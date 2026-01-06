@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Event {
+  id           Int       @id @default(autoincrement())
+  source       String    @db.VarChar(50)
+  sourceId     String    @map("source_id") @db.VarChar(255)
+  title        String    @db.VarChar(500)
+  description  String?   @db.Text
+  dateStart    DateTime  @map("date_start") @db.Timestamp(6)
+  dateEnd      DateTime? @map("date_end") @db.Timestamp(6)
+  locationName String?   @map("location_name") @db.VarChar(255)
+  address      String?   @db.VarChar(500)
+  latitude     Decimal?  @db.Decimal(10, 8)
+  longitude    Decimal?  @db.Decimal(11, 8)
+  category     String?   @db.VarChar(100)
+  sourceUrl    String?   @map("source_url") @db.VarChar(1000)
+  imageUrl     String?   @map("image_url") @db.VarChar(1000)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@unique([source, sourceId], name: "events_source_source_id_key")
+  @@index([dateStart], name: "idx_events_date_start")
+  @@index([latitude, longitude], name: "idx_events_location")
+  @@index([category], name: "idx_events_category")
+  @@map("events")
+}
+
+model WorkflowExecution {
+  id             Int       @id @default(autoincrement())
+  queryHash      String    @unique @map("query_hash") @db.VarChar(64)
+  location       String?   @db.VarChar(255)
+  radiusKm       Int?      @map("radius_km")
+  dateFrom       DateTime? @map("date_from") @db.Date
+  dateTo         DateTime? @map("date_to") @db.Date
+  cities         String[]  @db.Text
+  lastExecutedAt DateTime  @default(now()) @map("last_executed_at") @db.Timestamp(6)
+  status         String    @default("pending") @db.VarChar(20)
+  eventCount     Int       @default(0) @map("event_count")
+  errorMessage   String?   @map("error_message") @db.Text
+  n8nExecutionId String?   @map("n8n_execution_id") @db.VarChar(255)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([queryHash])
+  @@index([lastExecutedAt])
+  @@index([status])
+  @@map("workflow_executions")
+}

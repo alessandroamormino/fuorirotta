@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  fuorirotta-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fuorirotta-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Replace with your actual database connection
+      # For local development with Raspberry Pi on LAN:
+      # DATABASE_URL: "postgresql://fuorirotta:Fuor1rott%402025%21@192.168.1.X:5432/fuorirotta?schema=public"
+      # For Docker network (if DB is in Docker):
+      # DATABASE_URL: "postgresql://fuorirotta:Fuor1rott%402025%21@crimescript-db:5432/fuorirotta?schema=public"
+      DATABASE_URL: ${DATABASE_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    restart: unless-stopped
+    networks:
+      - fuorirotta-network
+
+networks:
+  fuorirotta-network:
+    driver: bridge
+
+# To connect to existing database network (e.g., Raspberry Pi Docker network):
+# networks:
+#   fuorirotta-network:
+#     external: true
+#     name: webstack_webstack
