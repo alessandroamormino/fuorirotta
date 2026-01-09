@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { checkCache, createWorkflowExecution, waitForExecution } from '@/lib/cacheService'
 import { triggerN8nWorkflow } from '@/lib/n8nClient'
+import { Prisma } from '@prisma/client'
 
 const LOMBARDY_CITIES = [
   'Milano', 'Bergamo', 'Brescia', 'Como', 'Cremona',
@@ -41,45 +42,33 @@ export async function GET(request: NextRequest) {
       dateTo: dateTo || endOfYear
     }
 
-    // ✅ CACHE CHECK (with fallback if table doesn't exist yet)
-    let cacheResult = { isCached: false, isRunning: false, shouldTrigger: false, execution: null }
+    // CACHE CHECK (solo per logging, non triggera più n8n)
+    let cacheResult: {
+      isCached: boolean
+      isRunning: boolean
+      shouldTrigger: boolean
+      execution?: {
+        id: number
+        lastExecutedAt: Date
+        status: string
+        eventCount: number
+      }
+    } | null = null
 
     try {
       cacheResult = await checkCache(cacheQuery)
 
-      // ✅ TRIGGER n8n se necessario
-      if (cacheResult.shouldTrigger) {
-        console.log('[Cache] Miss - triggering n8n workflow for query:', cacheQuery)
-        const executionId = await createWorkflowExecution(cacheQuery)
-        const triggered = await triggerN8nWorkflow(cacheQuery, executionId)
-
-        if (triggered) {
-          const completed = await waitForExecution(executionId, 90000)
-          if (!completed) {
-            console.warn('[n8n] Workflow timeout - returning existing data')
-          } else {
-            console.log('[n8n] Workflow completed successfully')
-          }
-        } else {
-          console.error('[n8n] Failed to trigger workflow - returning existing data')
-        }
-      } else if (cacheResult.isRunning) {
-        console.log('[Cache] Workflow already running - waiting 5 seconds...')
-        await new Promise(resolve => setTimeout(resolve, 5000))
-      } else if (cacheResult.isCached && cacheResult.execution) {
+      if (cacheResult.isCached && cacheResult.execution) {
         const ageHours = (Date.now() - cacheResult.execution.lastExecutedAt.getTime()) / (1000 * 60 * 60)
-        console.log(`[Cache] Hit! Age: ${ageHours.toFixed(1)}h, Events: ${cacheResult.execution.eventCount}`)
+        console.log(`[Cache] Data age: ${ageHours.toFixed(1)}h, Events: ${cacheResult.execution.eventCount}`)
+      } else {
+        console.log('[Cache] Reading from database (use /api/refresh to update data from sources)')
       }
     } catch (cacheError: any) {
-      // Graceful degradation: if cache table doesn't exist, continue without cache
-      if (cacheError?.code === 'P2021' || cacheError?.message?.includes('workflow_executions')) {
-        console.warn('[Cache] Table not found - running without cache. Execute migration to enable caching.')
-      } else {
-        console.error('[Cache] Error:', cacheError)
-      }
+      console.warn('[Cache] Check failed, proceeding with database query')
     }
 
-    // ✅ QUERY DATABASE
+    // QUERY DATABASE
     const where: any = {
       dateStart: { gte: dateFrom ? new Date(dateFrom) : new Date() },
     }
@@ -100,25 +89,37 @@ export async function GET(request: NextRequest) {
       where.category = { equals: category, mode: 'insensitive' }
     }
 
-    if (cities.length > 0) {
-      where.locationName = { in: cities }
+    // Filtro città: usa contains case-insensitive per più flessibilità
+    if (location) {
+      where.locationName = { contains: location, mode: 'insensitive' }
+    } else if (cities.length > 0) {
+      // Fallback: se location matcha città suggerite, usa OR per tutte
+      where.OR = [
+        ...(where.OR || []),
+        ...cities.map(city => ({
+          locationName: { contains: city, mode: 'insensitive' }
+        }))
+      ]
     }
 
-    const events = await prisma.event.findMany({
-      where,
-      orderBy: { dateStart: 'asc' },
-      take: limit,
-      skip: offset,
-    })
+    // GESTIONE FILTRO RAGGIO
+    let events: any[]
+    let total: number
 
-    // ✅ FILTRO RAGGIO (post-query)
-    let filteredEvents = events
     if (lat && lng && radius) {
+      // Con filtro raggio: fetch TUTTI gli eventi, filtra in memoria, poi pagina
       const userLat = parseFloat(lat)
       const userLng = parseFloat(lng)
       const radiusKm = parseFloat(radius)
 
-      filteredEvents = events.filter((event) => {
+      // Fetch tutti gli eventi che matchano i criteri base (senza paginazione)
+      const allEvents = await prisma.event.findMany({
+        where,
+        orderBy: { dateStart: 'asc' },
+      })
+
+      // Filtra per raggio
+      const filteredEvents = allEvents.filter((event) => {
         if (!event.latitude || !event.longitude) return false
         const distance = calculateDistance(
           userLat, userLng,
@@ -127,12 +128,24 @@ export async function GET(request: NextRequest) {
         )
         return distance <= radiusKm
       })
+
+      // Applica paginazione sui risultati filtrati
+      events = filteredEvents.slice(offset, offset + limit)
+      total = filteredEvents.length
+    } else {
+      // Senza filtro raggio: query normale con paginazione DB
+      events = await prisma.event.findMany({
+        where,
+        orderBy: { dateStart: 'asc' },
+        take: limit,
+        skip: offset,
+      })
+
+      total = await prisma.event.count({ where })
     }
 
-    const total = await prisma.event.count({ where })
-
     return NextResponse.json({
-      events: filteredEvents,
+      events,
       total,
       limit,
       offset,

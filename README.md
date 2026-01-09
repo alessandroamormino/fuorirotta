@@ -1,14 +1,16 @@
 # Fuorirotta Frontend
 
-Web application moderna per la scoperta di eventi in Lombardia, costruita con Next.js 15, TypeScript, Tailwind CSS e Prisma ORM con sistema di cache intelligente integrato con n8n.
+Web application moderna per la scoperta di eventi in Lombardia, costruita con Next.js 15, TypeScript, Tailwind CSS e Prisma ORM con sistema di cache ottimizzato e integrazione n8n.
 
 ## 🎯 Features Principali
 
-✅ **Cache Intelligente**: Sistema di caching a 4 ore con gestione concorrenza
-✅ **Infinite Scroll**: Caricamento progressivo eventi con lazy loading
-✅ **Filtri Avanzati**: Città, raggio geografico, periodo, categoria
-✅ **Integrazione n8n**: Trigger dinamico workflow per scraping on-demand
-✅ **Mappa Interattiva**: Visualizzazione eventi con cluster Mapbox
+✅ **Performance Ottimizzate**: Lettura diretta dal database (<1s caricamento)
+✅ **Cache Intelligente**: Sistema di refresh manuale con endpoint dedicato
+✅ **Infinite Scroll**: Caricamento progressivo con paginazione corretta (100 eventi/pagina)
+✅ **Filtri Avanzati**: Città, raggio geografico (Haversine), periodo, categoria
+✅ **Coordinate Fallback**: Eventi senza GPS usano coordinate città (12 città lombarde)
+✅ **Mappa Interattiva**: Visualizzazione 447 eventi con cluster Mapbox GL
+✅ **Integrazione n8n**: Refresh dati via webhook on-demand
 ✅ **Responsive**: Ottimizzato per mobile, tablet e desktop
 
 ---
@@ -31,16 +33,17 @@ Web application moderna per la scoperta di eventi in Lombardia, costruita con Ne
 
 ---
 
-## 🏗️ Architettura Sistema
+## 🏗️ Architettura Sistema (Ottimizzata)
 
-### Flusso Dati: Frontend → API → Cache → n8n → Database
+### Flusso Dati: Frontend → API → Database (Lettura Diretta)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ FRONTEND (React)                                            │
 │ - Navbar con filtri (città, raggio, periodo)               │
-│ - Infinite scroll (50 eventi/page)                         │
-│ - EventsMap (Mapbox clustering)                            │
+│ - Infinite scroll (100 eventi/page)                        │
+│ - EventsMap (Mapbox clustering - 447 eventi)               │
+│ - Coordinate fallback per città senza GPS                  │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      │ GET /api/events?location=Milano&radius=20&...
@@ -49,43 +52,50 @@ Web application moderna per la scoperta di eventi in Lombardia, costruita con Ne
 │ API LAYER (/app/api/events/route.ts)                       │
 │                                                             │
 │ 1. Parse parametri query                                   │
-│ 2. Genera query hash (SHA-256)                             │
-│ 3. ✅ CHECK CACHE (workflow_executions)                     │
-│    │                                                        │
-│    ├─ Cache HIT (< 4h) ──────────────┐                     │
-│    ├─ Workflow RUNNING ─────────┐    │                     │
-│    └─ Cache MISS ──────┐        │    │                     │
-│                        │        │    │                     │
-│ 4. ✅ TRIGGER n8n       │        │    │                     │
-│    POST webhook        │        │    │                     │
-│    ↓                   │        │    │                     │
-│ 5. Wait execution     │        │    │                     │
-│    (90s timeout)      │        │    │                     │
-│    ↓                   │        │    │                     │
-│ 6. ✅ QUERY DATABASE ←─┴────────┴────┘                     │
+│ 2. ✅ QUERY DATABASE (sempre, senza trigger n8n)            │
 │    - Filtro città                                          │
-│    - Filtro date                                           │
+│    - Filtro date (da oggi in poi)                          │
 │    - Filtro categoria                                      │
-│    - Pagination (limit/offset)                             │
-│ 7. Filtro raggio (post-query, Haversine)                   │
-│ 8. Return JSON                                             │
+│    - Fetch TUTTI gli eventi se filtro raggio attivo        │
+│                                                             │
+│ 3. ✅ FILTRO RAGGIO (post-query, Haversine in memoria)      │
+│    IF lat && lng && radius:                                │
+│      - Calcola distanza per ogni evento                    │
+│      - Filtra eventi dentro raggio                         │
+│      - Applica paginazione su risultati filtrati           │
+│                                                             │
+│ 4. Return JSON (< 1s)                                      │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ REFRESH ENDPOINT (/app/api/refresh - MANUALE)              │
+│                                                             │
+│ POST /api/refresh (manuale o cron job)                     │
+│    ↓                                                        │
+│ 1. createWorkflowExecution()                               │
+│ 2. triggerN8nWorkflow()                                    │
+│    ↓                                                        │
+│ 3. Optional: waitForExecution(120s)                        │
 └────────────────────┬────────────────────────────────────────┘
-                     │
                      │ Webhook POST
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│ N8N WORKFLOW (Raspberry Pi)                                │
+│ N8N WORKFLOW (Raspberry Pi @ 192.168.0.130)               │
 │                                                             │
 │ [Webhook] → [Parse Params] → [Generate Pagination]         │
 │      ↓                                                      │
-│ [Loop OpenData Lombardia]                                  │
+│ [Loop OpenData Lombardia API]                              │
 │   ├─ Request 1: offset=0,   limit=2000                     │
 │   ├─ Request 2: offset=2000, limit=2000                    │
-│   └─ Request 3: ...                                        │
+│   └─ Request 3: offset=4000, limit=2000                    │
 │      ↓                                                      │
 │ [Merge Pages] → [Transform] → [Filter Dates]               │
 │      ↓                                                      │
-│ [Insert DB] + [Update Cache Table]                         │
+│ [Geocoding per eventi senza coordinate]                    │
+│      ↓                                                      │
+│ [INSERT DB] ON CONFLICT UPDATE                             │
+│      ↓                                                      │
+│ [Update Cache Table: status=completed]                     │
 │      ↓                                                      │
 │ [Return Response]                                          │
 └────────────────────┬────────────────────────────────────────┘
@@ -96,7 +106,7 @@ Web application moderna per la scoperta di eventi in Lombardia, costruita con Ne
 │ POSTGRESQL DATABASE (crimescript-db)                       │
 │                                                             │
 │ ┌─────────────────────┐  ┌────────────────────────────┐   │
-│ │ events              │  │ workflow_executions        │   │
+│ │ events (~1000)      │  │ workflow_executions        │   │
 │ ├─────────────────────┤  ├────────────────────────────┤   │
 │ │ id (PK)             │  │ id (PK)                    │   │
 │ │ source              │  │ query_hash (UNIQUE)        │   │
@@ -114,7 +124,8 @@ Web application moderna per la scoperta di eventi in Lombardia, costruita con Ne
 │ └─────────────────────┘  - query_hash (UNIQUE)            │
 │                          - last_executed_at               │
 │ UNIQUE(source,          - status                          │
-│        source_id)                                         │
+│        source_id)       - date_start, category,           │
+│                           location_name (composite)       │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -211,6 +222,7 @@ frontend/
 │   │   └── useInfiniteScroll.ts      # ✨ Hook infinite scroll
 │   ├── n8nClient.ts                  # ✨ Trigger n8n webhook
 │   ├── cacheService.ts               # ✨ Cache check & management
+│   ├── cityCoordinates.ts            # ✨ Lookup coordinate città Lombardia
 │   ├── prisma.ts                      # Prisma singleton
 │   └── types.ts
 ├── prisma/
@@ -232,7 +244,7 @@ frontend/
 
 ### GET /api/events
 
-**Descrizione**: Recupera eventi con cache intelligente e trigger n8n automatico
+**Descrizione**: Recupera eventi dal database (lettura diretta, nessun trigger n8n automatico)
 
 **Query Parameters**:
 | Param | Type | Description | Default |
@@ -245,12 +257,12 @@ frontend/
 | `lat` | number | Latitudine utente | - |
 | `lng` | number | Longitudine utente | - |
 | `radius` | number | Raggio ricerca (km) | - |
-| `limit` | number | Eventi per pagina | 50 |
+| `limit` | number | Eventi per pagina | 100 |
 | `offset` | number | Pagination offset | 0 |
 
 **Esempio Request**:
-```
-GET /api/events?location=Milano&radius=20&dateFrom=2026-01-01&dateTo=2026-03-31&limit=50&offset=0
+```bash
+GET /api/events?location=Milano&radius=20&dateFrom=2026-01-01&dateTo=2026-03-31&limit=100&offset=0
 ```
 
 **Response**:
@@ -258,19 +270,77 @@ GET /api/events?location=Milano&radius=20&dateFrom=2026-01-01&dateTo=2026-03-31&
 {
   "events": [ /* array di eventi */ ],
   "total": 245,
-  "limit": 50,
+  "limit": 100,
   "offset": 0,
   "cache": {
-    "hit": true,
-    "age_hours": 2.3
+    "hit": false,
+    "age_hours": null
   }
 }
 ```
 
-**Cache Logic**:
-1. Se cache < 4h: ritorna dati DB immediatamente
-2. Se workflow running: attende 5s poi query DB
-3. Se cache miss: trigger n8n → attende 90s → query DB
+**Performance**:
+- Senza filtro raggio: Query DB standard con paginazione (<100ms)
+- Con filtro raggio: Fetch tutti eventi + filtro Haversine + paginazione (~500ms per 1000 eventi)
+
+---
+
+### POST /api/refresh
+
+**Descrizione**: Trigger manuale refresh dati da OpenData Lombardia via n8n workflow
+
+**Request Body** (opzionale):
+```json
+{
+  "cities": ["Milano", "Bergamo"],  // Default: tutte le città lombarde
+  "dateFrom": "2026-01-09",          // Default: oggi
+  "dateTo": "2026-12-31",            // Default: fine anno
+  "wait": true                       // Default: false (risponde subito)
+}
+```
+
+**Esempio Request**:
+```bash
+# Trigger immediato (non aspetta completamento)
+curl -X POST http://localhost:3000/api/refresh
+
+# Trigger e attendi completamento (max 2 minuti)
+curl -X POST http://localhost:3000/api/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"wait": true}'
+
+# Refresh solo Milano e Bergamo
+curl -X POST http://localhost:3000/api/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"cities": ["Milano", "Bergamo"]}'
+```
+
+**Response** (wait=false):
+```json
+{
+  "success": true,
+  "message": "Data refresh triggered successfully",
+  "executionId": "42",
+  "note": "Refresh is running in background"
+}
+```
+
+**Response** (wait=true):
+```json
+{
+  "success": true,
+  "message": "Data refresh completed successfully",
+  "executionId": "42"
+}
+```
+
+**Uso consigliato**:
+- **Manuale**: Chiamare quando servono dati aggiornati
+- **Cron Job**: Setup automatico (es. ogni 6 ore)
+  ```bash
+  # Crontab esempio: ogni 6 ore
+  0 */6 * * * curl -X POST http://localhost:3000/api/refresh
+  ```
 
 ---
 
@@ -311,37 +381,100 @@ GET /api/events?location=Milano&radius=20&dateFrom=2026-01-01&dateTo=2026-03-31&
 
 ## 📝 Workflow Completo Richiesta Utente
 
+### Scenario 1: Caricamento Eventi (Normale)
+
 ```
 1. Utente seleziona "Milano" + "20 km" + date range
    ↓
-2. Click "Cerca"
+2. Click "Cerca" (o auto-search con geolocation)
    ↓
-3. Frontend: fetch('/api/events?location=Milano&radius=20&...')
+3. Frontend: fetch('/api/events?lat=45.46&lng=9.19&radius=20&...')
    ↓
-4. API: generateQueryHash({ cities: ['Milano'], radiusKm: 20, ... })
+4. API: Query Database
+   - WHERE date_start >= oggi AND date_start <= dateTo
+   - Fetch TUTTI gli eventi (no pagination se radius attivo)
    ↓
-5. API: checkCache(queryHash)
-   ├─ Cache HIT (< 4h) ───→ Query DB ───→ Return JSON (< 100ms)
-   │
-   └─ Cache MISS ───→ createWorkflowExecution()
-                   ↓
-                   triggerN8nWorkflow()
-                   ↓
-                   n8n: Webhook → Parse → Paginate → Scrape → Insert DB + Update Cache
-                   ↓ (60-90s)
-                   waitForExecution(executionId)
-                   ↓
-                   Query DB ───→ Return JSON
+5. API: Filtro Raggio (Haversine in memoria)
+   - Per ogni evento: distance = haversine(userLat, userLng, eventLat, eventLng)
+   - Keep only if distance <= 20 km
+   ↓
+6. API: Paginazione sui risultati filtrati
+   - events.slice(offset, offset + 100)
+   ↓
+7. API: Return JSON (< 500ms)
+   {
+     "events": [...], // 100 eventi
+     "total": 245,    // Totali nel raggio
+     "limit": 100,
+     "offset": 0
+   }
+   ↓
+8. Frontend: Render 100 eventi
+   - EventCard grid (sinistra)
+   - EventsMap con 447 features GeoJSON + clustering (destra)
+   ↓
+9. Utente scrolla in fondo
+   ↓
+10. Infinite scroll: fetchMoreEvents() con offset=100
+   ↓
+11. API: Stessa query, offset=100 → Return next 100
+   ↓
+12. Frontend: Append altri 100 eventi (deduplicazione per ID)
+```
 
-6. Frontend: Render 50 eventi
+### Scenario 2: Refresh Dati (Manuale)
+
+```
+1. Admin/Cron: POST /api/refresh
    ↓
-7. Utente scrolla in fondo
+2. API: createWorkflowExecution()
+   - Genera query_hash per cache tracking
+   - Status: pending
    ↓
-8. Infinite scroll: fetchMoreEvents() con offset=50
+3. API: triggerN8nWorkflow()
+   - POST http://192.168.0.130:5678/webhook/fuorirotta-scrape
+   - Body: { query: {...}, execution_id: "42" }
    ↓
-9. API: Cache già presente → Query DB (immediate)
+4. n8n Workflow (background)
+   - Webhook Trigger
+   - Parse Input
+   - Generate Pagination (offset 0, 2000, 4000...)
+   - Loop HTTP Requests OpenData Lombardia
+   - Merge Pages
+   - Transform Data
+   - Geocoding per eventi senza coordinate
+   - INSERT DB (ON CONFLICT UPDATE)
+   - UPDATE workflow_executions SET status='completed'
+   ↓ (60-120s)
+5. API: Return immediate response (se wait=false)
+   {
+     "success": true,
+     "executionId": "42",
+     "note": "Refresh is running in background"
+   }
+```
+
+### Scenario 3: Eventi senza Coordinate GPS
+
+```
+1. Evento da DB senza latitude/longitude
    ↓
-10. Frontend: Append altri 50 eventi
+2. EventsMap: getEventCoordinates(event)
+   ↓
+3. Check: event.latitude && event.longitude?
+   - YES → Return { lat, lng } (coordinate reali)
+   - NO  → Lookup città in CITY_COORDINATES
+   ↓
+4. Match locationName con città Lombardia
+   - "Milano" → { lat: 45.4642, lng: 9.1900 }
+   - "Bergamo" → { lat: 45.6983, lng: 9.6773 }
+   - ...
+   ↓
+5. Return coordinate città come fallback
+   ↓
+6. Evento viene visualizzato sulla mappa
+   - Pin posizionato sulla città
+   - Clustering con altri eventi stessa città
 ```
 
 ---
@@ -359,6 +492,39 @@ npm run start
 docker build -t fuorirotta-frontend .
 docker run -p 3000:3000 --env-file .env fuorirotta-frontend
 ```
+
+---
+
+## 🔧 Ottimizzazioni Implementate (Gennaio 2025)
+
+### Performance
+- ✅ **Cache ottimizzata**: Lettura diretta DB invece di trigger n8n automatico (~90s → <1s)
+- ✅ **Paginazione corretta**: 100 eventi/pagina invece di 50, con filtro raggio pre-paginazione
+- ✅ **Filtro Haversine**: Calcolo distanze in memoria invece di SQL raw (più affidabile)
+
+### Visualizzazione Mappa
+- ✅ **447 eventi visibili**: Corretto bug 251 features (1 feature per evento invece che per location)
+- ✅ **Coordinate fallback**: Lookup 12 città lombarde per eventi senza GPS
+- ✅ **Clustering Mapbox**: Configurazione ottimale (max zoom 14, radius 50px)
+
+### API
+- ✅ **Nuovo endpoint `/api/refresh`**: Separato refresh dati da lettura
+- ✅ **Filtro date corretto**: Solo eventi da oggi in poi
+- ✅ **Filtro città case-insensitive**: Usa `contains` con `mode: 'insensitive'` per matching flessibile
+- ✅ **Response ottimizzate**: Cache info per debug, total sempre corretto
+
+### Filtri & UX
+- ✅ **Filtro "Nelle vicinanze" funzionante**: Non passa `location` all'API quando usa raggio, solo `lat/lng/radius`
+- ✅ **Input location protetto**: Campo readonly quando "Nelle vicinanze" è attivo, impedisce modifiche accidentali
+- ✅ **Capitalizzazione automatica**: Prima lettera sempre maiuscola nei nomi città (es. "milano" → "Milano")
+- ✅ **Lista città completa**: Tutte le 12 città lombarde sempre visibili (approccio statico)
+- ✅ **Reset intelligente**: Digitare manualmente resetta automaticamente "Nelle vicinanze"
+
+### Codebase
+- ✅ **cityCoordinates.ts**: Utility per gestione coordinate città con fallback
+- ✅ **Rimosso SQL raw**: Più manutenibile con Prisma ORM standard
+- ✅ **Fix TypeScript**: Tipi espliciti per `cacheResult` in route.ts
+- ✅ **Rimosso emoji dai commenti**: Compatibilità con tutti gli editor
 
 ---
 

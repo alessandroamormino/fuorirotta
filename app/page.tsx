@@ -86,7 +86,12 @@ export default function Home() {
     try {
       const params = new URLSearchParams()
 
-      if (searchFilters.location) params.append('location', searchFilters.location)
+      // Non passare location se è "Nelle vicinanze" (usa solo raggio)
+      const isNearbySearch = searchFilters.location?.startsWith('Nelle vicinanze')
+      if (searchFilters.location && !isNearbySearch) {
+        params.append('location', searchFilters.location)
+      }
+
       if (selectedCategory && selectedCategory !== 'all') params.append('category', selectedCategory)
       if (searchFilters.dateFrom) params.append('dateFrom', searchFilters.dateFrom.toISOString())
       if (searchFilters.dateTo) params.append('dateTo', searchFilters.dateTo.toISOString())
@@ -96,6 +101,7 @@ export default function Home() {
         params.append('lat', userLocation.lat.toString())
         params.append('lng', userLocation.lng.toString())
 
+        // Passa radius solo se specificato
         if (searchFilters.radius) {
           params.append('radius', searchFilters.radius.toString())
         }

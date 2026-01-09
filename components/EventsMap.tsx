@@ -6,6 +6,7 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { Event } from '@/lib/types'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { getEventCoordinates } from '@/lib/cityCoordinates'
 
 interface EventsMapProps {
   events: Event[]
@@ -60,48 +61,33 @@ export default function EventsMap({ events, onEventClick, disablePopups = false,
         popupRef.current = null
       }
 
-      const validEvents = events.filter(
-        (event) => event.latitude && event.longitude
-      )
+      // Ottieni coordinate per ogni evento (usa città come fallback)
+      const eventsWithCoords = events
+        .map((event) => {
+          const coords = getEventCoordinates(event)
+          return coords ? { event, coords } : null
+        })
+        .filter((item): item is { event: Event; coords: { lat: number; lng: number } } => item !== null)
 
-      // Raggruppa eventi per coordinate
-      const eventsByLocation = new Map<string, typeof validEvents>()
-      validEvents.forEach((event) => {
-        const key = `${event.latitude},${event.longitude}`
-        if (!eventsByLocation.has(key)) {
-          eventsByLocation.set(key, [])
-        }
-        eventsByLocation.get(key)!.push(event)
-      })
-
-    // Crea GeoJSON features (un feature per location)
+    // Crea GeoJSON features (un feature per evento - Mapbox gestirà il clustering)
     const geojsonData: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
-      features: Array.from(eventsByLocation.values()).map((locationEvents) => {
-        const firstEvent = locationEvents[0]
-        return {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [
-              parseFloat(firstEvent.longitude!.toString()),
-              parseFloat(firstEvent.latitude!.toString()),
-            ],
-          },
-          properties: {
-            events: JSON.stringify(locationEvents.map(e => ({
-              id: e.id,
-              title: e.title,
-              description: e.description || '',
-              dateStart: e.dateStart,
-              locationName: e.locationName || '',
-              category: e.category || '',
-              imageUrl: e.imageUrl || '',
-            }))),
-            eventCount: locationEvents.length,
-          },
-        }
-      }),
+      features: eventsWithCoords.map((item) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [item.coords.lng, item.coords.lat],
+        },
+        properties: {
+          id: item.event.id,
+          title: item.event.title,
+          description: item.event.description || '',
+          dateStart: item.event.dateStart,
+          locationName: item.event.locationName || '',
+          category: item.event.category || '',
+          imageUrl: item.event.imageUrl || '',
+        },
+      })),
     }
 
       // Rimuovi source esistente se presente
@@ -213,53 +199,57 @@ export default function EventsMap({ events, onEventClick, disablePopups = false,
 
         const coordinates = (e.features[0].geometry as GeoJSON.Point).coordinates.slice() as [number, number]
         const props = e.features[0].properties
-        const locationEvents = JSON.parse(props.events)
-        const eventCount = props.eventCount
 
-      // Popup in stile card con multipli eventi
+        // Ora ogni feature ha solo 1 evento
+        const event = {
+          id: props.id,
+          title: props.title,
+          description: props.description || '',
+          dateStart: props.dateStart,
+          locationName: props.locationName || '',
+          category: props.category || '',
+          imageUrl: props.imageUrl || '',
+        }
+
+      // Popup in stile card per singolo evento
       const popupContent = `
         <div style="width: 280px; font-family: system-ui, -apple-system, sans-serif; padding: 16px; position: relative;">
-          <div class="scrollbar-thin" style="max-height: 400px; overflow-y: auto;">
-            ${locationEvents.map((event: any, index: number) => `
-              <div style="margin-bottom: ${index < locationEvents.length - 1 ? '16px' : '0'}; padding-bottom: ${index < locationEvents.length - 1 ? '16px' : '0'}; border-bottom: ${index < locationEvents.length - 1 ? '1px solid #e5e7eb' : 'none'};">
-                ${event.imageUrl
-                  ? `<img src="${event.imageUrl}" alt="${event.title}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 12px; margin-bottom: 12px;" />`
-                  : `<div style="width: 100%; height: 120px; background: linear-gradient(135deg, #edf6f9 0%, #83c5be 100%); border-radius: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#006d77" stroke-width="2">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                      </svg>
-                    </div>`
-                }
-                <h3 style="font-weight: 600; font-size: 14px; color: #111; margin: 0 0 6px 0; line-height: 1.3;">${event.title}</h3>
-                ${event.locationName
-                  ? `<p style="font-size: 12px; color: #111; margin: 0 0 4px 0; font-weight: 500;">${event.locationName}</p>`
-                  : ''
-                }
-                <p style="font-size: 12px; color: #666; margin: 0 0 6px 0;">
-                  ${format(new Date(event.dateStart), 'dd MMM', { locale: it })}
-                </p>
-                ${event.category
-                  ? `<span style="display: inline-block; padding: 4px 10px; background: #edf6f9; color: #006d77; border-radius: 12px; font-size: 11px; font-weight: 600; margin-bottom: 12px;">${event.category}</span>`
-                  : ''
-                }
-                <a
-                  href="/eventi/${event.id}"
-                  style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: linear-gradient(to right, #006d77, #83c5be); color: white; font-weight: 600; border-radius: 16px; text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0, 109, 119, 0.2);"
-                  onmouseover="this.style.boxShadow='0 6px 16px rgba(0, 109, 119, 0.3)'"
-                  onmouseout="this.style.boxShadow='0 4px 12px rgba(0, 109, 119, 0.2)'"
-                >
-                  Vedi dettagli
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
+          <div>
+            ${event.imageUrl
+              ? `<img src="${event.imageUrl}" alt="${event.title}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 12px; margin-bottom: 12px;" />`
+              : `<div style="width: 100%; height: 120px; background: linear-gradient(135deg, #edf6f9 0%, #83c5be 100%); border-radius: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#006d77" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
                   </svg>
-                </a>
-              </div>
-            `).join('')}
+                </div>`
+            }
+            <h3 style="font-weight: 600; font-size: 14px; color: #111; margin: 0 0 6px 0; line-height: 1.3;">${event.title}</h3>
+            ${event.locationName
+              ? `<p style="font-size: 12px; color: #111; margin: 0 0 4px 0; font-weight: 500;">${event.locationName}</p>`
+              : ''
+            }
+            <p style="font-size: 12px; color: #666; margin: 0 0 6px 0;">
+              ${format(new Date(event.dateStart), 'dd MMM', { locale: it })}
+            </p>
+            ${event.category
+              ? `<span style="display: inline-block; padding: 4px 10px; background: #edf6f9; color: #006d77; border-radius: 12px; font-size: 11px; font-weight: 600; margin-bottom: 12px;">${event.category}</span>`
+              : ''
+            }
+            <a
+              href="/eventi/${event.id}"
+              style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: linear-gradient(to right, #006d77, #83c5be); color: white; font-weight: 600; border-radius: 16px; text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0, 109, 119, 0.2);"
+              onmouseover="this.style.boxShadow='0 6px 16px rgba(0, 109, 119, 0.3)'"
+              onmouseout="this.style.boxShadow='0 4px 12px rgba(0, 109, 119, 0.2)'"
+            >
+              Vedi dettagli
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </a>
           </div>
-          ${eventCount > 1 ? `<div style="margin-top: 12px; padding: 8px 12px; background: #006d77; color: white; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center;">${eventCount} eventi in questa location</div>` : ''}
         </div>
       `
 
@@ -298,10 +288,10 @@ export default function EventsMap({ events, onEventClick, disablePopups = false,
         }
       }
 
-      // Se c'è callback e c'è solo 1 evento, chiamalo
-      if (onEventClick && eventCount === 1) {
-        const event = validEvents.find(e => e.id === locationEvents[0].id)
-        if (event) onEventClick(event)
+      // Se c'è callback, chiamalo
+      if (onEventClick) {
+        const eventWithCoords = eventsWithCoords.find(item => item.event.id === event.id)
+        if (eventWithCoords) onEventClick(eventWithCoords.event)
       }
     })
       }
@@ -324,15 +314,10 @@ export default function EventsMap({ events, onEventClick, disablePopups = false,
       }
 
       // Adatta la vista per includere tutti gli eventi
-      if (validEvents.length > 0 && mapRef.current) {
+      if (eventsWithCoords.length > 0 && mapRef.current) {
         const bounds = new mapboxgl.LngLatBounds()
-        validEvents.forEach((event) => {
-          if (event.latitude && event.longitude) {
-            bounds.extend([
-              parseFloat(event.longitude.toString()),
-              parseFloat(event.latitude.toString()),
-            ])
-          }
+        eventsWithCoords.forEach((item) => {
+          bounds.extend([item.coords.lng, item.coords.lat])
         })
         mapRef.current.fitBounds(bounds, { padding: 50, maxZoom: 12 })
       }

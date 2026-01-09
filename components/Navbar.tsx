@@ -56,6 +56,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
   const [showRadiusSelector, setShowRadiusSelector] = useState(false)
   const [selectedRadius, setSelectedRadius] = useState<number | null>(null)
   const [customRadius, setCustomRadius] = useState(30)
+  const [isNearbySearch, setIsNearbySearch] = useState(false)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -75,10 +76,16 @@ export default function Navbar({ onSearch }: NavbarProps) {
     setActiveField(null)
   }
 
+  const capitalizeFirstLetter = (str: string) => {
+    if (!str) return str
+    return str.charAt(0).toUpperCase() + str.slice(1)
+  }
+
   const handleClearSearch = () => {
     setFilters({ location: '', dateFrom: null, dateTo: null, radius: undefined })
     setSearchInput('')
     setSelectedRadius(null)
+    setIsNearbySearch(false)
     setActiveField(null)
     onSearch({ location: '', dateFrom: null, dateTo: null, radius: undefined })
   }
@@ -165,11 +172,22 @@ export default function Navbar({ onSearch }: NavbarProps) {
                         placeholder="Cerca destinazioni"
                         value={searchInput}
                         onChange={(e) => {
-                          setSearchInput(e.target.value)
-                          setFilters({ ...filters, location: e.target.value })
+                          const value = capitalizeFirstLetter(e.target.value)
+                          setSearchInput(value)
+                          setFilters({ ...filters, location: value })
+                          // Se l'utente digita manualmente, resetta "Nelle vicinanze"
+                          if (isNearbySearch) {
+                            setIsNearbySearch(false)
+                            setSelectedRadius(null)
+                          }
                         }}
-                        className="w-full text-xs sm:text-sm outline-none bg-transparent text-gray-700 placeholder-gray-400"
+                        className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-gray-400 ${
+                          isNearbySearch
+                            ? 'text-gray-900 cursor-not-allowed font-medium'
+                            : 'text-gray-700'
+                        }`}
                         onFocus={() => setActiveField('where')}
+                        readOnly={isNearbySearch}
                       />
                     </div>
                     {activeField === 'where' && (
@@ -278,6 +296,8 @@ export default function Navbar({ onSearch }: NavbarProps) {
                               } else {
                                 setSearchInput(dest.name)
                                 setFilters({ ...filters, location: dest.name })
+                                setIsNearbySearch(false)
+                                setSelectedRadius(null)
                                 setActiveField('when')
                               }
                             }}
@@ -328,7 +348,8 @@ export default function Navbar({ onSearch }: NavbarProps) {
                             onClick={() => {
                               setSelectedRadius(radius.value)
                               setSearchInput(`Nelle vicinanze (${radius.label})`)
-                              setFilters({ ...filters, location: `Nelle vicinanze (${radius.label})` })
+                              setFilters({ ...filters, location: `Nelle vicinanze (${radius.label})`, radius: radius.value })
+                              setIsNearbySearch(true)
                               setShowRadiusSelector(false)
                               setActiveField('when')
                             }}
@@ -378,7 +399,8 @@ export default function Navbar({ onSearch }: NavbarProps) {
                               onClick={() => {
                                 setSelectedRadius(customRadius)
                                 setSearchInput(`Nelle vicinanze (${customRadius} km)`)
-                                setFilters({ ...filters, location: `Nelle vicinanze (${customRadius} km)` })
+                                setFilters({ ...filters, location: `Nelle vicinanze (${customRadius} km)`, radius: customRadius })
+                                setIsNearbySearch(true)
                                 setShowRadiusSelector(false)
                                 setActiveField('when')
                               }}
