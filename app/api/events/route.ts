@@ -144,6 +144,64 @@ export async function GET(request: NextRequest) {
       total = await prisma.event.count({ where })
     }
 
+    // ========== REFRESH ON-DEMAND LOGIC ==========
+    // Solo alla prima pagina (offset === 0) per evitare refresh multipli
+    console.log(`[Refresh] offset=${offset}, total=${total}, cacheResult=`, cacheResult)
+
+    if (offset === 0) {
+      // CASO 1: Nessun evento trovato → Refresh SINCRONO
+      if (total === 0 && cacheResult?.shouldTrigger) {
+        console.log('[Refresh On-Demand] No events found, triggering synchronous refresh...')
+
+        try {
+          const executionId = await createWorkflowExecution(cacheQuery)
+          const triggered = await triggerN8nWorkflow(cacheQuery, executionId)
+
+          if (triggered) {
+            // Aspetta max 2 minuti per il completamento
+            const completed = await waitForExecution(executionId, 120000)
+
+            if (completed) {
+              console.log('[Refresh On-Demand] Refresh completed, re-fetching events...')
+
+              // Re-fetch eventi dopo il refresh
+              if (lat && lng && radius) {
+                const userLat = parseFloat(lat)
+                const userLng = parseFloat(lng)
+                const radiusKm = parseFloat(radius)
+                const allEvents = await prisma.event.findMany({ where, orderBy: { dateStart: 'asc' } })
+                const filteredEvents = allEvents.filter((event) => {
+                  if (!event.latitude || !event.longitude) return false
+                  const distance = calculateDistance(userLat, userLng, parseFloat(event.latitude.toString()), parseFloat(event.longitude.toString()))
+                  return distance <= radiusKm
+                })
+                events = filteredEvents.slice(0, limit)
+                total = filteredEvents.length
+              } else {
+                events = await prisma.event.findMany({ where, orderBy: { dateStart: 'asc' }, take: limit })
+                total = await prisma.event.count({ where })
+              }
+            } else {
+              console.warn('[Refresh On-Demand] Refresh timeout - returning empty results')
+            }
+          }
+        } catch (refreshError) {
+          console.error('[Refresh On-Demand] Error during refresh:', refreshError)
+          // Continua con risultati vuoti
+        }
+      }
+      // CASO 2: Eventi trovati ma cache vecchia (>4h) → Refresh ASINCRONO
+      else if (total > 0 && cacheResult?.shouldTrigger && !cacheResult?.isRunning) {
+        console.log('[Refresh On-Demand] Cache stale, triggering background refresh...')
+
+        // Fire-and-forget: non aspettiamo il completamento
+        createWorkflowExecution(cacheQuery)
+          .then(executionId => triggerN8nWorkflow(cacheQuery, executionId))
+          .catch(err => console.error('[Refresh On-Demand] Background refresh failed:', err))
+      }
+    }
+    // ==============================================
+
     return NextResponse.json({
       events,
       total,
@@ -153,7 +211,8 @@ export async function GET(request: NextRequest) {
         hit: cacheResult?.isCached || false,
         age_hours: cacheResult?.execution?.lastExecutedAt
           ? (Date.now() - cacheResult.execution.lastExecutedAt.getTime()) / (1000 * 60 * 60)
-          : null
+          : null,
+        refreshed: offset === 0 && total === 0 ? true : false  // Indica se abbiamo fatto refresh
       }
     })
   } catch (error) {
