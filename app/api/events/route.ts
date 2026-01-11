@@ -69,8 +69,13 @@ export async function GET(request: NextRequest) {
     }
 
     // QUERY DATABASE
+    // Se non c'è dateFrom, usa l'inizio di oggi (00:00:00) invece dell'ora attuale
+    const startDate = dateFrom
+      ? new Date(dateFrom)
+      : new Date(new Date().setHours(0, 0, 0, 0))
+
     const where: any = {
-      dateStart: { gte: dateFrom ? new Date(dateFrom) : new Date() },
+      dateStart: { gte: startDate },
     }
 
     if (dateTo) {

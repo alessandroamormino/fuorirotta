@@ -93,8 +93,26 @@ export default function Home() {
       }
 
       if (selectedCategory && selectedCategory !== 'all') params.append('category', selectedCategory)
-      if (searchFilters.dateFrom) params.append('dateFrom', searchFilters.dateFrom.toISOString())
-      if (searchFilters.dateTo) params.append('dateTo', searchFilters.dateTo.toISOString())
+
+      // Gestisci le date per range di un solo giorno
+      // Usa formato locale YYYY-MM-DD senza conversione timezone
+      const formatLocalDate = (date: Date) => {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+
+      if (searchFilters.dateFrom) {
+        params.append('dateFrom', formatLocalDate(searchFilters.dateFrom))
+      }
+
+      if (searchFilters.dateTo) {
+        params.append('dateTo', formatLocalDate(searchFilters.dateTo))
+      } else if (searchFilters.dateFrom) {
+        // Se non c'è dateTo, usa dateFrom come fine (stesso giorno)
+        params.append('dateTo', formatLocalDate(searchFilters.dateFrom))
+      }
 
       // Connessione geolocation + raggio
       if (userLocation) {
