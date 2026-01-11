@@ -16,18 +16,15 @@ export const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
 
 // Trova coordinate per un evento basandosi sulla città
 export function getEventCoordinates(event: {
-  latitude: number | null | string
-  longitude: number | null | string
+  latitude: number | null
+  longitude: number | null
   locationName: string | null
 }): { lat: number; lng: number } | null {
   // Se ha già coordinate valide, usale
   if (event.latitude && event.longitude) {
-    const lat = parseFloat(event.latitude.toString())
-    const lng = parseFloat(event.longitude.toString())
-
     // Verifica che siano numeri validi
-    if (!isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng)) {
-      return { lat, lng }
+    if (!isNaN(event.latitude) && !isNaN(event.longitude) && isFinite(event.latitude) && isFinite(event.longitude)) {
+      return { lat: event.latitude, lng: event.longitude }
     }
   }
 
