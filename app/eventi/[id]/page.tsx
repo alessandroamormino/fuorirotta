@@ -108,21 +108,23 @@ export default function EventDetail() {
       {/* Navbar */}
       <Navbar onSearch={handleSearch} />
 
-      {/* Back Button */}
-      <motion.button
-        onClick={() => router.back()}
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="fixed top-24 left-15 z-50 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors border-2 border-[#83c5be]/30"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <ArrowLeft className="w-5 h-5 text-[#006d77]" />
-      </motion.button>
-
       {/* Main Content */}
       <main className="fixed top-28 left-0 right-0 bottom-0 overflow-y-auto scrollbar-thin">
-        <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="container mx-auto px-4 max-w-7xl">
+          {/* Back Button */}
+          <motion.button
+            onClick={() => router.back()}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors border-2 border-[#83c5be]/30 mb-4 mt-4"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <ArrowLeft className="w-5 h-5 text-[#006d77]" />
+          </motion.button>
+        </div>
+
+        <div className="container mx-auto px-4 max-w-7xl">
           {/* Hero Image */}
           {event.imageUrl ? (
             <motion.div
