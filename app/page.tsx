@@ -12,8 +12,10 @@ import { Filter, Loader2, Map, X } from "lucide-react";
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
 	loading: () => (
-		<div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
-			<Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+		<div className="w-full h-full bg-gray-100">
+			<div className="flex items-center justify-center h-full">
+				<Loader2 className="w-8 h-8 text-[#006d77] animate-spin" />
+			</div>
 		</div>
 	),
 });
@@ -244,24 +246,20 @@ export default function Home() {
 										</p>
 									</motion.div>
 								) : (
-									<motion.div
+									<div
 										key="events"
-										initial={{ opacity: 0 }}
-										animate={{ opacity: 1 }}
-										exit={{ opacity: 0 }}
 										className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-x-3 sm:gap-x-5 gap-y-8"
 									>
 										{events.map((event, index) => (
-											<motion.div
+											<div
 												key={`${event.source}-${event.id}`}
-												initial={{ opacity: 0, y: 20 }}
-												animate={{ opacity: 1, y: 0 }}
-												transition={{ delay: index * 0.05, duration: 0.3 }}
+												className="event-card-item"
+												style={{ animationDelay: `${index * 0.05}s` }}
 											>
 												<EventCard event={event} />
-											</motion.div>
+											</div>
 										))}
-									</motion.div>
+									</div>
 								)}
 							</AnimatePresence>
 
