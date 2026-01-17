@@ -293,15 +293,13 @@ export default function Home() {
 						{/* Show Map Button (Mobile/Tablet) - Always Visible at Bottom */}
 						{events.length > 0 && (
 							<div className="xl:hidden pt-4 flex-shrink-0">
-								<motion.button
+								<button
 									onClick={() => setIsMapExpanded(true)}
-									className="w-full px-6 py-3 bg-[#006d77] text-white rounded-full font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-shadow"
-									whileHover={{ scale: 1.02 }}
-									whileTap={{ scale: 0.98 }}
+									className="w-full px-6 py-3 bg-[#006d77] text-white rounded-full font-semibold flex items-center justify-center gap-2 shadow-lg active:shadow-md transition-shadow"
 								>
 									<Map className="w-5 h-5" />
 									Mostra mappa
-								</motion.button>
+								</button>
 							</div>
 						)}
 					</div>
@@ -337,14 +335,11 @@ export default function Home() {
 						initial={{ opacity: 0 }}
 						animate={{ opacity: 1 }}
 						exit={{ opacity: 0 }}
-						className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+						transition={{ duration: 0.15 }}
+						className="fixed inset-0 z-[100] bg-black/50"
 						onClick={() => setIsMapExpanded(false)}
 					>
-						<motion.div
-							initial={{ scale: 0.9, opacity: 0 }}
-							animate={{ scale: 1, opacity: 1 }}
-							exit={{ scale: 0.9, opacity: 0 }}
-							transition={{ type: "spring", damping: 25, stiffness: 300 }}
+						<div
 							className="absolute inset-4 bg-white rounded-2xl overflow-hidden shadow-2xl"
 							onClick={(e) => e.stopPropagation()}
 						>
@@ -369,7 +364,7 @@ export default function Home() {
 									userLocation={userLocation}
 								/>
 							</div>
-						</motion.div>
+						</div>
 					</motion.div>
 				)}
 			</AnimatePresence>
