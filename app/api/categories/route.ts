@@ -20,7 +20,7 @@ export async function GET() {
 
 		// Count events per category
 		const categoriesWithCount = await Promise.all(
-			categories.map(async (cat) => {
+			categories.map(async (cat: { category: string | null }) => {
 				const count = await prisma.event.count({
 					where: { category: cat.category },
 				});
