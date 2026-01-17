@@ -274,7 +274,7 @@ export default function Home() {
 											</span>
 										</div>
 									)}
-									{!hasMore && (
+									{!hasMore && offset > LIMIT && (
 										<div className="text-center">
 											<p className="text-gray-600 text-sm font-medium">
 												Tutti i {total} eventi sono stati caricati
