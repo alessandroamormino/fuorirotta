@@ -210,7 +210,7 @@ export default function Home() {
 					{/* Events List - Left Side - Flex Container */}
 					<div className="flex-1 min-w-0 flex flex-col">
 						{/* Scrollable Cards Area */}
-						<div className="flex-1 overflow-y-auto pb-4 pr-4 scrollbar-thin scrollbar-thumb-[#83c5be] scrollbar-track-gray-100">
+						<div className="flex-1 overflow-y-auto pb-4 scrollbar-thin scrollbar-thumb-[#83c5be] scrollbar-track-gray-100">
 							<AnimatePresence mode="wait">
 								{loading ? (
 									<motion.div
