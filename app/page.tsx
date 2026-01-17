@@ -28,8 +28,23 @@ interface SearchFilters {
 }
 
 export default function Home() {
-	const [events, setEvents] = useState<Event[]>([]);
-	// const [categories, setCategories] = useState<Category[]>([]);
+	const LIMIT = 100; // Aumentato da 50 a 100 per ridurre le chiamate API
+
+	// Restore from sessionStorage if available
+	const [events, setEvents] = useState<Event[]>(() => {
+		if (typeof window !== "undefined") {
+			const cached = sessionStorage.getItem("events-cache");
+			if (cached) {
+				try {
+					return JSON.parse(cached);
+				} catch {
+					return [];
+				}
+			}
+		}
+		return [];
+	});
+
 	const [loading, setLoading] = useState(true);
 	const [selectedCategory] = useState<string>("all");
 	const [searchFilters, setSearchFilters] = useState<SearchFilters>({
@@ -45,10 +60,27 @@ export default function Home() {
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
 
 	// Infinite scroll state
-	const [offset, setOffset] = useState(0);
-	const [hasMore, setHasMore] = useState(true);
-	const [total, setTotal] = useState(0);
-	const LIMIT = 100; // Aumentato da 50 a 100 per ridurre le chiamate API
+	const [offset, setOffset] = useState(() => {
+		if (typeof window !== "undefined") {
+			const cached = sessionStorage.getItem("events-offset");
+			return cached ? parseInt(cached) : 0;
+		}
+		return 0;
+	});
+	const [hasMore, setHasMore] = useState(() => {
+		if (typeof window !== "undefined") {
+			const cached = sessionStorage.getItem("events-hasMore");
+			return cached ? cached === "true" : true;
+		}
+		return true;
+	});
+	const [total, setTotal] = useState(() => {
+		if (typeof window !== "undefined") {
+			const cached = sessionStorage.getItem("events-total");
+			return cached ? parseInt(cached) : 0;
+		}
+		return 0;
+	});
 
 	const observerTarget = useInfiniteScroll(
 		() => {
@@ -57,6 +89,16 @@ export default function Home() {
 		hasMore,
 		loading
 	);
+
+	// Save to sessionStorage when state changes
+	useEffect(() => {
+		if (events.length > 0) {
+			sessionStorage.setItem("events-cache", JSON.stringify(events));
+			sessionStorage.setItem("events-offset", offset.toString());
+			sessionStorage.setItem("events-hasMore", hasMore.toString());
+			sessionStorage.setItem("events-total", total.toString());
+		}
+	}, [events, offset, hasMore, total]);
 
 	// Request geolocation on mount
 	useEffect(() => {
@@ -75,8 +117,57 @@ export default function Home() {
 		}
 	}, []);
 
+	// Check if we have cached data on mount
+	useEffect(() => {
+		const hasCachedData = sessionStorage.getItem("events-cache");
+		if (hasCachedData) {
+			// Skip initial load, we already have data from cache
+			setLoading(false);
+			// Restore scroll position
+			const scrollPos = sessionStorage.getItem("events-scroll");
+			if (scrollPos) {
+				setTimeout(() => {
+					const scrollContainer = document.querySelector(
+						".scrollable-events-container"
+					);
+					if (scrollContainer) {
+						scrollContainer.scrollTop = parseInt(scrollPos);
+					}
+				}, 100);
+			}
+		} else {
+			// No cache, do initial load
+			fetchEvents(0, true);
+		}
+	}, []);
+
+	// Save scroll position
+	useEffect(() => {
+		const scrollContainer = document.querySelector(
+			".scrollable-events-container"
+		);
+		if (!scrollContainer) return;
+
+		const handleScroll = () => {
+			sessionStorage.setItem(
+				"events-scroll",
+				scrollContainer.scrollTop.toString()
+			);
+		};
+
+		scrollContainer.addEventListener("scroll", handleScroll);
+		return () => scrollContainer.removeEventListener("scroll", handleScroll);
+	}, [events]);
+
 	// Reset and load events when filters change
 	useEffect(() => {
+		// Clear cache when filters change
+		sessionStorage.removeItem("events-cache");
+		sessionStorage.removeItem("events-offset");
+		sessionStorage.removeItem("events-hasMore");
+		sessionStorage.removeItem("events-total");
+		sessionStorage.removeItem("events-scroll");
+
 		setOffset(0);
 		setEvents([]);
 		setHasMore(true);
@@ -212,7 +303,7 @@ export default function Home() {
 					{/* Events List - Left Side - Flex Container */}
 					<div className="flex-1 min-w-0 flex flex-col">
 						{/* Scrollable Cards Area */}
-						<div className="flex-1 overflow-y-auto pb-4 pr-2 sm:pr-0 scrollbar-thin scrollbar-thumb-[#83c5be] scrollbar-track-gray-100">
+						<div className="scrollable-events-container flex-1 overflow-y-auto pb-4 pr-2 sm:pr-0 scrollbar-thin scrollbar-thumb-[#83c5be] scrollbar-track-gray-100">
 							<AnimatePresence mode="wait">
 								{loading ? (
 									<motion.div
