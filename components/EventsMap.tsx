@@ -38,6 +38,8 @@ export default function EventsMap({
 			style: "mapbox://styles/mapbox/streets-v12",
 			center: [9.1859, 45.4654], // [lng, lat] - Milano
 			zoom: 8,
+			touchZoomRotate: true,
+			touchPitch: false,
 		});
 
 		// Aggiungi controlli zoom
@@ -181,7 +183,9 @@ export default function EventsMap({
 			});
 
 			// Click sui cluster per zoom
-			mapRef.current.on("click", "clusters", (e) => {
+			const handleClusterClick = (
+				e: mapboxgl.MapLayerMouseEvent | mapboxgl.MapLayerTouchEvent
+			) => {
 				if (!mapRef.current) return;
 				const features = mapRef.current.queryRenderedFeatures(e.point, {
 					layers: ["clusters"],
@@ -201,11 +205,16 @@ export default function EventsMap({
 						zoom: zoom,
 					});
 				});
-			});
+			};
+
+			mapRef.current.on("click", "clusters", handleClusterClick);
+			mapRef.current.on("touchend", "clusters", handleClusterClick);
 
 			// Popup per i singoli punti (solo se non disabilitati)
 			if (!disablePopups) {
-				mapRef.current.on("click", "unclustered-point", (e) => {
+				const handleMarkerClick = (
+					e: mapboxgl.MapLayerMouseEvent | mapboxgl.MapLayerTouchEvent
+				) => {
 					if (!mapRef.current || !e.features?.[0] || !e.features[0].properties)
 						return;
 
@@ -302,10 +311,14 @@ export default function EventsMap({
 						<line x1="6" y1="6" x2="18" y2="18"></line>
 					</svg>
 				`;
-						closeButton.onclick = () => {
+						const closePopup = (e: MouseEvent | TouchEvent) => {
+							e.preventDefault();
+							e.stopPropagation();
 							popup.remove();
 							popupRef.current = null;
 						};
+						closeButton.addEventListener("click", closePopup as EventListener);
+						closeButton.addEventListener("touchend", closePopup as EventListener);
 						const content = popupElement.querySelector(
 							".mapboxgl-popup-content"
 						) as HTMLElement;
@@ -322,7 +335,11 @@ export default function EventsMap({
 						);
 						if (eventWithCoords) onEventClick(eventWithCoords.event);
 					}
-				});
+				};
+
+				// Aggiungi listener per click e touch
+				mapRef.current.on("click", "unclustered-point", handleMarkerClick);
+				mapRef.current.on("touchend", "unclustered-point", handleMarkerClick);
 			}
 
 			// Cambia cursore su hover
