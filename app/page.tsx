@@ -210,7 +210,7 @@ export default function Home() {
 					{/* Events List - Left Side - Flex Container */}
 					<div className="flex-1 min-w-0 flex flex-col">
 						{/* Scrollable Cards Area */}
-						<div className="flex-1 overflow-y-auto pb-4 scrollbar-thin scrollbar-thumb-[#83c5be] scrollbar-track-gray-100">
+						<div className="flex-1 overflow-y-auto pb-4 pr-2 sm:pr-0 scrollbar-thin scrollbar-thumb-[#83c5be] scrollbar-track-gray-100">
 							<AnimatePresence mode="wait">
 								{loading ? (
 									<motion.div
@@ -249,7 +249,7 @@ export default function Home() {
 										initial={{ opacity: 0 }}
 										animate={{ opacity: 1 }}
 										exit={{ opacity: 0 }}
-										className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-x-5 gap-y-8"
+										className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-x-3 sm:gap-x-5 gap-y-8"
 									>
 										{events.map((event, index) => (
 											<motion.div
