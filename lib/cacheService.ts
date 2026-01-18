@@ -82,6 +82,7 @@ export async function checkCache(query: ScrapeQuery): Promise<CacheResult> {
  */
 export async function createWorkflowExecution(query: ScrapeQuery): Promise<string> {
   const queryHash = generateQueryHash(query);
+  const executionId = `webhook_${Date.now()}`;
 
   const execution = await prisma.workflowExecution.upsert({
     where: { queryHash },
@@ -91,6 +92,7 @@ export async function createWorkflowExecution(query: ScrapeQuery): Promise<strin
       errorMessage: null
     },
     create: {
+      id: executionId,
       queryHash,
       location: query.cities?.join(', ') || null,
       radiusKm: query.radiusKm || null,
