@@ -8,7 +8,7 @@ interface CacheResult {
   isRunning: boolean;
   shouldTrigger: boolean;
   execution?: {
-    id: number;
+    id: string;
     lastExecutedAt: Date;
     status: string;
     eventCount: number;
@@ -102,7 +102,7 @@ export async function createWorkflowExecution(query: ScrapeQuery): Promise<strin
     }
   });
 
-  return execution.id.toString();
+  return execution.id;
 }
 
 /**
@@ -117,7 +117,7 @@ export async function waitForExecution(executionId: string, maxWaitMs: number = 
 
   while (Date.now() - startTime < maxWaitMs) {
     const execution = await prisma.workflowExecution.findUnique({
-      where: { id: parseInt(executionId) }
+      where: { id: executionId }
     });
 
     if (!execution) {
