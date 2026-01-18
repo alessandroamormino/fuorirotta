@@ -43,20 +43,38 @@ export default function Home() {
 		});
 	};
 
-	const [events, setEvents] = useState<Event[]>([]);
-
-	// Start with loading false if we have cached data
-	const [loading, setLoading] = useState(() => {
+	// Restore events from cache IMMEDIATELY on mount (synchronous)
+	const initialCacheData = (() => {
 		if (typeof window !== "undefined") {
-			const saved = sessionStorage.getItem("searchFilters");
-			if (saved) {
-				// Check if there's cached data for these filters
-				const cache = sessionStorage.getItem("eventCache");
-				return !cache; // loading = true only if no cache
+			const savedFilters = sessionStorage.getItem("searchFilters");
+			const cache = sessionStorage.getItem("eventCache");
+
+			if (savedFilters && cache) {
+				try {
+					const filters = JSON.parse(savedFilters);
+					const cacheData = JSON.parse(cache);
+					const queryKey = JSON.stringify({
+						location: filters.location || '',
+						dateFrom: filters.dateFrom || '',
+						dateTo: filters.dateTo || '',
+						radius: filters.radius || '',
+						category: 'all'
+					});
+
+					const cached = cacheData[queryKey];
+					if (cached && (Date.now() - cached.timestamp < 5 * 60 * 1000)) {
+						return { events: cached.events, total: cached.total };
+					}
+				} catch (e) {
+					console.error('Failed to restore cache:', e);
+				}
 			}
 		}
-		return true;
-	});
+		return { events: [], total: 0 };
+	})();
+
+	const [events, setEvents] = useState<Event[]>(initialCacheData.events);
+	const [loading, setLoading] = useState(initialCacheData.events.length === 0);
 	const [selectedCategory] = useState<string>("all");
 
 	// Restore search filters from sessionStorage
@@ -88,7 +106,7 @@ export default function Home() {
 	// Infinite scroll state
 	const [offset, setOffset] = useState(0);
 	const [hasMore, setHasMore] = useState(true);
-	const [total, setTotal] = useState(0);
+	const [total, setTotal] = useState(initialCacheData.total);
 
 	const observerTarget = useInfiniteScroll(
 		() => {
@@ -120,18 +138,13 @@ export default function Home() {
 		}
 	}, []);
 
-	// Check cache on mount
+	// Load events on mount (only if not already cached)
 	useEffect(() => {
-		const queryKey = generateQueryKey(searchFilters, selectedCategory);
-		const cached = getCachedEvents(queryKey);
-
-		if (cached) {
-			// Use cached data
-			setEvents(cached.events);
-			setTotal(cached.total);
-			setLoading(false);
-
-			// Restore scroll position
+		if (events.length === 0) {
+			// No cached events, fetch from API
+			fetchEvents(0, true);
+		} else {
+			// Events loaded from cache, restore scroll position
 			const scrollPos = sessionStorage.getItem("events-scroll");
 			if (scrollPos) {
 				setTimeout(() => {
@@ -143,9 +156,6 @@ export default function Home() {
 					}
 				}, 100);
 			}
-		} else {
-			// No cache, do initial load
-			fetchEvents(0, true);
 		}
 	}, []);
 
