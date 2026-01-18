@@ -45,13 +45,39 @@ export default function Home() {
 
 	const [events, setEvents] = useState<Event[]>([]);
 
-	const [loading, setLoading] = useState(true);
+	// Start with loading false if we have cached data
+	const [loading, setLoading] = useState(() => {
+		if (typeof window !== "undefined") {
+			const saved = sessionStorage.getItem("searchFilters");
+			if (saved) {
+				// Check if there's cached data for these filters
+				const cache = sessionStorage.getItem("eventCache");
+				return !cache; // loading = true only if no cache
+			}
+		}
+		return true;
+	});
 	const [selectedCategory] = useState<string>("all");
-	const [searchFilters, setSearchFilters] = useState<SearchFilters>({
-		location: "",
-		dateFrom: null,
-		dateTo: null,
-		radius: undefined,
+
+	// Restore search filters from sessionStorage
+	const [searchFilters, setSearchFilters] = useState<SearchFilters>(() => {
+		if (typeof window !== "undefined") {
+			const saved = sessionStorage.getItem("searchFilters");
+			if (saved) {
+				try {
+					const parsed = JSON.parse(saved);
+					return {
+						location: parsed.location || "",
+						dateFrom: parsed.dateFrom ? new Date(parsed.dateFrom) : null,
+						dateTo: parsed.dateTo ? new Date(parsed.dateTo) : null,
+						radius: parsed.radius
+					};
+				} catch {
+					return { location: "", dateFrom: null, dateTo: null, radius: undefined };
+				}
+			}
+		}
+		return { location: "", dateFrom: null, dateTo: null, radius: undefined };
 	});
 	const [userLocation, setUserLocation] = useState<{
 		lat: number;
@@ -71,6 +97,11 @@ export default function Home() {
 		hasMore,
 		loading
 	);
+
+	// Save search filters to sessionStorage when they change
+	useEffect(() => {
+		sessionStorage.setItem("searchFilters", JSON.stringify(searchFilters));
+	}, [searchFilters]);
 
 	// Request geolocation on mount
 	useEffect(() => {
