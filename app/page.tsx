@@ -8,6 +8,7 @@ import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
 import { useInfiniteScroll } from "@/lib/hooks/useInfiniteScroll";
 import { Filter, Loader2, Map, X } from "lucide-react";
+import { useEventCache } from "@/lib/eventCache";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -29,21 +30,20 @@ interface SearchFilters {
 
 export default function Home() {
 	const LIMIT = 100; // Aumentato da 50 a 100 per ridurre le chiamate API
+	const { getCachedEvents, setCachedEvents } = useEventCache();
 
-	// Restore from sessionStorage if available
-	const [events, setEvents] = useState<Event[]>(() => {
-		if (typeof window !== "undefined") {
-			const cached = sessionStorage.getItem("events-cache");
-			if (cached) {
-				try {
-					return JSON.parse(cached);
-				} catch {
-					return [];
-				}
-			}
-		}
-		return [];
-	});
+	// Helper to generate cache key from filters
+	const generateQueryKey = (filters: SearchFilters, category: string) => {
+		return JSON.stringify({
+			location: filters.location || '',
+			dateFrom: filters.dateFrom?.toISOString() || '',
+			dateTo: filters.dateTo?.toISOString() || '',
+			radius: filters.radius || '',
+			category: category || 'all'
+		});
+	};
+
+	const [events, setEvents] = useState<Event[]>([]);
 
 	const [loading, setLoading] = useState(true);
 	const [selectedCategory] = useState<string>("all");
@@ -60,27 +60,9 @@ export default function Home() {
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
 
 	// Infinite scroll state
-	const [offset, setOffset] = useState(() => {
-		if (typeof window !== "undefined") {
-			const cached = sessionStorage.getItem("events-offset");
-			return cached ? parseInt(cached) : 0;
-		}
-		return 0;
-	});
-	const [hasMore, setHasMore] = useState(() => {
-		if (typeof window !== "undefined") {
-			const cached = sessionStorage.getItem("events-hasMore");
-			return cached ? cached === "true" : true;
-		}
-		return true;
-	});
-	const [total, setTotal] = useState(() => {
-		if (typeof window !== "undefined") {
-			const cached = sessionStorage.getItem("events-total");
-			return cached ? parseInt(cached) : 0;
-		}
-		return 0;
-	});
+	const [offset, setOffset] = useState(0);
+	const [hasMore, setHasMore] = useState(true);
+	const [total, setTotal] = useState(0);
 
 	const observerTarget = useInfiniteScroll(
 		() => {
@@ -89,16 +71,6 @@ export default function Home() {
 		hasMore,
 		loading
 	);
-
-	// Save to sessionStorage when state changes
-	useEffect(() => {
-		if (events.length > 0) {
-			sessionStorage.setItem("events-cache", JSON.stringify(events));
-			sessionStorage.setItem("events-offset", offset.toString());
-			sessionStorage.setItem("events-hasMore", hasMore.toString());
-			sessionStorage.setItem("events-total", total.toString());
-		}
-	}, [events, offset, hasMore, total]);
 
 	// Request geolocation on mount
 	useEffect(() => {
@@ -117,12 +89,17 @@ export default function Home() {
 		}
 	}, []);
 
-	// Check if we have cached data on mount
+	// Check cache on mount
 	useEffect(() => {
-		const hasCachedData = sessionStorage.getItem("events-cache");
-		if (hasCachedData) {
-			// Skip initial load, we already have data from cache
+		const queryKey = generateQueryKey(searchFilters, selectedCategory);
+		const cached = getCachedEvents(queryKey);
+
+		if (cached) {
+			// Use cached data
+			setEvents(cached.events);
+			setTotal(cached.total);
 			setLoading(false);
+
 			// Restore scroll position
 			const scrollPos = sessionStorage.getItem("events-scroll");
 			if (scrollPos) {
@@ -159,19 +136,25 @@ export default function Home() {
 		return () => scrollContainer.removeEventListener("scroll", handleScroll);
 	}, [events]);
 
-	// Reset and load events when filters change
+	// Check cache when filters change
 	useEffect(() => {
-		// Clear cache when filters change
-		sessionStorage.removeItem("events-cache");
-		sessionStorage.removeItem("events-offset");
-		sessionStorage.removeItem("events-hasMore");
-		sessionStorage.removeItem("events-total");
-		sessionStorage.removeItem("events-scroll");
+		const queryKey = generateQueryKey(searchFilters, selectedCategory);
+		const cached = getCachedEvents(queryKey);
 
 		setOffset(0);
-		setEvents([]);
 		setHasMore(true);
-		fetchEvents(0, true);
+		sessionStorage.removeItem("events-scroll");
+
+		if (cached) {
+			// Use cached data
+			setEvents(cached.events);
+			setTotal(cached.total);
+			setLoading(false);
+		} else {
+			// Fetch new data
+			setEvents([]);
+			fetchEvents(0, true);
+		}
 	}, [searchFilters, selectedCategory]);
 
 	// Load categories
@@ -250,21 +233,31 @@ export default function Home() {
 				return;
 			}
 
+			const newEvents = data.events || [];
+			const newTotal = data.total || 0;
+
 			if (isReset) {
-				setEvents(data.events || []);
+				setEvents(newEvents);
+				// Store in cache for first page load
+				const queryKey = generateQueryKey(searchFilters, selectedCategory);
+				setCachedEvents(queryKey, {
+					events: newEvents,
+					total: newTotal,
+					query: queryKey
+				});
 			} else {
 				// Deduplicate events by ID before appending
 				setEvents((prev) => {
 					const existingIds = new Set(prev.map((e) => e.id));
-					const newEvents = (data.events || []).filter(
+					const uniqueNewEvents = newEvents.filter(
 						(e: Event) => !existingIds.has(e.id)
 					);
-					return [...prev, ...newEvents];
+					return [...prev, ...uniqueNewEvents];
 				});
 			}
 
-			setTotal(data.total || 0);
-			setHasMore((data.events?.length || 0) === LIMIT);
+			setTotal(newTotal);
+			setHasMore(newEvents.length === LIMIT);
 			setOffset(currentOffset + LIMIT);
 		} catch (error) {
 			console.error("Error fetching events:", error);
