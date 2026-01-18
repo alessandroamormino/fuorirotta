@@ -16,6 +16,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
 	title: "Fuorirotta",
 	description: "Created by the Fuorirotta team",
+	metadataBase: new URL(
+		(process.env.NEXT_PUBLIC_SITE_URL ||
+			process.env.SITE_URL ||
+			"http://localhost:3000"
+		).replace(/\/$/, "")
+	),
+	alternates: {
+		canonical: "/",
+	},
+	robots: {
+		index: true,
+		follow: true,
+	},
 };
 
 export default function RootLayout({
