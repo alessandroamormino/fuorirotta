@@ -191,6 +191,8 @@ export async function GET(request: NextRequest) {
 			cacheResult
 		);
 
+		let refreshTriggered = false;
+
 		if (offset === 0) {
 			// CASO 1: Nessun evento trovato → Refresh SINCRONO
 			if (total === 0 && cacheResult?.shouldTrigger) {
@@ -212,6 +214,7 @@ export async function GET(request: NextRequest) {
 					const result = await runAllScrapers(params);
 					await completeWorkflowExecution(executionId, result.saved);
 
+					refreshTriggered = true;
 					console.log('[Refresh On-Demand] Scraper refresh completed, re-fetching events...');
 
 					// Re-fetch eventi dopo il refresh
@@ -262,6 +265,8 @@ export async function GET(request: NextRequest) {
 					"[Refresh On-Demand] Cache stale, triggering background refresh..."
 				);
 
+				refreshTriggered = true;
+
 				// Fire-and-forget: non aspettiamo il completamento
 				createWorkflowExecution(cacheQuery)
 					.then(async (executionId) => {
@@ -286,11 +291,10 @@ export async function GET(request: NextRequest) {
 			offset,
 			cache: {
 				hit: cacheResult?.isCached || false,
-				age_hours: cacheResult?.execution?.lastExecutedAt
-					? (Date.now() - cacheResult.execution.lastExecutedAt.getTime()) /
-					  (1000 * 60 * 60)
-					: null,
-				refreshed: offset === 0 && total === 0 ? true : false, // Indica se abbiamo fatto refresh
+				fresh: cacheResult?.isFresh || false,
+				age_hours: cacheResult?.ageHours ?? null,
+				refreshing: refreshTriggered,
+				last_event_count: cacheResult?.execution?.eventCount ?? null,
 			},
 		});
 	} catch (error) {
