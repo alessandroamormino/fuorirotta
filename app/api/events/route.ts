@@ -4,8 +4,10 @@ import {
 	checkCache,
 	createWorkflowExecution,
 	waitForExecution,
+	completeWorkflowExecution,
+	failWorkflowExecution,
 } from "@/lib/cacheService";
-import { triggerN8nWorkflow } from "@/lib/n8nClient";
+import { runAllScrapers } from "@/lib/scrapers";
 import { Prisma, Event as PrismaEvent } from "@prisma/client";
 import { Event } from "@/lib/types";
 
@@ -195,55 +197,53 @@ export async function GET(request: NextRequest) {
 					"[Refresh On-Demand] No events found, triggering synchronous refresh..."
 				);
 
+				let executionId: string | null = null;
+
 				try {
-					const executionId = await createWorkflowExecution(cacheQuery);
-					const triggered = await triggerN8nWorkflow(cacheQuery, executionId);
+					executionId = await createWorkflowExecution(cacheQuery);
 
-					if (triggered) {
-						// Aspetta max 2 minuti per il completamento
-						const completed = await waitForExecution(executionId, 120000);
+					// Run scrapers directly instead of n8n webhook
+					const params = {
+						dateFrom: cacheQuery.dateFrom,
+						dateTo: cacheQuery.dateTo
+					};
 
-						if (completed) {
-							console.log(
-								"[Refresh On-Demand] Refresh completed, re-fetching events..."
+					await runAllScrapers(params);
+					await completeWorkflowExecution(executionId, 0); // eventCount updated by saveEvents
+
+					console.log('[Refresh On-Demand] Scraper refresh completed, re-fetching events...');
+
+					// Re-fetch eventi dopo il refresh
+					if (lat && lng && radius) {
+						const userLat = parseFloat(lat);
+						const userLng = parseFloat(lng);
+						const radiusKm = parseFloat(radius);
+						const allEvents = await prisma.event.findMany({
+							where,
+							orderBy: { dateStart: "asc" },
+						});
+						const filteredEvents = allEvents.filter((event) => {
+							if (!event.latitude || !event.longitude) return false;
+							const distance = calculateDistance(
+								userLat,
+								userLng,
+								parseFloat(event.latitude.toString()),
+								parseFloat(event.longitude.toString())
 							);
-
-							// Re-fetch eventi dopo il refresh
-							if (lat && lng && radius) {
-								const userLat = parseFloat(lat);
-								const userLng = parseFloat(lng);
-								const radiusKm = parseFloat(radius);
-								const allEvents = await prisma.event.findMany({
-									where,
-									orderBy: { dateStart: "asc" },
-								});
-								const filteredEvents = allEvents.filter((event) => {
-									if (!event.latitude || !event.longitude) return false;
-									const distance = calculateDistance(
-										userLat,
-										userLng,
-										parseFloat(event.latitude.toString()),
-										parseFloat(event.longitude.toString())
-									);
-									return distance <= radiusKm;
-								});
-								events = filteredEvents.slice(0, limit);
-								total = filteredEvents.length;
-							} else {
-								events = await prisma.event.findMany({
-									where,
-									orderBy: { dateStart: "asc" },
-									take: limit,
-								});
-								total = await prisma.event.count({ where });
-							}
-						} else {
-							console.warn(
-								"[Refresh On-Demand] Refresh timeout - returning empty results"
-							);
-						}
+							return distance <= radiusKm;
+						});
+						events = filteredEvents.slice(0, limit);
+						total = filteredEvents.length;
+					} else {
+						events = await prisma.event.findMany({
+							where,
+							orderBy: { dateStart: "asc" },
+							take: limit,
+						});
+						total = await prisma.event.count({ where });
 					}
 				} catch (refreshError) {
+					if (executionId) await failWorkflowExecution(executionId, String(refreshError));
 					console.error(
 						"[Refresh On-Demand] Error during refresh:",
 						refreshError
@@ -263,10 +263,17 @@ export async function GET(request: NextRequest) {
 
 				// Fire-and-forget: non aspettiamo il completamento
 				createWorkflowExecution(cacheQuery)
-					.then((executionId) => triggerN8nWorkflow(cacheQuery, executionId))
-					.catch((err) =>
-						console.error("[Refresh On-Demand] Background refresh failed:", err)
-					);
+					.then(async (executionId) => {
+						try {
+							const params = { dateFrom: cacheQuery.dateFrom, dateTo: cacheQuery.dateTo };
+							await runAllScrapers(params);
+							await completeWorkflowExecution(executionId, 0);
+						} catch (err) {
+							await failWorkflowExecution(executionId, String(err));
+							console.error('[Refresh On-Demand] Background refresh failed:', err);
+						}
+					})
+					.catch(err => console.error('[Refresh On-Demand] Background refresh failed:', err));
 			}
 		}
 		// ==============================================

@@ -65,9 +65,6 @@ export async function runAllScrapers(params?: ScrapeParams): Promise<void> {
   } catch (error) {
     console.error('[Scraper] Fatal error:', error)
     throw error
-  } finally {
-    // Always disconnect prisma
-    await prisma.$disconnect()
   }
 }
 
@@ -87,8 +84,13 @@ if (require.main === module) {
     }
   }
 
-  runAllScrapers(params).catch(error => {
-    console.error('[Scraper] Execution failed:', error)
-    process.exit(1)
-  })
+  runAllScrapers(params)
+    .then(async () => {
+      await prisma.$disconnect()
+    })
+    .catch(async (error) => {
+      console.error('[Scraper] Execution failed:', error)
+      await prisma.$disconnect()
+      process.exit(1)
+    })
 }
