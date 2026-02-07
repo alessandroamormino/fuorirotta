@@ -1,7 +1,33 @@
 import { prisma } from './prisma';
-import { generateQueryHash, ScrapeQuery } from './n8nClient';
+import crypto from 'crypto';
 
 const CACHE_TTL_HOURS = 4;
+
+export interface ScrapeQuery {
+  cities?: string[];
+  radiusKm?: number;
+  centerLat?: number;
+  centerLng?: number;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+/**
+ * Genera un hash SHA-256 deterministico dalla query per il caching
+ * Normalizza i parametri per garantire che query equivalenti producano lo stesso hash
+ */
+export function generateQueryHash(query: ScrapeQuery): string {
+  const normalized = {
+    cities: (query.cities || []).sort(), // Ordina per consistenza
+    radiusKm: query.radiusKm || null,
+    centerLat: query.centerLat ? Math.round(query.centerLat * 1000) / 1000 : null, // 3 decimali
+    centerLng: query.centerLng ? Math.round(query.centerLng * 1000) / 1000 : null,
+    dateFrom: query.dateFrom || '',
+    dateTo: query.dateTo || ''
+  };
+
+  return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
+}
 
 interface CacheResult {
   isCached: boolean;
@@ -78,17 +104,19 @@ export async function checkCache(query: ScrapeQuery): Promise<CacheResult> {
 /**
  * Crea o aggiorna un record di esecuzione workflow nel database
  * @param query Parametri di ricerca eventi
+ * @param eventCount Optional: number of events found (if provided, status set to 'completed')
  * @returns ID dell'esecuzione creata/aggiornata
  */
-export async function createWorkflowExecution(query: ScrapeQuery): Promise<string> {
+export async function createWorkflowExecution(query: ScrapeQuery, eventCount?: number): Promise<string> {
   const queryHash = generateQueryHash(query);
-  const executionId = `webhook_${Date.now()}`;
+  const executionId = `scraper_${Date.now()}`;
 
   const execution = await prisma.workflowExecution.upsert({
     where: { queryHash },
     update: {
-      status: 'pending',
+      status: eventCount !== undefined ? 'completed' : 'pending',
       lastExecutedAt: new Date(),
+      eventCount: eventCount !== undefined ? eventCount : undefined,
       errorMessage: null
     },
     create: {
@@ -99,12 +127,53 @@ export async function createWorkflowExecution(query: ScrapeQuery): Promise<strin
       dateFrom: query.dateFrom ? new Date(query.dateFrom) : null,
       dateTo: query.dateTo ? new Date(query.dateTo) : null,
       cities: query.cities || [],
-      status: 'pending',
+      status: eventCount !== undefined ? 'completed' : 'pending',
+      eventCount: eventCount !== undefined ? eventCount : 0,
       lastExecutedAt: new Date()
     }
   });
 
   return execution.id;
+}
+
+/**
+ * Completa l'esecuzione di un workflow con successo
+ * @param executionId ID dell'esecuzione workflow
+ * @param eventCount Numero di eventi trovati
+ */
+export async function completeWorkflowExecution(executionId: string, eventCount: number): Promise<void> {
+  try {
+    await prisma.workflowExecution.update({
+      where: { id: executionId },
+      data: {
+        status: 'completed',
+        eventCount,
+        lastExecutedAt: new Date(),
+        errorMessage: null
+      }
+    });
+  } catch (error) {
+    console.error(`[Cache] Failed to complete workflow execution ${executionId}:`, error);
+  }
+}
+
+/**
+ * Marca l'esecuzione di un workflow come fallita
+ * @param executionId ID dell'esecuzione workflow
+ * @param errorMessage Messaggio di errore
+ */
+export async function failWorkflowExecution(executionId: string, errorMessage: string): Promise<void> {
+  try {
+    await prisma.workflowExecution.update({
+      where: { id: executionId },
+      data: {
+        status: 'failed',
+        errorMessage
+      }
+    });
+  } catch (error) {
+    console.error(`[Cache] Failed to mark workflow execution ${executionId} as failed:`, error);
+  }
 }
 
 /**
