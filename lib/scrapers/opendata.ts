@@ -8,6 +8,7 @@
  */
 
 import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
+import { fetchWithRetry } from './utils'
 
 interface OpenDataRecord {
   id?: string
@@ -43,8 +44,8 @@ export async function scrapeOpenData(params: ScrapeParams = {}): Promise<ScrapeR
     const whereClause = `data_in>='${dateFrom}' AND data_in<='${dateTo}'`
     const url = `https://www.dati.lombardia.it/resource/hs8z-dcey.json?$limit=2000&$offset=0&$where=${encodeURIComponent(whereClause)}&$order=data_in DESC`
 
-    // Fetch JSON data
-    const response = await fetch(url)
+    // Fetch JSON data with retry logic
+    const response = await fetchWithRetry(url)
     const data: OpenDataRecord[] = await response.json()
 
     // Transform to ScrapedEvent format

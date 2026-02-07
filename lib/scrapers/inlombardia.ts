@@ -9,6 +9,7 @@
  */
 
 import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
+import { fetchWithRetry } from './utils'
 
 interface ParsedEvent {
   title: string | null
@@ -72,8 +73,8 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   // Build initial URL
   const initialUrl = `https://www.in-lombardia.it/eventi?from%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateFrom)}&to%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateTo)}&location=&where=&distance=40&what%5B%5D=all&date_search=period`
 
-  // Fetch initial page
-  const initialResponse = await fetch(initialUrl)
+  // Fetch initial page with retry logic
+  const initialResponse = await fetchWithRetry(initialUrl)
   const initialHtml = await initialResponse.text()
 
   // Extract view_dom_id (required for AJAX pagination)
@@ -109,8 +110,8 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
     ].join('&')
 
     try {
-      // POST to AJAX endpoint
-      const ajaxResponse = await fetch('https://www.in-lombardia.it/it/views/ajax', {
+      // POST to AJAX endpoint with retry logic
+      const ajaxResponse = await fetchWithRetry('https://www.in-lombardia.it/it/views/ajax', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -148,7 +149,7 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
         hasMorePages = false
       }
     } catch (error) {
-      // On any fetch error, stop pagination (don't throw)
+      // On any fetch error, stop pagination and return events collected so far (don't throw)
       hasMorePages = false
     }
   }

@@ -9,6 +9,7 @@
  */
 
 import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
+import { fetchWithRetry } from './utils'
 
 interface ParsedEvent {
   title: string | null
@@ -24,8 +25,8 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Scrape
   const startTime = Date.now()
 
   try {
-    // Step 1: Fetch HTML from SoloSagre
-    const response = await fetch('https://www.solosagre.it/sagre/lombardia/')
+    // Step 1: Fetch HTML from SoloSagre with retry logic
+    const response = await fetchWithRetry('https://www.solosagre.it/sagre/lombardia/')
     const html = await response.text()
 
     // Step 2: Parse HTML to extract events
