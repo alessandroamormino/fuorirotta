@@ -5,6 +5,7 @@ import { Event } from './types';
 
 interface EventCacheData {
   events: Event[];
+  mapEvents?: Event[];
   total: number;
   timestamp: number;
   query: string;

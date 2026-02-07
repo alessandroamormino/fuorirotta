@@ -29,7 +29,7 @@ interface SearchFilters {
 }
 
 export default function Home() {
-	const LIMIT = 100; // Aumentato da 50 a 100 per ridurre le chiamate API
+	const LIMIT = 50;
 	const { getCachedEvents, setCachedEvents } = useEventCache();
 
 	// Helper to generate cache key from filters
@@ -63,17 +63,18 @@ export default function Home() {
 
 					const cached = cacheData[queryKey];
 					if (cached && (Date.now() - cached.timestamp < 5 * 60 * 1000)) {
-						return { events: cached.events, total: cached.total };
+						return { events: cached.events, mapEvents: cached.mapEvents || cached.events, total: cached.total };
 					}
 				} catch (e) {
 					console.error('Failed to restore cache:', e);
 				}
 			}
 		}
-		return { events: [], total: 0 };
+		return { events: [], mapEvents: [], total: 0 };
 	})();
 
 	const [events, setEvents] = useState<Event[]>(initialCacheData.events);
+	const [mapEvents, setMapEvents] = useState<Event[]>(initialCacheData.mapEvents);
 	const [loading, setLoading] = useState(initialCacheData.events.length === 0);
 	const [selectedCategory] = useState<string>("all");
 
@@ -189,11 +190,14 @@ export default function Home() {
 		if (cached) {
 			// Use cached data
 			setEvents(cached.events);
+			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
 			setLoading(false);
 		} else {
-			// Fetch new data
+			// Fetch new data - set loading FIRST to prevent "nessun risultato" flash
+			setLoading(true);
 			setEvents([]);
+			setMapEvents([]);
 			fetchEvents(0, true);
 		}
 	}, [searchFilters, selectedCategory]);
@@ -275,19 +279,22 @@ export default function Home() {
 			}
 
 			const newEvents = data.events || [];
+			const newMapEvents = data.mapEvents || newEvents; // fallback to events if mapEvents not available
 			const newTotal = data.total || 0;
 
 			if (isReset) {
 				setEvents(newEvents);
+				setMapEvents(newMapEvents); // Set ALL events for map
 				// Store in cache for first page load
 				const queryKey = generateQueryKey(searchFilters, selectedCategory);
 				setCachedEvents(queryKey, {
 					events: newEvents,
+					mapEvents: newMapEvents,
 					total: newTotal,
 					query: queryKey
 				});
 			} else {
-				// Deduplicate events by ID before appending
+				// Infinite scroll: only append to list events, map already has all
 				setEvents((prev) => {
 					const existingIds = new Set(prev.map((e) => e.id));
 					const uniqueNewEvents = newEvents.filter(
@@ -295,6 +302,7 @@ export default function Home() {
 					);
 					return [...prev, ...uniqueNewEvents];
 				});
+				// Don't update mapEvents on scroll - they already have everything
 			}
 
 			setTotal(newTotal);
@@ -431,7 +439,7 @@ export default function Home() {
 					<div className="hidden xl:block w-[45%] max-w-2xl flex-shrink-0">
 						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#83c5be]/30 relative group">
 							<EventsMap
-								events={events}
+								events={mapEvents}
 								mapId="map-sidebar"
 								userLocation={userLocation}
 							/>
@@ -469,7 +477,7 @@ export default function Home() {
 							{/* Header */}
 							<div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-lg border-b border-gray-200 px-6 py-4 flex items-center justify-between">
 								<h3 className="text-lg font-bold text-gray-900">
-									Mappa eventi - {events.length} eventi
+									Mappa eventi - {mapEvents.length} eventi
 								</h3>
 								<button
 									onClick={() => setIsMapExpanded(false)}
@@ -482,7 +490,7 @@ export default function Home() {
 							{/* Map Content */}
 							<div className="absolute inset-0 pt-16">
 								<EventsMap
-									events={events}
+									events={mapEvents}
 									mapId="map-fullscreen"
 									userLocation={userLocation}
 								/>
