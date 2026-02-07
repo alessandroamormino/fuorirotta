@@ -144,6 +144,7 @@ export async function GET(request: NextRequest) {
 		// GESTIONE FILTRO RAGGIO
 		let events: any[];
 		let total: number;
+		let mapEvents: any[];
 
 		if (lat && lng && radius) {
 			// Con filtro raggio: fetch TUTTI gli eventi, filtra in memoria, poi pagina
@@ -172,6 +173,20 @@ export async function GET(request: NextRequest) {
 			// Applica paginazione sui risultati filtrati
 			events = filteredEvents.slice(offset, offset + limit);
 			total = filteredEvents.length;
+
+			// For map: use all filtered events with lightweight fields
+			mapEvents = filteredEvents.map((e) => ({
+				id: e.id,
+				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
+				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
+				title: e.title,
+				dateStart: e.dateStart,
+				locationName: e.locationName,
+				category: e.category,
+				imageUrl: e.imageUrl,
+				source: e.source,
+				sourceId: e.sourceId,
+			}));
 		} else {
 			// Senza filtro raggio: query normale con paginazione DB
 			events = await prisma.event.findMany({
@@ -182,6 +197,30 @@ export async function GET(request: NextRequest) {
 			});
 
 			total = await prisma.event.count({ where });
+
+			// Fetch lightweight event data for map (all matching events, no pagination)
+			const mapEventsRaw = await prisma.event.findMany({
+				where,
+				orderBy: { dateStart: "asc" },
+				select: {
+					id: true,
+					latitude: true,
+					longitude: true,
+					title: true,
+					dateStart: true,
+					locationName: true,
+					category: true,
+					imageUrl: true,
+					source: true,
+					sourceId: true,
+				},
+			});
+
+			mapEvents = mapEventsRaw.map((e) => ({
+				...e,
+				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
+				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
+			}));
 		}
 
 		// ========== REFRESH ON-DEMAND LOGIC ==========
@@ -238,6 +277,20 @@ export async function GET(request: NextRequest) {
 						});
 						events = filteredEvents.slice(0, limit);
 						total = filteredEvents.length;
+
+						// Also update mapEvents after scrape
+						mapEvents = filteredEvents.map((e) => ({
+							id: e.id,
+							latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
+							longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
+							title: e.title,
+							dateStart: e.dateStart,
+							locationName: e.locationName,
+							category: e.category,
+							imageUrl: e.imageUrl,
+							source: e.source,
+							sourceId: e.sourceId,
+						}));
 					} else {
 						events = await prisma.event.findMany({
 							where,
@@ -245,6 +298,30 @@ export async function GET(request: NextRequest) {
 							take: limit,
 						});
 						total = await prisma.event.count({ where });
+
+						// Also fetch mapEvents after scrape
+						const mapEventsRaw = await prisma.event.findMany({
+							where,
+							orderBy: { dateStart: "asc" },
+							select: {
+								id: true,
+								latitude: true,
+								longitude: true,
+								title: true,
+								dateStart: true,
+								locationName: true,
+								category: true,
+								imageUrl: true,
+								source: true,
+								sourceId: true,
+							},
+						});
+
+						mapEvents = mapEventsRaw.map((e) => ({
+							...e,
+							latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
+							longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
+						}));
 					}
 				} catch (refreshError) {
 					if (executionId) await failWorkflowExecution(executionId, String(refreshError));
@@ -286,6 +363,7 @@ export async function GET(request: NextRequest) {
 
 		return NextResponse.json({
 			events: events.map(convertEventCoordinates),
+			mapEvents, // ALL matching events (lightweight) for map rendering
 			total,
 			limit,
 			offset,
