@@ -33,6 +33,8 @@ interface CacheResult {
   isCached: boolean;
   isRunning: boolean;
   shouldTrigger: boolean;
+  isFresh: boolean;
+  ageHours: number | null;
   execution?: {
     id: string;
     lastExecutedAt: Date;
@@ -55,15 +57,18 @@ export async function checkCache(query: ScrapeQuery): Promise<CacheResult> {
 
   // Nessuna esecuzione precedente - trigger necessario
   if (!execution) {
-    return { isCached: false, isRunning: false, shouldTrigger: true };
+    return { isCached: false, isRunning: false, shouldTrigger: true, isFresh: false, ageHours: null };
   }
 
   // Workflow in esecuzione o in coda - aspetta
   if (execution.status === 'running' || execution.status === 'pending') {
+    const ageInHours = (Date.now() - execution.lastExecutedAt.getTime()) / (1000 * 60 * 60);
     return {
       isCached: false,
       isRunning: true,
       shouldTrigger: false,
+      isFresh: false,
+      ageHours: ageInHours,
       execution: {
         id: execution.id,
         lastExecutedAt: execution.lastExecutedAt,
@@ -83,6 +88,8 @@ export async function checkCache(query: ScrapeQuery): Promise<CacheResult> {
       isCached: true,
       isRunning: false,
       shouldTrigger: false,
+      isFresh: true,
+      ageHours: ageInHours,
       execution: {
         id: execution.id,
         lastExecutedAt: execution.lastExecutedAt,
@@ -93,12 +100,19 @@ export async function checkCache(query: ScrapeQuery): Promise<CacheResult> {
   }
 
   // Cache scaduta o failed - trigger necessario
-  return { isCached: false, isRunning: false, shouldTrigger: true, execution: {
-    id: execution.id,
-    lastExecutedAt: execution.lastExecutedAt,
-    status: execution.status,
-    eventCount: execution.eventCount
-  } };
+  return {
+    isCached: false,
+    isRunning: false,
+    shouldTrigger: true,
+    isFresh: false,
+    ageHours: ageInHours,
+    execution: {
+      id: execution.id,
+      lastExecutedAt: execution.lastExecutedAt,
+      status: execution.status,
+      eventCount: execution.eventCount
+    }
+  };
 }
 
 /**
@@ -176,40 +190,3 @@ export async function failWorkflowExecution(executionId: string, errorMessage: s
   }
 }
 
-/**
- * Aspetta il completamento di un workflow n8n con polling
- * @param executionId ID dell'esecuzione nel database
- * @param maxWaitMs Tempo massimo di attesa in millisecondi (default: 90s)
- * @returns true se completato con successo, false se timeout o fallito
- */
-export async function waitForExecution(executionId: string, maxWaitMs: number = 90000): Promise<boolean> {
-  const startTime = Date.now();
-  const pollInterval = 3000; // Poll ogni 3 secondi
-
-  while (Date.now() - startTime < maxWaitMs) {
-    const execution = await prisma.workflowExecution.findUnique({
-      where: { id: executionId }
-    });
-
-    if (!execution) {
-      console.warn(`Workflow execution ${executionId} not found`);
-      return false;
-    }
-
-    if (execution.status === 'completed') {
-      console.log(`Workflow execution ${executionId} completed successfully`);
-      return true;
-    }
-
-    if (execution.status === 'failed') {
-      console.error(`Workflow execution ${executionId} failed: ${execution.errorMessage}`);
-      return false;
-    }
-
-    // Ancora in pending o running - continua ad aspettare
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
-  }
-
-  console.warn(`Workflow execution ${executionId} timed out after ${maxWaitMs}ms`);
-  return false; // Timeout - workflow ancora in esecuzione
-}

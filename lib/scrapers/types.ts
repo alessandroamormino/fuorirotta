@@ -31,3 +31,10 @@ export interface ScrapeResult {
   duration: number // milliseconds
   error?: string
 }
+
+export interface RunResult {
+  saved: number
+  skipped: number
+  total: number
+  errors: string[]
+}

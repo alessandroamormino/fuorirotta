@@ -13,14 +13,15 @@ import { scrapeOpenData } from './opendata'
 import { scrapeInLombardia } from './inlombardia'
 import { saveEvents, logMetrics } from './utils'
 import { prisma } from '../prisma'
-import type { ScrapeParams, ScrapeResult } from './types'
+import type { ScrapeParams, ScrapeResult, RunResult } from './types'
 
 /**
  * Run all scrapers concurrently and save to database
  *
  * @param params - Optional date range parameters
+ * @returns RunResult with saved, skipped, total counts and errors
  */
-export async function runAllScrapers(params?: ScrapeParams): Promise<void> {
+export async function runAllScrapers(params?: ScrapeParams): Promise<RunResult> {
   console.log('[Scraper] Starting scrape of all sources...')
 
   try {
@@ -50,18 +51,30 @@ export async function runAllScrapers(params?: ScrapeParams): Promise<void> {
     // Log metrics summary
     logMetrics(results)
 
+    // Collect errors from failed scrapers
+    const errors = results
+      .filter(r => r.error)
+      .map(r => `${r.source}: ${r.error}`)
+
     // Combine all events from successful scrapers
     const allEvents = results.flatMap(r => r.events)
 
     if (allEvents.length === 0) {
       console.log('[Scraper] No events to save.')
-      return
+      return { saved: 0, skipped: 0, total: 0, errors }
     }
 
     // Save to database with deduplication
     const { saved, skipped } = await saveEvents(allEvents)
 
     console.log(`[Scraper] Done. ${saved} new events saved to database.`)
+
+    return {
+      saved,
+      skipped,
+      total: allEvents.length,
+      errors
+    }
   } catch (error) {
     console.error('[Scraper] Fatal error:', error)
     throw error

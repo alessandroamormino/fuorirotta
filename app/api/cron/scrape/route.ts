@@ -65,10 +65,10 @@ async function executeScrape() {
 
   try {
     // Run all scrapers
-    await runAllScrapers({ dateFrom: today, dateTo: endOfYear });
+    const result = await runAllScrapers({ dateFrom: today, dateTo: endOfYear });
 
     // Mark execution as complete
-    await completeWorkflowExecution(executionId, 0);
+    await completeWorkflowExecution(executionId, result.saved);
 
     console.log('[Cron] Scrape completed successfully');
 

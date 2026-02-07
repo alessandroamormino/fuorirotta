@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import {
 	checkCache,
 	createWorkflowExecution,
-	waitForExecution,
 	completeWorkflowExecution,
 	failWorkflowExecution,
 } from "@/lib/cacheService";
@@ -72,6 +71,8 @@ export async function GET(request: NextRequest) {
 			isCached: boolean;
 			isRunning: boolean;
 			shouldTrigger: boolean;
+			isFresh: boolean;
+			ageHours: number | null;
 			execution?: {
 				id: string;
 				lastExecutedAt: Date;
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
 				);
 			} else {
 				console.log(
-					"[Cache] Reading from database (use /api/refresh to update data from sources)"
+					"[Cache] Reading from database (use /api/scrape to update data from sources)"
 				);
 			}
 		} catch (cacheError: any) {
@@ -208,8 +209,8 @@ export async function GET(request: NextRequest) {
 						dateTo: cacheQuery.dateTo
 					};
 
-					await runAllScrapers(params);
-					await completeWorkflowExecution(executionId, 0); // eventCount updated by saveEvents
+					const result = await runAllScrapers(params);
+					await completeWorkflowExecution(executionId, result.saved);
 
 					console.log('[Refresh On-Demand] Scraper refresh completed, re-fetching events...');
 
@@ -266,8 +267,8 @@ export async function GET(request: NextRequest) {
 					.then(async (executionId) => {
 						try {
 							const params = { dateFrom: cacheQuery.dateFrom, dateTo: cacheQuery.dateTo };
-							await runAllScrapers(params);
-							await completeWorkflowExecution(executionId, 0);
+							const result = await runAllScrapers(params);
+							await completeWorkflowExecution(executionId, result.saved);
 						} catch (err) {
 							await failWorkflowExecution(executionId, String(err));
 							console.error('[Refresh On-Demand] Background refresh failed:', err);
