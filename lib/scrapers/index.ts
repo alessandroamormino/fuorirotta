@@ -8,4 +8,6 @@
 export { scrapeSoloSagre } from './solosagre'
 export { scrapeOpenData } from './opendata'
 export { scrapeInLombardia } from './inlombardia'
+export { saveEvents, logMetrics } from './utils'
+export { runAllScrapers } from './runner'
 export type { ScrapedEvent, ScrapeParams, ScrapeResult } from './types'
