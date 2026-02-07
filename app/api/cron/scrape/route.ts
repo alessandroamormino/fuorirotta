@@ -72,7 +72,17 @@ async function executeScrape() {
 
     console.log('[Cron] Scrape completed successfully');
 
-    return { success: true, message: 'Cron scrape completed', executionId };
+    return {
+      success: true,
+      message: 'Cron scrape completed',
+      executionId,
+      events: {
+        saved: result.saved,
+        skipped: result.skipped,
+        total: result.total,
+      },
+      errors: result.errors.length > 0 ? result.errors : undefined
+    };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Cron] Scrape failed:', errorMsg);
