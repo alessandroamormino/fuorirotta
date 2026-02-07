@@ -42,7 +42,7 @@ export default function EventCard({ event }: EventCardProps) {
 						{event.locationName || "Lombardia"}
 					</h3>
 					<p className="text-sm text-gray-600 line-clamp-1">{event.title}</p>
-					<p className="text-sm text-[#006d77] font-medium">
+					<p className="text-sm text-[#006d77] font-medium" suppressHydrationWarning>
 						{format(new Date(event.dateStart), "dd MMM", { locale: it })}
 					</p>
 				</div>
