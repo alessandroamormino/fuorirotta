@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { Event } from "@/lib/types";
@@ -42,39 +42,13 @@ export default function Home() {
 		});
 	};
 
-	// Restore events from cache IMMEDIATELY on mount (synchronous)
-	const initialCacheData = (() => {
-		if (typeof window !== "undefined") {
-			const savedFilters = sessionStorage.getItem("searchFilters");
-			const cache = sessionStorage.getItem("eventCache");
+	// Track if this is the first mount (to prevent resetting page on filter restoration)
+	const isFirstMount = useRef(true);
 
-			if (savedFilters && cache) {
-				try {
-					const filters = JSON.parse(savedFilters);
-					const cacheData = JSON.parse(cache);
-					const queryKey = JSON.stringify({
-						location: filters.location || '',
-						dateFrom: filters.dateFrom || '',
-						dateTo: filters.dateTo || '',
-						radius: filters.radius || '',
-						category: 'all'
-					});
-
-					const cached = cacheData[queryKey];
-					if (cached && (Date.now() - cached.timestamp < 5 * 60 * 1000)) {
-						return { events: cached.events, mapEvents: cached.mapEvents || cached.events, total: cached.total };
-					}
-				} catch (e) {
-					console.error('Failed to restore cache:', e);
-				}
-			}
-		}
-		return { events: [], mapEvents: [], total: 0 };
-	})();
-
-	const [events, setEvents] = useState<Event[]>(initialCacheData.events);
-	const [mapEvents, setMapEvents] = useState<Event[]>(initialCacheData.mapEvents);
-	const [loading, setLoading] = useState(initialCacheData.events.length === 0);
+	// Initialize with empty arrays (prevents hydration mismatch)
+	const [events, setEvents] = useState<Event[]>([]);
+	const [mapEvents, setMapEvents] = useState<Event[]>([]);
+	const [loading, setLoading] = useState(true);
 	const [selectedCategory] = useState<string>("all");
 	const [clusterGeoJSON, setClusterGeoJSON] = useState<any>(null);
 
@@ -112,7 +86,7 @@ export default function Home() {
 		}
 		return 1;
 	});
-	const [total, setTotal] = useState(initialCacheData.total);
+	const [total, setTotal] = useState(0);
 
 	// Save currentPage to sessionStorage when it changes
 	useEffect(() => {
@@ -156,26 +130,40 @@ export default function Home() {
 			.catch(err => console.warn('[Clusters] Failed to load cached clusters:', err));
 	}, []);
 
-	// Load events on mount - handle cache/page restoration
-	useEffect(() => {
-		const savedPage = typeof window !== "undefined" ? sessionStorage.getItem("currentPage") : null;
-		const restoredPage = savedPage ? parseInt(savedPage, 10) : 1;
-
-		if (events.length === 0) {
-			// No cached events, fetch from API
-			fetchEvents(currentPage);
-		} else if (restoredPage > 1) {
-			// Events loaded from cache (page 1), but user was on a different page
-			// Re-fetch the correct page to sync UI
-			fetchEvents(restoredPage);
-		}
-	}, []);
-
-	// Check cache when filters change
+	// Restore cache on mount (after hydration) - runs once
 	useEffect(() => {
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
+		if (cached) {
+			// Restore cached events
+			setEvents(cached.events);
+			setMapEvents(cached.mapEvents || cached.events);
+			setTotal(cached.total);
+			setLoading(false);
+
+			// If user was on a page > 1, fetch that page
+			if (currentPage > 1) {
+				fetchEvents(currentPage);
+			}
+		} else {
+			// No cache, fetch initial data
+			fetchEvents(currentPage);
+		}
+
+		// Mark first mount as complete
+		isFirstMount.current = false;
+	}, []); // Run once on mount
+
+	// Check cache when filters change (but NOT on first mount)
+	useEffect(() => {
+		// Skip on first mount (handled by mount useEffect above)
+		if (isFirstMount.current) return;
+
+		const queryKey = generateQueryKey(searchFilters, selectedCategory);
+		const cached = getCachedEvents(queryKey);
+
+		// Reset to page 1 when filters change
 		setCurrentPage(1);
 
 		if (cached) {
