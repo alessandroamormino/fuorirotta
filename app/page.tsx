@@ -28,7 +28,7 @@ interface SearchFilters {
 }
 
 export default function Home() {
-	const LIMIT = 12;
+	const LIMIT = 16;
 	const { getCachedEvents, setCachedEvents } = useEventCache();
 
 	// Helper to generate cache key from filters
@@ -340,7 +340,7 @@ export default function Home() {
 								) : (
 									<div
 										key="events"
-										className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-4 sm:gap-x-6 gap-y-10"
+										className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-4 sm:gap-x-6 gap-y-4"
 									>
 										{events.map((event, index) => (
 											<div
@@ -468,7 +468,7 @@ export default function Home() {
 					</div>
 
 					{/* Map - Right Side (Fixed) */}
-					<div className="hidden xl:block w-[45%] max-w-2xl flex-shrink-0">
+					<div className="hidden xl:block w-[50%] max-w-4xl flex-shrink-0">
 						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#83c5be]/30 relative group">
 							<EventsMap
 								events={mapEvents}

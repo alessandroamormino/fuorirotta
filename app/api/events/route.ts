@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 		const lat = searchParams.get("lat");
 		const lng = searchParams.get("lng");
 		const radius = searchParams.get("radius");
-		const limit = parseInt(searchParams.get("limit") || "12");
+		const limit = parseInt(searchParams.get("limit") || "16");
 		const offset = parseInt(searchParams.get("offset") || "0");
 		const location = searchParams.get("location") || "";
 
