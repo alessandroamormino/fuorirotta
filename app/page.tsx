@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { Event } from "@/lib/types";
@@ -29,6 +30,7 @@ interface SearchFilters {
 
 export default function Home() {
 	const LIMIT = 12;
+	const router = useRouter();
 	const { getCachedEvents, setCachedEvents } = useEventCache();
 
 	// Helper to generate cache key from filters
@@ -75,20 +77,22 @@ export default function Home() {
 	} | null>(null);
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
 
-	// Pagination state
+	// Pagination state - read from URL query params (single source of truth)
 	const [currentPage, setCurrentPage] = useState<number>(() => {
 		if (typeof window !== "undefined") {
+			// Try to read from URL first
+			const urlParams = new URLSearchParams(window.location.search);
+			const pageFromUrl = urlParams.get("page");
+			if (pageFromUrl) {
+				return parseInt(pageFromUrl, 10);
+			}
+			// Fallback to sessionStorage for backward compatibility
 			const saved = sessionStorage.getItem("currentPage");
 			return saved ? parseInt(saved, 10) : 1;
 		}
 		return 1;
 	});
 	const [total, setTotal] = useState(0);
-
-	// Save currentPage to sessionStorage when it changes
-	useEffect(() => {
-		sessionStorage.setItem("currentPage", currentPage.toString());
-	}, [currentPage]);
 
 	// Save search filters to sessionStorage when they change
 	useEffect(() => {
@@ -183,6 +187,9 @@ export default function Home() {
 		setLoading(true);
 		// Update currentPage immediately - page parameter is single source of truth
 		setCurrentPage(page);
+		// Update URL with page parameter (shallow routing - no reload)
+		const url = page > 1 ? `/?page=${page}` : '/';
+		router.push(url, { scroll: false });
 		try {
 			const params = new URLSearchParams();
 
