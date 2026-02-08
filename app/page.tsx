@@ -82,7 +82,9 @@ export default function Home() {
 	const [currentPage, setCurrentPage] = useState<number>(() => {
 		if (typeof window !== "undefined") {
 			const saved = sessionStorage.getItem("currentPage");
-			return saved ? parseInt(saved, 10) : 1;
+			const page = saved ? parseInt(saved, 10) : 1;
+			console.log('[PAGINATION DEBUG] Initial currentPage from sessionStorage:', page);
+			return page;
 		}
 		return 1;
 	});
@@ -132,10 +134,16 @@ export default function Home() {
 
 	// Restore cache on mount (after hydration) - runs once
 	useEffect(() => {
+		// Mark first mount as complete IMMEDIATELY (before any other code)
+		// This prevents the filters useEffect from resetting currentPage
+		isFirstMount.current = false;
+
+		console.log('[PAGINATION DEBUG] Mount useEffect - currentPage:', currentPage);
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
 		if (cached) {
+			console.log('[PAGINATION DEBUG] Cache found, events:', cached.events.length);
 			// Restore cached events
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
@@ -144,22 +152,25 @@ export default function Home() {
 
 			// If user was on a page > 1, fetch that page
 			if (currentPage > 1) {
+				console.log('[PAGINATION DEBUG] Fetching page', currentPage);
 				fetchEvents(currentPage);
 			}
 		} else {
+			console.log('[PAGINATION DEBUG] No cache, fetching page', currentPage);
 			// No cache, fetch initial data
 			fetchEvents(currentPage);
 		}
-
-		// Mark first mount as complete
-		isFirstMount.current = false;
 	}, []); // Run once on mount
 
 	// Check cache when filters change (but NOT on first mount)
 	useEffect(() => {
 		// Skip on first mount (handled by mount useEffect above)
-		if (isFirstMount.current) return;
+		if (isFirstMount.current) {
+			console.log('[PAGINATION DEBUG] Filters useEffect - skipping (first mount)');
+			return;
+		}
 
+		console.log('[PAGINATION DEBUG] Filters changed - resetting to page 1');
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
