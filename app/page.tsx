@@ -28,7 +28,7 @@ interface SearchFilters {
 }
 
 export default function Home() {
-	const LIMIT = 50;
+	const LIMIT = 12;
 	const { getCachedEvents, setCachedEvents } = useEventCache();
 
 	// Helper to generate cache key from filters
@@ -163,6 +163,7 @@ export default function Home() {
 			fetchEvents(currentPage);
 		} else if (currentPage > 1) {
 			// Events loaded from cache but on a non-first page, re-fetch correct page
+			// This ensures pagination UI syncs correctly after back navigation
 			fetchEvents(currentPage);
 		} else {
 			// Events loaded from cache for page 1, restore scroll position
