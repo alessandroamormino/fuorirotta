@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Link from "next/link";
 import { Calendar } from "lucide-react";
+import { decodeHtmlEntities } from "@/lib/utils";
 
 interface EventCardProps {
 	event: Event;
@@ -39,9 +40,9 @@ export default function EventCard({ event }: EventCardProps) {
 				{/* Info */}
 				<div className="flex flex-col gap-0.5">
 					<h3 className="text-sm font-semibold text-gray-900 line-clamp-1">
-						{event.locationName || "Lombardia"}
+						{decodeHtmlEntities(event.title)}
 					</h3>
-					<p className="text-sm text-gray-600 line-clamp-1">{event.title}</p>
+					<p className="text-sm text-gray-600 line-clamp-1">{event.locationName || "Lombardia"}</p>
 					<p className="text-sm text-[#006d77] font-medium" suppressHydrationWarning>
 						{format(new Date(event.dateStart), "dd MMM", { locale: it })}
 					</p>
