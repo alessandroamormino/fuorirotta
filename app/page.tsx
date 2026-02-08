@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
-import { Filter, Loader2, Map, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Loader2, Map, X } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
@@ -165,39 +165,8 @@ export default function Home() {
 			// Events loaded from cache but on a non-first page, re-fetch correct page
 			// This ensures pagination UI syncs correctly after back navigation
 			fetchEvents(currentPage);
-		} else {
-			// Events loaded from cache for page 1, restore scroll position
-			const scrollPos = sessionStorage.getItem("events-scroll");
-			if (scrollPos) {
-				setTimeout(() => {
-					const scrollContainer = document.querySelector(
-						".scrollable-events-container"
-					);
-					if (scrollContainer) {
-						scrollContainer.scrollTop = parseInt(scrollPos);
-					}
-				}, 100);
-			}
 		}
 	}, []);
-
-	// Save scroll position
-	useEffect(() => {
-		const scrollContainer = document.querySelector(
-			".scrollable-events-container"
-		);
-		if (!scrollContainer) return;
-
-		const handleScroll = () => {
-			sessionStorage.setItem(
-				"events-scroll",
-				scrollContainer.scrollTop.toString()
-			);
-		};
-
-		scrollContainer.addEventListener("scroll", handleScroll);
-		return () => scrollContainer.removeEventListener("scroll", handleScroll);
-	}, [events]);
 
 	// Check cache when filters change
 	useEffect(() => {
@@ -205,7 +174,6 @@ export default function Home() {
 		const cached = getCachedEvents(queryKey);
 
 		setCurrentPage(1);
-		sessionStorage.removeItem("events-scroll");
 
 		if (cached) {
 			// Use cached data
@@ -314,16 +282,6 @@ export default function Home() {
 					query: queryKey
 				});
 			}
-
-			// Scroll to top of scrollable container
-			setTimeout(() => {
-				const scrollContainer = document.querySelector(
-					".scrollable-events-container"
-				);
-				if (scrollContainer) {
-					scrollContainer.scrollTop = 0;
-				}
-			}, 0);
 		} catch (error) {
 			console.error("Error fetching events:", error);
 		} finally {
@@ -345,8 +303,8 @@ export default function Home() {
 				<div className="container mx-auto px-4 py-4 h-full flex gap-6">
 					{/* Events List - Left Side - Flex Container */}
 					<div className="flex-1 min-w-0 flex flex-col">
-						{/* Scrollable Cards Area */}
-						<div className="scrollable-events-container flex-1 overflow-y-auto pb-4 pr-2 sm:pr-0 scrollbar-thin scrollbar-thumb-[#83c5be] scrollbar-track-gray-100">
+						{/* Cards Area - No Scroll, Fixed Height */}
+						<div className="flex-1 overflow-hidden pb-4">
 							<AnimatePresence mode="wait">
 								{loading ? (
 									<motion.div
@@ -396,10 +354,12 @@ export default function Home() {
 									</div>
 								)}
 							</AnimatePresence>
+						</div>
 
-							{/* Pagination Controls */}
-							{!loading && events.length > 0 && (
-								<div className="flex flex-col items-center gap-4 py-8">
+						{/* Pagination Controls - Fixed at Bottom */}
+						{!loading && events.length > 0 && (
+							<div className="flex-shrink-0 py-4">
+								<div className="flex flex-col items-center gap-4">
 									<p className="text-gray-600 text-sm font-medium">
 										{total} {total === 1 ? 'evento' : 'eventi'}
 									</p>
@@ -449,9 +409,9 @@ export default function Home() {
 												<button
 													onClick={() => setCurrentPage(currentPage - 1)}
 													disabled={currentPage === 1}
-													className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white font-medium text-sm"
+													className="p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
 												>
-													&lt; Prev
+													<ChevronLeft className="w-5 h-5" />
 												</button>
 
 												{pages.map((page, idx) => {
@@ -482,16 +442,16 @@ export default function Home() {
 												<button
 													onClick={() => setCurrentPage(currentPage + 1)}
 													disabled={currentPage === totalPages}
-													className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white font-medium text-sm"
+													className="p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
 												>
-													Next &gt;
+													<ChevronRight className="w-5 h-5" />
 												</button>
 											</div>
 										);
 									})()}
 								</div>
-							)}
-						</div>
+							</div>
+						)}
 
 						{/* Show Map Button (Mobile/Tablet) - Always Visible at Bottom */}
 						{events.length > 0 && (
