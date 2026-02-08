@@ -28,7 +28,7 @@ interface SearchFilters {
 }
 
 export default function Home() {
-	const LIMIT = 16;
+	const LIMIT = 12;
 	const { getCachedEvents, setCachedEvents } = useEventCache();
 
 	// Helper to generate cache key from filters
