@@ -42,9 +42,6 @@ export default function Home() {
 		});
 	};
 
-	// Track if this is the first mount (to prevent resetting page on filter restoration)
-	const isFirstMount = useRef(true);
-
 	// Initialize with empty arrays (prevents hydration mismatch)
 	const [events, setEvents] = useState<Event[]>([]);
 	const [mapEvents, setMapEvents] = useState<Event[]>([]);
@@ -82,9 +79,7 @@ export default function Home() {
 	const [currentPage, setCurrentPage] = useState<number>(() => {
 		if (typeof window !== "undefined") {
 			const saved = sessionStorage.getItem("currentPage");
-			const page = saved ? parseInt(saved, 10) : 1;
-			console.log('[PAGINATION DEBUG] Initial currentPage from sessionStorage:', page);
-			return page;
+			return saved ? parseInt(saved, 10) : 1;
 		}
 		return 1;
 	});
@@ -134,12 +129,10 @@ export default function Home() {
 
 	// Restore cache on mount (after hydration) - runs once
 	useEffect(() => {
-		console.log('[PAGINATION DEBUG] Mount useEffect - currentPage:', currentPage);
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
 		if (cached) {
-			console.log('[PAGINATION DEBUG] Cache found, events:', cached.events.length);
 			// Restore cached events
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
@@ -148,56 +141,48 @@ export default function Home() {
 
 			// If user was on a page > 1, fetch that page
 			if (currentPage > 1) {
-				console.log('[PAGINATION DEBUG] Fetching page', currentPage);
 				fetchEvents(currentPage);
 			}
 		} else {
-			console.log('[PAGINATION DEBUG] No cache, fetching page', currentPage);
 			// No cache, fetch initial data
 			fetchEvents(currentPage);
 		}
 	}, []); // Run once on mount
 
+	// Track initial mount to skip filters effect on first render
+	const isInitialMount = useRef(true);
+
 	// Check cache when filters change (but NOT on first mount)
 	useEffect(() => {
 		// Skip on first mount (handled by mount useEffect above)
-		if (isFirstMount.current) {
-			isFirstMount.current = false; // Mark as done BEFORE returning
-			console.log('[PAGINATION DEBUG] Filters useEffect - skipping (first mount)');
+		if (isInitialMount.current) {
+			isInitialMount.current = false;
 			return;
 		}
 
-		console.log('[PAGINATION DEBUG] Filters changed - resetting to page 1');
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
-		// Reset to page 1 when filters change
-		setCurrentPage(1);
-
 		if (cached) {
-			// Use cached data
+			// Use cached data and reset to page 1
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
 			setLoading(false);
+			setCurrentPage(1); // Reset page when filters change
 		} else {
 			// Fetch new data - set loading FIRST to prevent "nessun risultato" flash
 			setLoading(true);
 			setEvents([]);
 			setMapEvents([]);
-			fetchEvents(1);
+			fetchEvents(1); // This will set currentPage to 1
 		}
 	}, [searchFilters, selectedCategory]);
 
-	// Wire page changes
-	useEffect(() => {
-		if (currentPage > 1 || (events.length > 0 && currentPage === 1)) {
-			fetchEvents(currentPage);
-		}
-	}, [currentPage]);
-
 	const fetchEvents = async (page: number) => {
 		setLoading(true);
+		// Update currentPage immediately - page parameter is single source of truth
+		setCurrentPage(page);
 		try {
 			const params = new URLSearchParams();
 
@@ -406,7 +391,7 @@ export default function Home() {
 										return (
 											<div className="flex items-center gap-1 sm:gap-2">
 												<button
-													onClick={() => setCurrentPage(currentPage - 1)}
+													onClick={() => fetchEvents(currentPage - 1)}
 													disabled={currentPage === 1}
 													className="p-1.5 sm:p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
 												>
@@ -426,7 +411,7 @@ export default function Home() {
 													return (
 														<button
 															key={pageNum}
-															onClick={() => setCurrentPage(pageNum)}
+															onClick={() => fetchEvents(pageNum)}
 															className={
 																pageNum === currentPage
 																	? "px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg bg-[#006d77] text-white font-medium text-xs sm:text-sm"
@@ -439,7 +424,7 @@ export default function Home() {
 												})}
 
 												<button
-													onClick={() => setCurrentPage(currentPage + 1)}
+													onClick={() => fetchEvents(currentPage + 1)}
 													disabled={currentPage === totalPages}
 													className="p-1.5 sm:p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
 												>
