@@ -134,10 +134,6 @@ export default function Home() {
 
 	// Restore cache on mount (after hydration) - runs once
 	useEffect(() => {
-		// Mark first mount as complete IMMEDIATELY (before any other code)
-		// This prevents the filters useEffect from resetting currentPage
-		isFirstMount.current = false;
-
 		console.log('[PAGINATION DEBUG] Mount useEffect - currentPage:', currentPage);
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
@@ -166,6 +162,7 @@ export default function Home() {
 	useEffect(() => {
 		// Skip on first mount (handled by mount useEffect above)
 		if (isFirstMount.current) {
+			isFirstMount.current = false; // Mark as done BEFORE returning
 			console.log('[PAGINATION DEBUG] Filters useEffect - skipping (first mount)');
 			return;
 		}
