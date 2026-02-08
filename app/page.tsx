@@ -456,17 +456,14 @@ export default function Home() {
 							</div>
 						)}
 
-						{/* Show Map Button (Mobile/Tablet) - Always Visible at Bottom */}
+						{/* Floating Map Button (Mobile/Tablet) - Bottom Right */}
 						{events.length > 0 && (
-							<div className="xl:hidden pt-2 sm:pt-4 flex-shrink-0">
-								<button
-									onClick={() => setIsMapExpanded(true)}
-									className="w-full px-4 py-2.5 sm:px-6 sm:py-3 bg-[#006d77] text-white rounded-full font-semibold flex items-center justify-center gap-2 shadow-lg active:shadow-md transition-shadow text-sm sm:text-base"
-								>
-									<Map className="w-4 h-4 sm:w-5 sm:h-5" />
-									Mostra mappa
-								</button>
-							</div>
+							<button
+								onClick={() => setIsMapExpanded(true)}
+								className="xl:hidden fixed bottom-4 right-4 w-14 h-14 bg-[#006d77] text-white rounded-full shadow-lg active:shadow-md transition-shadow flex items-center justify-center z-50"
+							>
+								<Map className="w-6 h-6" />
+							</button>
 						)}
 					</div>
 
