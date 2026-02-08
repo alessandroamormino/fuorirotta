@@ -77,6 +77,7 @@ export default function Home() {
 	const [mapEvents, setMapEvents] = useState<Event[]>(initialCacheData.mapEvents);
 	const [loading, setLoading] = useState(initialCacheData.events.length === 0);
 	const [selectedCategory] = useState<string>("all");
+	const [clusterGeoJSON, setClusterGeoJSON] = useState<any>(null);
 
 	// Restore search filters from sessionStorage
 	const [searchFilters, setSearchFilters] = useState<SearchFilters>(() => {
@@ -137,6 +138,18 @@ export default function Home() {
 				}
 			);
 		}
+	}, []);
+
+	// Fetch pre-cached cluster data on mount for instant map rendering
+	useEffect(() => {
+		fetch('/api/events/clusters')
+			.then(res => res.json())
+			.then(data => {
+				if (data.geojson) {
+					setClusterGeoJSON(data.geojson);
+				}
+			})
+			.catch(err => console.warn('[Clusters] Failed to load cached clusters:', err));
 	}, []);
 
 	// Load events on mount (only if not already cached)
@@ -440,6 +453,7 @@ export default function Home() {
 						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#83c5be]/30 relative group">
 							<EventsMap
 								events={mapEvents}
+								initialGeoJSON={clusterGeoJSON}
 								mapId="map-sidebar"
 								userLocation={userLocation}
 							/>
@@ -491,6 +505,7 @@ export default function Home() {
 							<div className="absolute inset-0 pt-16">
 								<EventsMap
 									events={mapEvents}
+									initialGeoJSON={clusterGeoJSON}
 									mapId="map-fullscreen"
 									userLocation={userLocation}
 								/>

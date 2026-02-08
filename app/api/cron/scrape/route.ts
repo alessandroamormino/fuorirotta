@@ -5,6 +5,7 @@ import {
   completeWorkflowExecution,
   failWorkflowExecution
 } from '@/lib/cacheService';
+import { updateClusterCache } from '@/lib/clusterCache';
 
 // Vercel Pro allows up to 60s for serverless functions
 export const maxDuration = 60;
@@ -70,6 +71,15 @@ async function executeScrape() {
     // Mark execution as complete
     await completeWorkflowExecution(executionId, result.saved);
 
+    // Update map cluster cache with new event data
+    try {
+      await updateClusterCache();
+      console.log('[Cron] Cluster cache updated');
+    } catch (clusterError) {
+      console.error('[Cron] Failed to update cluster cache:', clusterError);
+      // Non-fatal: map will fall back to computing from events
+    }
+
     console.log('[Cron] Scrape completed successfully');
 
     return {
@@ -81,6 +91,7 @@ async function executeScrape() {
         skipped: result.skipped,
         total: result.total,
       },
+      clusterCacheUpdated: true,
       errors: result.errors.length > 0 ? result.errors : undefined
     };
   } catch (error) {

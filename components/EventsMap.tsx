@@ -10,6 +10,7 @@ import { getEventCoordinates } from "@/lib/cityCoordinates";
 
 interface EventsMapProps {
 	events: Event[];
+	initialGeoJSON?: GeoJSON.FeatureCollection;
 	onEventClick?: (event: Event) => void;
 	mapId?: string;
 	disablePopups?: boolean;
@@ -18,6 +19,7 @@ interface EventsMapProps {
 
 export default function EventsMap({
 	events,
+	initialGeoJSON,
 	onEventClick,
 	disablePopups = false,
 	userLocation,
@@ -70,7 +72,7 @@ export default function EventsMap({
 				popupRef.current = null;
 			}
 
-			// Ottieni coordinate per ogni evento (usa città come fallback)
+			// Compute events with coordinates for bounds fitting (always needed)
 			const eventsWithCoords = events
 				.map((event) => {
 					const coords = getEventCoordinates(event);
@@ -86,26 +88,34 @@ export default function EventsMap({
 			// Aggiorna il ref con i dati più recenti (per i gestori di eventi)
 			eventsWithCoordsRef.current = eventsWithCoords;
 
-			// Crea GeoJSON features (un feature per evento - Mapbox gestirà il clustering)
-			const geojsonData: GeoJSON.FeatureCollection = {
-				type: "FeatureCollection",
-				features: eventsWithCoords.map((item) => ({
-					type: "Feature",
-					geometry: {
-						type: "Point",
-						coordinates: [item.coords.lng, item.coords.lat],
-					},
-					properties: {
-						id: item.event.id,
-						title: item.event.title,
-						description: item.event.description || "",
-						dateStart: item.event.dateStart,
-						locationName: item.event.locationName || "",
-						category: item.event.category || "",
-						imageUrl: item.event.imageUrl || "",
-					},
-				})),
-			};
+			// Use pre-cached cluster data while events are loading, or compute from events
+			let geojsonData: GeoJSON.FeatureCollection;
+
+			if (events.length === 0 && initialGeoJSON && initialGeoJSON.features.length > 0) {
+				// Use pre-cached cluster data for instant map render
+				geojsonData = initialGeoJSON;
+			} else {
+				// Crea GeoJSON features (un feature per evento - Mapbox gestirà il clustering)
+				geojsonData = {
+					type: "FeatureCollection",
+					features: eventsWithCoords.map((item) => ({
+						type: "Feature",
+						geometry: {
+							type: "Point",
+							coordinates: [item.coords.lng, item.coords.lat],
+						},
+						properties: {
+							id: item.event.id,
+							title: item.event.title,
+							description: item.event.description || "",
+							dateStart: item.event.dateStart,
+							locationName: item.event.locationName || "",
+							category: item.event.category || "",
+							imageUrl: item.event.imageUrl || "",
+						},
+					})),
+				};
+			}
 
 			// Verifica se source e layers esistono già
 			const sourceExists = mapRef.current.getSource("events");
@@ -383,7 +393,7 @@ export default function EventsMap({
 		} else {
 			mapRef.current.once("load", updateMarkers);
 		}
-	}, [events, onEventClick, disablePopups]);
+	}, [events, initialGeoJSON, onEventClick, disablePopups]);
 
 	// Gestisci marker della posizione dell'utente
 	useEffect(() => {
