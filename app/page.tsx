@@ -156,15 +156,18 @@ export default function Home() {
 			.catch(err => console.warn('[Clusters] Failed to load cached clusters:', err));
 	}, []);
 
-	// Load events on mount (only if not already cached)
+	// Load events on mount - handle cache/page restoration
 	useEffect(() => {
+		const savedPage = typeof window !== "undefined" ? sessionStorage.getItem("currentPage") : null;
+		const restoredPage = savedPage ? parseInt(savedPage, 10) : 1;
+
 		if (events.length === 0) {
 			// No cached events, fetch from API
 			fetchEvents(currentPage);
-		} else if (currentPage > 1) {
-			// Events loaded from cache but on a non-first page, re-fetch correct page
-			// This ensures pagination UI syncs correctly after back navigation
-			fetchEvents(currentPage);
+		} else if (restoredPage > 1) {
+			// Events loaded from cache (page 1), but user was on a different page
+			// Re-fetch the correct page to sync UI
+			fetchEvents(restoredPage);
 		}
 	}, []);
 
