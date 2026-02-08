@@ -77,22 +77,20 @@ export default function Home() {
 	} | null>(null);
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
 
-	// Pagination state - read from URL query params (single source of truth)
+	// Pagination state - restore from sessionStorage
 	const [currentPage, setCurrentPage] = useState<number>(() => {
 		if (typeof window !== "undefined") {
-			// Try to read from URL first
-			const urlParams = new URLSearchParams(window.location.search);
-			const pageFromUrl = urlParams.get("page");
-			if (pageFromUrl) {
-				return parseInt(pageFromUrl, 10);
-			}
-			// Fallback to sessionStorage for backward compatibility
 			const saved = sessionStorage.getItem("currentPage");
 			return saved ? parseInt(saved, 10) : 1;
 		}
 		return 1;
 	});
 	const [total, setTotal] = useState(0);
+
+	// Save currentPage to sessionStorage when it changes
+	useEffect(() => {
+		sessionStorage.setItem("currentPage", currentPage.toString());
+	}, [currentPage]);
 
 	// Save search filters to sessionStorage when they change
 	useEffect(() => {
@@ -185,13 +183,13 @@ export default function Home() {
 
 	const fetchEvents = async (page: number) => {
 		setLoading(true);
-		// Update currentPage immediately - page parameter is single source of truth
+		// Update currentPage immediately
 		setCurrentPage(page);
-		// Update URL with page parameter (shallow routing - no reload)
-		const url = page > 1 ? `/?page=${page}` : '/';
-		router.push(url, { scroll: false });
 		try {
 			const params = new URLSearchParams();
+
+			// Add page parameter to API call
+			params.append("page", page.toString());
 
 			// Non passare location se è "Nelle vicinanze" (usa solo raggio)
 			const isNearbySearch =
