@@ -60,3 +60,14 @@ model WorkflowExecution {
   @@index([status])
   @@map("workflow_executions")
 }
+
+model MapClusterCache {
+  id          String   @id @default("default")
+  geojson     Json     // GeoJSON FeatureCollection with all event points
+  eventCount  Int      @map("event_count")
+  computedAt  DateTime @map("computed_at") @db.Timestamp(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("map_cluster_cache")
+}
