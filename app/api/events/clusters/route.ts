@@ -20,9 +20,11 @@ export async function GET() {
     });
   } catch (error) {
     console.error('[API] Error fetching cluster cache:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch cluster data' },
-      { status: 500 }
-    );
+    // Return empty cache instead of 500 to allow app to function without cluster data
+    return NextResponse.json({
+      geojson: null,
+      eventCount: 0,
+      computedAt: null,
+    });
   }
 }
