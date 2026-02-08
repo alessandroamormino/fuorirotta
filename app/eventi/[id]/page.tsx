@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
 import { Calendar, MapPin, ExternalLink, Tag, ArrowLeft } from "lucide-react";
+import { decodeHtmlEntities } from "@/lib/utils";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -141,6 +142,8 @@ export default function EventDetail() {
 								src={event.imageUrl}
 								alt={event.title}
 								className="w-full h-full object-cover"
+								loading="eager"
+								decoding="async"
 							/>
 						</motion.div>
 					) : (
@@ -185,7 +188,7 @@ export default function EventDetail() {
 								transition={{ delay: 0.2 }}
 								className="text-4xl md:text-5xl font-bold text-gray-900 leading-tight"
 							>
-								{event.title}
+								{decodeHtmlEntities(event.title)}
 							</motion.h1>
 
 							{/* Info Cards */}
@@ -231,13 +234,10 @@ export default function EventDetail() {
 											</div>
 											<div>
 												<h3 className="font-semibold text-gray-900 mb-1">
-													Luogo
+													{decodeHtmlEntities(event.locationName)}
 												</h3>
-												<p className="text-sm text-gray-600">
-													{event.locationName}
-												</p>
 												{event.address && (
-													<p className="text-xs text-gray-500 mt-1">
+													<p className="text-sm text-gray-600">
 														{event.address}
 													</p>
 												)}
