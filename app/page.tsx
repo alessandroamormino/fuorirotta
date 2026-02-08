@@ -293,57 +293,64 @@ export default function Home() {
 				<div className="container mx-auto px-4 py-4 h-full flex gap-6">
 					{/* Events List - Left Side - Flex Container */}
 					<div className="flex-1 min-w-0 flex flex-col">
-						{/* Cards Area - No Scroll, Fixed Height */}
-						<div className="flex-1 overflow-hidden pb-4">
-							<AnimatePresence mode="wait">
-								{loading ? (
-									<motion.div
-										key="loading"
-										initial={{ opacity: 0 }}
-										animate={{ opacity: 1 }}
-										exit={{ opacity: 0 }}
-										className="flex items-center justify-center py-20"
-									>
-										<div className="text-center">
-											<Loader2 className="w-12 h-12 text-[#006d77] animate-spin mx-auto mb-4" />
-											<p className="text-gray-600">Caricamento eventi...</p>
-										</div>
-									</motion.div>
-								) : events.length === 0 ? (
-									<motion.div
-										key="empty"
-										initial={{ opacity: 0, y: 20 }}
-										animate={{ opacity: 1, y: 0 }}
-										exit={{ opacity: 0, y: -20 }}
-										className="text-center py-20"
-									>
-										<div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-											<Filter className="w-10 h-10 text-gray-400" />
-										</div>
-										<h3 className="text-xl font-bold text-gray-900 mb-2">
-											Nessun evento trovato
-										</h3>
-										<p className="text-gray-600">
-											Prova a modificare i filtri di ricerca
-										</p>
-									</motion.div>
-								) : (
-									<div
-										key="events"
-										className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-3 gap-y-3 sm:gap-x-3 sm:gap-y-3 md:gap-x-4 md:gap-y-4 lg:gap-x-4 lg:gap-y-4"
-									>
-										{events.map((event, index) => (
-											<div
-												key={`${event.source}-${event.id}`}
-												className="event-card-item"
-												style={{ animationDelay: `${index * 0.05}s` }}
-											>
-												<EventCard event={event} />
+						{/* Cards Area - Mobile Scroll with gradient, Desktop no scroll */}
+						<div className="flex-1 pb-4 relative">
+							<div className="h-full overflow-y-auto xl:overflow-hidden">
+								<AnimatePresence mode="wait">
+									{loading ? (
+										<motion.div
+											key="loading"
+											initial={{ opacity: 0 }}
+											animate={{ opacity: 1 }}
+											exit={{ opacity: 0 }}
+											className="flex items-center justify-center py-20"
+										>
+											<div className="text-center">
+												<Loader2 className="w-12 h-12 text-[#006d77] animate-spin mx-auto mb-4" />
+												<p className="text-gray-600">Caricamento eventi...</p>
 											</div>
-										))}
-									</div>
-								)}
-							</AnimatePresence>
+										</motion.div>
+									) : events.length === 0 ? (
+										<motion.div
+											key="empty"
+											initial={{ opacity: 0, y: 20 }}
+											animate={{ opacity: 1, y: 0 }}
+											exit={{ opacity: 0, y: -20 }}
+											className="text-center py-20"
+										>
+											<div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+												<Filter className="w-10 h-10 text-gray-400" />
+											</div>
+											<h3 className="text-xl font-bold text-gray-900 mb-2">
+												Nessun evento trovato
+											</h3>
+											<p className="text-gray-600">
+												Prova a modificare i filtri di ricerca
+											</p>
+										</motion.div>
+									) : (
+										<div
+											key="events"
+											className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-4 md:gap-x-4 md:gap-y-4 lg:gap-x-4 lg:gap-y-4"
+										>
+											{events.map((event, index) => (
+												<div
+													key={`${event.source}-${event.id}`}
+													className="event-card-item"
+													style={{ animationDelay: `${index * 0.05}s` }}
+												>
+													<EventCard event={event} />
+												</div>
+											))}
+										</div>
+									)}
+								</AnimatePresence>
+							</div>
+
+							{/* Gradient blur at bottom (mobile only) */}
+							{!loading && events.length > 0 && (
+								<div className="xl:hidden absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-white via-white to-transparent pointer-events-none z-10" />
+							)}
 						</div>
 
 						{/* Pagination Controls - Fixed at Bottom */}
