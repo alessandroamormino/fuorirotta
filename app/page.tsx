@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
-import { useInfiniteScroll } from "@/lib/hooks/useInfiniteScroll";
 import { Filter, Loader2, Map, X } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
 
@@ -105,18 +104,20 @@ export default function Home() {
 	} | null>(null);
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
 
-	// Infinite scroll state
-	const [offset, setOffset] = useState(0);
-	const [hasMore, setHasMore] = useState(true);
+	// Pagination state
+	const [currentPage, setCurrentPage] = useState<number>(() => {
+		if (typeof window !== "undefined") {
+			const saved = sessionStorage.getItem("currentPage");
+			return saved ? parseInt(saved, 10) : 1;
+		}
+		return 1;
+	});
 	const [total, setTotal] = useState(initialCacheData.total);
 
-	const observerTarget = useInfiniteScroll(
-		() => {
-			if (!loading && hasMore) fetchMoreEvents();
-		},
-		hasMore,
-		loading
-	);
+	// Save currentPage to sessionStorage when it changes
+	useEffect(() => {
+		sessionStorage.setItem("currentPage", currentPage.toString());
+	}, [currentPage]);
 
 	// Save search filters to sessionStorage when they change
 	useEffect(() => {
@@ -143,7 +144,10 @@ export default function Home() {
 	// Fetch pre-cached cluster data on mount for instant map rendering
 	useEffect(() => {
 		fetch('/api/events/clusters')
-			.then(res => res.json())
+			.then(res => {
+				if (!res.ok) throw new Error('Cluster fetch failed');
+				return res.json();
+			})
 			.then(data => {
 				if (data.geojson) {
 					setClusterGeoJSON(data.geojson);
@@ -156,9 +160,12 @@ export default function Home() {
 	useEffect(() => {
 		if (events.length === 0) {
 			// No cached events, fetch from API
-			fetchEvents(0, true);
+			fetchEvents(currentPage);
+		} else if (currentPage > 1) {
+			// Events loaded from cache but on a non-first page, re-fetch correct page
+			fetchEvents(currentPage);
 		} else {
-			// Events loaded from cache, restore scroll position
+			// Events loaded from cache for page 1, restore scroll position
 			const scrollPos = sessionStorage.getItem("events-scroll");
 			if (scrollPos) {
 				setTimeout(() => {
@@ -196,8 +203,7 @@ export default function Home() {
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
-		setOffset(0);
-		setHasMore(true);
+		setCurrentPage(1);
 		sessionStorage.removeItem("events-scroll");
 
 		if (cached) {
@@ -211,19 +217,18 @@ export default function Home() {
 			setLoading(true);
 			setEvents([]);
 			setMapEvents([]);
-			fetchEvents(0, true);
+			fetchEvents(1);
 		}
 	}, [searchFilters, selectedCategory]);
 
-	// Load categories
-	// useEffect(() => {
-	// 	fetchCategories();
-	// }, []);
+	// Wire page changes
+	useEffect(() => {
+		if (currentPage > 1 || (events.length > 0 && currentPage === 1)) {
+			fetchEvents(currentPage);
+		}
+	}, [currentPage]);
 
-	const fetchEvents = async (
-		currentOffset: number,
-		isReset: boolean = false
-	) => {
+	const fetchEvents = async (page: number) => {
 		setLoading(true);
 		try {
 			const params = new URLSearchParams();
@@ -269,8 +274,9 @@ export default function Home() {
 				}
 			}
 
+			const offset = (page - 1) * LIMIT;
 			params.append("limit", LIMIT.toString());
-			params.append("offset", currentOffset.toString());
+			params.append("offset", offset.toString());
 
 			const response = await fetch(`/api/events?${params}`);
 
@@ -278,7 +284,6 @@ export default function Home() {
 				console.error("API Error:", response.status, response.statusText);
 				const errorData = await response.text();
 				console.error("Error details:", errorData);
-				setHasMore(false);
 				return;
 			}
 
@@ -287,7 +292,6 @@ export default function Home() {
 			// Handle API errors or missing data
 			if (data.error || !data.events) {
 				console.error("API returned error or no events:", data);
-				setHasMore(false);
 				return;
 			}
 
@@ -295,10 +299,12 @@ export default function Home() {
 			const newMapEvents = data.mapEvents || newEvents; // fallback to events if mapEvents not available
 			const newTotal = data.total || 0;
 
-			if (isReset) {
-				setEvents(newEvents);
-				setMapEvents(newMapEvents); // Set ALL events for map
-				// Store in cache for first page load
+			setEvents(newEvents);
+			setMapEvents(newMapEvents); // Set ALL events for map
+			setTotal(newTotal);
+
+			// Store in cache for first page load
+			if (page === 1) {
 				const queryKey = generateQueryKey(searchFilters, selectedCategory);
 				setCachedEvents(queryKey, {
 					events: newEvents,
@@ -306,42 +312,23 @@ export default function Home() {
 					total: newTotal,
 					query: queryKey
 				});
-			} else {
-				// Infinite scroll: only append to list events, map already has all
-				setEvents((prev) => {
-					const existingIds = new Set(prev.map((e) => e.id));
-					const uniqueNewEvents = newEvents.filter(
-						(e: Event) => !existingIds.has(e.id)
-					);
-					return [...prev, ...uniqueNewEvents];
-				});
-				// Don't update mapEvents on scroll - they already have everything
 			}
 
-			setTotal(newTotal);
-			setHasMore(newEvents.length === LIMIT);
-			setOffset(currentOffset + LIMIT);
+			// Scroll to top of scrollable container
+			setTimeout(() => {
+				const scrollContainer = document.querySelector(
+					".scrollable-events-container"
+				);
+				if (scrollContainer) {
+					scrollContainer.scrollTop = 0;
+				}
+			}, 0);
 		} catch (error) {
 			console.error("Error fetching events:", error);
-			setHasMore(false);
 		} finally {
 			setLoading(false);
 		}
 	};
-
-	const fetchMoreEvents = () => {
-		fetchEvents(offset, false);
-	};
-
-	// const fetchCategories = async () => {
-	// 	try {
-	// 		const response = await fetch("/api/categories");
-	// 		const data = await response.json();
-	// 		setCategories(data);
-	// 	} catch (error) {
-	// 		console.error("Error fetching categories:", error);
-	// 	}
-	// };
 
 	const handleSearch = (filters: SearchFilters) => {
 		setSearchFilters(filters);
@@ -394,7 +381,7 @@ export default function Home() {
 								) : (
 									<div
 										key="events"
-										className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-x-3 sm:gap-x-5 gap-y-8"
+										className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-4 sm:gap-x-6 gap-y-10"
 									>
 										{events.map((event, index) => (
 											<div
@@ -409,27 +396,98 @@ export default function Home() {
 								)}
 							</AnimatePresence>
 
-							{/* Infinite Scroll Trigger */}
+							{/* Pagination Controls */}
 							{!loading && events.length > 0 && (
-								<div ref={observerTarget} className="flex justify-center py-12">
-									{loading && (
-										<div className="flex items-center gap-2 text-[#006d77]">
-											<Loader2 className="w-6 h-6 animate-spin" />
-											<span className="text-sm font-medium">
-												Caricamento altri eventi...
-											</span>
-										</div>
-									)}
-									{!hasMore && offset > LIMIT && (
-										<div className="text-center">
-											<p className="text-gray-600 text-sm font-medium">
-												Tutti i {total} eventi sono stati caricati
-											</p>
-											<p className="text-gray-400 text-xs mt-1">
-												Non ci sono altri eventi da visualizzare
-											</p>
-										</div>
-									)}
+								<div className="flex flex-col items-center gap-4 py-8">
+									<p className="text-gray-600 text-sm font-medium">
+										{total} {total === 1 ? 'evento' : 'eventi'}
+									</p>
+									{(() => {
+										const totalPages = Math.ceil(total / LIMIT);
+										if (totalPages <= 1) return null;
+
+										const pages: (number | string)[] = [];
+										const maxVisible = 5;
+
+										if (totalPages <= maxVisible + 2) {
+											// Show all pages if total is small
+											for (let i = 1; i <= totalPages; i++) {
+												pages.push(i);
+											}
+										} else {
+											// Show with ellipsis
+											pages.push(1);
+
+											if (currentPage > 3) {
+												pages.push('...');
+											}
+
+											let start = Math.max(2, currentPage - 1);
+											let end = Math.min(totalPages - 1, currentPage + 1);
+
+											if (currentPage <= 3) {
+												end = Math.min(4, totalPages - 1);
+											}
+											if (currentPage >= totalPages - 2) {
+												start = Math.max(2, totalPages - 3);
+											}
+
+											for (let i = start; i <= end; i++) {
+												pages.push(i);
+											}
+
+											if (currentPage < totalPages - 2) {
+												pages.push('...');
+											}
+
+											pages.push(totalPages);
+										}
+
+										return (
+											<div className="flex items-center gap-2">
+												<button
+													onClick={() => setCurrentPage(currentPage - 1)}
+													disabled={currentPage === 1}
+													className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white font-medium text-sm"
+												>
+													&lt; Prev
+												</button>
+
+												{pages.map((page, idx) => {
+													if (page === '...') {
+														return (
+															<span key={`ellipsis-${idx}`} className="px-2 text-gray-400">
+																...
+															</span>
+														);
+													}
+
+													const pageNum = page as number;
+													return (
+														<button
+															key={pageNum}
+															onClick={() => setCurrentPage(pageNum)}
+															className={
+																pageNum === currentPage
+																	? "px-3 py-2 rounded-lg bg-[#006d77] text-white font-medium text-sm"
+																	: "px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 font-medium text-sm"
+															}
+														>
+															{pageNum}
+														</button>
+													);
+												})}
+
+												<button
+													onClick={() => setCurrentPage(currentPage + 1)}
+													disabled={currentPage === totalPages}
+													className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white font-medium text-sm"
+												>
+													Next &gt;
+												</button>
+											</div>
+										);
+									})()}
 								</div>
 							)}
 						</div>
