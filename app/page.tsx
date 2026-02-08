@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -152,13 +152,14 @@ export default function Home() {
 	}, []); // Run once on mount
 
 	// Track initial mount to skip filters effect on first render
-	const isInitialMount = useRef(true);
+	// Using state instead of ref so it resets on each mount (fixes Strict Mode issue)
+	const [isInitialMount, setIsInitialMount] = useState(true);
 
 	// Check cache when filters change (but NOT on first mount)
 	useEffect(() => {
 		// Skip on first mount (handled by mount useEffect above)
-		if (isInitialMount.current) {
-			isInitialMount.current = false;
+		if (isInitialMount) {
+			setIsInitialMount(false);
 			return;
 		}
 
