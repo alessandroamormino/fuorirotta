@@ -340,7 +340,7 @@ export default function Home() {
 								) : (
 									<div
 										key="events"
-										className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-4 sm:gap-x-6 gap-y-4"
+										className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-2 gap-y-3 sm:gap-x-4 sm:gap-y-4 md:gap-x-6 md:gap-y-4"
 									>
 										{events.map((event, index) => (
 											<div
@@ -358,9 +358,9 @@ export default function Home() {
 
 						{/* Pagination Controls - Fixed at Bottom */}
 						{!loading && events.length > 0 && (
-							<div className="flex-shrink-0 py-4">
-								<div className="flex flex-col items-center gap-4">
-									<p className="text-gray-600 text-sm font-medium">
+							<div className="flex-shrink-0 py-2 sm:py-4">
+								<div className="flex flex-col items-center gap-2 sm:gap-4">
+									<p className="text-gray-600 text-xs sm:text-sm font-medium">
 										{total} {total === 1 ? 'evento' : 'eventi'}
 									</p>
 									{(() => {
@@ -405,19 +405,19 @@ export default function Home() {
 										}
 
 										return (
-											<div className="flex items-center gap-2">
+											<div className="flex items-center gap-1 sm:gap-2">
 												<button
 													onClick={() => setCurrentPage(currentPage - 1)}
 													disabled={currentPage === 1}
-													className="p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+													className="p-1.5 sm:p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
 												>
-													<ChevronLeft className="w-5 h-5" />
+													<ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
 												</button>
 
 												{pages.map((page, idx) => {
 													if (page === '...') {
 														return (
-															<span key={`ellipsis-${idx}`} className="px-2 text-gray-400">
+															<span key={`ellipsis-${idx}`} className="px-1 sm:px-2 text-gray-400 text-xs sm:text-sm">
 																...
 															</span>
 														);
@@ -430,8 +430,8 @@ export default function Home() {
 															onClick={() => setCurrentPage(pageNum)}
 															className={
 																pageNum === currentPage
-																	? "px-3 py-2 rounded-lg bg-[#006d77] text-white font-medium text-sm"
-																	: "px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 font-medium text-sm"
+																	? "px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg bg-[#006d77] text-white font-medium text-xs sm:text-sm"
+																	: "px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 font-medium text-xs sm:text-sm"
 															}
 														>
 															{pageNum}
@@ -442,9 +442,9 @@ export default function Home() {
 												<button
 													onClick={() => setCurrentPage(currentPage + 1)}
 													disabled={currentPage === totalPages}
-													className="p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+													className="p-1.5 sm:p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
 												>
-													<ChevronRight className="w-5 h-5" />
+													<ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
 												</button>
 											</div>
 										);
@@ -455,12 +455,12 @@ export default function Home() {
 
 						{/* Show Map Button (Mobile/Tablet) - Always Visible at Bottom */}
 						{events.length > 0 && (
-							<div className="xl:hidden pt-4 flex-shrink-0">
+							<div className="xl:hidden pt-2 sm:pt-4 flex-shrink-0">
 								<button
 									onClick={() => setIsMapExpanded(true)}
-									className="w-full px-6 py-3 bg-[#006d77] text-white rounded-full font-semibold flex items-center justify-center gap-2 shadow-lg active:shadow-md transition-shadow"
+									className="w-full px-4 py-2.5 sm:px-6 sm:py-3 bg-[#006d77] text-white rounded-full font-semibold flex items-center justify-center gap-2 shadow-lg active:shadow-md transition-shadow text-sm sm:text-base"
 								>
-									<Map className="w-5 h-5" />
+									<Map className="w-4 h-4 sm:w-5 sm:h-5" />
 									Mostra mappa
 								</button>
 							</div>

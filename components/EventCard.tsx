@@ -16,7 +16,7 @@ export default function EventCard({ event }: EventCardProps) {
 		<Link href={`/eventi/${event.id}`} className="group cursor-pointer">
 			<div className="flex flex-col">
 				{/* Image */}
-				<div className="relative w-full aspect-square mb-3 overflow-hidden rounded-xl border-2 border-[#83c5be]/30 group-hover:border-[#006d77]/50 transition-all duration-300 shadow-sm group-hover:shadow-md">
+				<div className="relative w-full aspect-square mb-1.5 sm:mb-3 overflow-hidden rounded-lg sm:rounded-xl border border-[#83c5be]/30 sm:border-2 group-hover:border-[#006d77]/50 transition-all duration-300 shadow-sm group-hover:shadow-md">
 					{event.imageUrl ? (
 						<img
 							src={event.imageUrl}
@@ -39,11 +39,11 @@ export default function EventCard({ event }: EventCardProps) {
 
 				{/* Info */}
 				<div className="flex flex-col gap-0.5">
-					<h3 className="text-sm font-semibold text-gray-900 line-clamp-1">
+					<h3 className="text-xs sm:text-sm font-semibold text-gray-900 line-clamp-2">
 						{decodeHtmlEntities(event.title)}
 					</h3>
-					<p className="text-sm text-gray-600 line-clamp-1">{event.locationName || "Lombardia"}</p>
-					<p className="text-sm text-[#006d77] font-medium" suppressHydrationWarning>
+					<p className="text-xs sm:text-sm text-gray-600 line-clamp-1">{event.locationName || "Lombardia"}</p>
+					<p className="text-xs sm:text-sm text-[#006d77] font-medium" suppressHydrationWarning>
 						{format(new Date(event.dateStart), "dd MMM", { locale: it })}
 					</p>
 				</div>
