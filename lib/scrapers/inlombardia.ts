@@ -26,6 +26,13 @@ interface AjaxCommand {
   data?: string
 }
 
+interface DetailData {
+  description: string | null
+  venueName: string | null
+  fullAddress: string | null
+  phone: string | null
+}
+
 export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<ScrapeResult> {
   const startTime = Date.now()
 
@@ -36,8 +43,11 @@ export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<Scra
     // Step 2: Parse HTML to extract events
     const parsedEvents = parseHTML(html)
 
-    // Step 3: Transform to ScrapedEvent format with filtering
-    const events = transformEvents(parsedEvents, params)
+    // Step 3: Fetch detail pages for rich data
+    const detailDataMap = await fetchDetailPages(parsedEvents)
+
+    // Step 4: Transform to ScrapedEvent format with filtering and detail data
+    const events = transformEvents(parsedEvents, params, detailDataMap)
 
     const duration = Date.now() - startTime
 
@@ -223,6 +233,145 @@ function parseHTML(html: string): ParsedEvent[] {
   return events
 }
 
+async function fetchDetailPage(url: string): Promise<DetailData> {
+  try {
+    // Fetch detail page with short timeout and 1 retry for speed
+    const response = await fetchWithRetry(url, {
+      timeout: 5000,
+      retries: 1,
+      retryDelay: 500
+    })
+    const html = await response.text()
+
+    let description: string | null = null
+    let venueName: string | null = null
+    let fullAddress: string | null = null
+    let phone: string | null = null
+
+    // Extract JSON-LD structured data
+    const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/g
+    let match: RegExpExecArray | null
+
+    while ((match = jsonLdPattern.exec(html)) !== null) {
+      try {
+        const jsonData = JSON.parse(match[1])
+
+        // JSON-LD may be an object, array, or have @graph wrapper
+        let items: any[] = []
+        if (Array.isArray(jsonData)) {
+          items = jsonData
+        } else if (jsonData['@graph'] && Array.isArray(jsonData['@graph'])) {
+          items = jsonData['@graph']
+        } else {
+          items = [jsonData]
+        }
+
+        for (const item of items) {
+          // Check if this is an Event type
+          if (item['@type'] && String(item['@type']).includes('Event')) {
+            // Extract description
+            if (item.description && typeof item.description === 'string') {
+              let desc = item.description.trim()
+              // Decode HTML entities (simple approach)
+              desc = desc
+                .replace(/&quot;/g, '"')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&#039;/g, "'")
+                .replace(/<[^>]+>/g, '') // Strip HTML tags
+              description = desc
+            }
+
+            // Extract venue name and address from location
+            if (item.location && typeof item.location === 'object') {
+              if (item.location.name && typeof item.location.name === 'string') {
+                venueName = item.location.name.trim()
+              }
+
+              if (item.location.address && typeof item.location.address === 'object') {
+                // Build full address from PostalAddress components
+                const addr = item.location.address
+                const parts: string[] = []
+
+                if (addr.streetAddress) parts.push(String(addr.streetAddress).trim())
+                if (addr.addressLocality) parts.push(String(addr.addressLocality).trim())
+                if (addr.postalCode) parts.push(String(addr.postalCode).trim())
+                if (addr.addressRegion) parts.push(String(addr.addressRegion).trim())
+
+                if (parts.length > 0) {
+                  fullAddress = parts.join(', ')
+                }
+              }
+            }
+
+            break // Found Event data, stop looking
+          }
+        }
+      } catch (jsonError) {
+        // Invalid JSON in this script tag, continue to next
+        continue
+      }
+    }
+
+    // Extract phone number from HTML
+    const phonePattern = /icon-phone[\s\S]{0,200}?(?:<a[^>]*href="tel:([^"]+)"|<span[^>]*>\s*([\d\s\+\-\.\/\(\)]{7,})\s*<\/span>)/
+    const phoneMatch = html.match(phonePattern)
+    if (phoneMatch) {
+      const phoneStr = phoneMatch[1] || phoneMatch[2]
+      if (phoneStr && phoneStr.length >= 7) {
+        // Clean phone string
+        phone = phoneStr.trim().replace(/\s+/g, ' ')
+      }
+    }
+
+    return { description, venueName, fullAddress, phone }
+  } catch (error) {
+    // On error, return null data (graceful degradation)
+    return { description: null, venueName: null, fullAddress: null, phone: null }
+  }
+}
+
+async function fetchDetailPages(events: ParsedEvent[]): Promise<Map<string, DetailData>> {
+  const detailDataMap = new Map<string, DetailData>()
+
+  // Filter to only events with valid URLs
+  const eventsWithUrls = events.filter(e => e.url && e.url.startsWith('http'))
+
+  // Cap at 200 events maximum
+  const eventsToFetch = eventsWithUrls.slice(0, 200)
+
+  if (eventsToFetch.length === 0) {
+    return detailDataMap
+  }
+
+  console.log(`[InLombardia] Fetching ${eventsToFetch.length} detail pages in batches of 10...`)
+
+  // Process in batches of 10 concurrent requests
+  const batchSize = 10
+  for (let i = 0; i < eventsToFetch.length; i += batchSize) {
+    const batch = eventsToFetch.slice(i, i + batchSize)
+
+    // Use Promise.allSettled for resilience - individual failures don't crash the batch
+    const results = await Promise.allSettled(
+      batch.map(event =>
+        fetchDetailPage(event.url!).then(data => ({ url: event.url!, data }))
+      )
+    )
+
+    // Collect successful results
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        detailDataMap.set(result.value.url, result.value.data)
+      }
+    }
+  }
+
+  console.log(`[InLombardia] Fetched ${detailDataMap.size} detail pages successfully`)
+
+  return detailDataMap
+}
+
 function parseItalianDate(dateStr: string): Date | null {
   // Parse DD/MM/YYYY format
   const parts = dateStr.split('-')[0].trim().split('/')
@@ -248,7 +397,7 @@ function parseEndDate(dateStr: string): Date | null {
   return null
 }
 
-function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): ScrapedEvent[] {
+function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, detailDataMap: Map<string, DetailData>): ScrapedEvent[] {
   // Set default date range
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -282,17 +431,31 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
     const isActiveInPeriod = eventStartDate <= dateTo && eventEndDate >= dateFrom
     if (!isActiveInPeriod) continue
 
-    // Extract city from address (best effort)
-    let locationCity: string | null = null
-    if (data.address) {
-      // Try to match city name before province code: "City Name (XX)"
-      const cityMatch = data.address.match(/([A-Z][a-zà-ù\s]+)(?:\s*\([A-Z]{2}\))?/)
-      locationCity = cityMatch ? cityMatch[1].trim() : data.address.split(',')[0].trim()
+    // Look up detail data for this event URL
+    const detailData = data.url ? detailDataMap.get(data.url) : null
+
+    // Use detail data if available, fallback to list-view data
+    const description = detailData?.description || null
+    const phone = detailData?.phone || null
+
+    // For locationName: prefer detail venue name, fallback to extracted city
+    let locationName: string | null = detailData?.venueName || null
+
+    if (!locationName) {
+      // Extract city from address (best effort)
+      if (data.address) {
+        // Try to match city name before province code: "City Name (XX)"
+        const cityMatch = data.address.match(/([A-Z][a-zà-ù\s]+)(?:\s*\([A-Z]{2}\))?/)
+        locationName = cityMatch ? cityMatch[1].trim() : data.address.split(',')[0].trim()
+      }
+
+      if (!locationName && data.venue) {
+        locationName = data.venue.split(',')[0].trim()
+      }
     }
 
-    if (!locationCity && data.venue) {
-      locationCity = data.venue.split(',')[0].trim()
-    }
+    // For address: prefer detail fullAddress if richer, fallback to list-view address
+    const address = detailData?.fullAddress || data.address
 
     // Extract sourceId from URL or generate random
     const sourceId = data.url ? data.url.split('/').pop() || String(Math.random()) : String(Math.random())
@@ -301,17 +464,17 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
       source: 'in-lombardia',
       sourceId,
       title: data.title || 'Evento',
-      description: '', // InLombardia doesn't provide descriptions in list view
+      description,
       dateStart: eventStartDate,
       dateEnd: eventEndDate,
-      locationName: locationCity || data.venue || 'Lombardia',
-      address: data.address,
+      locationName: locationName || 'Lombardia',
+      address,
       latitude: null, // InLombardia doesn't provide coordinates
       longitude: null,
       category: data.category || 'Evento',
       sourceUrl: data.url || 'https://www.in-lombardia.it',
       imageUrl: data.image,
-      phone: null
+      phone
     })
   }
 
