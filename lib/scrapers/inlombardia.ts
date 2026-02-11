@@ -335,8 +335,8 @@ async function fetchDetailPage(url: string): Promise<DetailData> {
       }
     }
 
-    // Extract phone number from HTML
-    const phonePattern = /icon-phone[\s\S]{0,200}?(?:<a[^>]*href="tel:([^"]+)"|<span[^>]*>\s*([\d\s\+\-\.\/\(\)]{7,})\s*<\/span>)/
+    // Extract phone number from HTML (check tel: link, span, or p tag)
+    const phonePattern = /icon-phone[\s\S]{0,200}?(?:<a[^>]*href="tel:([^"]+)"|<(?:span|p)[^>]*>\s*([\d\s\+\-\.\/\(\)]{7,})\s*<\/(?:span|p)>)/
     const phoneMatch = html.match(phonePattern)
     if (phoneMatch) {
       const phoneStr = phoneMatch[1] || phoneMatch[2]
