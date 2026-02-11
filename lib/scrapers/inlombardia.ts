@@ -310,7 +310,8 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
       longitude: null,
       category: data.category || 'Evento',
       sourceUrl: data.url || 'https://www.in-lombardia.it',
-      imageUrl: data.image
+      imageUrl: data.image,
+      phone: null
     })
   }
 

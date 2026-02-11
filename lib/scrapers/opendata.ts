@@ -106,7 +106,8 @@ function transformEvents(data: OpenDataRecord[]): ScrapedEvent[] {
       longitude,
       category: item.tipo || 'Sagra',
       sourceUrl: item.url_programma?.url || 'https://www.dati.lombardia.it',
-      imageUrl: null // OpenData has no images
+      imageUrl: null, // OpenData has no images
+      phone: null
     })
   }
 

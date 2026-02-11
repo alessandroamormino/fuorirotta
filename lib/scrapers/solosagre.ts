@@ -168,7 +168,8 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
       longitude: null,
       category: 'Sagra',
       sourceUrl: data.url || 'https://www.solosagre.it',
-      imageUrl
+      imageUrl,
+      phone: null
     })
   }
 

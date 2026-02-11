@@ -170,7 +170,8 @@ export async function saveEvents(
       longitude: event.longitude,
       category: event.category,
       sourceUrl: event.sourceUrl,
-      imageUrl: event.imageUrl
+      imageUrl: event.imageUrl,
+      phone: event.phone
     }))
 
     // Use createMany with skipDuplicates to leverage unique constraint

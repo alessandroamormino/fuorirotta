@@ -18,6 +18,7 @@ export interface ScrapedEvent {
   category: string | null
   sourceUrl: string | null
   imageUrl: string | null
+  phone: string | null
 }
 
 export interface ScrapeParams {
