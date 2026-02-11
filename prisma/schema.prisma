@@ -24,6 +24,7 @@ model Event {
   dateEnd      DateTime? @map("date_end") @db.Timestamp(6)
   locationName String?   @map("location_name") @db.VarChar(255)
   address      String?   @db.VarChar(500)
+  phone        String?   @db.VarChar(50)
   latitude     Decimal?  @db.Decimal(10, 8)
   longitude    Decimal?  @db.Decimal(11, 8)
   category     String?   @db.VarChar(100)
