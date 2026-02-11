@@ -139,13 +139,14 @@ export function logMetrics(results: ScrapeResult[]): void {
 }
 
 /**
- * Save scraped events to PostgreSQL with deduplication
+ * Save scraped events to PostgreSQL with upsert behavior
  *
- * Uses Prisma createMany with skipDuplicates to leverage the unique
- * constraint on (source, sourceId). This matches n8n's skipOnConflict behavior.
+ * Uses Prisma upsert to update existing events or create new ones.
+ * This ensures that enriched data (descriptions, phone, venue) from detail
+ * pages updates existing records instead of being skipped.
  *
  * @param events - Array of ScrapedEvent to save
- * @returns Promise with counts of saved and skipped events
+ * @returns Promise with counts of saved and updated events
  */
 export async function saveEvents(
   events: ScrapedEvent[]
@@ -156,36 +157,74 @@ export async function saveEvents(
   }
 
   try {
-    // Convert ScrapedEvent to Prisma Event create input
-    const eventsToCreate = events.map(event => ({
-      source: event.source,
-      sourceId: event.sourceId,
-      title: event.title,
-      description: event.description,
-      dateStart: event.dateStart,
-      dateEnd: event.dateEnd,
-      locationName: event.locationName,
-      address: event.address,
-      latitude: event.latitude,
-      longitude: event.longitude,
-      category: event.category,
-      sourceUrl: event.sourceUrl,
-      imageUrl: event.imageUrl,
-      phone: event.phone
-    }))
+    let created = 0
+    let updated = 0
 
-    // Use createMany with skipDuplicates to leverage unique constraint
-    const result = await prisma.event.createMany({
-      data: eventsToCreate,
-      skipDuplicates: true
+    // Use Promise.allSettled to handle all upserts, even if some fail
+    const results = await Promise.allSettled(
+      events.map(event =>
+        prisma.event.upsert({
+          where: {
+            events_source_source_id_key: {
+              source: event.source,
+              sourceId: event.sourceId
+            }
+          },
+          create: {
+            source: event.source,
+            sourceId: event.sourceId,
+            title: event.title,
+            description: event.description,
+            dateStart: event.dateStart,
+            dateEnd: event.dateEnd,
+            locationName: event.locationName,
+            address: event.address,
+            latitude: event.latitude,
+            longitude: event.longitude,
+            category: event.category,
+            sourceUrl: event.sourceUrl,
+            imageUrl: event.imageUrl,
+            phone: event.phone
+          },
+          update: {
+            title: event.title,
+            description: event.description,
+            dateStart: event.dateStart,
+            dateEnd: event.dateEnd,
+            locationName: event.locationName,
+            address: event.address,
+            latitude: event.latitude,
+            longitude: event.longitude,
+            category: event.category,
+            sourceUrl: event.sourceUrl,
+            imageUrl: event.imageUrl,
+            phone: event.phone,
+            updatedAt: new Date()
+          }
+        })
+      )
+    )
+
+    // Count successes and failures
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        // Check if it was created or updated (rough heuristic: compare timestamps)
+        const event = result.value
+        const wasJustCreated = event.createdAt.getTime() === event.updatedAt.getTime()
+        if (wasJustCreated) {
+          created++
+        } else {
+          updated++
+        }
+      } else {
+        console.error(`[Scraper] Failed to save event ${index}:`, result.reason)
+      }
     })
 
-    const saved = result.count
-    const skipped = events.length - saved
+    const saved = created + updated
+    console.log(`[Scraper] Created ${created}, updated ${updated} events (${saved} total)`)
 
-    console.log(`[Scraper] Saved ${saved} new events, ${skipped} duplicates skipped`)
-
-    return { saved, skipped }
+    return { saved, skipped: 0 }
   } catch (error) {
     console.error('[Scraper] Database error:', error)
     throw error
