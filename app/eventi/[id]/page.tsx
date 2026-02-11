@@ -8,7 +8,7 @@ import { Event } from "@/lib/types";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
-import { Calendar, MapPin, ExternalLink, Tag, ArrowLeft } from "lucide-react";
+import { Calendar, MapPin, ExternalLink, Tag, ArrowLeft, Phone } from "lucide-react";
 import { decodeHtmlEntities } from "@/lib/utils";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
@@ -241,6 +241,26 @@ export default function EventDetail() {
 														{event.address}
 													</p>
 												)}
+											</div>
+										</div>
+									</div>
+								)}
+
+								{/* Phone Card */}
+								{event.phone && (
+									<div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-[#83c5be]/20 hover:border-[#006d77]/50 transition-all">
+										<div className="flex items-start gap-4">
+											<div className="w-12 h-12 rounded-full bg-[#edf6f9] flex items-center justify-center flex-shrink-0">
+												<Phone className="w-6 h-6 text-[#006d77]" />
+											</div>
+											<div>
+												<h3 className="font-semibold text-gray-900 mb-1">Telefono</h3>
+												<a
+													href={`tel:${event.phone}`}
+													className="text-sm text-[#006d77] hover:underline"
+												>
+													{event.phone}
+												</a>
 											</div>
 										</div>
 									</div>
