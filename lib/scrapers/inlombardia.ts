@@ -80,11 +80,30 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   const dateFrom = dateFromStr.split('-').reverse().join('/')
   const dateTo = dateToStr.split('-').reverse().join('/')
 
+  // Calculate date range in days for adaptive maxPages
+  const dateFromParsed = new Date(dateFromStr)
+  const dateToParsed = new Date(dateToStr)
+  const daysDiff = Math.ceil((dateToParsed.getTime() - dateFromParsed.getTime()) / (1000 * 60 * 60 * 24))
+
+  // Adaptive maxPages based on date range
+  let maxPages: number
+  if (daysDiff <= 7) {
+    maxPages = 5 // Short searches (1 week or less)
+  } else if (daysDiff <= 30) {
+    maxPages = 15 // Medium searches (up to 1 month)
+  } else {
+    maxPages = 50 // Long searches (more than 1 month)
+  }
+
   // Build initial URL
   const initialUrl = `https://www.in-lombardia.it/eventi?from%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateFrom)}&to%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateTo)}&location=&where=&distance=40&what%5B%5D=all&date_search=period`
 
-  // Fetch initial page with retry logic
-  const initialResponse = await fetchWithRetry(initialUrl)
+  // Fetch initial page with retry logic (2 retries, 500ms delay)
+  const initialResponse = await fetchWithRetry(initialUrl, {
+    timeout: 30000,
+    retries: 2,
+    retryDelay: 500
+  })
   const initialHtml = await initialResponse.text()
 
   // Extract view_dom_id (required for AJAX pagination)
@@ -100,7 +119,6 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   let page = 1
   let cardLastPos = 20
   let hasMorePages = true
-  const maxPages = 50
 
   while (hasMorePages && page < maxPages) {
     // Build form data for AJAX request
@@ -120,14 +138,17 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
     ].join('&')
 
     try {
-      // POST to AJAX endpoint with retry logic
+      // POST to AJAX endpoint with reduced timeout and retries for speed
       const ajaxResponse = await fetchWithRetry('https://www.in-lombardia.it/it/views/ajax', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
           'X-Requested-With': 'XMLHttpRequest'
         },
-        body: formData
+        body: formData,
+        timeout: 10000, // 10s timeout for AJAX requests
+        retries: 1, // Only 1 retry
+        retryDelay: 500 // 500ms delay
       })
 
       const ajaxData: AjaxCommand[] = await ajaxResponse.json()
