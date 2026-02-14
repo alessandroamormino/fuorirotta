@@ -2,10 +2,7 @@
  * SoloSagre.it scraper
  *
  * Fetches and parses HTML from solosagre.it/sagre/lombardia/
- * Ported from n8n workflow nodes:
- * - HTTP Request - SoloSagre
- * - Code - Parse SoloSagre HTML
- * - Code - Transform SoloSagre
+ * Fetches event listings, parses HTML with regex, and transforms to Event schema.
  */
 
 import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
@@ -56,7 +53,7 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Scrape
 function parseHTML(html: string): ParsedEvent[] {
   const events: ParsedEvent[] = []
 
-  // Regex pattern from n8n: Find all <div class="post"> blocks
+  // Regex pattern: Find all <div class="post"> blocks
   const postMatches = html.match(/<div class="post"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g)
 
   if (!postMatches) {
@@ -108,7 +105,7 @@ function parseHTML(html: string): ParsedEvent[] {
 }
 
 function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): ScrapedEvent[] {
-  // Set default date range (today to 6 months from now, same as n8n)
+  // Set default date range (today to 6 months from now)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 

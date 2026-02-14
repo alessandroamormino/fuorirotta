@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 			dateTo: dateTo || endOfYear,
 		};
 
-		// CACHE CHECK (solo per logging, non triggera più n8n)
+		// CACHE CHECK
 		let cacheResult: {
 			isCached: boolean;
 			isRunning: boolean;
@@ -244,7 +244,7 @@ export async function GET(request: NextRequest) {
 				try {
 					executionId = await createWorkflowExecution(cacheQuery);
 
-					// Run scrapers directly instead of n8n webhook
+					// Run scrapers
 					const params = {
 						dateFrom: cacheQuery.dateFrom,
 						dateTo: cacheQuery.dateTo

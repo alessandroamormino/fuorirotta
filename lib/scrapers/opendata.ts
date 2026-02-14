@@ -2,9 +2,7 @@
  * OpenData Lombardia scraper
  *
  * Fetches JSON from dati.lombardia.it Socrata API with date filtering
- * Ported from n8n workflow nodes:
- * - HTTP Request - OpenData Lombardia
- * - Code - Transform OpenData
+ * Queries Socrata API with SoQL date filtering and transforms JSON to Event schema.
  */
 
 import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
@@ -32,7 +30,7 @@ export async function scrapeOpenData(params: ScrapeParams = {}): Promise<ScrapeR
   const startTime = Date.now()
 
   try {
-    // Set default date range (today to 6 months from now, same as n8n)
+    // Set default date range (today to 6 months from now)
     const today = new Date()
     const dateFrom = params.dateFrom || today.toISOString().split('T')[0]
 

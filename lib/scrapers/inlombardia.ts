@@ -2,10 +2,8 @@
  * InLombardia scraper
  *
  * Fetches paginated HTML via AJAX POST from in-lombardia.it
- * Ported from n8n workflow nodes:
- * - Code - Fetch All InLombardia Events (Paginated)
- * - Code - Parse InLombardia HTML
- * - Code - Transform InLombardia
+ * Handles AJAX pagination, parses article HTML, fetches detail pages for
+ * JSON-LD structured data, and transforms to Event schema.
  */
 
 import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
@@ -191,7 +189,7 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
 function parseHTML(html: string): ParsedEvent[] {
   const events: ParsedEvent[] = []
 
-  // Regex pattern from n8n: Find all <article class="...c-card..."> blocks
+  // Regex pattern: Find all <article class="...c-card..."> blocks
   const cardMatches = html.match(/<article[^>]*class="[^"]*c-card[^"]*"[^>]*>([\s\S]*?)<\/article>/g)
 
   if (!cardMatches) {
