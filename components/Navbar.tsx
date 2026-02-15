@@ -225,7 +225,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
 												setSelectedRadius(null);
 											}
 										}}
-										className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-gray-400 ${
+										className={`w-full text-base outline-none bg-transparent placeholder-gray-400 ${
 											isNearbySearch
 												? "text-gray-900 cursor-not-allowed font-medium"
 												: "text-gray-700"
