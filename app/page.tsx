@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -76,6 +76,11 @@ export default function Home() {
 		lng: number;
 	} | null>(null);
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
+
+	// Scroll tracking for blur effects
+	const [showTopBlur, setShowTopBlur] = useState(false);
+	const [showBottomBlur, setShowBottomBlur] = useState(false);
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
 
 	// Pagination state - restore from sessionStorage
 	const [currentPage, setCurrentPage] = useState<number>(() => {
@@ -283,6 +288,23 @@ export default function Home() {
 		setSearchFilters(filters);
 	};
 
+	// Handle scroll to show/hide blur effects
+	const handleScroll = () => {
+		if (!scrollContainerRef.current) return;
+
+		const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+		const isAtTop = scrollTop < 10;
+		const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+
+		setShowTopBlur(!isAtTop);
+		setShowBottomBlur(!isAtBottom);
+	};
+
+	// Check scroll position on mount and when events change
+	useEffect(() => {
+		handleScroll();
+	}, [events]);
+
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-[#edf6f9] via-white to-[#83c5be]/10">
 			{/* Navbar */}
@@ -295,7 +317,11 @@ export default function Home() {
 					<div className="flex-1 min-w-0 flex flex-col">
 						{/* Cards Area - Mobile Scroll with gradient, Desktop no scroll */}
 						<div className="flex-1 pb-4 relative">
-							<div className="h-full overflow-y-auto xl:overflow-hidden">
+							<div
+								ref={scrollContainerRef}
+								onScroll={handleScroll}
+								className="h-full overflow-y-auto xl:overflow-hidden"
+							>
 								<AnimatePresence mode="wait">
 									{loading ? (
 										<motion.div
@@ -331,7 +357,7 @@ export default function Home() {
 									) : (
 										<div
 											key="events"
-											className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-3 gap-y-3 sm:gap-x-4 sm:gap-y-4 md:gap-x-4 md:gap-y-4 lg:gap-x-4 lg:gap-y-4"
+											className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-2 sm:gap-x-4 sm:gap-y-4 md:gap-x-4 md:gap-y-4 lg:gap-x-4 lg:gap-y-4"
 										>
 											{events.map((event, index) => (
 												<div
@@ -347,9 +373,14 @@ export default function Home() {
 								</AnimatePresence>
 							</div>
 
-							{/* Gradient blur at bottom (mobile only) */}
-							{!loading && events.length > 0 && (
-								<div className="xl:hidden absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-white via-white to-transparent pointer-events-none z-10" />
+							{/* Gradient blur at top (mobile only) - appears when scrolling down */}
+							{!loading && events.length > 0 && showTopBlur && (
+								<div className="xl:hidden absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-white via-white/80 to-transparent pointer-events-none z-10" />
+							)}
+
+							{/* Gradient blur at bottom (mobile only) - appears when content below */}
+							{!loading && events.length > 0 && showBottomBlur && (
+								<div className="xl:hidden absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none z-10" />
 							)}
 						</div>
 
