@@ -328,9 +328,9 @@ export default function Home() {
 			<main className="fixed top-28 left-0 right-0 bottom-0 overflow-hidden">
 				<div className="container mx-auto px-4 py-4 h-full flex gap-6">
 					{/* Events List - Left Side - Flex Container */}
-					<div className="flex-1 min-w-0 flex flex-col">
+					<div className="flex-1 min-w-0 flex flex-col min-h-0">
 						{/* Cards Area - Mobile Scroll with gradient, Desktop no scroll */}
-						<div className="flex-1 pb-4 relative">
+						<div className="flex-1 min-h-0 pb-4 relative">
 							<div
 								ref={scrollContainerRef}
 								onScroll={handleScroll}
