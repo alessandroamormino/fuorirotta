@@ -139,8 +139,11 @@ export default function Home() {
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
+		console.log('[Mount] Cache check:', { cached: !!cached, queryKey });
+
 		if (cached) {
 			// Restore cached events
+			console.log('[Mount] Restoring from cache:', cached.events.length, 'events');
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
@@ -152,6 +155,7 @@ export default function Home() {
 			}
 		} else {
 			// No cache, fetch initial data
+			console.log('[Mount] No cache, fetching page:', currentPage);
 			fetchEvents(currentPage);
 		}
 	}, []); // Run once on mount
@@ -188,6 +192,7 @@ export default function Home() {
 	}, [searchFilters, selectedCategory]);
 
 	const fetchEvents = async (page: number) => {
+		console.log('[fetchEvents] Starting fetch for page:', page);
 		setLoading(true);
 		// Update currentPage immediately
 		setCurrentPage(page);
@@ -243,19 +248,23 @@ export default function Home() {
 			params.append("offset", offset.toString());
 
 			const response = await fetch(`/api/events?${params}`);
+			console.log('[fetchEvents] Response status:', response.status);
 
 			if (!response.ok) {
 				console.error("API Error:", response.status, response.statusText);
 				const errorData = await response.text();
 				console.error("Error details:", errorData);
+				setLoading(false);
 				return;
 			}
 
 			const data = await response.json();
+			console.log('[fetchEvents] API data:', { events: data.events?.length, total: data.total, error: data.error });
 
 			// Handle API errors or missing data
 			if (data.error || !data.events) {
 				console.error("API returned error or no events:", data);
+				setLoading(false);
 				return;
 			}
 
@@ -263,6 +272,7 @@ export default function Home() {
 			const newMapEvents = data.mapEvents || newEvents; // fallback to events if mapEvents not available
 			const newTotal = data.total || 0;
 
+			console.log('[fetchEvents] Setting events:', newEvents.length, 'total:', newTotal);
 			setEvents(newEvents);
 			setMapEvents(newMapEvents); // Set ALL events for map
 			setTotal(newTotal);
@@ -278,8 +288,12 @@ export default function Home() {
 				});
 			}
 		} catch (error) {
-			console.error("Error fetching events:", error);
+			console.error("[fetchEvents] Error fetching events:", error);
+			setEvents([]);
+			setMapEvents([]);
+			setTotal(0);
 		} finally {
+			console.log('[fetchEvents] Fetch complete, setting loading to false');
 			setLoading(false);
 		}
 	};
