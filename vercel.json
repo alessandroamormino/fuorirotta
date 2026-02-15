@@ -1,10 +1,1 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "_comment": "CRON TEMPORANEAMENTE DISABILITATO - Ripristinare quando si ha Vercel Pro plan",
-  "_crons_disabled": [
-    {
-      "path": "/api/cron/scrape",
-      "schedule": "0 */4 * * *"
-    }
-  ]
-}
+{}
