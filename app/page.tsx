@@ -82,6 +82,14 @@ export default function Home() {
 	const [showBottomBlur, setShowBottomBlur] = useState(false);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+	// Debug info for mobile
+	const [debugInfo, setDebugInfo] = useState<string[]>([]);
+	const addDebug = (msg: string) => {
+		const timestamp = new Date().toLocaleTimeString();
+		setDebugInfo(prev => [...prev.slice(-5), `${timestamp}: ${msg}`]);
+		console.log(msg);
+	};
+
 	// Pagination state - restore from sessionStorage
 	const [currentPage, setCurrentPage] = useState<number>(() => {
 		if (typeof window !== "undefined") {
@@ -139,11 +147,11 @@ export default function Home() {
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
-		console.log('[Mount] Cache check:', { cached: !!cached, queryKey });
+		addDebug(`[Mount] Cache: ${cached ? 'found' : 'not found'}`);
 
 		if (cached) {
 			// Restore cached events
-			console.log('[Mount] Restoring from cache:', cached.events.length, 'events');
+			addDebug(`[Mount] Cached events: ${cached.events.length}`);
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
@@ -155,7 +163,7 @@ export default function Home() {
 			}
 		} else {
 			// No cache, fetch initial data
-			console.log('[Mount] No cache, fetching page:', currentPage);
+			addDebug(`[Mount] Fetching page ${currentPage}`);
 			fetchEvents(currentPage);
 		}
 	}, []); // Run once on mount
@@ -192,7 +200,7 @@ export default function Home() {
 	}, [searchFilters, selectedCategory]);
 
 	const fetchEvents = async (page: number) => {
-		console.log('[fetchEvents] Starting fetch for page:', page);
+		addDebug(`[Fetch] Page ${page}`);
 		setLoading(true);
 		// Update currentPage immediately
 		setCurrentPage(page);
@@ -248,9 +256,10 @@ export default function Home() {
 			params.append("offset", offset.toString());
 
 			const response = await fetch(`/api/events?${params}`);
-			console.log('[fetchEvents] Response status:', response.status);
+			addDebug(`[API] Status: ${response.status}`);
 
 			if (!response.ok) {
+				addDebug(`[API] Error: ${response.status}`);
 				console.error("API Error:", response.status, response.statusText);
 				const errorData = await response.text();
 				console.error("Error details:", errorData);
@@ -259,10 +268,11 @@ export default function Home() {
 			}
 
 			const data = await response.json();
-			console.log('[fetchEvents] API data:', { events: data.events?.length, total: data.total, error: data.error });
+			addDebug(`[API] Events: ${data.events?.length || 0}, Total: ${data.total || 0}`);
 
 			// Handle API errors or missing data
 			if (data.error || !data.events) {
+				addDebug(`[API] No events or error`);
 				console.error("API returned error or no events:", data);
 				setLoading(false);
 				return;
@@ -272,7 +282,7 @@ export default function Home() {
 			const newMapEvents = data.mapEvents || newEvents; // fallback to events if mapEvents not available
 			const newTotal = data.total || 0;
 
-			console.log('[fetchEvents] Setting events:', newEvents.length, 'total:', newTotal);
+			addDebug(`[Success] ${newEvents.length} events loaded`);
 			setEvents(newEvents);
 			setMapEvents(newMapEvents); // Set ALL events for map
 			setTotal(newTotal);
@@ -288,12 +298,12 @@ export default function Home() {
 				});
 			}
 		} catch (error) {
+			addDebug(`[Error] ${error instanceof Error ? error.message : 'Unknown error'}`);
 			console.error("[fetchEvents] Error fetching events:", error);
 			setEvents([]);
 			setMapEvents([]);
 			setTotal(0);
 		} finally {
-			console.log('[fetchEvents] Fetch complete, setting loading to false');
 			setLoading(false);
 		}
 	};
@@ -321,6 +331,15 @@ export default function Home() {
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-[#edf6f9] via-white to-[#83c5be]/10">
+			{/* Debug Panel - Mobile Only */}
+			{debugInfo.length > 0 && (
+				<div className="xl:hidden fixed top-2 left-2 z-[200] bg-black/90 text-white text-xs p-2 rounded max-w-[90vw] font-mono">
+					{debugInfo.map((msg, i) => (
+						<div key={i} className="whitespace-nowrap overflow-hidden text-ellipsis">{msg}</div>
+					))}
+				</div>
+			)}
+
 			{/* Navbar */}
 			<Navbar onSearch={handleSearch} />
 
