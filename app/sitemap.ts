@@ -1,6 +1,11 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
 
+// Force dynamic rendering to avoid database queries during build
+export const dynamic = 'force-dynamic';
+// Cache the sitemap for 1 hour
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 	const baseUrl = getBaseUrl();
 
