@@ -265,6 +265,22 @@ The cron endpoint returns execution metrics:
 3. Check Supabase Dashboard > Database > Connection pooling is enabled
 4. Verify connection strings are correct (copy from Supabase Dashboard)
 
+### Build Fails with "max clients reached" Error
+
+**Symptoms:** Build fails during sitemap generation with error:
+```
+FATAL: MaxClientsInSessionMode: max clients reached - in Session mode max clients are limited to pool_size
+Error occurred prerendering page "/sitemap.xml"
+```
+
+**Root Cause:** The sitemap attempts to query the database during build time (static generation), exhausting Neon/Supabase's connection pool in Session mode.
+
+**Solution:** The sitemap has been configured for dynamic rendering with caching:
+- `export const dynamic = 'force-dynamic'` - Generates sitemap at request time, not build time
+- `export const revalidate = 3600` - Caches the sitemap for 1 hour
+
+This eliminates database queries during build while keeping the sitemap fresh and performant.
+
 ### Map Not Loading
 
 **Symptoms:** Map tiles not rendering or "Invalid access token" error
