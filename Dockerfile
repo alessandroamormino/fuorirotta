@@ -18,11 +18,20 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Build-time env vars needed by Next.js static generation
+ARG DATABASE_URL
+ARG DIRECT_URL
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_MAPBOX_TOKEN
+ENV DATABASE_URL=$DATABASE_URL
+ENV DIRECT_URL=$DIRECT_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_MAPBOX_TOKEN=$NEXT_PUBLIC_MAPBOX_TOKEN
+
 # Generate Prisma Client
 RUN npx prisma generate
 
 # Build Next.js app
-# This will use the DATABASE_URL from environment
 RUN npm run build
 
 # Production image, copy all the files and run next
