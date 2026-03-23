@@ -234,17 +234,23 @@ function parseHTML(html: string): ParsedEvent[] {
     const titleMatch = card.match(/<h4[^>]*class="c-card__title"[^>]*>([^<]+)<\/h4>/)
     const title = titleMatch ? titleMatch[1].trim() : null
 
-    // Extract venue
-    const venueMatch = card.match(/<h5[^>]*class="c-card__location"[^>]*>([^<]+)<\/h5>/)
+    // Extract venue from <span class="organization"> inside c-card__location
+    const venueMatch = card.match(/<span[^>]*class="[^"]*organization[^"]*"[^>]*>([^<]+)<\/span>/)
     const venue = venueMatch ? venueMatch[1].trim() : null
 
-    // Extract address
-    const addressMatch = card.match(/<h6[^>]*class="c-card__city"[^>]*>([^<]+)<\/h6>/)
+    // Extract address from <span class="address-line1"> inside c-card__location
+    const addressMatch = card.match(/<span[^>]*class="[^"]*address-line1[^"]*"[^>]*>([^<]+)<\/span>/)
     const address = addressMatch ? addressMatch[1].trim() : null
 
-    // Extract date (format: DD/MM/YYYY or DD/MM/YYYY - DD/MM/YYYY)
-    const dateMatch = card.match(/<div[^>]*class="c-card__date"[^>]*>(\d{2}\/\d{2}\/\d{4}(?:\s*-\s*\d{2}\/\d{2}\/\d{4})?)<\/div>/)
-    const dateStr = dateMatch ? dateMatch[1].trim() : null
+    // Extract date from <time> elements inside c-card__date block (DD/MM/YYYY format)
+    // Supports single dates and date ranges (two <time> elements)
+    const timeMatches = [...card.matchAll(/<time[^>]*>(\d{2}\/\d{2}\/\d{4})<\/time>/g)]
+    let dateStr: string | null = null
+    if (timeMatches.length >= 2) {
+      dateStr = `${timeMatches[0][1]} - ${timeMatches[1][1]}`
+    } else if (timeMatches.length === 1) {
+      dateStr = timeMatches[0][1]
+    }
 
     // Extract category
     const categoryMatch = card.match(/<div[^>]*class="c-card__labels"[^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/)
