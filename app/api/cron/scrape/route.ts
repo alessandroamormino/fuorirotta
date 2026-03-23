@@ -114,18 +114,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  try {
-    const result = await executeScrape();
-    return NextResponse.json(result);
-  } catch (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error'
-      },
-      { status: 500 }
-    );
-  }
+  // Fire-and-forget: respond immediately to avoid nginx 504 timeout.
+  // Scraping can take several minutes; the result is tracked via WorkflowExecution.
+  executeScrape().catch(err =>
+    console.error('[Cron] Background scrape failed:', err)
+  );
+
+  return NextResponse.json({ success: true, message: 'Scrape started' }, { status: 202 });
 }
 
 /**
@@ -137,16 +132,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  try {
-    const result = await executeScrape();
-    return NextResponse.json(result);
-  } catch (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error'
-      },
-      { status: 500 }
-    );
-  }
+  // Fire-and-forget: respond immediately to avoid nginx 504 timeout.
+  // Scraping can take several minutes; the result is tracked via WorkflowExecution.
+  executeScrape().catch(err =>
+    console.error('[Cron] Background scrape failed:', err)
+  );
+
+  return NextResponse.json({ success: true, message: 'Scrape started' }, { status: 202 });
 }
