@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
@@ -43,6 +42,6 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
-=======
+
 .planning/
->>>>>>> 16ac204 (fix: use page parameter as single source of truth for pagination)
+.claude/
