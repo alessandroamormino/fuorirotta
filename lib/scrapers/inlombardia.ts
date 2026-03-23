@@ -93,11 +93,14 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
     maxPages = 50 // Long searches (more than 1 month)
   }
 
+  const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
   // Build initial URL
   const initialUrl = `https://www.in-lombardia.it/eventi?from%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateFrom)}&to%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateTo)}&location=&where=&distance=40&what%5B%5D=all&date_search=period`
 
   // Fetch initial page with retry logic (2 retries, 500ms delay)
   const initialResponse = await fetchWithRetry(initialUrl, {
+    headers: { 'User-Agent': BROWSER_UA },
     timeout: 30000,
     retries: 2,
     retryDelay: 500
@@ -112,17 +115,32 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   }
   const viewDomId = viewDomIdMatch[1]
 
-  // Extract the actual AJAX endpoint URL from drupalSettings embedded in the page.
-  // Drupal emits something like: "ajax_path":"\/it\/views\/ajax" or "ajaxPath":"..."
-  // Fall back to known candidates if not found.
-  let ajaxUrl = 'https://www.in-lombardia.it/views/ajax' // safest default (no lang prefix)
+  // Extract AJAX config from drupalSettings: ajax_path, view_name, view_display_id,
+  // view_args, view_path. These can change when the site is updated.
+  let ajaxUrl = 'https://www.in-lombardia.it/views/ajax'
   const ajaxPathMatch = initialHtml.match(/"ajax_path"\s*:\s*"([^"]+)"/) ||
                         initialHtml.match(/"ajaxPath"\s*:\s*"([^"]+)"/)
   if (ajaxPathMatch) {
     const path = ajaxPathMatch[1].replace(/\\\//g, '/')
     ajaxUrl = path.startsWith('http') ? path : 'https://www.in-lombardia.it' + path
   }
-  console.log(`[InLombardia] Using AJAX endpoint: ${ajaxUrl}`)
+
+  // Extract view_name, view_display_id, view_args, view_path from ajaxViews
+  let viewName = 'aggregatore_eventi'
+  let viewDisplayId = 'aggregatore'
+  let viewArgs = '24533'
+  let viewPath = '/node/24533'
+  const ajaxViewsMatch = initialHtml.match(/"ajaxViews"\s*:\s*\{[^}]*"view_dom_id:[a-f0-9]+":\s*(\{[^}]+\})/)
+  if (ajaxViewsMatch) {
+    try {
+      const viewConfig = JSON.parse(ajaxViewsMatch[1])
+      if (viewConfig.view_name) viewName = viewConfig.view_name
+      if (viewConfig.view_display_id) viewDisplayId = viewConfig.view_display_id
+      if (viewConfig.view_args) viewArgs = String(viewConfig.view_args)
+      if (viewConfig.view_path) viewPath = viewConfig.view_path.replace(/\\\//g, '/')
+    } catch { /* keep defaults */ }
+  }
+  console.log(`[InLombardia] AJAX: ${ajaxUrl} | view=${viewName}/${viewDisplayId} args=${viewArgs}`)
 
   // Start pagination
   let allHtml = initialHtml
@@ -134,16 +152,17 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
     // Build form data for AJAX request
     const formData = [
       `page=${page}`,
-      `view_name=events`,
-      `view_display_id=aggregatore_tutti`,
+      `view_name=${viewName}`,
+      `view_display_id=${viewDisplayId}`,
+      `view_args=${encodeURIComponent(viewArgs)}`,
+      `view_path=${encodeURIComponent(viewPath)}`,
+      `view_base_path=`,
       `view_dom_id=${viewDomId}`,
       `pager_element=0`,
-      `card_last_pos=${cardLastPos}`,
-      `card_last_merge_pos=${cardLastPos - 2}`,
       `from%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateFrom)}`,
       `to%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateTo)}`,
       `distance=40`,
-      `what%5B0%5D=all`,
+      `what%5B%5D=all`,
       `date_search=period`
     ].join('&')
 
@@ -153,7 +172,9 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'X-Requested-With': 'XMLHttpRequest'
+          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent': BROWSER_UA,
+          'Referer': initialUrl
         },
         body: formData,
         timeout: 10000, // 10s timeout for AJAX requests
