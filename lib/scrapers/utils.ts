@@ -160,66 +160,71 @@ export async function saveEvents(
     let created = 0
     let updated = 0
 
-    // Use Promise.allSettled to handle all upserts, even if some fail
-    const results = await Promise.allSettled(
-      events.map(event =>
-        prisma.event.upsert({
-          where: {
-            events_source_source_id_key: {
-              source: event.source,
-              sourceId: event.sourceId
-            }
-          },
-          create: {
-            source: event.source,
-            sourceId: event.sourceId,
-            title: event.title,
-            description: event.description,
-            dateStart: event.dateStart,
-            dateEnd: event.dateEnd,
-            locationName: event.locationName,
-            address: event.address,
-            latitude: event.latitude,
-            longitude: event.longitude,
-            category: event.category,
-            sourceUrl: event.sourceUrl,
-            imageUrl: event.imageUrl,
-            phone: event.phone
-          },
-          update: {
-            title: event.title,
-            description: event.description,
-            dateStart: event.dateStart,
-            dateEnd: event.dateEnd,
-            locationName: event.locationName,
-            address: event.address,
-            latitude: event.latitude,
-            longitude: event.longitude,
-            category: event.category,
-            sourceUrl: event.sourceUrl,
-            imageUrl: event.imageUrl,
-            phone: event.phone,
-            updatedAt: new Date()
-          }
-        })
-      )
-    )
+    // Process in small batches to avoid exhausting the connection pool.
+    // Firing all upserts concurrently (Promise.allSettled over 2000 items)
+    // saturates the pool (limit: 9) and causes P2024 timeout errors.
+    const batchSize = 5
+    for (let i = 0; i < events.length; i += batchSize) {
+      const batch = events.slice(i, i + batchSize)
 
-    // Count successes and failures
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        // Check if it was created or updated (rough heuristic: compare timestamps)
-        const event = result.value
-        const wasJustCreated = event.createdAt.getTime() === event.updatedAt.getTime()
-        if (wasJustCreated) {
-          created++
+      const results = await Promise.allSettled(
+        batch.map(event =>
+          prisma.event.upsert({
+            where: {
+              events_source_source_id_key: {
+                source: event.source,
+                sourceId: event.sourceId
+              }
+            },
+            create: {
+              source: event.source,
+              sourceId: event.sourceId,
+              title: event.title,
+              description: event.description,
+              dateStart: event.dateStart,
+              dateEnd: event.dateEnd,
+              locationName: event.locationName,
+              address: event.address,
+              latitude: event.latitude,
+              longitude: event.longitude,
+              category: event.category,
+              sourceUrl: event.sourceUrl,
+              imageUrl: event.imageUrl,
+              phone: event.phone
+            },
+            update: {
+              title: event.title,
+              description: event.description,
+              dateStart: event.dateStart,
+              dateEnd: event.dateEnd,
+              locationName: event.locationName,
+              address: event.address,
+              latitude: event.latitude,
+              longitude: event.longitude,
+              category: event.category,
+              sourceUrl: event.sourceUrl,
+              imageUrl: event.imageUrl,
+              phone: event.phone,
+              updatedAt: new Date()
+            }
+          })
+        )
+      )
+
+      results.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          const event = result.value
+          const wasJustCreated = event.createdAt.getTime() === event.updatedAt.getTime()
+          if (wasJustCreated) {
+            created++
+          } else {
+            updated++
+          }
         } else {
-          updated++
+          console.error(`[Scraper] Failed to save event ${i + idx}:`, result.reason)
         }
-      } else {
-        console.error(`[Scraper] Failed to save event ${index}:`, result.reason)
-      }
-    })
+      })
+    }
 
     const saved = created + updated
     console.log(`[Scraper] Created ${created}, updated ${updated} events (${saved} total)`)

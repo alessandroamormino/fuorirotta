@@ -112,6 +112,18 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   }
   const viewDomId = viewDomIdMatch[1]
 
+  // Extract the actual AJAX endpoint URL from drupalSettings embedded in the page.
+  // Drupal emits something like: "ajax_path":"\/it\/views\/ajax" or "ajaxPath":"..."
+  // Fall back to known candidates if not found.
+  let ajaxUrl = 'https://www.in-lombardia.it/views/ajax' // safest default (no lang prefix)
+  const ajaxPathMatch = initialHtml.match(/"ajax_path"\s*:\s*"([^"]+)"/) ||
+                        initialHtml.match(/"ajaxPath"\s*:\s*"([^"]+)"/)
+  if (ajaxPathMatch) {
+    const path = ajaxPathMatch[1].replace(/\\\//g, '/')
+    ajaxUrl = path.startsWith('http') ? path : 'https://www.in-lombardia.it' + path
+  }
+  console.log(`[InLombardia] Using AJAX endpoint: ${ajaxUrl}`)
+
   // Start pagination
   let allHtml = initialHtml
   let page = 1
@@ -137,7 +149,7 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
 
     try {
       // POST to AJAX endpoint with reduced timeout and retries for speed
-      const ajaxResponse = await fetchWithRetry('https://www.in-lombardia.it/it/views/ajax', {
+      const ajaxResponse = await fetchWithRetry(ajaxUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
