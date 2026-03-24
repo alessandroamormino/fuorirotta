@@ -66,39 +66,21 @@ export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<Scra
 }
 
 async function fetchAllPages(params: ScrapeParams): Promise<string> {
-  // Convert dates to DD/MM/YYYY format for InLombardia
   const today = new Date()
-  const dateFromStr = params.dateFrom || today.toISOString().split('T')[0]
+  // Dates stay in YYYY-MM-DD — the site now uses this format natively
+  const dateFrom = params.dateFrom || today.toISOString().split('T')[0]
 
   const sixMonthsLater = new Date()
   sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6)
-  const dateToStr = params.dateTo || sixMonthsLater.toISOString().split('T')[0]
+  const dateTo = params.dateTo || sixMonthsLater.toISOString().split('T')[0]
 
-  // Convert YYYY-MM-DD to DD/MM/YYYY
-  const dateFrom = dateFromStr.split('-').reverse().join('/')
-  const dateTo = dateToStr.split('-').reverse().join('/')
-
-  // Calculate date range in days for adaptive maxPages
-  const dateFromParsed = new Date(dateFromStr)
-  const dateToParsed = new Date(dateToStr)
-  const daysDiff = Math.ceil((dateToParsed.getTime() - dateFromParsed.getTime()) / (1000 * 60 * 60 * 24))
-
-  // Adaptive maxPages based on date range
-  let maxPages: number
-  if (daysDiff <= 7) {
-    maxPages = 5 // Short searches (1 week or less)
-  } else if (daysDiff <= 30) {
-    maxPages = 15 // Medium searches (up to 1 month)
-  } else {
-    maxPages = 50 // Long searches (more than 1 month)
-  }
+  const maxPages = 50
 
   const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-  // Build initial URL
-  const initialUrl = `https://www.in-lombardia.it/eventi?from%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateFrom)}&to%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateTo)}&location=&where=&distance=40&what%5B%5D=all&date_search=period`
+  // Initial page — new q[] param format with ISO dates
+  const initialUrl = `https://www.in-lombardia.it/eventi?q%5Bfrom%5D=${dateFrom}&q%5Bto%5D=${dateTo}&q%5Bwhat%5D%5Ball%5D=all&q%5Bfield_posizione_proximity%5D%5Bvalue%5D=40&q%5Bdate_search%5D=&q%5Blocation%5D=&q%5Bwhere%5D=`
 
-  // Fetch initial page with retry logic (2 retries, 500ms delay)
   const initialResponse = await fetchWithRetry(initialUrl, {
     headers: { 'User-Agent': BROWSER_UA },
     timeout: 30000,
@@ -107,30 +89,19 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   })
   const initialHtml = await initialResponse.text()
 
-  // Extract view_dom_id (required for AJAX pagination)
+  // Extract view_dom_id — required for AJAX pagination
   const viewDomIdMatch = initialHtml.match(/view_dom_id["']?:\s*["']([a-f0-9]+)["']/)
   if (!viewDomIdMatch) {
-    // No view_dom_id means pagination not available - return just initial page
     return initialHtml
   }
   const viewDomId = viewDomIdMatch[1]
 
-  // Extract AJAX config from drupalSettings: ajax_path, view_name, view_display_id,
-  // view_args, view_path. These can change when the site is updated.
-  let ajaxUrl = 'https://www.in-lombardia.it/views/ajax'
-  const ajaxPathMatch = initialHtml.match(/"ajax_path"\s*:\s*"([^"]+)"/) ||
-                        initialHtml.match(/"ajaxPath"\s*:\s*"([^"]+)"/)
-  if (ajaxPathMatch) {
-    const path = ajaxPathMatch[1].replace(/\\\//g, '/')
-    ajaxUrl = path.startsWith('http') ? path : 'https://www.in-lombardia.it' + path
-  }
-
-  // Extract view_name, view_display_id, view_args, view_path from ajaxViews
+  // Extract view config from drupalSettings (falls back to known defaults)
   let viewName = 'aggregatore_eventi'
   let viewDisplayId = 'aggregatore'
   let viewArgs = '24533'
   let viewPath = '/node/24533'
-  const ajaxViewsMatch = initialHtml.match(/"ajaxViews"\s*:\s*\{[^}]*"view_dom_id:[a-f0-9]+":\s*(\{[^}]+\})/)
+  const ajaxViewsMatch = initialHtml.match(/"ajaxViews"\s*:\s*\{[^}]*"views?_dom_id:[a-f0-9]+":\s*(\{[^}]+\})/)
   if (ajaxViewsMatch) {
     try {
       const viewConfig = JSON.parse(ajaxViewsMatch[1])
@@ -140,18 +111,29 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
       if (viewConfig.view_path) viewPath = viewConfig.view_path.replace(/\\\//g, '/')
     } catch { /* keep defaults */ }
   }
-  console.log(`[InLombardia] AJAX: ${ajaxUrl} | view=${viewName}/${viewDisplayId} args=${viewArgs}`)
 
-  // Start pagination
+  // Try to extract the compressed libraries token from the initial page
+  let pageLibraries = ''
+  const librariesMatch = initialHtml.match(/"libraries"\s*:\s*"([^"]+)"/)
+  if (librariesMatch) pageLibraries = librariesMatch[1]
+
+  console.log(`[InLombardia] view=${viewName}/${viewDisplayId} args=${viewArgs} dom_id=${viewDomId.substring(0, 8)}...`)
+
   let allHtml = initialHtml
   let page = 1
-  let cardLastPos = 20
   let hasMorePages = true
 
-  while (hasMorePages && page < maxPages) {
-    // Build form data for AJAX request
-    const formData = [
-      `page=${page}`,
+  while (hasMorePages && page <= maxPages) {
+    // AJAX pagination uses GET (not POST) with q[] params and ISO dates
+    const queryParts = [
+      `q%5Bfrom%5D=${dateFrom}`,
+      `q%5Bto%5D=${dateTo}`,
+      `q%5Bwhat%5D%5Ball%5D=all`,
+      `q%5Bfield_posizione_proximity%5D%5Bvalue%5D=40`,
+      `q%5Bdate_search%5D=`,
+      `q%5Blocation%5D=`,
+      `q%5Bwhere%5D=`,
+      `_wrapper_format=drupal_ajax`,
       `view_name=${viewName}`,
       `view_display_id=${viewDisplayId}`,
       `view_args=${encodeURIComponent(viewArgs)}`,
@@ -159,63 +141,66 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
       `view_base_path=`,
       `view_dom_id=${viewDomId}`,
       `pager_element=0`,
-      `from%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateFrom)}`,
-      `to%5Bvalue%5D%5Bdate%5D=${encodeURIComponent(dateTo)}`,
-      `distance=40`,
-      `what%5B%5D=all`,
-      `date_search=period`
+      `from=${dateFrom}`,
+      `to=${dateTo}`,
+      `where=`,
+      `page=${page}`,
+      `_drupal_ajax=1`,
+      `ajax_page_state%5Btheme%5D=turismo`,
+      `ajax_page_state%5Btheme_token%5D=`,
+      `ajax_page_state%5Blibraries%5D=${encodeURIComponent(pageLibraries)}`
     ].join('&')
 
+    const ajaxUrl = `https://www.in-lombardia.it/views/ajax?${queryParts}`
+
     try {
-      // POST to AJAX endpoint with reduced timeout and retries for speed
       const ajaxResponse = await fetchWithRetry(ajaxUrl, {
-        method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'X-Requested-With': 'XMLHttpRequest',
           'User-Agent': BROWSER_UA,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
           'Referer': initialUrl
         },
-        body: formData,
-        timeout: 10000, // 10s timeout for AJAX requests
-        retries: 1, // Only 1 retry
-        retryDelay: 500 // 500ms delay
+        timeout: 15000,
+        retries: 1,
+        retryDelay: 500
       })
 
       const ajaxData: AjaxCommand[] = await ajaxResponse.json()
 
-      // Find the insert command
+      const commandNames = ajaxData.map(cmd => cmd.command).filter(Boolean)
+      console.log(`[InLombardia] Page ${page} commands: ${commandNames.join(', ')}`)
+
       const insertCommand = ajaxData.find(cmd =>
         cmd.command === 'insert' ||
         cmd.command === 'views_infinite_scroll_insert_view' ||
-        cmd.command === 'views_infinite_scroll_content_selector'
+        cmd.command === 'views_infinite_scroll_content_selector' ||
+        cmd.command === 'replaceWith' ||
+        cmd.command === 'append' ||
+        (cmd.data && typeof cmd.data === 'string' && cmd.data.includes('<article'))
       )
 
       if (insertCommand && insertCommand.data) {
         const pageHtml = insertCommand.data
-
-        // Count events in this page
         const eventCount = (pageHtml.match(/<article/g) || []).length
 
         if (eventCount === 0) {
-          // No more events - stop pagination
           hasMorePages = false
         } else {
-          // Append HTML and continue
           allHtml += pageHtml
+          console.log(`[InLombardia] Page ${page}: ${eventCount} events`)
           page++
-          cardLastPos += 10
         }
       } else {
-        // No insert command - stop pagination
         hasMorePages = false
       }
     } catch (error) {
-      // On any fetch error, stop pagination and return events collected so far (don't throw)
+      console.log(`[InLombardia] Page ${page} error: ${error instanceof Error ? error.message : 'unknown'}`)
       hasMorePages = false
     }
   }
 
+  console.log(`[InLombardia] Pagination complete: ${page - 1} AJAX pages fetched`)
   return allHtml
 }
 
