@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   fuorirotta-frontend:
     build:
@@ -24,13 +22,10 @@ services:
     restart: unless-stopped
     networks:
       - fuorirotta-network
+      - webstack
 
 networks:
   fuorirotta-network:
     driver: bridge
-
-# To connect to existing database network (e.g., Raspberry Pi Docker network):
-# networks:
-#   fuorirotta-network:
-#     external: true
-#     name: webstack_webstack
+  webstack:
+    external: true
