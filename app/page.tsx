@@ -82,6 +82,22 @@ export default function Home() {
 	const [showBottomBlur, setShowBottomBlur] = useState(false);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+	// Navbar height tracking via getBoundingClientRect
+	const [navHeight, setNavHeight] = useState(112);
+	useEffect(() => {
+		const measure = () => {
+			const nav = document.getElementById("main-navbar");
+			if (!nav) return;
+			const rect = nav.getBoundingClientRect();
+			setNavHeight(rect.bottom); // bottom = distanza dal top della viewport = top + height
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		const nav = document.getElementById("main-navbar");
+		if (nav) ro.observe(nav);
+		return () => ro.disconnect();
+	}, []);
+
 	// Pagination state - restore from sessionStorage
 	const [currentPage, setCurrentPage] = useState<number>(() => {
 		if (typeof window !== "undefined") {
@@ -324,10 +340,13 @@ export default function Home() {
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-[#edf6f9] via-white to-[#83c5be]/10">
 			{/* Navbar */}
-			<Navbar onSearch={handleSearch} />
+			<Navbar onSearch={handleSearch} onOpenMap={() => setIsMapExpanded(true)} />
 
 			{/* Main Content - Split View */}
-			<main className="fixed top-28 left-0 right-0 bottom-0 overflow-hidden">
+			<main
+				className="fixed left-0 right-0 bottom-0 overflow-hidden"
+				style={{ top: navHeight }}
+			>
 				<div className="container mx-auto px-4 py-4 h-full flex gap-6">
 					{/* Events List - Left Side - Flex Container */}
 					<div className="flex-1 min-w-0 flex flex-col min-h-0">
@@ -496,16 +515,6 @@ export default function Home() {
 								</div>
 							</div>
 						)}
-
-						{/* Floating Map Button (Mobile/Tablet) - Bottom Right */}
-						{events.length > 0 && (
-							<button
-								onClick={() => setIsMapExpanded(true)}
-								className="xl:hidden fixed bottom-4 right-4 w-14 h-14 bg-[#006d77] text-white rounded-full shadow-lg active:shadow-md transition-shadow flex items-center justify-center z-50"
-							>
-								<Map className="w-6 h-6" />
-							</button>
-						)}
 					</div>
 
 					{/* Map - Right Side (Fixed) */}
@@ -541,34 +550,61 @@ export default function Home() {
 						animate={{ opacity: 1 }}
 						exit={{ opacity: 0 }}
 						transition={{ duration: 0.15 }}
-						className="fixed inset-0 z-[100] bg-black/50"
-						onClick={() => setIsMapExpanded(false)}
+						className="fixed inset-0 z-[100]"
 					>
+						{/* Desktop: con cornice e overlay scuro */}
 						<div
-							className="absolute inset-4 bg-white rounded-2xl overflow-hidden shadow-2xl"
-							onClick={(e) => e.stopPropagation()}
+							className="hidden xl:block absolute inset-0 bg-black/50"
+							onClick={() => setIsMapExpanded(false)}
 						>
-							{/* Header */}
-							<div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-lg border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-								<h3 className="text-lg font-bold text-gray-900">
-									Mappa eventi - {mapEvents.length} eventi
-								</h3>
+							<div
+								className="absolute inset-4 bg-white rounded-2xl overflow-hidden shadow-2xl"
+								onClick={(e) => e.stopPropagation()}
+							>
+								<div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-lg border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+									<h3 className="text-lg font-bold text-gray-900">
+										Mappa eventi — {mapEvents.length} eventi
+									</h3>
+									<button
+										onClick={() => setIsMapExpanded(false)}
+										className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+									>
+										<X className="w-6 h-6 text-gray-600" />
+									</button>
+								</div>
+								<div className="absolute inset-0 pt-16">
+									<EventsMap
+										events={mapEvents}
+										initialGeoJSON={clusterGeoJSON}
+										mapId="map-fullscreen-desktop"
+										userLocation={userLocation}
+									/>
+								</div>
+							</div>
+						</div>
+
+						{/* Mobile: tutto schermo */}
+						<div className="xl:hidden absolute inset-0">
+							<EventsMap
+								events={mapEvents}
+								initialGeoJSON={clusterGeoJSON}
+								mapId="map-fullscreen-mobile"
+								userLocation={userLocation}
+							/>
+							{/* Header sovrapposto */}
+							<div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-5 pb-4 pointer-events-none" style={{ paddingTop: "max(env(safe-area-inset-top), 16px)" }}>
+								<div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow pointer-events-auto">
+									<span className="text-sm font-semibold text-gray-900">
+										{mapEvents.length} {mapEvents.length === 1 ? "evento" : "eventi"}
+									</span>
+								</div>
+								{/* X a sinistra dei controlli zoom (che sono top-right di mapbox) */}
 								<button
 									onClick={() => setIsMapExpanded(false)}
-									className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+									className="w-11 h-11 rounded-full bg-white/90 backdrop-blur-md shadow flex items-center justify-center pointer-events-auto mr-14"
 								>
-									<X className="w-6 h-6 text-gray-600" />
+									<X className="w-5 h-5 text-gray-700" />
 								</button>
-							</div>
-
-							{/* Map Content */}
-							<div className="absolute inset-0 pt-16">
-								<EventsMap
-									events={mapEvents}
-									initialGeoJSON={clusterGeoJSON}
-									mapId="map-fullscreen"
-									userLocation={userLocation}
-								/>
 							</div>
 						</div>
 					</motion.div>
