@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "react-datepicker/dist/react-datepicker.css";
+@plugin "@tailwindcss/typography";
 
 :root {
   --background: #ffffff;

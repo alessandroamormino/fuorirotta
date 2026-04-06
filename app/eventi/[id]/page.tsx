@@ -278,9 +278,10 @@ export default function EventDetail() {
 									<h2 className="text-2xl font-bold text-gray-900 mb-4">
 										Descrizione
 									</h2>
-									<p className="text-gray-700 whitespace-pre-line leading-relaxed">
-										{event.description}
-									</p>
+									<div
+										className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
+										dangerouslySetInnerHTML={{ __html: event.description }}
+									/>
 								</motion.div>
 							)}
 						</div>
@@ -315,7 +316,7 @@ export default function EventDetail() {
 										href={event.sourceUrl}
 										target="_blank"
 										rel="noopener noreferrer"
-										className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-gradient-to-r from-[#006d77] to-[#83c5be] text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
+										className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-[#006d77] text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
 									>
 										Visita sito ufficiale
 										<ExternalLink className="w-5 h-5" />

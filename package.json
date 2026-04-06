@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "scrape": "npx tsx --import ./lib/scrapers/env.ts lib/scrapers/runner.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.1.0",
     "@prisma/client": "^6.1.0",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/leaflet": "^1.9.21",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",

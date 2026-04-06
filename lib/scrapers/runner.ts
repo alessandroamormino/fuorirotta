@@ -81,11 +81,17 @@ export async function runAllScrapers(params?: ScrapeParams): Promise<RunResult> 
   }
 }
 
-// Run directly: npx tsx frontend/lib/scrapers/runner.ts
+const SCRAPERS: Record<string, (params?: ScrapeParams) => Promise<ScrapeResult>> = {
+  inlombardia: scrapeInLombardia,
+  solosagre: scrapeSoloSagre,
+  opendata: scrapeOpenData,
+}
+
+// Run directly: npx tsx lib/scrapers/runner.ts [source] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 if (require.main === module) {
-  // Parse command-line arguments
   const args = process.argv.slice(2)
   const params: ScrapeParams = {}
+  let source: string | null = null
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--from' && args[i + 1]) {
@@ -94,16 +100,36 @@ if (require.main === module) {
     } else if (args[i] === '--to' && args[i + 1]) {
       params.dateTo = args[i + 1]
       i++
+    } else if (!args[i].startsWith('--')) {
+      source = args[i].toLowerCase()
     }
   }
 
-  runAllScrapers(params)
-    .then(async () => {
-      await prisma.$disconnect()
-    })
-    .catch(async (error) => {
-      console.error('[Scraper] Execution failed:', error)
-      await prisma.$disconnect()
-      process.exit(1)
-    })
+  const run = async () => {
+    if (source) {
+      const scraperFn = SCRAPERS[source]
+      if (!scraperFn) {
+        console.error(`[Scraper] Unknown source "${source}". Available: ${Object.keys(SCRAPERS).join(', ')}`)
+        process.exit(1)
+      }
+      console.log(`[Scraper] Running single scraper: ${source}`)
+      const result = await scraperFn(params)
+      logMetrics([result])
+      if (result.events.length > 0) {
+        const { saved, skipped } = await saveEvents(result.events)
+        console.log(`[Scraper] Done. ${saved} new events saved, ${skipped} skipped.`)
+      } else {
+        console.log('[Scraper] No events found.')
+      }
+    } else {
+      await runAllScrapers(params)
+    }
+    await prisma.$disconnect()
+  }
+
+  run().catch(async (error) => {
+    console.error('[Scraper] Execution failed:', error)
+    await prisma.$disconnect()
+    process.exit(1)
+  })
 }

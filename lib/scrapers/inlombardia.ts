@@ -29,6 +29,8 @@ interface DetailData {
   venueName: string | null
   fullAddress: string | null
   phone: string | null
+  latitude: number | null
+  longitude: number | null
 }
 
 export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<ScrapeResult> {
@@ -74,7 +76,7 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6)
   const dateTo = params.dateTo || sixMonthsLater.toISOString().split('T')[0]
 
-  const maxPages = 50
+  const maxPages = 200
 
   const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
@@ -290,6 +292,8 @@ async function fetchDetailPage(url: string): Promise<DetailData> {
     let venueName: string | null = null
     let fullAddress: string | null = null
     let phone: string | null = null
+    let latitude: number | null = null
+    let longitude: number | null = null
 
     // Extract JSON-LD structured data
     const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/g
@@ -357,6 +361,41 @@ async function fetchDetailPage(url: string): Promise<DetailData> {
       }
     }
 
+    // Fallback: extract description from HTML if JSON-LD didn't provide it
+    if (!description) {
+      // Find the opening tag of body-readmore, then extract until the matching closing </div>
+      const startMatch = html.match(/<div[^>]*class="body-readmore"[^>]*>/)
+      if (startMatch && startMatch.index !== undefined) {
+        const contentStart = startMatch.index + startMatch[0].length
+        let depth = 1
+        let i = contentStart
+        while (i < html.length && depth > 0) {
+          if (html.startsWith('<div', i)) depth++
+          else if (html.startsWith('</div', i)) depth--
+          if (depth > 0) i++
+        }
+        const innerHtml = html.slice(contentStart, i).trim()
+        if (innerHtml.length > 0) {
+          // Keep formatting tags, strip only scripts/styles and unwanted attributes
+          description = innerHtml
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/\s+class="[^"]*"/g, '')
+            .replace(/\s+id="[^"]*"/g, '')
+            .replace(/\s+style="[^"]*"/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+        }
+      }
+    }
+
+    // Extract coordinates from c-map data-url: @lat,lng,zoom
+    const mapMatch = html.match(/class="c-map"[^>]*data-url="[^"]*@([\d.\-]+),([\d.\-]+)/)
+    if (mapMatch) {
+      latitude = parseFloat(mapMatch[1])
+      longitude = parseFloat(mapMatch[2])
+    }
+
     // Extract phone number from HTML (check tel: link, span, or p tag)
     const phonePattern = /icon-phone[\s\S]{0,200}?(?:<a[^>]*href="tel:([^"]+)"|<(?:span|p)[^>]*>\s*([\d\s\+\-\.\/\(\)]{7,})\s*<\/(?:span|p)>)/
     const phoneMatch = html.match(phonePattern)
@@ -368,10 +407,10 @@ async function fetchDetailPage(url: string): Promise<DetailData> {
       }
     }
 
-    return { description, venueName, fullAddress, phone }
+    return { description, venueName, fullAddress, phone, latitude, longitude }
   } catch (error) {
     // On error, return null data (graceful degradation)
-    return { description: null, venueName: null, fullAddress: null, phone: null }
+    return { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null }
   }
 }
 
@@ -381,8 +420,7 @@ async function fetchDetailPages(events: ParsedEvent[]): Promise<Map<string, Deta
   // Filter to only events with valid URLs
   const eventsWithUrls = events.filter(e => e.url && e.url.startsWith('http'))
 
-  // Cap at 200 events maximum
-  const eventsToFetch = eventsWithUrls.slice(0, 200)
+  const eventsToFetch = eventsWithUrls
 
   if (eventsToFetch.length === 0) {
     return detailDataMap
@@ -480,6 +518,8 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, deta
     // Use detail data if available, fallback to list-view data
     const description = detailData?.description || null
     const phone = detailData?.phone || null
+    const latitude = detailData?.latitude ?? null
+    const longitude = detailData?.longitude ?? null
 
     // For locationName: prefer detail venue name, fallback to extracted city
     let locationName: string | null = detailData?.venueName || null
@@ -512,8 +552,8 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, deta
       dateEnd: eventEndDate,
       locationName: locationName || 'Lombardia',
       address,
-      latitude: null, // InLombardia doesn't provide coordinates
-      longitude: null,
+      latitude,
+      longitude,
       category: data.category || 'Evento',
       sourceUrl: data.url || 'https://www.in-lombardia.it',
       imageUrl: data.image,
