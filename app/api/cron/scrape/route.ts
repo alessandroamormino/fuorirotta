@@ -7,14 +7,10 @@ import {
 } from '@/lib/cacheService';
 import { updateClusterCache } from '@/lib/clusterCache';
 
-// Vercel Pro allows up to 60s for serverless functions
-export const maxDuration = 60;
-
 /**
  * Validate CRON_SECRET from request headers
  *
  * Checks Authorization header for "Bearer <CRON_SECRET>"
- * This is the standard Vercel Cron authentication pattern
  *
  * @param request - NextRequest object
  * @returns true if valid, false otherwise
@@ -106,7 +102,7 @@ async function executeScrape() {
 }
 
 /**
- * GET handler for Vercel Cron (Vercel Cron uses GET by default)
+ * GET handler for cron triggers (called by server-side crontab)
  */
 export async function GET(request: NextRequest) {
   // Validate CRON_SECRET
