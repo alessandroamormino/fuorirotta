@@ -333,8 +333,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									</div>
 								</Link>
 							</div>
-							{/* Icone lista + mappa centrate (assoluto) */}
-							<div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3">
+							<div className="flex-1 flex justify-end gap-2">
 								<motion.button
 									whileTap={{ scale: 0.9 }}
 									onClick={() => {
@@ -342,7 +341,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										setMobileDestExpanded(false);
 										setMobileWhenOpen(false);
 									}}
-									className="w-11 h-11 rounded-xl bg-white shadow flex items-center justify-center"
+									className="w-11 h-11 rounded-full bg-white shadow flex items-center justify-center"
 									title="Lista"
 								>
 									<LayoutList className="w-5 h-5 text-gray-600" />
@@ -355,14 +354,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										setMobileWhenOpen(false);
 										onOpenMap?.();
 									}}
-									className="w-11 h-11 rounded-xl bg-white shadow flex items-center justify-center"
+									className="w-11 h-11 rounded-full bg-white shadow flex items-center justify-center"
 									title="Mappa"
 								>
 									<Map className="w-5 h-5 text-gray-600" />
 								</motion.button>
-							</div>
-							{/* X chiudi a destra */}
-							<div className="flex-1 flex justify-end">
 								<motion.button
 									whileTap={{ scale: 0.9 }}
 									onClick={() => {
@@ -797,7 +793,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 				<div className="container mx-auto">
 					<div className="flex items-center justify-center gap-8">
 						{/* Logo */}
-						<div className="hidden sm:block absolute left-4 md:left-8 lg:left-15">
+						<div className="absolute left-4 md:left-8 lg:left-15">
 							<Link href="/">
 								<motion.div
 									className="flex items-center space-x-3 cursor-pointer"
@@ -809,9 +805,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										alt="Fuorirotta Logo"
 										width={40}
 										height={40}
-										className="w-8 h-8 sm:w-10 sm:h-10"
+										className="hidden sm:block w-8 h-8 sm:w-10 sm:h-10"
 									/>
-									<span className="hidden sm:block text-2xl font-bold text-[#006d77]">
+									<span className="hidden xl:block text-2xl font-bold text-[#006d77]">
 										Fuorirotta
 									</span>
 								</motion.div>
@@ -908,7 +904,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									{activeField === "where" && (
 										<motion.div
 											layoutId="activeRing"
-											className="absolute inset-x-0 top-2 bottom-2 rounded-full ring-2 ring-[#006d77] pointer-events-none"
+											className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-[#006d77]/5 pointer-events-none"
 											transition={{
 												type: "spring",
 												stiffness: 500,
@@ -938,7 +934,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									{activeField === "when" && (
 										<motion.div
 											layoutId="activeRing"
-											className="absolute inset-x-0 top-2 bottom-2 rounded-full ring-2 ring-[#006d77] pointer-events-none"
+											className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-[#006d77]/5 pointer-events-none"
 											transition={{
 												type: "spring",
 												stiffness: 500,

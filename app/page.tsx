@@ -129,7 +129,9 @@ export default function Home() {
 					});
 				},
 				(error) => {
-					console.log("Geolocation not enabled:", error);
+					if (process.env.APP_DEBUG === "true") {
+						console.log("Geolocation not enabled:", error);
+					}
 				}
 			);
 		}
@@ -155,11 +157,15 @@ export default function Home() {
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
-		console.log(`[Mount] Cache: ${cached ? 'found' : 'not found'}`);
+		if (process.env.APP_DEBUG === "true") {
+			console.log(`[Mount] Cache: ${cached ? 'found' : 'not found'}`);
+		}
 
 		if (cached) {
 			// Restore cached events
-			console.log(`[Mount] Cached events: ${cached.events.length}`);
+			if (process.env.APP_DEBUG === "true") {
+				console.log(`[Mount] Cached events: ${cached.events.length}`);
+			}
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
@@ -171,7 +177,9 @@ export default function Home() {
 			}
 		} else {
 			// No cache, fetch initial data
-			console.log(`[Mount] Fetching page ${currentPage}`);
+			if (process.env.APP_DEBUG === "true") {
+				console.log(`[Mount] Fetching page ${currentPage}`);
+			}
 			fetchEvents(currentPage);
 		}
 	}, []); // Run once on mount
@@ -208,7 +216,9 @@ export default function Home() {
 	}, [searchFilters, selectedCategory]);
 
 	const fetchEvents = async (page: number) => {
-		console.log(`[Fetch] Page ${page}`);
+		if (process.env.APP_DEBUG === "true") {
+			console.log(`[Fetch] Page ${page}`);
+		}
 		setLoading(true);
 		// Update currentPage immediately
 		setCurrentPage(page);
@@ -264,24 +274,32 @@ export default function Home() {
 			params.append("offset", offset.toString());
 
 			const response = await fetch(`/api/events?${params}`);
-			console.log(`[API] Status: ${response.status}`);
+			if (process.env.APP_DEBUG === "true") {
+				console.log(`[API] Status: ${response.status}`);
+			}
 
 			if (!response.ok) {
-				console.log(`[API] Error: ${response.status}`);
-				console.error("API Error:", response.status, response.statusText);
-				const errorData = await response.text();
-				console.error("Error details:", errorData);
+				if (process.env.APP_DEBUG === "true") {
+					console.log(`[API] Error: ${response.status}`);
+					console.error("API Error:", response.status, response.statusText);
+					const errorData = await response.text();
+					console.error("Error details:", errorData);
+				}
 				setLoading(false);
 				return;
 			}
 
 			const data = await response.json();
-			console.log(`[API] Events: ${data.events?.length || 0}, Total: ${data.total || 0}`);
+			if (process.env.APP_DEBUG === "true") {
+				console.log(`[API] Events: ${data.events?.length || 0}, Total: ${data.total || 0}`);
+			}
 
 			// Handle API errors or missing data
 			if (data.error || !data.events) {
-				console.log(`[API] No events or error`);
-				console.error("API returned error or no events:", data);
+				if (process.env.APP_DEBUG === "true") {
+					console.log(`[API] No events or error`);
+					console.error("API returned error or no events:", data);
+				}
 				setLoading(false);
 				return;
 			}
@@ -290,7 +308,9 @@ export default function Home() {
 			const newMapEvents = data.mapEvents || newEvents; // fallback to events if mapEvents not available
 			const newTotal = data.total || 0;
 
-			console.log(`[Success] ${newEvents.length} events loaded`);
+			if (process.env.APP_DEBUG === "true") {
+				console.log(`[Success] ${newEvents.length} events loaded`);
+			}
 			setEvents(newEvents);
 			setMapEvents(newMapEvents); // Set ALL events for map
 			setTotal(newTotal);
@@ -306,8 +326,10 @@ export default function Home() {
 				});
 			}
 		} catch (error) {
-			console.log(`[Error] ${error instanceof Error ? error.message : 'Unknown error'}`);
-			console.error("[fetchEvents] Error fetching events:", error);
+			if (process.env.APP_DEBUG === "true") {
+				console.log(`[Error] ${error instanceof Error ? error.message : 'Unknown error'}`);
+				console.error("[fetchEvents] Error fetching events:", error);
+			}
 			setEvents([]);
 			setMapEvents([]);
 			setTotal(0);
@@ -338,7 +360,7 @@ export default function Home() {
 	}, [events]);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-[#edf6f9] via-white to-[#83c5be]/10">
+		<div className="min-h-screen bg-[#83c5be]/5">
 			{/* Navbar */}
 			<Navbar onSearch={handleSearch} onOpenMap={() => setIsMapExpanded(true)} />
 
@@ -392,7 +414,7 @@ export default function Home() {
 									) : (
 										<div
 											key="events"
-											className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-2 sm:gap-x-4 sm:gap-y-4 md:gap-x-4 md:gap-y-4 lg:gap-x-4 lg:gap-y-4"
+											className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-2 sm:gap-4 md:gap-4 lg:gap-2 xl:gap-4"
 										>
 											{events.map((event, index) => (
 												<div
@@ -407,117 +429,106 @@ export default function Home() {
 									)}
 								</AnimatePresence>
 							</div>
-
-							{/* Gradient blur at top (mobile only) - appears when scrolling down */}
-							{!loading && events.length > 0 && showTopBlur && (
-								<div className="xl:hidden absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-white via-white/80 to-transparent pointer-events-none z-10" />
-							)}
-
-							{/* Gradient blur at bottom (mobile only) - appears when content below */}
-							{!loading && events.length > 0 && showBottomBlur && (
-								<div className="xl:hidden absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none z-10" />
-							)}
 						</div>
 
 						{/* Pagination Controls - Fixed at Bottom */}
 						{!loading && events.length > 0 && (
 							<div className="flex-shrink-0 py-2 sm:py-4">
-								<div className="flex flex-col items-center gap-2 sm:gap-4">
+								<div className="flex justify-between items-center gap-2 sm:gap-4">
 									<p className="text-gray-600 text-xs sm:text-sm font-medium">
-										{total} {total === 1 ? 'evento' : 'eventi'}
+										{total}
+										<span className="hidden lg:inline"> Eventi totali</span>
 									</p>
-									{(() => {
-										const totalPages = Math.ceil(total / LIMIT);
-										if (totalPages <= 1) return null;
+									<div className="bg-white border border-[#83c5be]/30 rounded-full flex items-center gap-1 sm:gap-2 px-2 py-2">
+										{(() => {
+											const totalPages = Math.ceil(total / LIMIT);
+											if (totalPages <= 1) return null;
 
-										const pages: (number | string)[] = [];
-										const maxVisible = 5;
+											const buildPages = (edge: number): (number | string)[] => {
+												const pages: (number | string)[] = [];
+												if (totalPages <= edge * 2 + 3) {
+													for (let i = 1; i <= totalPages; i++) pages.push(i);
+												} else {
+													for (let i = 1; i <= edge; i++) pages.push(i);
+													if (currentPage > edge + 1) pages.push('...');
+													if (currentPage > edge && currentPage < totalPages - edge + 1) pages.push(currentPage);
+													if (currentPage < totalPages - edge) pages.push('...');
+													for (let i = totalPages - edge + 1; i <= totalPages; i++) pages.push(i);
+												}
+												return pages;
+											};
 
-										if (totalPages <= maxVisible + 2) {
-											// Show all pages if total is small
-											for (let i = 1; i <= totalPages; i++) {
-												pages.push(i);
-											}
-										} else {
-											// Show with ellipsis
-											pages.push(1);
-
-											if (currentPage > 3) {
-												pages.push('...');
-											}
-
-											let start = Math.max(2, currentPage - 1);
-											let end = Math.min(totalPages - 1, currentPage + 1);
-
-											if (currentPage <= 3) {
-												end = Math.min(4, totalPages - 1);
-											}
-											if (currentPage >= totalPages - 2) {
-												start = Math.max(2, totalPages - 3);
-											}
-
-											for (let i = start; i <= end; i++) {
-												pages.push(i);
-											}
-
-											if (currentPage < totalPages - 2) {
-												pages.push('...');
-											}
-
-											pages.push(totalPages);
-										}
-
-										return (
-											<div className="flex items-center gap-1 sm:gap-2">
-												<button
-													onClick={() => fetchEvents(currentPage - 1)}
-													disabled={currentPage === 1}
-													className="p-1.5 sm:p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-												>
-													<ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-												</button>
-
-												{pages.map((page, idx) => {
+											const renderPages = (pages: (number | string)[], size: 'sm' | 'md') =>
+												pages.map((page, idx) => {
 													if (page === '...') {
 														return (
-															<span key={`ellipsis-${idx}`} className="px-1 sm:px-2 text-gray-400 text-xs sm:text-sm">
+															<span key={`ellipsis-${idx}`} className={size === 'sm' ? "px-1 text-gray-400 text-xs" : "px-1 text-gray-400 text-sm"}>
 																...
 															</span>
 														);
 													}
-
 													const pageNum = page as number;
+													const base = size === 'sm'
+														? "w-7 h-7 flex items-center justify-center rounded-full font-medium text-xs"
+														: "w-9 h-9 flex items-center justify-center rounded-full font-medium text-sm";
 													return (
 														<button
 															key={pageNum}
 															onClick={() => fetchEvents(pageNum)}
-															className={
-																pageNum === currentPage
-																	? "px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg bg-[#006d77] text-white font-medium text-xs sm:text-sm"
-																	: "px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 font-medium text-xs sm:text-sm"
-															}
+															className={pageNum === currentPage ? `${base} bg-[#006d77] text-white` : `${base} border border-gray-200 bg-white text-gray-700 hover:bg-gray-50`}
 														>
 															{pageNum}
 														</button>
 													);
-												})}
+												});
 
+											const prevBtn = (size: 'sm' | 'md') => (
+												<button
+													onClick={() => fetchEvents(currentPage - 1)}
+													disabled={currentPage === 1}
+													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white`}
+												>
+													<ChevronLeft className={size === 'sm' ? "w-4 h-4" : "w-5 h-5"} />
+												</button>
+											);
+
+											const nextBtn = (size: 'sm' | 'md') => (
 												<button
 													onClick={() => fetchEvents(currentPage + 1)}
 													disabled={currentPage === totalPages}
-													className="p-1.5 sm:p-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white`}
 												>
-													<ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+													<ChevronRight className={size === 'sm' ? "w-4 h-4" : "w-5 h-5"} />
 												</button>
-											</div>
-										);
-									})()}
+											);
+
+											return (
+												<>
+													{/* Mobile: 2 per lato */}
+													<div className="flex sm:hidden items-center gap-1">
+														{prevBtn('sm')}
+														{renderPages(buildPages(2), 'sm')}
+														{nextBtn('sm')}
+													</div>
+													{/* Desktop: 3 per lato */}
+													<div className="hidden sm:flex items-center gap-2">
+														{prevBtn('md')}
+														{renderPages(buildPages(3), 'md')}
+														{nextBtn('md')}
+													</div>
+												</>
+											);
+										})()}
+									</div>
+									<p className="text-gray-600 text-xs sm:text-sm font-medium">
+										{events.length + ' / ' + LIMIT}
+									</p>
 								</div>
 							</div>
 						)}
 					</div>
 
-					{/* Map - Right Side (Fixed) */}
+					{/* Map - Right Side (Fixed) */}  
 					<div className="hidden xl:block w-[50%] max-w-4xl flex-shrink-0">
 						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#83c5be]/30 relative group">
 							<EventsMap
