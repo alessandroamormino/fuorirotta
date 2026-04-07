@@ -28,9 +28,6 @@ export const metadata: Metadata = {
 			"http://localhost:3000"
 		).replace(/\/$/, "")
 	),
-	alternates: {
-		canonical: "/",
-	},
 	robots: {
 		index: true,
 		follow: true,
