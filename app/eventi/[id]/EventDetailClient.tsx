@@ -26,17 +26,21 @@ interface SearchFilters {
 	dateTo: Date | null;
 }
 
-export default function EventDetailClient() {
+interface EventDetailClientProps {
+	initialEvent?: Event | null;
+}
+
+export default function EventDetailClient({ initialEvent }: EventDetailClientProps) {
 	const params = useParams();
 	const router = useRouter();
-	const [event, setEvent] = useState<Event | null>(null);
-	const [loading, setLoading] = useState(true);
+	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
+	const [loading, setLoading] = useState(!initialEvent);
 
 	useEffect(() => {
-		if (params.id) {
-			fetchEvent(params.id as string);
-		}
-	}, [params.id]);
+		// Se abbiamo già i dati dal server (SSR), non richiedere
+		if (initialEvent || !params.id) return;
+		fetchEvent(params.id as string);
+	}, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const fetchEvent = async (id: string) => {
 		setLoading(true);
