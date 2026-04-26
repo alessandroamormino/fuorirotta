@@ -73,11 +73,32 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 
 	const handleNavigation = (lat: number | null, lng: number | null, nome: string) => {
 		if (lat == null || lng == null) return;
-		const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-		const url = isMobile
-			? `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(nome)})`
-			: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-		window.open(url, '_blank');
+
+		const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+		const isAndroid = /Android/i.test(navigator.userAgent);
+
+		if (isAndroid) {
+			window.location.href = `https://maps.google.com/maps?daddr=${lat},${lng}`;
+			return;
+		}
+
+		if (isIOS) {
+			const googleMapsUrl = `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
+			const appleMapsUrl = `https://maps.apple.com/?daddr=${lat},${lng}`;
+
+			const fallback = setTimeout(() => {
+				window.location.href = appleMapsUrl;
+			}, 500);
+
+			document.addEventListener('visibilitychange', () => {
+				if (document.hidden) clearTimeout(fallback);
+			}, { once: true });
+
+			window.location.href = googleMapsUrl;
+			return;
+		}
+
+		window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
 	}
 
 	if (loading) {
