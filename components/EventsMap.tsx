@@ -30,7 +30,6 @@ export default function EventsMap({
 	const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
 	const eventsWithCoordsRef = useRef<Array<{event: Event; coords: {lat: number; lng: number}}>>([]);
 	const layersInitializedRef = useRef(false);
-	const hasLoadedOnceRef = useRef(false);
 
 	useEffect(() => {
 		if (!mapContainerRef.current) return;
@@ -89,17 +88,11 @@ export default function EventsMap({
 			// Aggiorna il ref con i dati più recenti (per i gestori di eventi)
 			eventsWithCoordsRef.current = eventsWithCoords;
 
-			// Mark as loaded once events arrive (even if empty after filter)
-			if (events.length > 0 || hasLoadedOnceRef.current) {
-				hasLoadedOnceRef.current = true;
-			}
-
-			// Use pre-cached cluster data ONLY on initial load before events arrive
-			// After first load, always use live event data (even if empty from filters)
+			// Use pre-cached cluster data when available (no active filters)
+			// HomeClient passes null initialGeoJSON when filters are active
 			let geojsonData: GeoJSON.FeatureCollection;
 
-			if (!hasLoadedOnceRef.current && initialGeoJSON && initialGeoJSON.features.length > 0) {
-				// Use pre-cached cluster data for instant map render (initial load only)
+			if (initialGeoJSON && initialGeoJSON.features.length > 0) {
 				geojsonData = initialGeoJSON;
 			} else {
 				// Crea GeoJSON features from current events (un feature per evento - Mapbox gestirà il clustering)

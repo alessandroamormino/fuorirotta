@@ -326,6 +326,8 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 											width={32}
 											height={32}
 											className="w-8 h-8"
+											loading="eager"
+											priority
 										/>
 										<span className="text-base font-bold text-[#006d77]">
 											Fuorirotta
@@ -806,6 +808,8 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										width={40}
 										height={40}
 										className="hidden sm:block w-8 h-8 sm:w-10 sm:h-10"
+										loading="eager"
+										priority
 									/>
 									<span className="hidden xl:block text-2xl font-bold text-[#006d77]">
 										Fuorirotta

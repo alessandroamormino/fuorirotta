@@ -54,29 +54,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const [selectedCategory] = useState<string>("all");
 	const [clusterGeoJSON, setClusterGeoJSON] = useState<any>(null);
 
-	const [searchFilters, setSearchFilters] = useState<SearchFilters>(() => {
-		if (typeof window !== "undefined") {
-			const saved = sessionStorage.getItem("searchFilters");
-			if (saved) {
-				try {
-					const parsed = JSON.parse(saved);
-					return {
-						location: parsed.location || "",
-						dateFrom: parsed.dateFrom ? new Date(parsed.dateFrom) : null,
-						dateTo: parsed.dateTo ? new Date(parsed.dateTo) : null,
-						radius: parsed.radius
-					};
-				} catch {
-					return { location: "", dateFrom: null, dateTo: null, radius: undefined };
-				}
-			}
-		}
-		return { location: "", dateFrom: null, dateTo: null, radius: undefined };
-	});
+	const [searchFilters, setSearchFilters] = useState<SearchFilters>({ location: "", dateFrom: null, dateTo: null, radius: undefined });
 	const [userLocation, setUserLocation] = useState<{
 		lat: number;
 		lng: number;
 	} | null>(null);
+	const hasActiveFilters = !!(
+		searchFilters.location || searchFilters.dateFrom || searchFilters.dateTo || searchFilters.radius
+	);
+	const effectiveClusterGeoJSON = hasActiveFilters ? null : clusterGeoJSON;
+
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
 
 	const [showTopBlur, setShowTopBlur] = useState(false);
@@ -98,13 +85,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		return () => ro.disconnect();
 	}, []);
 
-	const [currentPage, setCurrentPage] = useState<number>(() => {
-		if (typeof window !== "undefined") {
-			const saved = sessionStorage.getItem("currentPage");
-			return saved ? parseInt(saved, 10) : 1;
-		}
-		return 1;
-	});
+	const [currentPage, setCurrentPage] = useState<number>(1);
 	const [total, setTotal] = useState(initialTotal);
 
 	useEffect(() => {
@@ -149,19 +130,39 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 	// On mount: check if user has active filters or cached data; otherwise use SSR data
 	useEffect(() => {
-		const queryKey = generateQueryKey(searchFilters, selectedCategory);
+		// Read sessionStorage after hydration to avoid SSR mismatch
+		const savedPage = sessionStorage.getItem("currentPage");
+		const savedFilters = sessionStorage.getItem("searchFilters");
+		const page = savedPage ? parseInt(savedPage, 10) : 1;
+		if (page !== 1) setCurrentPage(page);
+
+		let activeFilters = searchFilters;
+		if (savedFilters) {
+			try {
+				const parsed = JSON.parse(savedFilters);
+				activeFilters = {
+					location: parsed.location || "",
+					dateFrom: parsed.dateFrom ? new Date(parsed.dateFrom) : null,
+					dateTo: parsed.dateTo ? new Date(parsed.dateTo) : null,
+					radius: parsed.radius,
+				};
+				setSearchFilters(activeFilters);
+			} catch { /* ignore */ }
+		}
+
+		const queryKey = generateQueryKey(activeFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
 		if (cached) {
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
-			if (currentPage > 1) fetchEvents(currentPage);
+			if (page > 1) fetchEvents(page);
 			return;
 		}
 
 		const hasFilters =
-			searchFilters.location || searchFilters.dateFrom || searchFilters.dateTo || searchFilters.radius;
+			activeFilters.location || activeFilters.dateFrom || activeFilters.dateTo || activeFilters.radius;
 
 		if (!hasFilters && initialEvents.length > 0) {
 			// Use SSR data and seed the cache
@@ -171,9 +172,9 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				total: initialTotal,
 				query: queryKey,
 			});
-			if (currentPage > 1) fetchEvents(currentPage);
+			if (page > 1) fetchEvents(page);
 		} else {
-			fetchEvents(currentPage);
+			fetchEvents(page);
 		}
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -473,7 +474,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#83c5be]/30 relative group">
 							<EventsMap
 								events={mapEvents}
-								initialGeoJSON={clusterGeoJSON}
+								initialGeoJSON={effectiveClusterGeoJSON}
 								mapId="map-sidebar"
 								userLocation={userLocation}
 							/>
@@ -510,7 +511,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							>
 								<div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-lg border-b border-gray-200 px-6 py-4 flex items-center justify-between">
 									<h3 className="text-lg font-bold text-gray-900">
-										Mappa eventi — {mapEvents.length} eventi
+										Mappa eventi — {effectiveClusterGeoJSON ? effectiveClusterGeoJSON.features.length : mapEvents.length} eventi
 									</h3>
 									<button
 										onClick={() => setIsMapExpanded(false)}
@@ -522,7 +523,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								<div className="absolute inset-0 pt-16">
 									<EventsMap
 										events={mapEvents}
-										initialGeoJSON={clusterGeoJSON}
+										initialGeoJSON={effectiveClusterGeoJSON}
 										mapId="map-fullscreen-desktop"
 										userLocation={userLocation}
 									/>
@@ -533,7 +534,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						<div className="xl:hidden absolute inset-0">
 							<EventsMap
 								events={mapEvents}
-								initialGeoJSON={clusterGeoJSON}
+								initialGeoJSON={effectiveClusterGeoJSON}
 								mapId="map-fullscreen-mobile"
 								userLocation={userLocation}
 							/>
