@@ -35,6 +35,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
 	const [loading, setLoading] = useState(!initialEvent);
+	const [showMapModal, setShowMapModal] = useState<{ lat: number; lng: number } | null>(null);
 
 	useEffect(() => {
 		// Se abbiamo già i dati dal server (SSR), non richiedere
@@ -71,7 +72,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		router.push(`/?${searchParams.toString()}`);
 	};
 
-	const handleNavigation = (lat: number | null, lng: number | null, nome: string) => {
+	const handleNavigation = (lat: number | null, lng: number | null) => {
 		if (lat == null || lng == null) return;
 
 		const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -83,18 +84,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		}
 
 		if (isIOS) {
-			const googleMapsUrl = `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
-			const appleMapsUrl = `https://maps.apple.com/?daddr=${lat},${lng}`;
-
-			const fallback = setTimeout(() => {
-				window.location.href = appleMapsUrl;
-			}, 500);
-
-			document.addEventListener('visibilitychange', () => {
-				if (document.hidden) clearTimeout(fallback);
-			}, { once: true });
-
-			window.location.href = googleMapsUrl;
+			setShowMapModal({ lat, lng });
 			return;
 		}
 
@@ -337,16 +327,13 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										<div className="h-[300px] rounded-xl overflow-hidden border-2 border-[#83c5be]/30">
 											<EventsMap events={[event]} disablePopups={true} />
 										</div>
-										<a
-											href={event.sourceUrl ?? undefined}
-											target="_blank"
-											rel="noopener noreferrer"
+										<button
 											className="flex items-center justify-center gap-2 w-full px-6 py-2 mt-4 bg-[#006d77] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
-											onClick={() => {handleNavigation(event.latitude, event.longitude, event.title)}}
+											onClick={() => handleNavigation(event.latitude, event.longitude)}
 										>
 											Naviga
 											<ExternalLink className="w-5 h-5" />
-										</a>
+										</button>
 									</motion.div>
 								)}
 
@@ -373,6 +360,42 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 					</div>
 				</div>
 			</main>
+
+			{showMapModal && (
+				<div
+					className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+					onClick={() => setShowMapModal(null)}
+				>
+					<div
+						className="w-full max-w-sm bg-white rounded-t-2xl p-6 pb-10 shadow-xl"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<p className="text-center text-gray-500 text-sm mb-4">Apri con</p>
+						<div className="flex flex-col gap-3">
+							<a
+								href={`comgooglemaps://?daddr=${showMapModal.lat},${showMapModal.lng}&directionsmode=driving`}
+								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-[#006d77] text-white font-semibold rounded-xl"
+								onClick={() => setShowMapModal(null)}
+							>
+								Google Maps
+							</a>
+							<a
+								href={`https://maps.apple.com/?daddr=${showMapModal.lat},${showMapModal.lng}`}
+								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-gray-100 text-gray-800 font-semibold rounded-xl"
+								onClick={() => setShowMapModal(null)}
+							>
+								Apple Maps
+							</a>
+							<button
+								className="text-gray-400 text-sm mt-1"
+								onClick={() => setShowMapModal(null)}
+							>
+								Annulla
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
