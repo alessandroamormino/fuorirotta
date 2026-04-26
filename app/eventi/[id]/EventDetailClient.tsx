@@ -71,10 +71,11 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		router.push(`/?${searchParams.toString()}`);
 	};
 
-	const handleNavigation = (lat: String, lng: String, nome: String) => {
+	const handleNavigation = (lat: number | null, lng: number | null, nome: string) => {
+		if (lat == null || lng == null) return;
 		const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 		const url = isMobile
-			? `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(String(nome))})`
+			? `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(nome)})`
 			: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 		window.open(url, '_blank');
 	}
@@ -316,7 +317,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 											<EventsMap events={[event]} disablePopups={true} />
 										</div>
 										<a
-											href={event.sourceUrl}
+											href={event.sourceUrl ?? undefined}
 											target="_blank"
 											rel="noopener noreferrer"
 											className="flex items-center justify-center gap-2 w-full px-6 py-2 mt-4 bg-[#006d77] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
@@ -336,7 +337,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										transition={{ delay: 0.6 }}
 									>
 										<a
-											href={event.sourceUrl}
+											href={event.sourceUrl ?? undefined}
 											target="_blank"
 											rel="noopener noreferrer"
 											className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-[#edf6f9] text-[#006d77] font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all"
