@@ -71,6 +71,14 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		router.push(`/?${searchParams.toString()}`);
 	};
 
+	const handleNavigation = (lat: String, lng: String) => {
+		const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+		const url = isMobile
+			? `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(nome)})`
+			: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+		window.open(url, '_blank');
+	}
+
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-gray-50">
@@ -285,57 +293,60 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
 										dangerouslySetInnerHTML={{ __html: event.description }}
 									/>
+									<p className="text-xs text-gray-500">Fonte: {event.source}</p>
 								</motion.div>
 							)}
 						</div>
 
 						{/* Right Column - Map & Actions */}
-						<div className="lg:col-span-1 space-y-6">
-							{/* Map */}
-							{event.latitude && event.longitude && (
-								<motion.div
-									initial={{ opacity: 0, x: 20 }}
-									animate={{ opacity: 1, x: 0 }}
-									transition={{ delay: 0.5 }}
-									className="bg-white rounded-2xl p-4 shadow-lg border-2 border-[#83c5be]/20 sticky top-4"
-								>
-									<h3 className="text-lg font-bold text-gray-900 mb-4">
-										Dove si trova
-									</h3>
-									<div className="h-[300px] rounded-xl overflow-hidden border-2 border-[#83c5be]/30">
-										<EventsMap events={[event]} disablePopups={true} />
-									</div>
-								</motion.div>
-							)}
-
-							{/* External Link */}
-							{event.sourceUrl && (
-								<motion.div
-									initial={{ opacity: 0, x: 20 }}
-									animate={{ opacity: 1, x: 0 }}
-									transition={{ delay: 0.6 }}
-								>
-									<a
-										href={event.sourceUrl}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-[#006d77] text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
+						<div className="lg:col-span-1">
+							<div className="space-y-6 sticky top-4">
+								{/* Map */}
+								{event.latitude && event.longitude && (
+									<motion.div
+										initial={{ opacity: 0, x: 20 }}
+										animate={{ opacity: 1, x: 0 }}
+										transition={{ delay: 0.5 }}
+										className="bg-white rounded-2xl p-4 shadow-lg border-2 border-[#83c5be]/20"
 									>
-										Visita sito ufficiale
-										<ExternalLink className="w-5 h-5" />
-									</a>
-								</motion.div>
-							)}
+										<h3 className="text-lg font-bold text-gray-900 mb-4">
+											Dove si trova
+										</h3>
+										<div className="h-[300px] rounded-xl overflow-hidden border-2 border-[#83c5be]/30">
+											<EventsMap events={[event]} disablePopups={true} />
+										</div>
+										<a
+											href={event.sourceUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="flex items-center justify-center gap-2 w-full px-6 py-2 mt-4 bg-[#006d77] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+											onClick={() => {handleNavigation(event.latitude, event.longitude)}}
+										>
+											Naviga
+											<ExternalLink className="w-5 h-5" />
+										</a>
+									</motion.div>
+								)}
 
-							{/* Source Info */}
-							<motion.div
-								initial={{ opacity: 0, x: 20 }}
-								animate={{ opacity: 1, x: 0 }}
-								transition={{ delay: 0.7 }}
-								className="bg-white rounded-2xl p-4 shadow-lg border-2 border-[#83c5be]/20"
-							>
-								<p className="text-xs text-gray-500">Fonte: {event.source}</p>
-							</motion.div>
+								{/* External Link */}
+								{event.sourceUrl && (
+									<motion.div
+										initial={{ opacity: 0, x: 20 }}
+										animate={{ opacity: 1, x: 0 }}
+										transition={{ delay: 0.6 }}
+									>
+										<a
+											href={event.sourceUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-[#edf6f9] text-[#006d77] font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all"
+										>
+											Visita sito ufficiale
+											<ExternalLink className="w-5 h-5" />
+										</a>
+									</motion.div>
+								)}
+							</div>
 						</div>
 					</div>
 				</div>

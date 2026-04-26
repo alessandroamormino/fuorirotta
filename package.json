@@ -17,6 +17,7 @@
     "@types/leaflet": "^1.9.21",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",
+    "he": "^1.2.0",
     "heimdall-sdk": "^0.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/he": "^1.2.3",
     "@types/node": "^20",
     "@types/pg": "^8.16.0",
     "@types/react": "^19",

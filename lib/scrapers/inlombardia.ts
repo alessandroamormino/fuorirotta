@@ -6,6 +6,7 @@
  * JSON-LD structured data, and transforms to Event schema.
  */
 
+import he from 'he'
 import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
 
@@ -241,7 +242,7 @@ function parseHTML(html: string): ParsedEvent[] {
 
     // Extract category
     const categoryMatch = card.match(/<div[^>]*class="c-card__labels"[^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/)
-    const category = categoryMatch ? categoryMatch[1].trim() : null
+    const category = categoryMatch ? he.decode(categoryMatch[1].trim()) : null
 
     // Extract URL
     const urlMatch = card.match(/<a[^>]+href="([^"]+)"/)
