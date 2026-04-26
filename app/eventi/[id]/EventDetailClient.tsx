@@ -71,10 +71,10 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		router.push(`/?${searchParams.toString()}`);
 	};
 
-	const handleNavigation = (lat: String, lng: String) => {
+	const handleNavigation = (lat: String, lng: String, nome: String) => {
 		const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 		const url = isMobile
-			? `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(nome)})`
+			? `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(String(nome))})`
 			: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 		window.open(url, '_blank');
 	}
@@ -320,7 +320,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 											target="_blank"
 											rel="noopener noreferrer"
 											className="flex items-center justify-center gap-2 w-full px-6 py-2 mt-4 bg-[#006d77] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
-											onClick={() => {handleNavigation(event.latitude, event.longitude)}}
+											onClick={() => {handleNavigation(event.latitude, event.longitude, event.title)}}
 										>
 											Naviga
 											<ExternalLink className="w-5 h-5" />
