@@ -116,5 +116,24 @@ set -e
 
 [[ "${code_case3}" -eq 2 ]] || fail "caso 3: atteso exit 2, ottenuto ${code_case3}"
 
+# --- Caso 4: commenti inline nel .env (regressione WR-01) ---
+# Docker Compose rimuove un commento `<spazio>#...` sia da un valore fra
+# apici sia da uno nudo; read_env_var deve produrre lo stesso risultato,
+# altrimenti lo script e Compose finiscono per usare due segreti diversi.
+{
+  printf 'CRON_SECRET="%s" # rotated 2026-08-01\n' "${secret}"
+  printf 'NEXT_PUBLIC_APP_URL=http://127.0.0.1:%s # local\n' "${port}"
+} > "${tmp_dir}/.env"
+start_server 202
+set +e
+output_case4="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}")"
+code_case4=$?
+set -e
+stop_server
+
+[[ "${code_case4}" -eq 0 ]] || fail "caso 4: atteso exit 0, ottenuto ${code_case4} (output: ${output_case4})"
+auth_received_case4="$(cat "${auth_file}" 2>/dev/null || echo "")"
+[[ "${auth_received_case4}" == "Bearer ${secret}" ]] || fail "caso 4: header ricevuto '${auth_received_case4}', atteso 'Bearer ${secret}' senza commento/apici residui"
+
 echo "OK"
 exit 0

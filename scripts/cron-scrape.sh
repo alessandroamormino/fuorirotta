@@ -29,10 +29,18 @@ read_env_var() {
   line="$(grep -m1 "^${name}=" "${env_file}" 2>/dev/null || true)"
   value="${line#*=}"
   value="${value%$'\r'}"
-  case "${value}" in
-    \"*\") value="${value#\"}"; value="${value%\"}" ;;
-    \'*\') value="${value#\'}"; value="${value%\'}" ;;
-  esac
+  # Rispecchia il parsing di Docker Compose: un valore fra apici mantiene
+  # tutto cio' che c'e' fra gli apici (compreso un eventuale `#`) e scarta
+  # solo un commento *dopo* l'apice di chiusura; un valore senza apici
+  # scarta tutto da uno spazio+`#` in poi. Senza questo, un commento inline
+  # (es. `CRON_SECRET="..." # rotated`) desincronizza lo script da Compose.
+  if [[ "${value}" =~ ^\"([^\"]*)\"[[:space:]]*(#.*)?$ ]]; then
+    value="${BASH_REMATCH[1]}"
+  elif [[ "${value}" =~ ^\'([^\']*)\'[[:space:]]*(#.*)?$ ]]; then
+    value="${BASH_REMATCH[1]}"
+  else
+    value="$(printf '%s' "${value}" | sed -E 's/[[:space:]]+#.*$//')"
+  fi
   printf '%s' "${value}"
 }
 
