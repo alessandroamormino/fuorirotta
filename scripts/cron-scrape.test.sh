@@ -135,5 +135,20 @@ stop_server
 auth_received_case4="$(cat "${auth_file}" 2>/dev/null || echo "")"
 [[ "${auth_received_case4}" == "Bearer ${secret}" ]] || fail "caso 4: header ricevuto '${auth_received_case4}', atteso 'Bearer ${secret}' senza commento/apici residui"
 
+# --- Caso 5: connessione fallita (nessun server in ascolto) ---
+# Nessun server e' stato riavviato dopo lo stop del caso 4: la porta e'
+# chiusa, quindi curl fallisce a livello di connessione (non riceve una
+# risposta HTTP) ed esercita il ramo `|| http_code="000"`, distinto dal
+# caso 2 (server raggiungibile, risposta non-2xx).
+write_env yes
+set +e
+output_case5="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" 2>/dev/null)"
+code_case5=$?
+set -e
+
+[[ "${code_case5}" -eq 1 ]] || fail "caso 5: atteso exit 1, ottenuto ${code_case5}"
+[[ "${output_case5}" == *"http_code=000"* ]] || fail "caso 5: output senza http_code=000 (output: ${output_case5})"
+[[ "${output_case5}" == *"FAILED"* ]] || fail "caso 5: output senza etichetta FAILED (output: ${output_case5})"
+
 echo "OK"
 exit 0
