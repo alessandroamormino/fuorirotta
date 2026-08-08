@@ -242,7 +242,30 @@ Test the alert channel deliberately (most dead man's switch providers, e.g. heal
 curl -fsS --max-time 10 --retry 3 "$HEALTHCHECK_URL/fail"
 ```
 
-**Cron health baseline:** not yet collected. This section will be filled in with real numbers (success rate observed in `/var/log/fuorirotta-cron.log`) by plan `05-03`. Treat its absence here as "not measured yet", not as "zero failures".
+### Cron health baseline (measured 2026-08-08)
+
+Read from `/var/log/fuorirotta-cron.log`, which the previous crontab line had been appending raw response bodies to since **2026-03-23 20:00 UTC**:
+
+| Response | Count |
+|---|---|
+| `{"success":true,"message":"Scrape started"}` | 29 |
+| `{"error":"Unauthorized"}` | 797 |
+| `502 Bad Gateway` (nginx) | 2 |
+| **Total** | **828** |
+
+828 responses over ~138 days matches 828 expected invocations at 6/day — so effectively every scheduled invocation is accounted for, and **96.3% of them were rejected**.
+
+The 29 successes are not spread out: ~27 sit at the head of the log (2026-03-23 → ~2026-03-28) and **2 sit at the very tail**, from 2026-08-08 after a `docker compose up -d` finally delivered `CRON_SECRET` into the container. 797 rejections ÷ 6/day = 133 days, which places the breakage at **~2026-03-28** and its end at 2026-08-08 — **4.4 months**, not the 3 months originally estimated from container uptime.
+
+**Why it stayed silent for 4.4 months.** The old line was:
+
+```cron
+0 */4 * * * curl -s -X POST "https://fuori-rotta.it/api/cron/scrape" -H "Authorization: Bearer <secret>" >> /var/log/fuorirotta-cron.log 2>&1
+```
+
+`curl -s` with no `-f` and no exit-code check: a 401 and a 202 both exit 0 and both append an indistinguishable blob to the log. The log also carries no timestamps, which is why 828 invocations occupy 7 physical lines and the breakage cannot be dated by reading it — only by counting. `scripts/cron-scrape.sh` fixes both: one timestamped line per invocation (`2026-08-08T13:43:38Z cron-scrape http_code=401 FAILED`) and a non-zero exit on any non-2xx.
+
+Treat these numbers as the "before" state. Any future measurement should be read against the post-cutover log, whose format is not comparable to the one above.
 
 ## Troubleshooting
 
