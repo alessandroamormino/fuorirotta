@@ -60,13 +60,11 @@ fi
 
 target_url="${app_url%/}/api/cron/scrape"
 
-# ponytail: il segreto passa come argomento a curl ed e' quindi visibile in
-# `ps` a chiunque abbia accesso locale alla shell. Accettato: il box e' a
-# utente singolo (root). Percorso di aggiornamento se un giorno servisse:
-# passare l'header via `curl -K -` leggendo da stdin invece che da argv.
-http_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
-  -X POST \
-  -H "Authorization: Bearer ${cron_secret}" \
+# Il segreto viene passato via `curl -K -` (config da stdin) invece che come
+# argomento `-H`, cosi' non finisce nell'argv del processo visibile a `ps` /
+# /proc/<pid>/cmdline ad altri utenti locali.
+http_code=$(printf 'header = "Authorization: Bearer %s"\n' "${cron_secret}" | \
+  curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -X POST -K - \
   "${target_url}") || http_code="000"
 
 timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
