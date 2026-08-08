@@ -18,7 +18,6 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",
     "he": "^1.2.0",
-    "heimdall-sdk": "^0.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
     "mapbox-gl": "^3.17.0",

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { EventCacheProvider } from "@/lib/eventCache";
-import HeimdallWrapper from "@/components/HeimdallWrapper";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -76,11 +75,9 @@ export default function RootLayout({
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
-				<HeimdallWrapper>
-					<EventCacheProvider>
-						{children}
-					</EventCacheProvider>
-				</HeimdallWrapper>
+				<EventCacheProvider>
+					{children}
+				</EventCacheProvider>
 			</body>
 		</html>
 	);
