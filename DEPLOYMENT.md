@@ -56,7 +56,7 @@ Three categories matter because they are read at different times by different pr
 
 In production the file is `.env` in the compose directory (`/opt/docker/fuori-rotta/fuorirotta/.env`), not `.env.local` — `.env.local` is a local-development-only convention and is never read by Docker Compose.
 
-**Quoting pitfall:** Docker Compose strips surrounding quotes from values in `.env`, but `source` and ad-hoc shell scripts do not. The same `.env` read two different ways can therefore produce two different values — a secret written as `"abc..."` becomes 44 characters inside the container but 46 characters to a naive reader. `scripts/cron-scrape.sh` strips quotes for exactly this reason. Prefer writing values without quotes in `.env` regardless.
+**Quoting pitfall:** Docker Compose strips surrounding quotes from values in `.env`, but `source` and ad-hoc shell scripts do not. The same `.env` read two different ways can therefore produce two different values — a secret written as `"abc..."` becomes 44 characters inside the container but 46 characters to a naive reader. `scripts/cron-scrape.sh` strips quotes for exactly this reason. Prefer writing values without quotes in `.env` regardless. The same divergence risk applies to inline comments: Compose strips a trailing `<space>#comment` from a `.env` value (quoted or not); `scripts/cron-scrape.sh` mirrors this, but any other ad-hoc reader of the file may not — avoid inline comments on secret lines when in doubt.
 
 ## Local Development
 
