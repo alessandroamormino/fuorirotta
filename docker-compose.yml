@@ -19,6 +19,8 @@ services:
       # DATABASE_URL: "postgresql://fuorirotta:Fuor1rott%402025%21@crimescript-db:5432/fuorirotta?schema=public"
       DATABASE_URL: ${DATABASE_URL}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # Required by /api/cron/scrape — without it the route denies every request (401)
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET must be set in .env}
     restart: unless-stopped
     networks:
       - fuorirotta-network
