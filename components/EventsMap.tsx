@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Event } from "@/lib/types";
@@ -17,6 +17,123 @@ interface EventsMapProps {
 	userLocation?: { lat: number; lng: number } | null;
 }
 
+const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/streets-v12";
+const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
+
+const EMPTY_GEOJSON: GeoJSON.FeatureCollection = {
+	type: "FeatureCollection",
+	features: [],
+};
+
+// Calcolati una volta: usano var(--primary) direttamente, quindi seguono il tema
+// via cascata CSS senza bisogno di essere ri-derivati a ogni apertura di popup.
+const CTA_SHADOW = "0 4px 12px color-mix(in srgb, var(--primary) 20%, transparent)";
+const CTA_SHADOW_HOVER = "0 6px 16px color-mix(in srgb, var(--primary) 30%, transparent)";
+
+// Mitigazione T-07-11: i campi evento interpolati nel popup HTML arrivano dagli
+// scraper e vanno resi inerti prima di entrare nel template string.
+function escapeHtml(text: string): string {
+	return String(text)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+// Unica lettura dei token a runtime: chiamata dentro addEventLayers (invocata
+// dall'handler "load"/"style.load", mai a livello di modulo o al solo mount).
+function readThemeColors() {
+	const style = getComputedStyle(document.documentElement);
+	const get = (name: string) => style.getPropertyValue(name).trim();
+	return {
+		accent: get("--accent"),
+		primary: get("--primary"),
+		primaryHover: get("--primary-hover"),
+		surface: get("--surface"),
+		primaryForeground: get("--primary-foreground"),
+		foreground: get("--foreground"),
+		mutedForeground: get("--muted-foreground"),
+		accentTint: get("--accent-tint"),
+		userLocation: get("--user-location"),
+	};
+}
+
+// Aggiunge solo source "events" + i tre layer, coi colori letti a runtime.
+// Non registra gestori di eventi (map.on): quelli sopravvivono a setStyle()
+// e vengono registrati una sola volta altrove (handlersRegisteredRef).
+function addEventLayers(map: mapboxgl.Map, geojsonData: GeoJSON.FeatureCollection) {
+	const colors = readThemeColors();
+
+	map.addSource("events", {
+		type: "geojson",
+		data: geojsonData,
+		cluster: true,
+		clusterMaxZoom: 14,
+		clusterRadius: 50,
+	});
+
+	// Layer per i cluster
+	map.addLayer({
+		id: "clusters",
+		type: "circle",
+		source: "events",
+		filter: ["has", "point_count"],
+		paint: {
+			"circle-color": [
+				"step",
+				["get", "point_count"],
+				colors.accent, // 1-10 eventi
+				10,
+				colors.primary, // 10-30 eventi
+				30,
+				colors.primaryHover, // 30+ eventi
+			],
+			"circle-radius": [
+				"step",
+				["get", "point_count"],
+				20, // < 10
+				10,
+				30, // 10-30
+				30,
+				40, // 30+
+			],
+			"circle-stroke-width": 3,
+			"circle-stroke-color": colors.surface,
+		},
+	});
+
+	// Layer per il contatore nei cluster
+	map.addLayer({
+		id: "cluster-count",
+		type: "symbol",
+		source: "events",
+		filter: ["has", "point_count"],
+		layout: {
+			"text-field": "{point_count_abbreviated}",
+			"text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+			"text-size": 14,
+		},
+		paint: {
+			"text-color": colors.primaryForeground,
+		},
+	});
+
+	// Layer per i singoli punti
+	map.addLayer({
+		id: "unclustered-point",
+		type: "circle",
+		source: "events",
+		filter: ["!", ["has", "point_count"]],
+		paint: {
+			"circle-color": colors.primary,
+			"circle-radius": 8,
+			"circle-stroke-width": 2,
+			"circle-stroke-color": colors.surface,
+		},
+	});
+}
+
 export default function EventsMap({
 	events,
 	initialGeoJSON,
@@ -30,6 +147,9 @@ export default function EventsMap({
 	const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
 	const eventsWithCoordsRef = useRef<Array<{event: Event; coords: {lat: number; lng: number}}>>([]);
 	const layersInitializedRef = useRef(false);
+	const handlersRegisteredRef = useRef(false);
+	const lastGeoJSONRef = useRef<GeoJSON.FeatureCollection | null>(null);
+	const [isThemeTransitioning, setIsThemeTransitioning] = useState(false);
 
 	useEffect(() => {
 		if (!mapContainerRef.current) return;
@@ -37,9 +157,15 @@ export default function EventsMap({
 		// Inizializza la mappa
 		mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
+		// Lo script anti-FOUC applica .dark su <html> prima dell'idratazione,
+		// quindi questa lettura al mount è affidabile (Pitfall 2 di 07-RESEARCH.md).
+		const initialStyle = document.documentElement.classList.contains("dark")
+			? MAP_STYLE_DARK
+			: MAP_STYLE_LIGHT;
+
 		mapRef.current = new mapboxgl.Map({
 			container: mapContainerRef.current,
-			style: "mapbox://styles/mapbox/streets-v12",
+			style: initialStyle,
 			center: [9.1859, 45.4654], // [lng, lat] - Milano
 			zoom: 8,
 			touchZoomRotate: true,
@@ -57,6 +183,31 @@ export default function EventsMap({
 			mapRef.current?.remove();
 			mapRef.current = null;
 		};
+	}, []);
+
+	// Reagisci al cambio tema: scambia lo style Mapbox e ri-aggiungi source/layer
+	// dentro style.load, mostrando un velo finché i marker non sono tornati.
+	useEffect(() => {
+		const handleThemeChange = () => {
+			const map = mapRef.current;
+			if (!map) return;
+
+			const isDark = document.documentElement.classList.contains("dark");
+			setIsThemeTransitioning(true);
+			map.setStyle(isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT);
+			// Dopo setStyle() source e layer non esistono più (comportamento
+			// documentato di Mapbox GL, non un difetto del progetto).
+			layersInitializedRef.current = false;
+
+			map.once("style.load", () => {
+				addEventLayers(map, lastGeoJSONRef.current ?? EMPTY_GEOJSON);
+				layersInitializedRef.current = true;
+				setIsThemeTransitioning(false);
+			});
+		};
+
+		window.addEventListener("theme-change", handleThemeChange);
+		return () => window.removeEventListener("theme-change", handleThemeChange);
 	}, []);
 
 	// Aggiorna i marker quando cambiano gli eventi
@@ -117,6 +268,10 @@ export default function EventsMap({
 				};
 			}
 
+			// Conserva l'ultimo GeoJSON: serve a ri-aggiungere i layer dopo uno
+			// scambio di style senza ricalcolare le coordinate.
+			lastGeoJSONRef.current = geojsonData;
+
 			// Verifica se source e layers esistono già
 			const sourceExists = mapRef.current.getSource("events");
 
@@ -124,77 +279,14 @@ export default function EventsMap({
 				// Aggiornamento incrementale: usa setData() per evitare il blink
 				(mapRef.current.getSource("events") as mapboxgl.GeoJSONSource).setData(geojsonData);
 			} else {
-				// Prima inizializzazione: aggiungi source + layers + gestori eventi
+				// Prima inizializzazione: aggiungi source + layers
+				addEventLayers(mapRef.current, geojsonData);
+				layersInitializedRef.current = true;
+			}
 
-				// Aggiungi source con clustering
-				mapRef.current.addSource("events", {
-					type: "geojson",
-					data: geojsonData,
-					cluster: true,
-					clusterMaxZoom: 14,
-					clusterRadius: 50,
-				});
-
-				// Layer per i cluster
-				mapRef.current.addLayer({
-					id: "clusters",
-					type: "circle",
-					source: "events",
-					filter: ["has", "point_count"],
-					paint: {
-						"circle-color": [
-							"step",
-							["get", "point_count"],
-							"#83c5be", // 1-10 eventi
-							10,
-							"#006d77", // 10-30 eventi
-							30,
-							"#00565e", // 30+ eventi
-						],
-						"circle-radius": [
-							"step",
-							["get", "point_count"],
-							20, // < 10
-							10,
-							30, // 10-30
-							30,
-							40, // 30+
-						],
-						"circle-stroke-width": 3,
-						"circle-stroke-color": "#fff",
-					},
-				});
-
-				// Layer per il contatore nei cluster
-				mapRef.current.addLayer({
-					id: "cluster-count",
-					type: "symbol",
-					source: "events",
-					filter: ["has", "point_count"],
-					layout: {
-						"text-field": "{point_count_abbreviated}",
-						"text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
-						"text-size": 14,
-					},
-					paint: {
-						"text-color": "#ffffff",
-					},
-				});
-
-				// Layer per i singoli punti
-				mapRef.current.addLayer({
-					id: "unclustered-point",
-					type: "circle",
-					source: "events",
-					filter: ["!", ["has", "point_count"]],
-					paint: {
-						"circle-color": "#006d77",
-						"circle-radius": 8,
-						"circle-stroke-width": 2,
-						"circle-stroke-color": "#fff",
-					},
-				});
-
+			// I gestori sopravvivono a un cambio di style: registrarli di nuovo
+			// dopo un setStyle li duplicherebbe, facendo scattare due volte ogni click.
+			if (!handlersRegisteredRef.current) {
 				// Click sui cluster per zoom
 				const handleClusterClick = (
 					e: mapboxgl.MapLayerMouseEvent | mapboxgl.MapLayerTouchEvent
@@ -253,15 +345,27 @@ export default function EventsMap({
 							imageUrl: props.imageUrl || "",
 						};
 
+						// Colori letti prima di costruire il template: le classi Tailwind
+						// non arrivano dentro l'HTML di un popup Mapbox.
+						const colors = readThemeColors();
+
+						// Escaping (mitigazione T-07-11): i campi evento arrivano dagli
+						// scraper, senza escaping un titolo con markup verrebbe eseguito nel popup.
+						const safeTitle = escapeHtml(event.title);
+						const safeLocationName = event.locationName ? escapeHtml(event.locationName) : "";
+						const safeCategory = event.category ? escapeHtml(event.category) : "";
+						const safeImageUrl = event.imageUrl ? escapeHtml(event.imageUrl) : "";
+						const safeId = escapeHtml(String(event.id));
+
 						// Popup in stile card per singolo evento
 						const popupContent = `
 					<div style="width: 280px; font-family: system-ui, -apple-system, sans-serif; padding: 16px; position: relative;">
 						<div>
 							${
-								event.imageUrl
-									? `<img src="${event.imageUrl}" alt="${event.title}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 12px; margin-bottom: 12px;" />`
-									: `<div style="width: 100%; height: 120px; background: linear-gradient(135deg, #edf6f9 0%, #83c5be 100%); border-radius: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
-										<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#006d77" stroke-width="2">
+								safeImageUrl
+									? `<img src="${safeImageUrl}" alt="${safeTitle}" style="width: 100%; height: 120px; object-fit: cover; border-radius: var(--r-lg); margin-bottom: 12px;" />`
+									: `<div style="width: 100%; height: 120px; background: linear-gradient(135deg, ${colors.accentTint} 0%, ${colors.accent} 100%); border-radius: var(--r-lg); margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
+										<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${colors.primary}" stroke-width="2">
 											<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
 											<line x1="16" y1="2" x2="16" y2="6"></line>
 											<line x1="8" y1="2" x2="8" y2="6"></line>
@@ -269,27 +373,25 @@ export default function EventsMap({
 										</svg>
 									</div>`
 							}
-							<h3 style="font-weight: 600; font-size: 14px; color: #111; margin: 0 0 6px 0; line-height: 1.3;">${
-								event.title
-							}</h3>
+							<h3 style="font-weight: 600; font-size: 14px; color: ${colors.foreground}; margin: 0 0 6px 0; line-height: 1.3;">${safeTitle}</h3>
 							${
-								event.locationName
-									? `<p style="font-size: 12px; color: #111; margin: 0 0 4px 0; font-weight: 500;">${event.locationName}</p>`
+								safeLocationName
+									? `<p style="font-size: 12px; color: ${colors.foreground}; margin: 0 0 4px 0; font-weight: 500;">${safeLocationName}</p>`
 									: ""
 							}
-							<p style="font-size: 12px; color: #666; margin: 0 0 6px 0;">
+							<p style="font-size: 12px; color: ${colors.mutedForeground}; margin: 0 0 6px 0;">
 								${format(new Date(event.dateStart), "dd MMM", { locale: it })}
 							</p>
 							${
-								event.category
-									? `<span style="display: inline-block; padding: 4px 10px; background: #edf6f9; color: #006d77; border-radius: 12px; font-size: 11px; font-weight: 600; margin-bottom: 12px;">${event.category}</span>`
+								safeCategory
+									? `<span style="display: inline-block; padding: 4px 10px; background: ${colors.accentTint}; color: ${colors.primary}; border-radius: var(--r-lg); font-size: 11px; font-weight: 600; margin-bottom: 12px;">${safeCategory}</span>`
 									: ""
 							}
 							<a
-								href="/eventi/${event.id}"
-								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: linear-gradient(to right, #006d77, #83c5be); color: white; font-weight: 600; border-radius: 16px; text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0, 109, 119, 0.2);"
-								onmouseover="this.style.boxShadow='0 6px 16px rgba(0, 109, 119, 0.3)'"
-								onmouseout="this.style.boxShadow='0 4px 12px rgba(0, 109, 119, 0.2)'"
+								href="/eventi/${safeId}"
+								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: linear-gradient(to right, ${colors.primary}, ${colors.accent}); color: ${colors.primaryForeground}; font-weight: 600; border-radius: var(--r-xl); text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: ${CTA_SHADOW};"
+								onmouseover="this.style.boxShadow='${CTA_SHADOW_HOVER}'"
+								onmouseout="this.style.boxShadow='${CTA_SHADOW}'"
 							>
 								Vedi dettagli
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -373,8 +475,8 @@ export default function EventsMap({
 					});
 				}
 
-				// Marca i layers come inizializzati
-				layersInitializedRef.current = true;
+				// Marca i gestori come registrati: mai riportato a false, sopravvivono a setStyle()
+				handlersRegisteredRef.current = true;
 			}
 
 			// Adatta la vista per includere tutti gli eventi (sempre, non solo prima inizializzazione)
@@ -410,10 +512,12 @@ export default function EventsMap({
 		el.style.width = "24px";
 		el.style.height = "24px";
 		el.style.borderRadius = "50%";
-		el.style.backgroundColor = "#3B82F6";
-		el.style.border = "3px solid white";
+		// Il blu resta identico nei due temi di proposito: convenzione di
+		// piattaforma per "sei qui", non va rimappato sul teal di marca.
+		el.style.backgroundColor = "var(--user-location)";
+		el.style.border = "3px solid var(--surface)";
 		el.style.boxShadow =
-			"0 0 0 3px rgba(59, 130, 246, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2)";
+			"0 0 0 3px color-mix(in srgb, var(--user-location) 30%, transparent), 0 2px 8px rgba(0, 0, 0, 0.2)";
 		el.style.cursor = "default";
 
 		// Aggiungi pulse animation
@@ -424,7 +528,7 @@ export default function EventsMap({
 		pulse.style.width = "36px";
 		pulse.style.height = "36px";
 		pulse.style.borderRadius = "50%";
-		pulse.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+		pulse.style.backgroundColor = "color-mix(in srgb, var(--user-location) 30%, transparent)";
 		pulse.style.animation = "pulse 2s infinite";
 		el.appendChild(pulse);
 
@@ -444,5 +548,15 @@ export default function EventsMap({
 		};
 	}, [userLocation]);
 
-	return <div ref={mapContainerRef} className="w-full h-full" />;
+	return (
+		<div className="relative w-full h-full">
+			<div ref={mapContainerRef} className="w-full h-full" />
+			{isThemeTransitioning && (
+				<div
+					className="absolute inset-0 bg-surface pointer-events-none"
+					aria-hidden="true"
+				/>
+			)}
+		</div>
+	);
 }
