@@ -14,9 +14,9 @@ interface EventCardProps {
 export default function EventCard({ event }: EventCardProps) {
 	return (
 		<Link href={`/eventi/${event.id}`} className="group cursor-pointer">
-			<div className="flex flex-col rounded-[15px] h-full items-stretch p-2 bg-white border border-[#006d77]/10 hover:border-[#006d77]/50 transition-all duration-300">
+			<div className="flex flex-col rounded-card h-full items-stretch p-2 bg-surface border border-primary/10 hover:border-primary/50 transition-all duration-300">
 				{/* Image */}
-				<div className="relative w-full aspect-16/9 mb-1 sm:mb-3 overflow-hidden rounded-md sm:rounded-xl group-hover:border-[#006d77]/50 transition-all duration-300group-hover:shadow-md">
+				<div className="relative w-full aspect-16/9 mb-1 sm:mb-3 overflow-hidden rounded-md sm:rounded-xl group-hover:border-primary/50 transition-all duration-300group-hover:shadow-md">
 					{event.imageUrl ? (
 						<img
 							src={event.imageUrl}
@@ -24,12 +24,12 @@ export default function EventCard({ event }: EventCardProps) {
 							className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
 						/>
 					) : (
-						<div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#edf6f9] via-[#83c5be]/20 to-[#006d77]/10">
+						<div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-accent-tint via-accent/20 to-primary/10">
 							<div className="flex flex-col items-center gap-1 sm:gap-3">
-								<div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#006d77]/10 flex items-center justify-center">
-									<Calendar className="w-3 h-3 sm:w-6 sm:h-6 text-[#006d77]" />
+								<div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
+									<Calendar className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
 								</div>
-								<span className="text-[10px] sm:text-xs font-medium text-[#006d77]/60">
+								<span className="text-[10px] sm:text-xs font-medium text-primary/60">
 									Evento
 								</span>
 							</div>
@@ -39,13 +39,13 @@ export default function EventCard({ event }: EventCardProps) {
 
 				{/* Info */}
 				<div className="flex flex-col gap-0.5">
-					<h1 className="text-[16px] sm:text-md font-semibold text-gray-900 line-clamp-2 leading-tight">
+					<h1 className="text-[16px] sm:text-md font-semibold text-foreground line-clamp-2 leading-tight">
 						{decodeHtmlEntities(event.title.toLowerCase().charAt(0).toUpperCase() + event.title.toLowerCase().slice(1))}
 					</h1>
 					<div className="flex items-center gap-1">
-						<span className="text-[10px] sm:text-sm text-gray-600 line-clamp-1">{event.locationName || "Lombardia"}</span>
+						<span className="text-[10px] sm:text-sm text-muted-foreground line-clamp-1">{event.locationName || "Lombardia"}</span>
 						<span> - </span>
-						<span className="text-[10px] sm:text-sm text-[#006d77] font-medium" suppressHydrationWarning>
+						<span className="text-[10px] sm:text-sm text-primary font-medium" suppressHydrationWarning>
 							{format(new Date(event.dateStart), "dd MMM", { locale: it })}
 						</span>
 					</div>

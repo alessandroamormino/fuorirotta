@@ -8,11 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "scrape": "npx tsx --import ./lib/scrapers/env.ts lib/scrapers/runner.ts"
+    "scrape": "npx tsx --import ./lib/scrapers/env.ts lib/scrapers/runner.ts",
+    "check:tokens": "! grep -rInE '#[0-9a-fA-F]{3,8}\\b' app components lib --include='*.ts' --include='*.tsx' --include='*.css' --exclude='globals.css' | grep -vE '&#[0-9]+;|&#x[0-9a-fA-F]+;'"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.1.0",
     "@prisma/client": "^6.1.0",
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-popover": "^1.1.23",
     "@tailwindcss/typography": "^0.5.19",
     "@types/leaflet": "^1.9.21",
     "date-fns": "^4.1.0",
@@ -25,7 +28,6 @@
     "pg": "^8.16.3",
     "prisma": "^6.1.0",
     "react": "19.2.3",
-    "react-datepicker": "^9.1.0",
     "react-dom": "19.2.3",
     "react-leaflet": "^5.0.0"
   },
@@ -35,7 +37,6 @@
     "@types/node": "^20",
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
-    "@types/react-datepicker": "^6.2.0",
     "@types/react-dom": "^19",
     "dotenv": "^17.2.3",
     "eslint": "^9",
