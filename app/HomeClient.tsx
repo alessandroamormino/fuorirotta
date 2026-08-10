@@ -13,9 +13,9 @@ import { useEventCache } from "@/lib/eventCache";
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
 	loading: () => (
-		<div className="w-full h-full bg-gray-100">
+		<div className="w-full h-full bg-muted-strong">
 			<div className="flex items-center justify-center h-full">
-				<Loader2 className="w-8 h-8 text-[#006d77] animate-spin" />
+				<Loader2 className="w-8 h-8 text-primary animate-spin" />
 			</div>
 		</div>
 	),
@@ -309,7 +309,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	}, [events]);
 
 	return (
-		<div className="min-h-screen bg-[#83c5be]/5">
+		<div className="min-h-screen bg-accent/5">
 			<Navbar onSearch={handleSearch} onOpenMap={() => setIsMapExpanded(true)} />
 
 			<main
@@ -334,8 +334,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 											className="flex items-center justify-center py-20"
 										>
 											<div className="text-center">
-												<Loader2 className="w-12 h-12 text-[#006d77] animate-spin mx-auto mb-4" />
-												<p className="text-gray-600">Caricamento eventi...</p>
+												<Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+												<p className="text-muted-foreground">Caricamento eventi...</p>
 											</div>
 										</motion.div>
 									) : events.length === 0 ? (
@@ -346,13 +346,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 											exit={{ opacity: 0, y: -20 }}
 											className="text-center py-20"
 										>
-											<div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-												<Filter className="w-10 h-10 text-gray-400" />
+											<div className="w-20 h-20 bg-muted-strong rounded-full flex items-center justify-center mx-auto mb-4">
+												<Filter className="w-10 h-10 text-muted-foreground-faint" />
 											</div>
-											<h3 className="text-xl font-bold text-gray-900 mb-2">
+											<h3 className="text-xl font-bold text-foreground mb-2">
 												Nessun evento trovato
 											</h3>
-											<p className="text-gray-600">
+											<p className="text-muted-foreground">
 												Prova a modificare i filtri di ricerca
 											</p>
 										</motion.div>
@@ -379,11 +379,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						{!loading && events.length > 0 && (
 							<div className="flex-shrink-0 py-2 sm:py-4">
 								<div className="flex justify-between items-center gap-2 sm:gap-4">
-									<p className="text-gray-600 text-xs sm:text-sm font-medium">
+									<p className="text-muted-foreground text-xs sm:text-sm font-medium">
 										{total}
 										<span className="hidden lg:inline"> Eventi totali</span>
 									</p>
-									<div className="bg-white border border-[#83c5be]/30 rounded-full flex items-center gap-1 sm:gap-2 px-2 py-2">
+									<div className="bg-surface border border-accent/30 rounded-full flex items-center gap-1 sm:gap-2 px-2 py-2">
 										{(() => {
 											const totalPages = Math.ceil(total / LIMIT);
 											if (totalPages <= 1) return null;
@@ -406,7 +406,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												pages.map((page, idx) => {
 													if (page === '...') {
 														return (
-															<span key={`ellipsis-${idx}`} className={size === 'sm' ? "px-1 text-gray-400 text-xs" : "px-1 text-gray-400 text-sm"}>
+															<span key={`ellipsis-${idx}`} className={size === 'sm' ? "px-1 text-muted-foreground-faint text-xs" : "px-1 text-muted-foreground-faint text-sm"}>
 																...
 															</span>
 														);
@@ -419,7 +419,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 														<button
 															key={pageNum}
 															onClick={() => fetchEvents(pageNum)}
-															className={pageNum === currentPage ? `${base} bg-[#006d77] text-white` : `${base} border border-gray-200 bg-white text-gray-700 hover:bg-gray-50`}
+															className={pageNum === currentPage ? `${base} bg-primary text-primary-foreground` : `${base} border border-border bg-surface text-foreground-secondary hover:bg-muted`}
 														>
 															{pageNum}
 														</button>
@@ -430,7 +430,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												<button
 													onClick={() => fetchEvents(currentPage - 1)}
 													disabled={currentPage === 1}
-													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white`}
+													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-border bg-surface text-foreground-secondary hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface`}
 												>
 													<ChevronLeft className={size === 'sm' ? "w-4 h-4" : "w-5 h-5"} />
 												</button>
@@ -440,7 +440,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												<button
 													onClick={() => fetchEvents(currentPage + 1)}
 													disabled={currentPage === totalPages}
-													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white`}
+													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-border bg-surface text-foreground-secondary hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface`}
 												>
 													<ChevronRight className={size === 'sm' ? "w-4 h-4" : "w-5 h-5"} />
 												</button>
@@ -462,7 +462,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 											);
 										})()}
 									</div>
-									<p className="text-gray-600 text-xs sm:text-sm font-medium">
+									<p className="text-muted-foreground text-xs sm:text-sm font-medium">
 										{events.length + ' / ' + LIMIT}
 									</p>
 								</div>
@@ -471,7 +471,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					</div>
 
 					<div className="hidden xl:block w-[50%] max-w-4xl flex-shrink-0">
-						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#83c5be]/30 relative group">
+						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-accent/30 relative group">
 							<EventsMap
 								events={mapEvents}
 								initialGeoJSON={effectiveClusterGeoJSON}
@@ -480,7 +480,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							/>
 							<motion.button
 								onClick={() => setIsMapExpanded(true)}
-								className="absolute bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-white text-gray-900 rounded-full font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all opacity-0 group-hover:opacity-100 z-[1000]"
+								className="absolute bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-surface text-foreground rounded-full font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all opacity-0 group-hover:opacity-100 z-[1000]"
 								whileHover={{ scale: 1.05 }}
 								whileTap={{ scale: 0.95 }}
 							>
@@ -506,18 +506,18 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							onClick={() => setIsMapExpanded(false)}
 						>
 							<div
-								className="absolute inset-4 bg-white rounded-2xl overflow-hidden shadow-2xl"
+								className="absolute inset-4 bg-surface rounded-2xl overflow-hidden shadow-2xl"
 								onClick={(e) => e.stopPropagation()}
 							>
-								<div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-lg border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-									<h3 className="text-lg font-bold text-gray-900">
+								<div className="absolute top-0 left-0 right-0 z-10 bg-surface/95 backdrop-blur-lg border-b border-border px-6 py-4 flex items-center justify-between">
+									<h3 className="text-lg font-bold text-foreground">
 										Mappa eventi — {effectiveClusterGeoJSON ? effectiveClusterGeoJSON.features.length : mapEvents.length} eventi
 									</h3>
 									<button
 										onClick={() => setIsMapExpanded(false)}
-										className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+										className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-muted-strong transition-colors"
 									>
-										<X className="w-6 h-6 text-gray-600" />
+										<X className="w-6 h-6 text-muted-foreground" />
 									</button>
 								</div>
 								<div className="absolute inset-0 pt-16">
@@ -539,16 +539,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								userLocation={userLocation}
 							/>
 							<div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-5 pb-4 pointer-events-none" style={{ paddingTop: "max(env(safe-area-inset-top), 16px)" }}>
-								<div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow pointer-events-auto">
-									<span className="text-sm font-semibold text-gray-900">
+								<div className="bg-surface/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow pointer-events-auto">
+									<span className="text-sm font-semibold text-foreground">
 										{mapEvents.length} {mapEvents.length === 1 ? "evento" : "eventi"}
 									</span>
 								</div>
 								<button
 									onClick={() => setIsMapExpanded(false)}
-									className="w-11 h-11 rounded-full bg-white/90 backdrop-blur-md shadow flex items-center justify-center pointer-events-auto mr-14"
+									className="w-11 h-11 rounded-full bg-surface/90 backdrop-blur-md shadow flex items-center justify-center pointer-events-auto mr-14"
 								>
-									<X className="w-5 h-5 text-gray-700" />
+									<X className="w-5 h-5 text-foreground-secondary" />
 								</button>
 							</div>
 						</div>

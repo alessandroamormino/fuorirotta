@@ -15,7 +15,7 @@ const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
 	loading: () => (
 		<div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl">
-			<div className="text-gray-500">Caricamento mappa...</div>
+			<div className="text-muted-foreground-subtle">Caricamento mappa...</div>
 		</div>
 	),
 });
@@ -93,12 +93,12 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 
 	if (loading) {
 		return (
-			<div className="min-h-screen bg-gray-50">
+			<div className="min-h-screen bg-muted">
 				<Navbar onSearch={handleSearch} />
 				<div className="fixed top-28 left-0 right-0 bottom-0 flex items-center justify-center">
 					<div className="text-center">
-						<div className="w-16 h-16 border-4 border-[#83c5be] border-t-[#006d77] rounded-full animate-spin mx-auto mb-4"></div>
-						<p className="text-gray-600">Caricamento evento...</p>
+						<div className="w-16 h-16 border-4 border-accent border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+						<p className="text-muted-foreground">Caricamento evento...</p>
 					</div>
 				</div>
 			</div>
@@ -107,22 +107,22 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 
 	if (!event) {
 		return (
-			<div className="min-h-screen bg-gray-50">
+			<div className="min-h-screen bg-muted">
 				<Navbar onSearch={handleSearch} />
 				<div className="fixed top-28 left-0 right-0 bottom-0 flex items-center justify-center">
 					<div className="text-center">
-						<div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-							<Calendar className="w-10 h-10 text-gray-400" />
+						<div className="w-20 h-20 bg-muted-strong rounded-full flex items-center justify-center mx-auto mb-4">
+							<Calendar className="w-10 h-10 text-muted-foreground-faint" />
 						</div>
-						<h3 className="text-xl font-bold text-gray-900 mb-2">
+						<h3 className="text-xl font-bold text-foreground mb-2">
 							Evento non trovato
 						</h3>
-						<p className="text-gray-600 mb-6">
+						<p className="text-muted-foreground mb-6">
 							L'evento che stai cercando non esiste o è stato rimosso
 						</p>
 						<button
 							onClick={() => router.push("/")}
-							className="px-6 py-3 bg-gradient-to-r from-[#006d77] to-[#83c5be] text-white rounded-full font-semibold hover:shadow-lg transition-shadow"
+							className="px-6 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground rounded-full font-semibold hover:shadow-lg transition-shadow"
 						>
 							Torna agli eventi
 						</button>
@@ -133,7 +133,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	}
 
 	return (
-		<div className="min-h-screen bg-gray-50">
+		<div className="min-h-screen bg-muted">
 			{/* Navbar */}
 			<Navbar onSearch={handleSearch} />
 
@@ -145,11 +145,11 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						onClick={() => router.back()}
 						initial={{ opacity: 0, x: -20 }}
 						animate={{ opacity: 1, x: 0 }}
-						className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors border-2 border-[#83c5be]/30 mb-4 mt-4"
+						className="w-12 h-12 bg-surface rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors border-2 border-accent/30 mb-4 mt-4"
 						whileHover={{ scale: 1.05 }}
 						whileTap={{ scale: 0.95 }}
 					>
-						<ArrowLeft className="w-5 h-5 text-[#006d77]" />
+						<ArrowLeft className="w-5 h-5 text-primary" />
 					</motion.button>
 				</div>
 
@@ -159,7 +159,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						<motion.div
 							initial={{ opacity: 0, y: 20 }}
 							animate={{ opacity: 1, y: 0 }}
-							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-[#83c5be]/30"
+							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-accent/30"
 						>
 							<img
 								src={event.imageUrl}
@@ -173,13 +173,13 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						<motion.div
 							initial={{ opacity: 0, y: 20 }}
 							animate={{ opacity: 1, y: 0 }}
-							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-[#83c5be]/30 bg-gradient-to-br from-[#edf6f9] via-[#83c5be]/20 to-[#006d77]/10 flex items-center justify-center"
+							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-accent/30 bg-gradient-to-br from-accent-tint via-accent/20 to-primary/10 flex items-center justify-center"
 						>
 							<div className="flex flex-col items-center gap-6">
-								<div className="w-32 h-32 rounded-full bg-[#006d77]/10 flex items-center justify-center">
-									<Calendar className="w-16 h-16 text-[#006d77]" />
+								<div className="w-32 h-32 rounded-full bg-primary/10 flex items-center justify-center">
+									<Calendar className="w-16 h-16 text-primary" />
 								</div>
-								<span className="text-2xl font-semibold text-[#006d77]/60">
+								<span className="text-2xl font-semibold text-primary/60">
 									Evento
 								</span>
 							</div>
@@ -197,7 +197,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 									animate={{ opacity: 1, x: 0 }}
 									transition={{ delay: 0.1 }}
 								>
-									<span className="inline-flex items-center gap-2 px-4 py-2 bg-[#edf6f9] text-[#006d77] rounded-full text-sm font-semibold border-2 border-[#83c5be]/30">
+									<span className="inline-flex items-center gap-2 px-4 py-2 bg-accent-tint text-primary rounded-full text-sm font-semibold border-2 border-accent/30">
 										<Tag className="w-4 h-4" />
 										{event.category}
 									</span>
@@ -209,7 +209,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 								initial={{ opacity: 0, x: -20 }}
 								animate={{ opacity: 1, x: 0 }}
 								transition={{ delay: 0.2 }}
-								className="text-4xl md:text-5xl font-bold text-gray-900 leading-tight"
+								className="text-4xl md:text-5xl font-bold text-foreground leading-tight"
 							>
 								{decodeHtmlEntities(event.title)}
 							</motion.h1>
@@ -222,14 +222,14 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 								className="grid grid-cols-1 md:grid-cols-2 gap-4"
 							>
 								{/* Date Card */}
-								<div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-[#83c5be]/20 hover:border-[#006d77]/50 transition-all">
+								<div className="bg-surface rounded-2xl p-6 shadow-lg border-2 border-accent/20 hover:border-primary/50 transition-all">
 									<div className="flex items-start gap-4">
-										<div className="w-12 h-12 rounded-full bg-[#edf6f9] flex items-center justify-center flex-shrink-0">
-											<Calendar className="w-6 h-6 text-[#006d77]" />
+										<div className="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center flex-shrink-0">
+											<Calendar className="w-6 h-6 text-primary" />
 										</div>
 										<div>
-											<h3 className="font-semibold text-gray-900 mb-1">Data</h3>
-											<p className="text-sm text-gray-600">
+											<h3 className="font-semibold text-foreground mb-1">Data</h3>
+											<p className="text-sm text-muted-foreground">
 												{format(
 													new Date(event.dateStart),
 													"EEEE dd MMMM yyyy",
@@ -237,7 +237,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 												)}
 											</p>
 											{event.dateEnd && (
-												<p className="text-xs text-gray-500 mt-1">
+												<p className="text-xs text-muted-foreground-subtle mt-1">
 													Fino al{" "}
 													{format(new Date(event.dateEnd), "dd MMMM yyyy", {
 														locale: it,
@@ -250,17 +250,17 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 
 								{/* Location Card */}
 								{event.locationName && (
-									<div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-[#83c5be]/20 hover:border-[#006d77]/50 transition-all">
+									<div className="bg-surface rounded-2xl p-6 shadow-lg border-2 border-accent/20 hover:border-primary/50 transition-all">
 										<div className="flex items-start gap-4">
-											<div className="w-12 h-12 rounded-full bg-[#edf6f9] flex items-center justify-center flex-shrink-0">
-												<MapPin className="w-6 h-6 text-[#006d77]" />
+											<div className="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center flex-shrink-0">
+												<MapPin className="w-6 h-6 text-primary" />
 											</div>
 											<div>
-												<h3 className="font-semibold text-gray-900 mb-1">
+												<h3 className="font-semibold text-foreground mb-1">
 													{decodeHtmlEntities(event.locationName)}
 												</h3>
 												{event.address && (
-													<p className="text-sm text-gray-600">
+													<p className="text-sm text-muted-foreground">
 														{event.address}
 													</p>
 												)}
@@ -271,16 +271,16 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 
 								{/* Phone Card */}
 								{event.phone && (
-									<div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-[#83c5be]/20 hover:border-[#006d77]/50 transition-all">
+									<div className="bg-surface rounded-2xl p-6 shadow-lg border-2 border-accent/20 hover:border-primary/50 transition-all">
 										<div className="flex items-start gap-4">
-											<div className="w-12 h-12 rounded-full bg-[#edf6f9] flex items-center justify-center flex-shrink-0">
-												<Phone className="w-6 h-6 text-[#006d77]" />
+											<div className="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center flex-shrink-0">
+												<Phone className="w-6 h-6 text-primary" />
 											</div>
 											<div>
-												<h3 className="font-semibold text-gray-900 mb-1">Telefono</h3>
+												<h3 className="font-semibold text-foreground mb-1">Telefono</h3>
 												<a
 													href={`tel:${event.phone}`}
-													className="text-sm text-[#006d77] hover:underline"
+													className="text-sm text-primary hover:underline"
 												>
 													{event.phone}
 												</a>
@@ -296,16 +296,16 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.4 }}
-									className="bg-white rounded-2xl p-6 md:p-8 shadow-lg border-2 border-[#83c5be]/20"
+									className="bg-surface rounded-2xl p-6 md:p-8 shadow-lg border-2 border-accent/20"
 								>
-									<h2 className="text-2xl font-bold text-gray-900 mb-4">
+									<h2 className="text-2xl font-bold text-foreground mb-4">
 										Descrizione
 									</h2>
 									<div
-										className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
+										className="text-foreground-secondary leading-relaxed prose prose-sm max-w-none"
 										dangerouslySetInnerHTML={{ __html: event.description }}
 									/>
-									<p className="text-xs text-gray-500">Fonte: {event.source}</p>
+									<p className="text-xs text-muted-foreground-subtle">Fonte: {event.source}</p>
 								</motion.div>
 							)}
 						</div>
@@ -319,16 +319,16 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										initial={{ opacity: 0, x: 20 }}
 										animate={{ opacity: 1, x: 0 }}
 										transition={{ delay: 0.5 }}
-										className="bg-white rounded-2xl p-4 shadow-lg border-2 border-[#83c5be]/20"
+										className="bg-surface rounded-2xl p-4 shadow-lg border-2 border-accent/20"
 									>
-										<h3 className="text-lg font-bold text-gray-900 mb-4">
+										<h3 className="text-lg font-bold text-foreground mb-4">
 											Dove si trova
 										</h3>
-										<div className="h-[300px] rounded-xl overflow-hidden border-2 border-[#83c5be]/30">
+										<div className="h-[300px] rounded-xl overflow-hidden border-2 border-accent/30">
 											<EventsMap events={[event]} disablePopups={true} />
 										</div>
 										<button
-											className="flex items-center justify-center gap-2 w-full px-6 py-2 mt-4 bg-[#006d77] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+											className="flex items-center justify-center gap-2 w-full px-6 py-2 mt-4 bg-primary text-primary-foreground font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
 											onClick={() => handleNavigation(event.latitude, event.longitude)}
 										>
 											Naviga
@@ -348,7 +348,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 											href={event.sourceUrl ?? undefined}
 											target="_blank"
 											rel="noopener noreferrer"
-											className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-[#edf6f9] text-[#006d77] font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all"
+											className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-accent-tint text-primary font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all"
 										>
 											Visita sito ufficiale
 											<ExternalLink className="w-5 h-5" />
@@ -367,27 +367,27 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 					onClick={() => setShowMapModal(null)}
 				>
 					<div
-						className="w-full max-w-sm bg-white rounded-t-2xl p-6 pb-10 shadow-xl"
+						className="w-full max-w-sm bg-surface rounded-t-2xl p-6 pb-10 shadow-xl"
 						onClick={(e) => e.stopPropagation()}
 					>
-						<p className="text-center text-gray-500 text-sm mb-4">Apri con</p>
+						<p className="text-center text-muted-foreground-subtle text-sm mb-4">Apri con</p>
 						<div className="flex flex-col gap-3">
 							<a
 								href={`comgooglemaps://?daddr=${showMapModal.lat},${showMapModal.lng}&directionsmode=driving`}
-								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-[#006d77] text-white font-semibold rounded-xl"
+								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-xl"
 								onClick={() => setShowMapModal(null)}
 							>
 								Google Maps
 							</a>
 							<a
 								href={`https://maps.apple.com/?daddr=${showMapModal.lat},${showMapModal.lng}`}
-								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-gray-100 text-gray-800 font-semibold rounded-xl"
+								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-muted-strong text-foreground-strong font-semibold rounded-xl"
 								onClick={() => setShowMapModal(null)}
 							>
 								Apple Maps
 							</a>
 							<button
-								className="text-gray-400 text-sm mt-1"
+								className="text-muted-foreground-faint text-sm mt-1"
 								onClick={() => setShowMapModal(null)}
 							>
 								Annulla
