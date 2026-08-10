@@ -25,6 +25,22 @@ const EMPTY_GEOJSON: GeoJSON.FeatureCollection = {
 	features: [],
 };
 
+// Calcolati una volta: usano var(--primary) direttamente, quindi seguono il tema
+// via cascata CSS senza bisogno di essere ri-derivati a ogni apertura di popup.
+const CTA_SHADOW = "0 4px 12px color-mix(in srgb, var(--primary) 20%, transparent)";
+const CTA_SHADOW_HOVER = "0 6px 16px color-mix(in srgb, var(--primary) 30%, transparent)";
+
+// Mitigazione T-07-11: i campi evento interpolati nel popup HTML arrivano dagli
+// scraper e vanno resi inerti prima di entrare nel template string.
+function escapeHtml(text: string): string {
+	return String(text)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
 // Unica lettura dei token a runtime: chiamata dentro addEventLayers (invocata
 // dall'handler "load"/"style.load", mai a livello di modulo o al solo mount).
 function readThemeColors() {
@@ -329,15 +345,27 @@ export default function EventsMap({
 							imageUrl: props.imageUrl || "",
 						};
 
+						// Colori letti prima di costruire il template: le classi Tailwind
+						// non arrivano dentro l'HTML di un popup Mapbox.
+						const colors = readThemeColors();
+
+						// Escaping (mitigazione T-07-11): i campi evento arrivano dagli
+						// scraper, senza escaping un titolo con markup verrebbe eseguito nel popup.
+						const safeTitle = escapeHtml(event.title);
+						const safeLocationName = event.locationName ? escapeHtml(event.locationName) : "";
+						const safeCategory = event.category ? escapeHtml(event.category) : "";
+						const safeImageUrl = event.imageUrl ? escapeHtml(event.imageUrl) : "";
+						const safeId = escapeHtml(String(event.id));
+
 						// Popup in stile card per singolo evento
 						const popupContent = `
 					<div style="width: 280px; font-family: system-ui, -apple-system, sans-serif; padding: 16px; position: relative;">
 						<div>
 							${
-								event.imageUrl
-									? `<img src="${event.imageUrl}" alt="${event.title}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 12px; margin-bottom: 12px;" />`
-									: `<div style="width: 100%; height: 120px; background: linear-gradient(135deg, #edf6f9 0%, #83c5be 100%); border-radius: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
-										<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#006d77" stroke-width="2">
+								safeImageUrl
+									? `<img src="${safeImageUrl}" alt="${safeTitle}" style="width: 100%; height: 120px; object-fit: cover; border-radius: var(--r-lg); margin-bottom: 12px;" />`
+									: `<div style="width: 100%; height: 120px; background: linear-gradient(135deg, ${colors.accentTint} 0%, ${colors.accent} 100%); border-radius: var(--r-lg); margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
+										<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${colors.primary}" stroke-width="2">
 											<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
 											<line x1="16" y1="2" x2="16" y2="6"></line>
 											<line x1="8" y1="2" x2="8" y2="6"></line>
@@ -345,27 +373,25 @@ export default function EventsMap({
 										</svg>
 									</div>`
 							}
-							<h3 style="font-weight: 600; font-size: 14px; color: #111; margin: 0 0 6px 0; line-height: 1.3;">${
-								event.title
-							}</h3>
+							<h3 style="font-weight: 600; font-size: 14px; color: ${colors.foreground}; margin: 0 0 6px 0; line-height: 1.3;">${safeTitle}</h3>
 							${
-								event.locationName
-									? `<p style="font-size: 12px; color: #111; margin: 0 0 4px 0; font-weight: 500;">${event.locationName}</p>`
+								safeLocationName
+									? `<p style="font-size: 12px; color: ${colors.foreground}; margin: 0 0 4px 0; font-weight: 500;">${safeLocationName}</p>`
 									: ""
 							}
-							<p style="font-size: 12px; color: #666; margin: 0 0 6px 0;">
+							<p style="font-size: 12px; color: ${colors.mutedForeground}; margin: 0 0 6px 0;">
 								${format(new Date(event.dateStart), "dd MMM", { locale: it })}
 							</p>
 							${
-								event.category
-									? `<span style="display: inline-block; padding: 4px 10px; background: #edf6f9; color: #006d77; border-radius: 12px; font-size: 11px; font-weight: 600; margin-bottom: 12px;">${event.category}</span>`
+								safeCategory
+									? `<span style="display: inline-block; padding: 4px 10px; background: ${colors.accentTint}; color: ${colors.primary}; border-radius: var(--r-lg); font-size: 11px; font-weight: 600; margin-bottom: 12px;">${safeCategory}</span>`
 									: ""
 							}
 							<a
-								href="/eventi/${event.id}"
-								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: linear-gradient(to right, #006d77, #83c5be); color: white; font-weight: 600; border-radius: 16px; text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0, 109, 119, 0.2);"
-								onmouseover="this.style.boxShadow='0 6px 16px rgba(0, 109, 119, 0.3)'"
-								onmouseout="this.style.boxShadow='0 4px 12px rgba(0, 109, 119, 0.2)'"
+								href="/eventi/${safeId}"
+								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: linear-gradient(to right, ${colors.primary}, ${colors.accent}); color: ${colors.primaryForeground}; font-weight: 600; border-radius: var(--r-xl); text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: ${CTA_SHADOW};"
+								onmouseover="this.style.boxShadow='${CTA_SHADOW_HOVER}'"
+								onmouseout="this.style.boxShadow='${CTA_SHADOW}'"
 							>
 								Vedi dettagli
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -486,10 +512,12 @@ export default function EventsMap({
 		el.style.width = "24px";
 		el.style.height = "24px";
 		el.style.borderRadius = "50%";
-		el.style.backgroundColor = "#3B82F6";
-		el.style.border = "3px solid white";
+		// Il blu resta identico nei due temi di proposito: convenzione di
+		// piattaforma per "sei qui", non va rimappato sul teal di marca.
+		el.style.backgroundColor = "var(--user-location)";
+		el.style.border = "3px solid var(--surface)";
 		el.style.boxShadow =
-			"0 0 0 3px rgba(59, 130, 246, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2)";
+			"0 0 0 3px color-mix(in srgb, var(--user-location) 30%, transparent), 0 2px 8px rgba(0, 0, 0, 0.2)";
 		el.style.cursor = "default";
 
 		// Aggiungi pulse animation
@@ -500,7 +528,7 @@ export default function EventsMap({
 		pulse.style.width = "36px";
 		pulse.style.height = "36px";
 		pulse.style.borderRadius = "50%";
-		pulse.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+		pulse.style.backgroundColor = "color-mix(in srgb, var(--user-location) 30%, transparent)";
 		pulse.style.animation = "pulse 2s infinite";
 		el.appendChild(pulse);
 
