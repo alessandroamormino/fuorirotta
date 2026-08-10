@@ -17,6 +17,99 @@ interface EventsMapProps {
 	userLocation?: { lat: number; lng: number } | null;
 }
 
+// Unica lettura dei token a runtime: chiamata dentro addEventLayers (invocata
+// dall'handler "load", mai a livello di modulo o al solo mount).
+function readThemeColors() {
+	const style = getComputedStyle(document.documentElement);
+	const get = (name: string) => style.getPropertyValue(name).trim();
+	return {
+		accent: get("--accent"),
+		primary: get("--primary"),
+		primaryHover: get("--primary-hover"),
+		surface: get("--surface"),
+		primaryForeground: get("--primary-foreground"),
+		foreground: get("--foreground"),
+		mutedForeground: get("--muted-foreground"),
+		accentTint: get("--accent-tint"),
+		userLocation: get("--user-location"),
+	};
+}
+
+// Aggiunge solo source "events" + i tre layer, coi colori letti a runtime.
+// Non registra gestori di eventi (map.on): quelli sopravvivono a setStyle()
+// e vengono registrati una sola volta altrove (handlersRegisteredRef).
+function addEventLayers(map: mapboxgl.Map, geojsonData: GeoJSON.FeatureCollection) {
+	const colors = readThemeColors();
+
+	map.addSource("events", {
+		type: "geojson",
+		data: geojsonData,
+		cluster: true,
+		clusterMaxZoom: 14,
+		clusterRadius: 50,
+	});
+
+	// Layer per i cluster
+	map.addLayer({
+		id: "clusters",
+		type: "circle",
+		source: "events",
+		filter: ["has", "point_count"],
+		paint: {
+			"circle-color": [
+				"step",
+				["get", "point_count"],
+				colors.accent, // 1-10 eventi
+				10,
+				colors.primary, // 10-30 eventi
+				30,
+				colors.primaryHover, // 30+ eventi
+			],
+			"circle-radius": [
+				"step",
+				["get", "point_count"],
+				20, // < 10
+				10,
+				30, // 10-30
+				30,
+				40, // 30+
+			],
+			"circle-stroke-width": 3,
+			"circle-stroke-color": colors.surface,
+		},
+	});
+
+	// Layer per il contatore nei cluster
+	map.addLayer({
+		id: "cluster-count",
+		type: "symbol",
+		source: "events",
+		filter: ["has", "point_count"],
+		layout: {
+			"text-field": "{point_count_abbreviated}",
+			"text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+			"text-size": 14,
+		},
+		paint: {
+			"text-color": colors.primaryForeground,
+		},
+	});
+
+	// Layer per i singoli punti
+	map.addLayer({
+		id: "unclustered-point",
+		type: "circle",
+		source: "events",
+		filter: ["!", ["has", "point_count"]],
+		paint: {
+			"circle-color": colors.primary,
+			"circle-radius": 8,
+			"circle-stroke-width": 2,
+			"circle-stroke-color": colors.surface,
+		},
+	});
+}
+
 export default function EventsMap({
 	events,
 	initialGeoJSON,
@@ -30,6 +123,8 @@ export default function EventsMap({
 	const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
 	const eventsWithCoordsRef = useRef<Array<{event: Event; coords: {lat: number; lng: number}}>>([]);
 	const layersInitializedRef = useRef(false);
+	const handlersRegisteredRef = useRef(false);
+	const lastGeoJSONRef = useRef<GeoJSON.FeatureCollection | null>(null);
 
 	useEffect(() => {
 		if (!mapContainerRef.current) return;
@@ -117,6 +212,10 @@ export default function EventsMap({
 				};
 			}
 
+			// Conserva l'ultimo GeoJSON: serve a ri-aggiungere i layer dopo uno
+			// scambio di style senza ricalcolare le coordinate.
+			lastGeoJSONRef.current = geojsonData;
+
 			// Verifica se source e layers esistono già
 			const sourceExists = mapRef.current.getSource("events");
 
@@ -124,77 +223,14 @@ export default function EventsMap({
 				// Aggiornamento incrementale: usa setData() per evitare il blink
 				(mapRef.current.getSource("events") as mapboxgl.GeoJSONSource).setData(geojsonData);
 			} else {
-				// Prima inizializzazione: aggiungi source + layers + gestori eventi
+				// Prima inizializzazione: aggiungi source + layers
+				addEventLayers(mapRef.current, geojsonData);
+				layersInitializedRef.current = true;
+			}
 
-				// Aggiungi source con clustering
-				mapRef.current.addSource("events", {
-					type: "geojson",
-					data: geojsonData,
-					cluster: true,
-					clusterMaxZoom: 14,
-					clusterRadius: 50,
-				});
-
-				// Layer per i cluster
-				mapRef.current.addLayer({
-					id: "clusters",
-					type: "circle",
-					source: "events",
-					filter: ["has", "point_count"],
-					paint: {
-						"circle-color": [
-							"step",
-							["get", "point_count"],
-							"#83c5be", // 1-10 eventi
-							10,
-							"#006d77", // 10-30 eventi
-							30,
-							"#00565e", // 30+ eventi
-						],
-						"circle-radius": [
-							"step",
-							["get", "point_count"],
-							20, // < 10
-							10,
-							30, // 10-30
-							30,
-							40, // 30+
-						],
-						"circle-stroke-width": 3,
-						"circle-stroke-color": "#fff",
-					},
-				});
-
-				// Layer per il contatore nei cluster
-				mapRef.current.addLayer({
-					id: "cluster-count",
-					type: "symbol",
-					source: "events",
-					filter: ["has", "point_count"],
-					layout: {
-						"text-field": "{point_count_abbreviated}",
-						"text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
-						"text-size": 14,
-					},
-					paint: {
-						"text-color": "#ffffff",
-					},
-				});
-
-				// Layer per i singoli punti
-				mapRef.current.addLayer({
-					id: "unclustered-point",
-					type: "circle",
-					source: "events",
-					filter: ["!", ["has", "point_count"]],
-					paint: {
-						"circle-color": "#006d77",
-						"circle-radius": 8,
-						"circle-stroke-width": 2,
-						"circle-stroke-color": "#fff",
-					},
-				});
-
+			// I gestori sopravvivono a un cambio di style: registrarli di nuovo
+			// dopo un setStyle li duplicherebbe, facendo scattare due volte ogni click.
+			if (!handlersRegisteredRef.current) {
 				// Click sui cluster per zoom
 				const handleClusterClick = (
 					e: mapboxgl.MapLayerMouseEvent | mapboxgl.MapLayerTouchEvent
@@ -373,8 +409,8 @@ export default function EventsMap({
 					});
 				}
 
-				// Marca i layers come inizializzati
-				layersInitializedRef.current = true;
+				// Marca i gestori come registrati: mai riportato a false, sopravvivono a setStyle()
+				handlersRegisteredRef.current = true;
 			}
 
 			// Adatta la vista per includere tutti gli eventi (sempre, non solo prima inizializzazione)
