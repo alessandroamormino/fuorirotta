@@ -5,28 +5,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
 	Search,
 	ChevronLeft,
-	ChevronRight,
 	ChevronDown,
 	X,
 	LayoutList,
 	Map,
 } from "lucide-react";
 import { it } from "date-fns/locale";
-import {
-	format,
-	addMonths,
-	subMonths,
-	startOfMonth,
-	endOfMonth,
-	eachDayOfInterval,
-	isSameMonth,
-	isSameDay,
-	isToday,
-	startOfWeek,
-	endOfWeek,
-} from "date-fns";
+import { format } from "date-fns";
 import Link from "next/link";
 import Image from "next/image";
+import DateRangeField from "@/components/ui/DateRangeField";
 
 interface NavbarProps {
 	onSearch: (filters: SearchFilters) => void;
@@ -78,8 +66,6 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 		dateFrom: null,
 		dateTo: null,
 	});
-	const [currentMonth, setCurrentMonth] = useState(new Date());
-	const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
 	const searchBarRef = useRef<HTMLDivElement>(null);
 	const activeFieldRef = useRef<ActiveField | null>(null);
 	const [searchInput, setSearchInput] = useState("");
@@ -173,38 +159,6 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 		setMobileWhenOpen(false);
 	};
 
-	const handleDateSelect = (date: Date) => {
-		if (!filters.dateFrom || (filters.dateFrom && filters.dateTo)) {
-			setFilters({ ...filters, dateFrom: date, dateTo: null });
-		} else {
-			if (date < filters.dateFrom) {
-				setFilters({ ...filters, dateFrom: date, dateTo: filters.dateFrom });
-			} else {
-				setFilters({ ...filters, dateTo: date });
-			}
-		}
-	};
-
-	const isDateInRange = (date: Date) => {
-		if (!filters.dateFrom) return false;
-		if (!filters.dateTo && !hoveredDate)
-			return isSameDay(date, filters.dateFrom);
-		const endDate = filters.dateTo || hoveredDate;
-		if (!endDate) return isSameDay(date, filters.dateFrom);
-		return date >= filters.dateFrom && date <= endDate;
-	};
-
-	const isDateRangeStart = (date: Date) =>
-		!!(filters.dateFrom && isSameDay(date, filters.dateFrom));
-	const isDateRangeEnd = (date: Date) =>
-		!!(filters.dateTo && isSameDay(date, filters.dateTo));
-
-	const getDaysInMonth = (month: Date) => {
-		const start = startOfWeek(startOfMonth(month), { locale: it });
-		const end = endOfWeek(endOfMonth(month), { locale: it });
-		return eachDayOfInterval({ start, end });
-	};
-
 	const getIconForDestination = (iconType: string) => {
 		switch (iconType) {
 			case "nearby":
@@ -228,55 +182,6 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 
 	const hasActiveFilters =
 		filters.location || filters.dateFrom || filters.dateTo;
-
-	const renderCalendarGrid = (month: Date) => {
-		const days = getDaysInMonth(month);
-		return (
-			<div className="grid grid-cols-7 gap-0.5">
-				{["L", "M", "M", "G", "V", "S", "D"].map((day, i) => (
-					<div
-						key={i}
-						className="text-center text-[10px] font-semibold text-gray-400 py-2"
-					>
-						{day}
-					</div>
-				))}
-				{days.map((date, i) => {
-					const inRange = isDateInRange(date);
-					const isStart = isDateRangeStart(date);
-					const isEnd = isDateRangeEnd(date);
-					const isCurrentMonth = isSameMonth(date, month);
-					const isPast = date < new Date() && !isToday(date);
-
-					return (
-						<motion.button
-							key={i}
-							whileHover={isCurrentMonth && !isPast ? { scale: 1.1 } : {}}
-							onClick={() =>
-								isCurrentMonth && !isPast && handleDateSelect(date)
-							}
-							onMouseEnter={() =>
-								isCurrentMonth && !isPast && setHoveredDate(date)
-							}
-							onMouseLeave={() => setHoveredDate(null)}
-							disabled={!isCurrentMonth || isPast}
-							className={`
-                aspect-square flex items-center justify-center text-sm rounded-full transition-all
-                ${!isCurrentMonth ? "text-gray-200" : ""}
-                ${isPast ? "text-gray-300 cursor-not-allowed" : ""}
-                ${isStart || isEnd ? "bg-gradient-to-r from-[#006d77] to-[#83c5be] text-white font-bold" : ""}
-                ${inRange && !isStart && !isEnd ? "bg-[#006d77]/10" : ""}
-                ${!inRange && !isPast && isCurrentMonth ? "hover:bg-gray-100" : ""}
-                ${isToday(date) && !isStart && !isEnd ? "border-2 border-[#006d77]" : ""}
-              `}
-						>
-							{format(date, "d")}
-						</motion.button>
-					);
-				})}
-			</div>
-		);
-	};
 
 	const filteredDestinations = mobileSearchInput.trim()
 		? SUGGESTED_DESTINATIONS.filter((d) =>
@@ -683,83 +588,14 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									</div>
 
 									{/* Box calendario: header fisso + mesi scrollabili */}
-									<div className="flex-1 overflow-hidden mx-4 mb-32 bg-white rounded-2xl shadow-sm flex flex-col">
-										{/* Header fisso "Quando?" */}
-										<div className="px-5 pt-5 pb-3 flex-shrink-0">
-											<h2 className="text-2xl font-bold text-gray-900">
-												Quando?
-											</h2>
-											{/* Intestazione giorni settimana fissa */}
-											<div className="grid grid-cols-7 gap-0.5 mt-4">
-												{["L", "M", "M", "G", "V", "S", "D"].map((day, i) => (
-													<div
-														key={i}
-														className="text-center text-[10px] font-semibold text-gray-400 py-1"
-													>
-														{day}
-													</div>
-												))}
-											</div>
-										</div>
-
-										{/* Mesi scrollabili */}
-										<div className="flex-1 overflow-y-auto px-5 pb-5">
-											{[0, 1, 2].map((offset) => {
-												const month = addMonths(currentMonth, offset);
-												const days = getDaysInMonth(month);
-												return (
-													<div key={offset} className="mb-6">
-														<h3 className="font-bold text-gray-900 text-base mb-3">
-															{format(month, "MMMM yyyy", { locale: it })}
-														</h3>
-														<div className="grid grid-cols-7 gap-0.5">
-															{days.map((date, i) => {
-																const inRange = isDateInRange(date);
-																const isStart = isDateRangeStart(date);
-																const isEnd = isDateRangeEnd(date);
-																const isCurrentMonth = isSameMonth(date, month);
-																const isPast =
-																	date < new Date() && !isToday(date);
-																return (
-																	<motion.button
-																		key={i}
-																		whileHover={
-																			isCurrentMonth && !isPast
-																				? { scale: 1.1 }
-																				: {}
-																		}
-																		onClick={() =>
-																			isCurrentMonth &&
-																			!isPast &&
-																			handleDateSelect(date)
-																		}
-																		onMouseEnter={() =>
-																			isCurrentMonth &&
-																			!isPast &&
-																			setHoveredDate(date)
-																		}
-																		onMouseLeave={() => setHoveredDate(null)}
-																		disabled={!isCurrentMonth || isPast}
-																		className={`
-																			aspect-square flex items-center justify-center text-sm rounded-full transition-all
-																			${!isCurrentMonth ? "text-gray-200" : ""}
-																			${isPast ? "text-gray-300 cursor-not-allowed" : ""}
-																			${isStart || isEnd ? "bg-gradient-to-r from-[#006d77] to-[#83c5be] text-white font-bold" : ""}
-																			${inRange && !isStart && !isEnd ? "bg-[#006d77]/10" : ""}
-																			${!inRange && !isPast && isCurrentMonth ? "hover:bg-gray-100" : ""}
-																			${isToday(date) && !isStart && !isEnd ? "border-2 border-[#006d77]" : ""}
-																		`}
-																	>
-																		{format(date, "d")}
-																	</motion.button>
-																);
-															})}
-														</div>
-													</div>
-												);
-											})}
-										</div>
-									</div>
+									<DateRangeField
+										variant="mobile"
+										dateFrom={filters.dateFrom}
+										dateTo={filters.dateTo}
+										onChange={(range) =>
+											setFilters((f) => ({ ...f, ...range }))
+										}
+									/>
 								</motion.div>
 							)}
 						</AnimatePresence>
@@ -1184,51 +1020,14 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 												transition={{ duration: 0.2 }}
 												className="p-4 sm:p-8"
 											>
-												<div className="flex gap-8">
-													{/* Month 1 */}
-													<div className="flex-1">
-														<div className="flex items-center justify-between mb-4">
-															<button
-																onClick={() =>
-																	setCurrentMonth(subMonths(currentMonth, 1))
-																}
-																className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-															>
-																<ChevronLeft className="w-5 h-5" />
-															</button>
-															<h3 className="font-bold text-gray-900 text-base">
-																{format(currentMonth, "MMMM yyyy", {
-																	locale: it,
-																})}
-															</h3>
-															<div className="w-9" />
-														</div>
-														{renderCalendarGrid(currentMonth)}
-													</div>
-
-													{/* Month 2 */}
-													<div className="flex-1">
-														<div className="flex items-center justify-between mb-4">
-															<div className="w-9" />
-															<h3 className="font-bold text-gray-900 text-base">
-																{format(
-																	addMonths(currentMonth, 1),
-																	"MMMM yyyy",
-																	{ locale: it },
-																)}
-															</h3>
-															<button
-																onClick={() =>
-																	setCurrentMonth(addMonths(currentMonth, 1))
-																}
-																className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-															>
-																<ChevronRight className="w-5 h-5" />
-															</button>
-														</div>
-														{renderCalendarGrid(addMonths(currentMonth, 1))}
-													</div>
-												</div>
+												<DateRangeField
+													variant="desktop"
+													dateFrom={filters.dateFrom}
+													dateTo={filters.dateTo}
+													onChange={(range) =>
+														setFilters((f) => ({ ...f, ...range }))
+													}
+												/>
 
 												{(filters.dateFrom || filters.dateTo) && (
 													<div className="mt-6 flex justify-end">
