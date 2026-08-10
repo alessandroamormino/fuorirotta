@@ -13,13 +13,7 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-
-// ponytail: 5-line class-join, not the lib/utils.ts `cn` helper — that file belongs to
-// a sibling plan not yet present in this worktree. Converges on the shared helper once
-// the wave merges.
-function cn(...classes: Array<string | false | null | undefined>): string {
-  return classes.filter(Boolean).join(" ");
-}
+import { cn } from "@/lib/utils";
 
 const Root = DialogPrimitive.Root;
 const Trigger = DialogPrimitive.Trigger;
