@@ -32,3 +32,11 @@ export function decodeHtmlEntities(text: string): string {
 
 	return decoded;
 }
+
+/**
+ * Join class names, filtering out falsy values.
+ * No clsx/tailwind-merge: fixed variant sets don't need class-conflict resolution (D-09).
+ */
+export function cn(...classes: (string | false | null | undefined)[]): string {
+	return classes.filter(Boolean).join(" ");
+}
