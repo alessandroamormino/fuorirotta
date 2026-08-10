@@ -207,11 +207,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 						exit={{ opacity: 0, y: "-100%" }}
 						transition={{ type: "spring", damping: 30, stiffness: 300 }}
 						data-mobile-overlay="true"
-						className="fixed inset-0 z-[200] bg-gray-50 flex flex-col sm:hidden"
+						className="fixed inset-0 z-[200] bg-muted flex flex-col sm:hidden"
 					>
 						{/* Header */}
 						<div
-							className="flex items-center px-5 pb-4 bg-gray-50 relative"
+							className="flex items-center px-5 pb-4 bg-muted relative"
 							style={{ paddingTop: "max(env(safe-area-inset-top), 16px)" }}
 						>
 							{/* Logo a sinistra */}
@@ -234,7 +234,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 											loading="eager"
 											priority
 										/>
-										<span className="text-base font-bold text-[#006d77]">
+										<span className="text-base font-bold text-primary">
 											Fuorirotta
 										</span>
 									</div>
@@ -248,10 +248,10 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										setMobileDestExpanded(false);
 										setMobileWhenOpen(false);
 									}}
-									className="w-11 h-11 rounded-full bg-white shadow flex items-center justify-center"
+									className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center"
 									title="Lista"
 								>
-									<LayoutList className="w-5 h-5 text-gray-600" />
+									<LayoutList className="w-5 h-5 text-muted-foreground" />
 								</motion.button>
 								<motion.button
 									whileTap={{ scale: 0.9 }}
@@ -261,10 +261,10 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										setMobileWhenOpen(false);
 										onOpenMap?.();
 									}}
-									className="w-11 h-11 rounded-full bg-white shadow flex items-center justify-center"
+									className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center"
 									title="Mappa"
 								>
-									<Map className="w-5 h-5 text-gray-600" />
+									<Map className="w-5 h-5 text-muted-foreground" />
 								</motion.button>
 								<motion.button
 									whileTap={{ scale: 0.9 }}
@@ -273,9 +273,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										setMobileDestExpanded(false);
 										setMobileWhenOpen(false);
 									}}
-									className="w-11 h-11 rounded-full bg-white shadow flex items-center justify-center"
+									className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center"
 								>
-									<X className="w-5 h-5 text-gray-700" />
+									<X className="w-5 h-5 text-foreground-secondary" />
 								</motion.button>
 							</div>
 						</div>
@@ -292,7 +292,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									className="flex-1 overflow-y-auto px-4 pb-32"
 								>
 									{/* BOX DOVE espanso */}
-									<div className="bg-white rounded-2xl shadow-sm p-5 mb-3">
+									<div className="bg-surface rounded-2xl shadow-sm p-5 mb-3">
 										<AnimatePresence mode="wait" initial={false}>
 											{!mobileNearbyOpen ? (
 												<motion.div
@@ -302,11 +302,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													exit={{ opacity: 0, x: -16 }}
 													transition={{ duration: 0.2 }}
 												>
-													<h2 className="text-2xl font-bold text-gray-900 mb-4">
+													<h2 className="text-2xl font-bold text-foreground mb-4">
 														Dove?
 													</h2>
-													<div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 mb-5">
-														<Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+													<div className="flex items-center gap-3 border border-border rounded-xl px-4 py-3 mb-5">
+														<Search className="w-4 h-4 text-muted-foreground-faint flex-shrink-0" />
 														<input
 															autoFocus
 															type="text"
@@ -321,11 +321,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																setIsNearbySearch(false);
 																setSelectedRadius(null);
 															}}
-															className="flex-1 text-sm outline-none bg-transparent placeholder-gray-400 text-gray-700"
+															className="flex-1 text-sm outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
 														/>
 													</div>
 
-													<p className="text-xs font-semibold text-gray-500 mb-3">
+													<p className="text-xs font-semibold text-muted-foreground-subtle mb-3">
 														{mobileSearchInput.trim()
 															? "Risultati"
 															: "Destinazioni suggerite"}
@@ -352,16 +352,16 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																			setMobileWhenOpen(true);
 																		}
 																	}}
-																	className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-all text-left"
+																	className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted transition-all text-left"
 																>
-																	<div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl flex-shrink-0">
+																	<div className="w-10 h-10 bg-muted-strong rounded-lg flex items-center justify-center text-xl flex-shrink-0">
 																		{getIconForDestination(dest.icon)}
 																	</div>
 																	<div className="flex-1 min-w-0">
-																		<div className="font-medium text-gray-900 text-sm truncate">
+																		<div className="font-medium text-foreground text-sm truncate">
 																			{dest.name}
 																		</div>
-																		<div className="text-xs text-gray-500 truncate">
+																		<div className="text-xs text-muted-foreground-subtle truncate">
 																			{dest.subtitle}
 																		</div>
 																	</div>
@@ -378,19 +378,19 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	});
 																	setMobileWhenOpen(true);
 																}}
-																className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-all text-left"
+																className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted transition-all text-left"
 															>
-																<div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl flex-shrink-0">
-																	<Search className="w-4 h-4 text-gray-500" />
+																<div className="w-10 h-10 bg-muted-strong rounded-lg flex items-center justify-center text-xl flex-shrink-0">
+																	<Search className="w-4 h-4 text-muted-foreground-subtle" />
 																</div>
 																<div className="flex-1 min-w-0">
-																	<div className="font-medium text-gray-900 text-sm">
+																	<div className="font-medium text-foreground text-sm">
 																		Cerca città:{" "}
-																		<span className="text-[#006d77]">
+																		<span className="text-primary">
 																			{mobileSearchInput}
 																		</span>
 																	</div>
-																	<div className="text-xs text-gray-500">
+																	<div className="text-xs text-muted-foreground-subtle">
 																		Cerca eventi in questa zona
 																	</div>
 																</div>
@@ -406,7 +406,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															<motion.button
 																whileTap={{ scale: 0.97 }}
 																onClick={() => setMobileDestExpanded(true)}
-																className="mt-3 w-full flex items-center justify-center gap-1 py-2 text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors"
+																className="mt-3 w-full flex items-center justify-center gap-1 py-2 text-sm font-semibold text-muted-foreground-subtle hover:text-foreground-strong transition-colors"
 															>
 																<ChevronDown className="w-4 h-4" />
 																Mostra più destinazioni
@@ -416,7 +416,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 														<motion.button
 															whileTap={{ scale: 0.97 }}
 															onClick={() => setMobileDestExpanded(false)}
-															className="mt-3 w-full flex items-center justify-center gap-1 py-2 text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors"
+															className="mt-3 w-full flex items-center justify-center gap-1 py-2 text-sm font-semibold text-muted-foreground-subtle hover:text-foreground-strong transition-colors"
 														>
 															<ChevronDown className="w-4 h-4 rotate-180" />
 															Mostra meno
@@ -436,11 +436,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 														<motion.button
 															whileTap={{ scale: 0.9 }}
 															onClick={() => setMobileNearbyOpen(false)}
-															className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+															className="w-8 h-8 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
 														>
-															<ChevronLeft className="w-5 h-5 text-gray-600" />
+															<ChevronLeft className="w-5 h-5 text-muted-foreground" />
 														</motion.button>
-														<h2 className="text-2xl font-bold text-gray-900">
+														<h2 className="text-2xl font-bold text-foreground">
 															Nelle vicinanze
 														</h2>
 													</div>
@@ -454,22 +454,22 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																onClick={() => setMobileCustomRadius(r.value)}
 																className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
 																	mobileCustomRadius === r.value
-																		? "border-[#006d77] bg-[#006d77]/5"
-																		: "border-gray-100 hover:border-gray-200"
+																		? "border-primary bg-primary/5"
+																		: "border-muted-strong hover:border-border"
 																}`}
 															>
 																<div className="text-left">
-																	<div className="font-semibold text-gray-900 text-sm">
+																	<div className="font-semibold text-foreground text-sm">
 																		{r.label}
 																	</div>
-																	<div className="text-xs text-gray-500">
+																	<div className="text-xs text-muted-foreground-subtle">
 																		{r.subtitle}
 																	</div>
 																</div>
 																{mobileCustomRadius === r.value && (
-																	<div className="w-5 h-5 rounded-full bg-[#006d77] flex items-center justify-center">
+																	<div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
 																		<svg
-																			className="w-3 h-3 text-white"
+																			className="w-3 h-3 text-primary-foreground"
 																			fill="none"
 																			viewBox="0 0 24 24"
 																			stroke="currentColor"
@@ -488,12 +488,12 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													</div>
 
 													{/* Slider personalizzato */}
-													<div className="bg-gray-50 rounded-xl p-4 mb-6">
+													<div className="bg-muted rounded-xl p-4 mb-6">
 														<div className="flex items-center justify-between mb-3">
-															<span className="text-sm font-medium text-gray-700">
+															<span className="text-sm font-medium text-foreground-secondary">
 																Distanza personalizzata
 															</span>
-															<span className="text-base font-bold text-[#006d77]">
+															<span className="text-base font-bold text-primary">
 																{mobileCustomRadius} km
 															</span>
 														</div>
@@ -508,10 +508,10 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															}
 															className="w-full h-2 rounded-lg appearance-none cursor-pointer"
 															style={{
-																background: `linear-gradient(to right, #006d77 0%, #006d77 ${((mobileCustomRadius - 5) / 195) * 100}%, #e5e7eb ${((mobileCustomRadius - 5) / 195) * 100}%, #e5e7eb 100%)`,
+																background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((mobileCustomRadius - 5) / 195) * 100}%, var(--border) ${((mobileCustomRadius - 5) / 195) * 100}%, var(--border) 100%)`,
 															}}
 														/>
-														<div className="flex justify-between text-xs text-gray-400 mt-1">
+														<div className="flex justify-between text-xs text-muted-foreground-faint mt-1">
 															<span>5 km</span>
 															<span>200 km</span>
 														</div>
@@ -534,7 +534,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															setMobileNearbyOpen(false);
 															setMobileWhenOpen(true);
 														}}
-														className="w-full py-3 bg-[#006d77] hover:bg-[#00565e] text-white font-semibold rounded-xl transition-colors"
+														className="w-full py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl transition-colors"
 													>
 														Conferma
 													</motion.button>
@@ -546,12 +546,12 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									{/* BOX QUANDO collassato */}
 									<button
 										onClick={() => setMobileWhenOpen(true)}
-										className="w-full bg-white rounded-2xl shadow-sm px-5 py-4 flex items-center justify-between text-left mb-3"
+										className="w-full bg-surface rounded-2xl shadow-sm px-5 py-4 flex items-center justify-between text-left mb-3"
 									>
-										<span className="text-sm text-gray-400 font-medium">
+										<span className="text-sm text-muted-foreground-faint font-medium">
 											Quando
 										</span>
-										<span className="text-sm font-semibold text-gray-900">
+										<span className="text-sm font-semibold text-foreground">
 											{filters.dateFrom && filters.dateTo
 												? `${format(filters.dateFrom, "d MMM", { locale: it })} – ${format(filters.dateTo, "d MMM", { locale: it })}`
 												: "Aggiungi date"}
@@ -576,12 +576,12 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									<div className="px-4 pt-1 pb-2">
 										<button
 											onClick={() => setMobileWhenOpen(false)}
-											className="w-full bg-white rounded-2xl shadow-sm px-5 py-4 flex items-center justify-between text-left"
+											className="w-full bg-surface rounded-2xl shadow-sm px-5 py-4 flex items-center justify-between text-left"
 										>
-											<span className="text-sm text-gray-400 font-medium">
+											<span className="text-sm text-muted-foreground-faint font-medium">
 												Dove
 											</span>
-											<span className="text-sm font-semibold text-gray-900 truncate max-w-[200px]">
+											<span className="text-sm font-semibold text-foreground truncate max-w-[200px]">
 												{filters.location || "Sono flessibile"}
 											</span>
 										</button>
@@ -601,11 +601,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 						</AnimatePresence>
 
 						{/* Footer fisso */}
-						<div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-5 py-4 flex items-center justify-between gap-4 sm:hidden">
+						<div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-muted-strong px-5 py-4 flex items-center justify-between gap-4 sm:hidden">
 							<motion.button
 								whileTap={{ scale: 0.96 }}
 								onClick={handleMobileClear}
-								className="text-sm font-semibold text-gray-700 underline underline-offset-2"
+								className="text-sm font-semibold text-foreground-secondary underline underline-offset-2"
 							>
 								Cancella tutto
 							</motion.button>
@@ -613,7 +613,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 								whileHover={{ scale: 1.02 }}
 								whileTap={{ scale: 0.97 }}
 								onClick={handleMobileSearch}
-								className="flex items-center gap-2 px-6 py-3 bg-[#006d77] hover:bg-[#00565e] text-white font-semibold rounded-full transition-colors shadow-lg"
+								className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-full transition-colors shadow-lg"
 							>
 								<Search className="w-4 h-4" />
 								Cerca
@@ -647,7 +647,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										loading="eager"
 										priority
 									/>
-									<span className="hidden xl:block text-2xl font-bold text-[#006d77]">
+									<span className="hidden xl:block text-2xl font-bold text-primary">
 										Fuorirotta
 									</span>
 								</motion.div>
@@ -656,7 +656,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 
 						{/* Search Bar */}
 						<div ref={searchBarRef} className="w-full max-w-3xl relative">
-							<div className="w-full flex items-center bg-white/90 backdrop-blur-md border border-white/40 rounded-full shadow-lg hover:shadow-xl transition-all px-2 relative">
+							<div className="w-full flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 rounded-full shadow-lg hover:shadow-xl transition-all px-2 relative">
 								{/* Mobile: searchbar */}
 								<div className="sm:hidden flex-1 min-w-0">
 									{!hasActiveFilters ? (
@@ -667,9 +667,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 												setMobileWhenOpen(false);
 												setActiveField("mobile_search");
 											}}
-											className="px-4 py-4 rounded-full cursor-pointer transition-all hover:bg-white/50"
+											className="px-4 py-4 rounded-full cursor-pointer transition-all hover:bg-surface/50"
 										>
-											<button className="flex items-center gap-2 w-full justify-center text-sm font-semibold text-gray-700 cursor-pointer">
+											<button className="flex items-center gap-2 w-full justify-center text-sm font-semibold text-foreground-secondary cursor-pointer">
 												<Search className="w-4 h-4" />
 												<span>Inizia la ricerca</span>
 											</button>
@@ -680,9 +680,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 											<motion.button
 												whileTap={{ scale: 0.9 }}
 												onClick={handleClearSearch}
-												className="w-9 h-9 flex-shrink-0 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+												className="w-9 h-9 flex-shrink-0 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
 											>
-												<ChevronLeft className="w-5 h-5 text-gray-700" />
+												<ChevronLeft className="w-5 h-5 text-foreground-secondary" />
 											</motion.button>
 											<button
 												onClick={() => {
@@ -692,11 +692,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 												}}
 												className="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2"
 											>
-												<span className="text-sm font-semibold text-gray-900 truncate">
+												<span className="text-sm font-semibold text-foreground truncate">
 													{filters.location || "Ovunque"}
 												</span>
-												<span className="text-gray-300 font-light">·</span>
-												<span className="text-sm text-gray-500 truncate flex-shrink-0">
+												<span className="text-disabled-foreground font-light">·</span>
+												<span className="text-sm text-muted-foreground-subtle truncate flex-shrink-0">
 													{filters.dateFrom && filters.dateTo
 														? `${format(filters.dateFrom, "d MMM", { locale: it })} – ${format(filters.dateTo, "d MMM", { locale: it })}`
 														: filters.dateFrom
@@ -714,9 +714,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 								<div className="hidden sm:block flex-1 relative">
 									<div
 										onClick={() => setActiveField("where")}
-										className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-white/50"
+										className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
 									>
-										<label className="text-[10px] sm:text-xs font-semibold text-gray-900 block mb-0.5">
+										<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 											Dove
 										</label>
 										<input
@@ -732,10 +732,10 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													setSelectedRadius(null);
 												}
 											}}
-											className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-gray-400 ${
+											className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-muted-foreground-faint ${
 												isNearbySearch
-													? "text-gray-900 cursor-not-allowed font-medium"
-													: "text-gray-700"
+													? "text-foreground cursor-not-allowed font-medium"
+													: "text-foreground-secondary"
 											}`}
 											onFocus={() => setActiveField("where")}
 											readOnly={isNearbySearch}
@@ -744,7 +744,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									{activeField === "where" && (
 										<motion.div
 											layoutId="activeRing"
-											className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-[#006d77]/5 pointer-events-none"
+											className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
 											transition={{
 												type: "spring",
 												stiffness: 500,
@@ -754,18 +754,18 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									)}
 								</div>
 
-								<div className="hidden sm:block w-px h-8 bg-white/30" />
+								<div className="hidden sm:block w-px h-8 bg-surface/30" />
 
 								{/* Desktop: When Field */}
 								<div className="hidden sm:block flex-1 relative">
 									<div
 										onClick={() => setActiveField("when")}
-										className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-white/50"
+										className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
 									>
-										<label className="text-[10px] sm:text-xs font-semibold text-gray-900 block mb-0.5">
+										<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 											Date
 										</label>
-										<div className="text-xs sm:text-sm text-gray-400 truncate">
+										<div className="text-xs sm:text-sm text-muted-foreground-faint truncate">
 											{filters.dateFrom && filters.dateTo
 												? `${format(filters.dateFrom, "d MMM", { locale: it })} - ${format(filters.dateTo, "d MMM", { locale: it })}`
 												: "Aggiungi date"}
@@ -774,7 +774,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									{activeField === "when" && (
 										<motion.div
 											layoutId="activeRing"
-											className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-[#006d77]/5 pointer-events-none"
+											className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
 											transition={{
 												type: "spring",
 												stiffness: 500,
@@ -794,7 +794,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 											whileHover={{ scale: 1.05 }}
 											whileTap={{ scale: 0.95 }}
 											onClick={handleClearSearch}
-											className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+											className="px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted-strong rounded-full transition-colors"
 										>
 											Cancella
 										</motion.button>
@@ -803,9 +803,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										whileHover={{ scale: 1.05 }}
 										whileTap={{ scale: 0.95 }}
 										onClick={handleSearch}
-										className="w-12 h-12 bg-[#006d77] hover:bg-[#00565e] rounded-full flex items-center justify-center transition-colors"
+										className="w-12 h-12 bg-primary hover:bg-primary-hover rounded-full flex items-center justify-center transition-colors"
 									>
-										<Search className="w-5 h-5 text-white" />
+										<Search className="w-5 h-5 text-primary-foreground" />
 									</motion.button>
 								</div>
 							</div>
@@ -821,7 +821,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										layout: { type: "spring", damping: 30, stiffness: 400 },
 										opacity: { duration: 0.2 },
 									}}
-									className={`absolute top-full mt-4 bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 overflow-hidden
+									className={`absolute top-full mt-4 bg-surface/95 backdrop-blur-md rounded-3xl shadow-2xl border border-surface/30 overflow-hidden
                     ${
 											activeField === "where"
 												? "left-0 right-0 sm:left-0 sm:right-auto sm:w-[500px]"
@@ -839,14 +839,14 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 												transition={{ duration: 0.2 }}
 												className="p-4 sm:p-8"
 											>
-												<h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-4 sm:mb-6">
+												<h3 className="text-xs sm:text-sm font-semibold text-foreground mb-4 sm:mb-6">
 													Destinazioni suggerite
 												</h3>
 												<div className="grid grid-cols-1 gap-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
 													{SUGGESTED_DESTINATIONS.map((dest) => (
 														<motion.button
 															key={dest.name}
-															whileHover={{ backgroundColor: "#f7f7f7" }}
+															whileHover={{ backgroundColor: "var(--muted)" }}
 															whileTap={{ scale: 0.98 }}
 															onClick={() => {
 																if (dest.isNearby) {
@@ -862,16 +862,16 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	setActiveField("when");
 																}
 															}}
-															className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-gray-50 transition-all text-left"
+															className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-muted transition-all text-left"
 														>
-															<div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
+															<div className="w-10 h-10 sm:w-12 sm:h-12 bg-muted-strong rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
 																{getIconForDestination(dest.icon)}
 															</div>
 															<div className="flex-1 min-w-0">
-																<div className="font-medium text-gray-900 text-sm sm:text-base truncate">
+																<div className="font-medium text-foreground text-sm sm:text-base truncate">
 																	{dest.name}
 																</div>
-																<div className="text-xs sm:text-sm text-gray-500 truncate">
+																<div className="text-xs sm:text-sm text-muted-foreground-subtle truncate">
 																	{dest.subtitle}
 																</div>
 															</div>
@@ -896,10 +896,10 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 														onClick={() => setShowRadiusSelector(false)}
 														whileHover={{ scale: 1.05 }}
 														whileTap={{ scale: 0.95 }}
-														className="w-7 h-7 sm:w-8 sm:h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+														className="w-7 h-7 sm:w-8 sm:h-8 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
 													>
 														<svg
-															className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600"
+															className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground"
 															fill="none"
 															stroke="currentColor"
 															viewBox="0 0 24 24"
@@ -912,7 +912,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															/>
 														</svg>
 													</motion.button>
-													<h3 className="text-xs sm:text-sm font-semibold text-gray-900">
+													<h3 className="text-xs sm:text-sm font-semibold text-foreground">
 														Seleziona il raggio
 													</h3>
 												</div>
@@ -920,7 +920,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													{RADIUS_OPTIONS.map((radius) => (
 														<motion.button
 															key={radius.value}
-															whileHover={{ backgroundColor: "#f7f7f7" }}
+															whileHover={{ backgroundColor: "var(--muted)" }}
 															whileTap={{ scale: 0.98 }}
 															onClick={() => {
 																setSelectedRadius(radius.value);
@@ -936,16 +936,16 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																setShowRadiusSelector(false);
 																setActiveField("when");
 															}}
-															className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-gray-50 transition-all text-left"
+															className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-muted transition-all text-left"
 														>
-															<div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
+															<div className="w-10 h-10 sm:w-12 sm:h-12 bg-muted-strong rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
 																📍
 															</div>
 															<div className="flex-1">
-																<div className="font-medium text-gray-900 text-sm sm:text-base">
+																<div className="font-medium text-foreground text-sm sm:text-base">
 																	{radius.label}
 																</div>
-																<div className="text-xs sm:text-sm text-gray-500">
+																<div className="text-xs sm:text-sm text-muted-foreground-subtle">
 																	{radius.subtitle}
 																</div>
 															</div>
@@ -954,12 +954,12 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 
 													{/* Custom Radius */}
 													<div className="border-t pt-3 sm:pt-4 mt-2">
-														<div className="p-3 sm:p-4 rounded-xl bg-gray-50">
+														<div className="p-3 sm:p-4 rounded-xl bg-muted">
 															<div className="flex items-center justify-between mb-3 sm:mb-4">
-																<div className="font-medium text-gray-900 text-sm sm:text-base">
+																<div className="font-medium text-foreground text-sm sm:text-base">
 																	Distanza personalizzata
 																</div>
-																<div className="text-xl sm:text-2xl font-bold text-[#006d77]">
+																<div className="text-xl sm:text-2xl font-bold text-primary">
 																	{customRadius} km
 																</div>
 															</div>
@@ -973,12 +973,12 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	onChange={(e) =>
 																		setCustomRadius(Number(e.target.value))
 																	}
-																	className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+																	className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer"
 																	style={{
-																		background: `linear-gradient(to right, #006d77 0%, #006d77 ${((customRadius - 5) / 195) * 100}%, #e5e7eb ${((customRadius - 5) / 195) * 100}%, #e5e7eb 100%)`,
+																		background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((customRadius - 5) / 195) * 100}%, var(--border) ${((customRadius - 5) / 195) * 100}%, var(--border) 100%)`,
 																	}}
 																/>
-																<div className="flex justify-between text-xs text-gray-500 mt-1">
+																<div className="flex justify-between text-xs text-muted-foreground-subtle mt-1">
 																	<span>5 km</span>
 																	<span>200 km</span>
 																</div>
@@ -1000,7 +1000,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	setShowRadiusSelector(false);
 																	setActiveField("when");
 																}}
-																className="w-full px-4 py-2 bg-gradient-to-r from-[#006d77] to-[#83c5be] text-white font-semibold rounded-lg hover:shadow-lg transition-all"
+																className="w-full px-4 py-2 bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold rounded-lg hover:shadow-lg transition-all"
 															>
 																Applica
 															</motion.button>
@@ -1039,7 +1039,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	dateTo: null,
 																})
 															}
-															className="text-sm font-semibold text-gray-600 hover:text-gray-900 underline"
+															className="text-sm font-semibold text-muted-foreground hover:text-foreground underline"
 														>
 															Cancella date
 														</button>

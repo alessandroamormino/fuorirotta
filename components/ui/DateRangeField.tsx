@@ -71,7 +71,7 @@ export default function DateRangeField({
 				{["L", "M", "M", "G", "V", "S", "D"].map((day, i) => (
 					<div
 						key={i}
-						className="text-center text-[10px] font-semibold text-gray-400 py-2"
+						className="text-center text-[10px] font-semibold text-muted-foreground-faint py-2"
 					>
 						{day}
 					</div>
@@ -97,12 +97,12 @@ export default function DateRangeField({
 							disabled={!isCurrentMonth || isPast}
 							className={`
                 aspect-square flex items-center justify-center text-sm rounded-full transition-all
-                ${!isCurrentMonth ? "text-gray-200" : ""}
-                ${isPast ? "text-gray-300 cursor-not-allowed" : ""}
-                ${isStart || isEnd ? "bg-gradient-to-r from-[#006d77] to-[#83c5be] text-white font-bold" : ""}
-                ${inRange && !isStart && !isEnd ? "bg-[#006d77]/10" : ""}
-                ${!inRange && !isPast && isCurrentMonth ? "hover:bg-gray-100" : ""}
-                ${isToday(date) && !isStart && !isEnd ? "border-2 border-[#006d77]" : ""}
+                ${!isCurrentMonth ? "text-border" : ""}
+                ${isPast ? "text-disabled-foreground cursor-not-allowed" : ""}
+                ${isStart || isEnd ? "bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold" : ""}
+                ${inRange && !isStart && !isEnd ? "bg-primary/10" : ""}
+                ${!inRange && !isPast && isCurrentMonth ? "hover:bg-muted-strong" : ""}
+                ${isToday(date) && !isStart && !isEnd ? "border-2 border-primary" : ""}
               `}
 						>
 							{format(date, "d")}
@@ -115,16 +115,16 @@ export default function DateRangeField({
 
 	if (variant === "mobile") {
 		return (
-			<div className="flex-1 overflow-hidden mx-4 mb-32 bg-white rounded-2xl shadow-sm flex flex-col">
+			<div className="flex-1 overflow-hidden mx-4 mb-32 bg-surface rounded-2xl shadow-sm flex flex-col">
 				{/* Header fisso "Quando?" */}
 				<div className="px-5 pt-5 pb-3 flex-shrink-0">
-					<h2 className="text-2xl font-bold text-gray-900">Quando?</h2>
+					<h2 className="text-2xl font-bold text-foreground">Quando?</h2>
 					{/* Intestazione giorni settimana fissa */}
 					<div className="grid grid-cols-7 gap-0.5 mt-4">
 						{["L", "M", "M", "G", "V", "S", "D"].map((day, i) => (
 							<div
 								key={i}
-								className="text-center text-[10px] font-semibold text-gray-400 py-1"
+								className="text-center text-[10px] font-semibold text-muted-foreground-faint py-1"
 							>
 								{day}
 							</div>
@@ -139,7 +139,7 @@ export default function DateRangeField({
 						const days = getDaysInMonth(month);
 						return (
 							<div key={offset} className="mb-6">
-								<h3 className="font-bold text-gray-900 text-base mb-3">
+								<h3 className="font-bold text-foreground text-base mb-3">
 									{format(month, "MMMM yyyy", { locale: it })}
 								</h3>
 								<div className="grid grid-cols-7 gap-0.5">
@@ -165,12 +165,12 @@ export default function DateRangeField({
 												disabled={!isCurrentMonth || isPast}
 												className={`
 													aspect-square flex items-center justify-center text-sm rounded-full transition-all
-													${!isCurrentMonth ? "text-gray-200" : ""}
-													${isPast ? "text-gray-300 cursor-not-allowed" : ""}
-													${isStart || isEnd ? "bg-gradient-to-r from-[#006d77] to-[#83c5be] text-white font-bold" : ""}
-													${inRange && !isStart && !isEnd ? "bg-[#006d77]/10" : ""}
-													${!inRange && !isPast && isCurrentMonth ? "hover:bg-gray-100" : ""}
-													${isToday(date) && !isStart && !isEnd ? "border-2 border-[#006d77]" : ""}
+													${!isCurrentMonth ? "text-border" : ""}
+													${isPast ? "text-disabled-foreground cursor-not-allowed" : ""}
+													${isStart || isEnd ? "bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold" : ""}
+													${inRange && !isStart && !isEnd ? "bg-primary/10" : ""}
+													${!inRange && !isPast && isCurrentMonth ? "hover:bg-muted-strong" : ""}
+													${isToday(date) && !isStart && !isEnd ? "border-2 border-primary" : ""}
 												`}
 											>
 												{format(date, "d")}
@@ -193,11 +193,11 @@ export default function DateRangeField({
 				<div className="flex items-center justify-between mb-4">
 					<button
 						onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-						className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+						className="p-2 hover:bg-muted-strong rounded-full transition-colors"
 					>
 						<ChevronLeft className="w-5 h-5" />
 					</button>
-					<h3 className="font-bold text-gray-900 text-base">
+					<h3 className="font-bold text-foreground text-base">
 						{format(currentMonth, "MMMM yyyy", { locale: it })}
 					</h3>
 					<div className="w-9" />
@@ -209,12 +209,12 @@ export default function DateRangeField({
 			<div className="flex-1">
 				<div className="flex items-center justify-between mb-4">
 					<div className="w-9" />
-					<h3 className="font-bold text-gray-900 text-base">
+					<h3 className="font-bold text-foreground text-base">
 						{format(addMonths(currentMonth, 1), "MMMM yyyy", { locale: it })}
 					</h3>
 					<button
 						onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-						className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+						className="p-2 hover:bg-muted-strong rounded-full transition-colors"
 					>
 						<ChevronRight className="w-5 h-5" />
 					</button>
