@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { EventCacheProvider } from "@/lib/eventCache";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -71,10 +72,29 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="it">
+		<html lang="it" suppressHydrationWarning>
+			<head>
+				<script
+					dangerouslySetInnerHTML={{
+						__html: `
+							(function () {
+								try {
+									var stored = localStorage.getItem('theme');
+									if (stored === 'dark') {
+										document.documentElement.classList.add('dark');
+									} else if (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+										document.documentElement.classList.add('dark');
+									}
+								} catch (e) {}
+							})();
+						`,
+					}}
+				/>
+			</head>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
+				<ThemeToggle />
 				<EventCacheProvider>
 					{children}
 				</EventCacheProvider>
