@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Event } from "@/lib/types";
@@ -17,8 +17,16 @@ interface EventsMapProps {
 	userLocation?: { lat: number; lng: number } | null;
 }
 
+const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/streets-v12";
+const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
+
+const EMPTY_GEOJSON: GeoJSON.FeatureCollection = {
+	type: "FeatureCollection",
+	features: [],
+};
+
 // Unica lettura dei token a runtime: chiamata dentro addEventLayers (invocata
-// dall'handler "load", mai a livello di modulo o al solo mount).
+// dall'handler "load"/"style.load", mai a livello di modulo o al solo mount).
 function readThemeColors() {
 	const style = getComputedStyle(document.documentElement);
 	const get = (name: string) => style.getPropertyValue(name).trim();
@@ -125,6 +133,7 @@ export default function EventsMap({
 	const layersInitializedRef = useRef(false);
 	const handlersRegisteredRef = useRef(false);
 	const lastGeoJSONRef = useRef<GeoJSON.FeatureCollection | null>(null);
+	const [isThemeTransitioning, setIsThemeTransitioning] = useState(false);
 
 	useEffect(() => {
 		if (!mapContainerRef.current) return;
@@ -132,9 +141,15 @@ export default function EventsMap({
 		// Inizializza la mappa
 		mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
+		// Lo script anti-FOUC applica .dark su <html> prima dell'idratazione,
+		// quindi questa lettura al mount è affidabile (Pitfall 2 di 07-RESEARCH.md).
+		const initialStyle = document.documentElement.classList.contains("dark")
+			? MAP_STYLE_DARK
+			: MAP_STYLE_LIGHT;
+
 		mapRef.current = new mapboxgl.Map({
 			container: mapContainerRef.current,
-			style: "mapbox://styles/mapbox/streets-v12",
+			style: initialStyle,
 			center: [9.1859, 45.4654], // [lng, lat] - Milano
 			zoom: 8,
 			touchZoomRotate: true,
@@ -152,6 +167,31 @@ export default function EventsMap({
 			mapRef.current?.remove();
 			mapRef.current = null;
 		};
+	}, []);
+
+	// Reagisci al cambio tema: scambia lo style Mapbox e ri-aggiungi source/layer
+	// dentro style.load, mostrando un velo finché i marker non sono tornati.
+	useEffect(() => {
+		const handleThemeChange = () => {
+			const map = mapRef.current;
+			if (!map) return;
+
+			const isDark = document.documentElement.classList.contains("dark");
+			setIsThemeTransitioning(true);
+			map.setStyle(isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT);
+			// Dopo setStyle() source e layer non esistono più (comportamento
+			// documentato di Mapbox GL, non un difetto del progetto).
+			layersInitializedRef.current = false;
+
+			map.once("style.load", () => {
+				addEventLayers(map, lastGeoJSONRef.current ?? EMPTY_GEOJSON);
+				layersInitializedRef.current = true;
+				setIsThemeTransitioning(false);
+			});
+		};
+
+		window.addEventListener("theme-change", handleThemeChange);
+		return () => window.removeEventListener("theme-change", handleThemeChange);
 	}, []);
 
 	// Aggiorna i marker quando cambiano gli eventi
@@ -480,5 +520,15 @@ export default function EventsMap({
 		};
 	}, [userLocation]);
 
-	return <div ref={mapContainerRef} className="w-full h-full" />;
+	return (
+		<div className="relative w-full h-full">
+			<div ref={mapContainerRef} className="w-full h-full" />
+			{isThemeTransitioning && (
+				<div
+					className="absolute inset-0 bg-surface pointer-events-none"
+					aria-hidden="true"
+				/>
+			)}
+		</div>
+	);
 }
