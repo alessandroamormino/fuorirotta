@@ -99,7 +99,7 @@ export default function DateRangeField({
                 aspect-square flex items-center justify-center text-sm rounded-full transition-all
                 ${!isCurrentMonth ? "text-border" : ""}
                 ${isPast ? "text-disabled-foreground cursor-not-allowed" : ""}
-                ${isStart || isEnd ? "bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold" : ""}
+                ${isStart || isEnd ? "bg-primary text-primary-foreground font-bold" : ""}
                 ${inRange && !isStart && !isEnd ? "bg-primary/10" : ""}
                 ${!inRange && !isPast && isCurrentMonth ? "hover:bg-muted-strong" : ""}
                 ${isToday(date) && !isStart && !isEnd ? "border-2 border-primary" : ""}
@@ -167,7 +167,7 @@ export default function DateRangeField({
 													aspect-square flex items-center justify-center text-sm rounded-full transition-all
 													${!isCurrentMonth ? "text-border" : ""}
 													${isPast ? "text-disabled-foreground cursor-not-allowed" : ""}
-													${isStart || isEnd ? "bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold" : ""}
+													${isStart || isEnd ? "bg-primary text-primary-foreground font-bold" : ""}
 													${inRange && !isStart && !isEnd ? "bg-primary/10" : ""}
 													${!inRange && !isPast && isCurrentMonth ? "hover:bg-muted-strong" : ""}
 													${isToday(date) && !isStart && !isEnd ? "border-2 border-primary" : ""}

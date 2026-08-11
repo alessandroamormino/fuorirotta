@@ -122,7 +122,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						</p>
 						<button
 							onClick={() => router.push("/")}
-							className="px-6 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground rounded-full font-semibold hover:shadow-lg transition-shadow"
+							className="px-6 py-3 bg-primary text-primary-foreground rounded-full font-semibold hover:shadow-lg transition-shadow"
 						>
 							Torna agli eventi
 						</button>

@@ -1000,7 +1000,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	setShowRadiusSelector(false);
 																	setActiveField("when");
 																}}
-																className="w-full px-4 py-2 bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold rounded-lg hover:shadow-lg transition-all"
+																className="w-full px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:shadow-lg transition-all"
 															>
 																Applica
 															</motion.button>

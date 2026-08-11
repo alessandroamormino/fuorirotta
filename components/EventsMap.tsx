@@ -390,7 +390,7 @@ export default function EventsMap({
 							}
 							<a
 								href="/eventi/${safeId}"
-								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: linear-gradient(to right, ${colors.primary}, ${colors.accent}); color: ${colors.primaryForeground}; font-weight: 600; border-radius: var(--r-xl); text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: ${CTA_SHADOW};"
+								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: ${colors.primary}; color: ${colors.primaryForeground}; font-weight: 600; border-radius: var(--r-xl); text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: ${CTA_SHADOW};"
 								onmouseover="this.style.boxShadow='${CTA_SHADOW_HOVER}'"
 								onmouseout="this.style.boxShadow='${CTA_SHADOW}'"
 							>
