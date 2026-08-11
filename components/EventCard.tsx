@@ -24,7 +24,7 @@ export default function EventCard({ event }: EventCardProps) {
 							className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
 						/>
 					) : (
-						<div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-accent-tint via-accent/20 to-primary/10">
+						<div className="w-full h-full flex items-center justify-center bg-muted">
 							<div className="flex flex-col items-center gap-1 sm:gap-3">
 								<div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
 									<Calendar className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />

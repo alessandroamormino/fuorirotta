@@ -245,6 +245,10 @@ input[type="range"].slider::-moz-range-thumb:hover {
   border-radius: var(--r-xl) !important;
   padding: 0 !important;
   box-shadow: var(--sh-xl) !important;
+  /* Senza questo resta il bianco di default di Mapbox, mentre il contenuto del
+     popup usa --foreground: in tema scuro diventa testo chiaro su fondo bianco. */
+  background: var(--surface) !important;
+  color: var(--foreground) !important;
 }
 
 .mapboxgl-popup-tip {

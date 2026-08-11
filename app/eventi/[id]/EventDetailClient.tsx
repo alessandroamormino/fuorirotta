@@ -14,7 +14,7 @@ import { decodeHtmlEntities } from "@/lib/utils";
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
 	loading: () => (
-		<div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl">
+		<div className="w-full h-full flex items-center justify-center bg-muted rounded-2xl">
 			<div className="text-muted-foreground-subtle">Caricamento mappa...</div>
 		</div>
 	),
@@ -173,7 +173,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						<motion.div
 							initial={{ opacity: 0, y: 20 }}
 							animate={{ opacity: 1, y: 0 }}
-							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-accent/30 bg-gradient-to-br from-accent-tint via-accent/20 to-primary/10 flex items-center justify-center"
+							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-accent/30 bg-muted flex items-center justify-center"
 						>
 							<div className="flex flex-col items-center gap-6">
 								<div className="w-32 h-32 rounded-full bg-primary/10 flex items-center justify-center">
