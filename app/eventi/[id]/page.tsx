@@ -123,7 +123,14 @@ export default async function EventDetailPage({
 			{jsonLd && (
 				<script
 					type="application/ld+json"
-					dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+					// JSON.stringify non esegue l'escaping di `<`: un `</script>` dentro un
+					// campo scrapato (title, location.name, address, imageUrl — nessuno dei
+					// quali viene strippato) chiuderebbe il tag in anticipo. Peggio ancora,
+					// decodeHtmlEntities riconverte `&lt;` in `<`, trasformando la forma
+					// gia' innocua nel payload. Escapando `<` il vettore si chiude.
+					dangerouslySetInnerHTML={{
+						__html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+					}}
 				/>
 			)}
 			<EventDetailClient initialEvent={serializedEvent} />

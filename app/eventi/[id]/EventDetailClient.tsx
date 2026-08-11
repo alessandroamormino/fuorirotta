@@ -301,10 +301,13 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 									<h2 className="text-2xl font-bold text-foreground mb-4">
 										Descrizione
 									</h2>
-									<div
-										className="text-foreground-secondary leading-relaxed prose prose-sm max-w-none"
-										dangerouslySetInnerHTML={{ __html: event.description }}
-									/>
+									{/* Reso come testo, non come HTML: le descrizioni sono testo puro
+								    (solosagre e inlombardia strippano i tag alla fonte, opendata
+								    restituisce il campo grezzo dell'API). dangerouslySetInnerHTML
+								    qui era solo una via d'ingresso XSS da contenuto scrapato — T-07-09. */}
+								<div className="text-foreground-secondary leading-relaxed prose prose-sm max-w-none whitespace-pre-line">
+										{event.description}
+									</div>
 									<p className="text-xs text-muted-foreground-subtle">Fonte: {event.source}</p>
 								</motion.div>
 							)}
