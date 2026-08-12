@@ -432,7 +432,7 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
     }
 
     return { detail: { description, venueName, fullAddress, phone, latitude, longitude } }
-  } catch (error) {
+  } catch {
     // On error, return null data (graceful degradation) — comportamento identico a prima
     return { detail: { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null } }
   }
