@@ -1,0 +1,30 @@
+# Postgres locale per sviluppo e test.
+# Non ha niente a che vedere con docker-compose.yml, che e' il deploy di produzione:
+# questo file non viene mai copiato sul server.
+#
+# ponytail: la versione di Postgres qui e' un'ipotesi, non un dato letto dalla
+# produzione. Se il DB di produzione gira su una major diversa, allineala con
+# POSTGRES_VERSION=<major> prima di fidarti dei test locali su comportamenti
+# specifici della versione (collation, ordinamenti, funzioni di data).
+services:
+  postgres-dev:
+    image: postgres:${POSTGRES_VERSION:-16}-alpine
+    container_name: fuorirotta-postgres-dev
+    environment:
+      POSTGRES_USER: fuorirotta
+      POSTGRES_PASSWORD: fuorirotta
+      POSTGRES_DB: fuorirotta_dev
+    ports:
+      # 5433 sull'host: lascia libera la 5432 per qualunque altro Postgres locale.
+      - "5433:5432"
+    volumes:
+      - fuorirotta-pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuorirotta -d fuorirotta_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  fuorirotta-pgdata-dev:
