@@ -5,7 +5,7 @@
  * Fetches event listings, parses HTML with regex, and transforms to Event schema.
  */
 
-import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
+import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
 
 interface ParsedEvent {
@@ -26,7 +26,7 @@ interface ParseOutcome {
   error?: string
 }
 
-export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<ScrapeResult> {
+export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<AdapterResult> {
   const startTime = Date.now()
 
   try {
