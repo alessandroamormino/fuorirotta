@@ -34,6 +34,18 @@ interface DetailData {
   longitude: number | null
 }
 
+// Stessa forma di ParseOutcome in solosagre.ts, dichiarata localmente per file (Fase 8).
+// `error` non e' mai valorizzato oggi: il fail-loudly di D-07 arriva con cheerio in 08-03.
+interface ParseOutcome {
+  events: ParsedEvent[]
+  error?: string
+}
+
+interface DetailParseOutcome {
+  detail: DetailData
+  error?: string
+}
+
 export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<ScrapeResult> {
   const startTime = Date.now()
 
@@ -42,7 +54,7 @@ export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<Scra
     const html = await fetchAllPages(params)
 
     // Step 2: Parse HTML to extract events
-    const parsedEvents = parseHTML(html)
+    const parsedEvents = parseInLombardiaCards(html).events
 
     // Step 3: Fetch detail pages for rich data
     const detailDataMap = await fetchDetailPages(parsedEvents)
@@ -207,14 +219,14 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   return allHtml
 }
 
-function parseHTML(html: string): ParsedEvent[] {
+export function parseInLombardiaCards(html: string): ParseOutcome {
   const events: ParsedEvent[] = []
 
   // Regex pattern: Find all <article class="...c-card..."> blocks
   const cardMatches = html.match(/<article[^>]*class="[^"]*c-card[^"]*"[^>]*>([\s\S]*?)<\/article>/g)
 
   if (!cardMatches) {
-    return events
+    return { events }
   }
 
   cardMatches.forEach(card => {
@@ -276,7 +288,7 @@ function parseHTML(html: string): ParsedEvent[] {
     }
   })
 
-  return events
+  return { events }
 }
 
 async function fetchDetailPage(url: string): Promise<DetailData> {
@@ -289,6 +301,17 @@ async function fetchDetailPage(url: string): Promise<DetailData> {
     })
     const html = await response.text()
 
+    return parseInLombardiaDetail(html).detail
+  } catch (error) {
+    // On error, return null data (graceful degradation)
+    return { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null }
+  }
+}
+
+// Riceve l'HTML gia' scaricato e non fa alcuna rete: fetchDetailPage resta responsabile
+// del solo fetchWithRetry. Corpo identico a prima dell'estrazione, zero logica nuova.
+export function parseInLombardiaDetail(html: string): DetailParseOutcome {
+  try {
     let description: string | null = null
     let venueName: string | null = null
     let fullAddress: string | null = null
@@ -408,10 +431,10 @@ async function fetchDetailPage(url: string): Promise<DetailData> {
       }
     }
 
-    return { description, venueName, fullAddress, phone, latitude, longitude }
-  } catch (error) {
-    // On error, return null data (graceful degradation)
-    return { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null }
+    return { detail: { description, venueName, fullAddress, phone, latitude, longitude } }
+  } catch {
+    // On error, return null data (graceful degradation) — comportamento identico a prima
+    return { detail: { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null } }
   }
 }
 

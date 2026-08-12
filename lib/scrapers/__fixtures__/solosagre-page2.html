@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Sagre in Lombardia oggi su Solo Sagre</title>		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+		<meta http-equiv="content-language" content="it" />		<meta name="description" content="In questa sezione trovi tutte le sagre in Lombardia che si tengono sia oggi che nelle prossime settimane." />						<meta id="viewport" name="viewport" content="width=1116, user-scalable=yes">
+		<script type="text/javascript">
+			if ( screen.width < 768 ) {
+				var vp = document.getElementById('viewport');
+				vp.setAttribute('content','width=device-width, user-scalable=no');
+			}
+		</script>
+		<link href="/_tmpl/solosagre/assets/css/style.css?v=31" rel="stylesheet" type="text/css">		<link href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.3.5/jquery.fancybox.min.css" rel="stylesheet" />
+		<link href="/_tmpl/solosagre/assets/libs/select2-4.0.13/css/select2.min.css" rel="stylesheet" />		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;600;700&display=swap" rel="stylesheet">
+		<link rel="stylesheet" href="https://www.solosagre.it/css/fontawesome-5.15.4/css/all.min.css">		<link rel="shortcut icon" href="/_tmpl/solosagre/assets/images/brand/solosagre-favicon.ico">		<link rel="icon" type="image/png" sizes="16x16" href="/_tmpl/solosagre/assets/images/brand/solosagre-favicon-16x16.png">		<link rel="icon" type="image/png" sizes="32x32" href="/_tmpl/solosagre/assets/images/brand/solosagre-favicon-32x32.png">		<link rel="icon" type="image/png" sizes="57x57" href="/_tmpl/solosagre/assets/images/brand/solosagre-favicon-57x57.png">		<link rel="icon" type="image/png" sizes="96x96" href="/_tmpl/solosagre/assets/images/brand/solosagre-favicon-96x96.png">		<link rel="icon" type="image/png" sizes="120x120" href="/_tmpl/solosagre/assets/images/brand/solosagre-favicon-120x120.png">		<link rel="icon" type="image/png" sizes="180x180" href="/_tmpl/solosagre/assets/images/brand/solosagre-favicon-180x180.png">		<link rel="canonical" href="https://www.solosagre.it/sagre/lombardia/2/">		<meta property="og:image" content="https://www.solosagre.it/_tmpl/solosagre/assets/images/brand/solosagre-social-share.png" />		<meta property="article:author" content="https://www.facebook.com/solosagre" />
+		<script type="text/javascript" src="/javascript/common.js?v=31"></script>		<script type="text/javascript" src="/javascript/form/general.js?v=31"></script>		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+		<script type="text/javascript" src="/_tmpl/solosagre/assets/js/script.js?v=31"></script>		<script type="text/javascript" src="/_tmpl/solosagre/assets/js/jquery.fancybox.min.js?v=3.3.5"></script>		<script src="/_tmpl/solosagre/assets/libs/select2-4.0.13/js/select2.min.js"></script>						<script type="text/javascript">
+			baseUrl = 'https://www.solosagre.it';			$(document).ready(function() {
+				jQuery("[data-fancybox]").fancybox({
+					idleTime: 1000,
+					buttons: [
+						"zoom",
+						"share",
+						"slideShow",
+						"fullScreen",
+						"close"
+					],
+					lang: "it",					i18n: {
+						en: {
+							CLOSE: "Close",
+							NEXT: "Next",
+							PREV: "Previous",
+							ERROR: "The requested content cannot be loaded. <br/> Please try again later.",
+							PLAY_START: "Start slideshow",
+							PLAY_STOP: "Pause slideshow",
+							FULL_SCREEN: "Full screen",
+							THUMBS: "Thumbnails",
+							DOWNLOAD: "Download",
+							SHARE: "Share",
+							ZOOM: "Zoom"
+						},
+						it: {
+							CLOSE: "Chiudi",
+							NEXT: "Successivo",
+							PREV: "Precedente",
+							ERROR: "Non è possibile caricare il contentuti richiesto. <br/> Si prega di riprovare più tardi.",
+							PLAY_START: "Avvio lo slideshow",
+							PLAY_STOP: "Metti in pausa lo slideshow",
+							FULL_SCREEN: "Schemro intero",
+							THUMBS: "Miniature",
+							DOWNLOAD: "Scarica",
+							SHARE: "Condividi",
+							ZOOM: "Zoom"
+						}
+					},
+					iframe : {
+						preload : false
+					}
+				});
+				$('.post .postContentDescription img, .post .postContentSide img').on('click', function() {
+					console.log($(this).attr('src'));
+					if ( $(this).parents('a').length == 0 ) {
+						$.fancybox.open([{
+							src: $(this).attr('src'),
+							opts: {
+								buttons: [
+									"zoom",
+									"share",
+									"slideShow",
+									"fullScreen",
+									"close"
+								]
+							}
+						}]);
+					}
+				});
+				if ( jQuery('#fld_region').length>0 ) {
+					updateCascadingSelectBox('fld_region', 'fld_area');
+					jQuery('#fld_region').change(function () {
+						updateCascadingSelectBox('fld_region', 'fld_area');
+						updateCitySelectBox();
+					});
+					jQuery('#fld_area').change(function () {
+						updateCitySelectBox();
+					});
+				}
+			});
+		</script>
+		
+								<script src="https://analytics.ahrefs.com/analytics.js" data-key="TfqfIS7LuyYeqjLymbrOiA" async></script>						
+				
+		<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-T6R7R86');</script>
+<!-- End Google Tag Manager -->		
+			</head>
+	<body>
+		<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T6R7R86"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->		
+								<div id="container">			<header id="header">
+				<div id="headerMain">
+					<div class="wrapper">
+						<div id="headerLogo">
+							<h2 class="logo">
+								<a href="https://www.solosagre.it/">									<img src="/_tmpl/solosagre/assets/images/brand/solosagre-logo-web-light.png" alt="Solo Sagre">								</a>							</h2>
+						</div>
+						<div id="headerIcons">
+							<a id="showSearch" href="#search" data-fancybox data-src="#search">
+								<i class="fas fa-search"></i>
+							</a>
+							<a id="menuPull" href="#">
+								<i class="fas fa-bars"></i>
+							</a>
+						</div>
+					</div>
+				</div>
+				<div id="headerContent">
+					<div id="mainMenu">
+						<div class="wrapper">
+							<ul>
+																											<li class="x"><a href="/sagre/lombardia/" title="">Sagre Lombardia</a></li>																													<li class="x"><a href="/sagre/lazio/" title="">Sagre Lazio</a></li>																													<li class="x"><a href="/sagre/" title="">Sagre</a></li>																																			<li class="item menu first">
+									<a>Eventi</a>																			<ul class="subMenu">
+																							<li class="item menu"><a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/enogastronomia/">Enogastronomia e Street Food</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/festivita-e-folklore/">Festività e Folklore</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/mostre-e-mercatini/">Fiere, Mostre e Mercati</a></li>																					</ul>
+																	</li>
+																	<li class="item menu">
+										<a>Le regioni d'Italia</a>										<ul class="subMenu">
+																							<li class="item menu"><a href="https://www.solosagre.it/eventi/abruzzo/">Abruzzo</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/basilicata/">Basilicata</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/calabria/">Calabria</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/campania/">Campania</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/emilia-romagna/">Emilia-Romagna</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/friuli-venezia-giulia/">Friuli Venezia Giulia</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/lazio/">Lazio</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/liguria/">Liguria</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/lombardia/">Lombardia</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/marche/">Marche</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/molise/">Molise</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/piemonte/">Piemonte</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/puglia/">Puglia</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/sardegna/">Sardegna</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/sicilia/">Sicilia</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/toscana/">Toscana</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/trentino-alto-adige/">Trentino-Alto Adige</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/umbria/">Umbria</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/valle-d-aosta/">Valle d'Aosta</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/eventi/veneto/">Veneto</a></li>																					</ul>
+									</li>
+																									<li class="item menu">
+										<a>Temi</a>										<ul class="subMenu">
+																							<li class="item menu"><a href="https://www.solosagre.it/tag/antiche-fiere/">Antiche Fiere</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/area-camper/">Area Camper</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/arrosticini/">Arrosticini</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/artigianato/">Artigianato</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/benessere/">Benessere</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/birra/">Birra</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/bistecca/">Bistecca</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/cacciagione/">Cacciagione</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/carnevale/">Carnevale</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/castagne/">Castagne</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/cibo-di-strada/">Cibo di strada</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/eventi-storici/">Eventi Storici</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/floreali/">Floreali</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/funghi/">Funghi</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/gastronomia/">Gastronomia</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/gluten-free/">Gluten Free</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/insolite/">Insolite</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/maiale/">Maiale</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/moto/">Moto</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/natale/">Natale</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/olio-extravergine-di-oliva/">Olio extravergine di oliva</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/paesane/">Paesane</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/patronali/">Patronali</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/pesce/">Pesce</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/polenta/">Polenta</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/popolari/">Popolari</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/primi-piatti/">Primi piatti</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/religiose/">Religiose</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/riso/">Riso</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/sociale/">Sociale</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/sport-e-gusto/">Sport e Gusto</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/vegan/">Vegan</a></li>																							<li class="item menu"><a href="https://www.solosagre.it/tag/vino/">Vino</a></li>																					</ul>
+									</li>
+																																			<li><a href="/fornitori/" title="">Fornitori eventi</a></li>																																			<!--<li class="item menu last"><a href="https://www.solosagre.it/magazine/">Magazine</a></li>-->							</ul>
+						</div>
+					</div>
+					<div id="headerAdditional">
+						<div class="wrapper">
+							<ul id="headerMenu">
+																											<li><a href="https://www.solosagre.it/info/chi-siamo/" title="">Chi siamo</a></li>																			<li><a href="/info/segnalazione-eventi/" title="">Segnalazione eventi</a></li>																			<li><a href="/archivio/" title="">Archivio</a></li>																			<li><a href="/info/lavora-con-noi/" title="">Lavora con noi </a></li>																			<li><a href="/info/contatti/" title="">Contatti</a></li>																								</ul>
+																						<div id="headerSocial">
+																			<a href="https://www.facebook.com/solosagre/" title="Seguici su Facebook"><img src="/_tmpl/solosagre/assets/images/social/facebook.png" alt="Facebook" /></a>																			<a href="https://www.instagram.com/solosagre.it/" title="Seguici su Instagram"><img src="/_tmpl/solosagre/assets/images/social/instagram.png" alt="Instagram" /></a>																	</div>
+														<div class="clearBoth"></div>
+						</div>
+					</div>
+				</div>
+			</header><!-- #header -->
+						<main id="main">				
+								
+				<div class="wrapper">
+					
+																		<div id="breadcrumbs">
+																	<a href="https://www.solosagre.it/">Home page</a>																	&gt; <a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>																	&gt; Lombardia															</div>
+																
+										<div id="content">
+	<section class="postListBox mainSection">
+		<h1>Sagre in Lombardia Oggi su Solo Sagre</h1>		
+				
+		<div id="contentBanner" class="banner">
+					</div>
+		
+					
+			<div class="postList ">									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/bs/roccafranca/sagra-del-quaranti.html">								<img alt="Sagra del Quarantì" src="/_data/upload/thumb/sagra-del-quaranti-1.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/bs/roccafranca/sagra-del-quaranti.html" itemprop="url"><span itemprop="name">Sagra del Quarantì</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-08-27">27/08/2026</time> al <time itemprop="endDate" datetime="2026-08-30">30/08/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Roccafranca</span></strong> (<span class="region">Lombardia</span>, <span class="province">bs</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">La Sagra del Quarant&igrave; torna dal 27 al 30 agosto 2065 a Roccafranca (BS).
+
+Anche questa 16&ordf; edizione sar&agrave; incentrata sulla tradizione del Quarantino: il mais tipico della Bassa Bresciana, che matura in soli 40 giorni e che ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/bs/roccafranca/sagra-del-quaranti.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/pv/lomello/sagra-del-gorgonzola-a-lomello.html">								<img alt="Sagra del Gorgonzola a Lomello" src="/_data/upload/thumb/sagra-del-gorgonzola-a-lomello.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/pv/lomello/sagra-del-gorgonzola-a-lomello.html" itemprop="url"><span itemprop="name">Sagra del Gorgonzola a Lomello</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-08-28">28/08/2026</time> al <time itemprop="endDate" datetime="2026-08-30">30/08/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Lomello</span></strong> (<span class="region">Lombardia</span>, <span class="province">pv</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">Da venerd&igrave; 28 a domenica 30 agosto 2026, Lomello (PV) ospita la Sagra del Gorgonzola: gi&agrave; Sagra dal Strachin (che da queste parti indica lo stracchino ma, anche, il famoso formaggio che d&agrave; il nome alla festa).
+
+La cornice ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/pv/lomello/sagra-del-gorgonzola-a-lomello.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/mi/cerro-maggiore/sagra-di-san-bartolomeo.html">								<img alt="Sagra di San Bartolomeo" src="/_data/upload/thumb/sagra-di-san-bartolomeo.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/mi/cerro-maggiore/sagra-di-san-bartolomeo.html" itemprop="url"><span itemprop="name">Sagra di San Bartolomeo</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-08-28">28/08/2026</time> al <time itemprop="endDate" datetime="2026-08-31">31/08/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Cerro Maggiore</span></strong> (<span class="region">Lombardia</span>, <span class="province">mi</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">Dal 28 al 31 agosto 2026 arriva a Cantalupo, frazione di Cerro Maggiore (MI), la Sagra di San Bartolomeo.
+
+Il programma prevede musica dal vivo e spettacoli, mercatini, attivit&agrave; dimostrative, appuntamenti dedicati alla comunit&agrave; e la ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/mi/cerro-maggiore/sagra-di-san-bartolomeo.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/bg/casirate-d-adda/gerundium-fest.html">								<img alt="Gerundium Fest" src="/_data/upload/thumb/gerundium-fest.png">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/bg/casirate-d-adda/gerundium-fest.html" itemprop="url"><span itemprop="name">Gerundium Fest</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-08-11">11/08/2026</time> al <time itemprop="endDate" datetime="2026-09-06">06/09/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Casirate d'Adda</span></strong> (<span class="region">Lombardia</span>, <span class="province">bg</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">Sta per tornare il Gerundium Fest di Casirate d&#39;Adda (BG), una delle feste della birra e delle manifestazioni popolari pi&ugrave; importanti della Bassa Bergamasca.
+
+La 27&ordf; edizione si terr&agrave; dal 11 agosto al 6 settembre 2026 nel ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/bg/casirate-d-adda/gerundium-fest.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/bg/scanzorosciate/il-settembre-del-moscato-di-scanzo-e-dei-sapori-scanzesi.html">								<img alt="Il Settembre del Moscato di Scanzo e dei Sapori Scanzesi" src="/_data/upload/thumb/il-settembre-del-moscato-di-scanzo-e-dei-sapori-scanzesi-2.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/bg/scanzorosciate/il-settembre-del-moscato-di-scanzo-e-dei-sapori-scanzesi.html" itemprop="url"><span itemprop="name">Il Settembre del Moscato di Scanzo e dei Sapori Scanzesi</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-09-03">03/09/2026</time> al <time itemprop="endDate" datetime="2026-09-06">06/09/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Scanzorosciate</span></strong> (<span class="region">Lombardia</span>, <span class="province">bg</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">La 18&ordf; edizione della Festa del Moscato di Scanzo e dei Sapori Scanzesi, in programma a Scanzorosciate (BG) dal 3 al 6 settembre 2026, torna con 4 giornate di gusto, arte e divertimenti.
+
+Il programma prevede laboratori, concorsi e ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/bg/scanzorosciate/il-settembre-del-moscato-di-scanzo-e-dei-sapori-scanzesi.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/bs/passirano/sagra-settembrina.html">								<img alt="Sagra Settembrina" src="/_data/upload/thumb/sagra-settembrina-1.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/bs/passirano/sagra-settembrina.html" itemprop="url"><span itemprop="name">Sagra Settembrina</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-09-03">03/09/2026</time> al <time itemprop="endDate" datetime="2026-09-06">06/09/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Passirano</span></strong> (<span class="region">Lombardia</span>, <span class="province">bs</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">Dal 3 al 6 settembre 2026 arriva la 35&ordf; edizione della Sagra Settembrina di Monterotondo, frazione di Passirano (BS).
+
+L&#39;evento unisce gusto e tradizione, proponendo piatti tipici come trippa, pasta al salm&igrave;, brasato con polenta, ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/bs/passirano/sagra-settembrina.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/mn/marmirolo/sagra-del-luccio-in-salsa.html">								<img alt="Sagra del Luccio in Salsa" src="/_data/upload/thumb/sagra-del-luccio-in-salsa.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/mn/marmirolo/sagra-del-luccio-in-salsa.html" itemprop="url"><span itemprop="name">Sagra del Luccio in Salsa</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-09-04">04/09/2026</time> al <time itemprop="endDate" datetime="2026-09-08">08/09/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Marmirolo</span></strong> (<span class="region">Lombardia</span>, <span class="province">mn</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">A Pozzolo sul Mincio, frazione di Marmirolo (MN), in occasione della Festivit&agrave; di Maria Bambina, patrona del paese, si svolge l&rsquo;annuale Sagra del Luccio in Salsa.
+
+Questa 52&ordf; edizione si terr&agrave; dal 4 all&#39;8 settembre 2026 ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/mn/marmirolo/sagra-del-luccio-in-salsa.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/so/chiavenna/sagra-dei-crotti-a-chiavenna.html">								<img alt="Sagra dei Crotti a Chiavenna" src="/_data/upload/thumb/sagra-dei-crotti-a-chiavenna.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/so/chiavenna/sagra-dei-crotti-a-chiavenna.html" itemprop="url"><span itemprop="name">Sagra dei Crotti a Chiavenna</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-09-05">05/09/2026</time> al <time itemprop="endDate" datetime="2026-09-13">13/09/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Chiavenna</span></strong> (<span class="region">Lombardia</span>, <span class="province">so</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">Come ogni settembre, Chiavenna (SO) apre le porte dei suoi crotti, in occasione della 66&ordf; edizione della Sagra dei Crotti - traguardo davvero importante - e della 22&ordf; edizione di And&egrave;m a Cr&ograve;t.
+
+Ecco le date 2026:
+
+- 5-6 ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/so/chiavenna/sagra-dei-crotti-a-chiavenna.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/mb/seveso/sagra-valtellinese-dei-funghi-e-dei-pizzoccheri.html">								<img alt="Sagra Valtellinese dei Funghi e dei Pizzoccheri" src="/_data/upload/thumb/sagra-valtellinese-dei-funghi-e-dei-pizzoccheri-1.jpg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/mb/seveso/sagra-valtellinese-dei-funghi-e-dei-pizzoccheri.html" itemprop="url"><span itemprop="name">Sagra Valtellinese dei Funghi e dei Pizzoccheri</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-08-29">29/08/2026</time> al <time itemprop="endDate" datetime="2026-09-13">13/09/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Seveso</span></strong> (<span class="region">Lombardia</span>, <span class="province">mb</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">A Seveso (MB) torna la Sagra Valtellinese dei Funghi e dei Pizzoccheri.
+
+L&#39;appuntamento &egrave; presso il centro polifunzionale di viale Redipuglia 50, con posti al coperto.
+
+Le date 2026:
+
+29-30 Agosto
+
+4-5-6 Settembre
+
+11-12-13 ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/mb/seveso/sagra-valtellinese-dei-funghi-e-dei-pizzoccheri.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+									<div class="post" itemscope itemtype="https://schema.org/Event">						<div class="postThumb">
+							<a href="https://www.solosagre.it/sagre/lombardia/cr/pieve-san-giacomo/croce-verde-in-festa-a-pieve-san-giacomo.html">								<img alt="Croce Verde in Festa a Pieve San Giacomo" src="/_data/upload/thumb/croce-verde-in-festa-a-pieve-san-giacomo.jpeg">							</a>
+						</div>
+						<h2><a href="https://www.solosagre.it/sagre/lombardia/cr/pieve-san-giacomo/croce-verde-in-festa-a-pieve-san-giacomo.html" itemprop="url"><span itemprop="name">Croce Verde in Festa a Pieve San Giacomo</span></a></h2>													<p class="postDates">
+								Dal <time itemprop="startDate" datetime="2026-09-17">17/09/2026</time> al <time itemprop="endDate" datetime="2026-09-20">20/09/2026</time>							</p>
+							<p class="postLocation postIconBox">
+								<i class="fas fa-map-marker-alt"></i>
+								Comune di <strong><span itemprop="location">Pieve San Giacomo</span></strong> (<span class="region">Lombardia</span>, <span class="province">cr</span>).							</p>
+															<p class="postTags postIconBox">
+									<i class="fas fa-tag"></i>
+									<a href="https://www.solosagre.it/sagre/">Sagre gastronomiche</a>								</p>
+																			<p class="postContent">
+							<span itemprop="description">Dal 17 al 20 settembre 2026 arriva Croce Verde in Festa a Pieve San Giacomo (CR), presso il Campo Sportivo Comunale di via Sandro Pertini 1.
+
+Saranno quattro serate tra buona cucina, musica e divertimento.
+Ogni sar&agrave; attiva la cucina, con un ...</span>							<a href="https://www.solosagre.it/sagre/lombardia/cr/pieve-san-giacomo/croce-verde-in-festa-a-pieve-san-giacomo.html" class="readMore">Continua a leggere</a>						</p>
+					</div>
+							</div><!-- #postList -->
+			
+			<div id="paging">
+				Pagina 2 di 3:								<a href="https://www.solosagre.it/sagre/lombardia/">&laquo;</a>				
+									<a href="https://www.solosagre.it/sagre/lombardia/">1</a> <span class="pageSelected">2</span> <a href="https://www.solosagre.it/sagre/lombardia/3/">3</a> 								
+				<a href="https://www.solosagre.it/sagre/lombardia/3/">&raquo;</a>							</div>
+			
+				
+		<div id="contentBottomBanner" class="banner">
+							<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5147707909315281"
+     crossorigin="anonymous"></script>
+<!-- solosagre.it - footer - adattabile -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-5147707909315281"
+     data-ad-slot="7220758434"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script><div id="postApplication">
+<h3 style="margin:0">Vuoi collaborare con il team di Solo Sagre?</h3>
+<p style="margin:10px 0">Hai competenze negli ambiti commerciale, editoriale e digitale e vorresti unirti al nostro team?</p>
+<p style="margin:0"><a href="/info/lavora-con-noi/">Scrivici per proporre la tua candidatura!</a></p>
+</div>					</div>
+		
+	</section>
+</div><!-- #content -->
+
+<div id="sidebar" class="sidebar">
+		<!-- box ricerca -->
+<div id="search" class="sideBox boxedBox">	<h2>
+		Cerca Eventi							</h2>
+	<form action="https://www.solosagre.it/cerca" method="get">						<p>
+			<select id="fld_category" name="category" data-placeholder="Qualsiasi tipologia">				<option value="">Qualsiasi tipologia</option>																														<option value="1" selected>Sagre gastronomiche</option>																												<option value="20" >Enogastronomia e Street Food</option>																												<option value="42" >Festività e Folklore</option>																												<option value="50" >Fiere, Mostre e Mercati</option>																									</select>
+		</p>
+				<p>
+			<select id="fld_tag" name="tag" data-placeholder="Qualsiasi tema">				<option value="">Qualsiasi tema</option>																						<option value="7" >Antiche Fiere</option>													<option value="73" >Area Camper</option>													<option value="94" >Arrosticini</option>													<option value="8" >Artigianato</option>													<option value="16" >Benessere</option>													<option value="17" >Birra</option>													<option value="92" >Bistecca</option>													<option value="89" >Cacciagione</option>													<option value="9" >Carnevale</option>													<option value="4" >Castagne</option>													<option value="69" >Cibo di strada</option>													<option value="72" >Eventi Storici</option>													<option value="22" >Floreali</option>													<option value="83" >Funghi</option>													<option value="81" >Gastronomia</option>													<option value="71" >Gluten Free</option>													<option value="14" >Insolite</option>													<option value="84" >Maiale</option>													<option value="70" >Moto</option>													<option value="21" >Natale</option>													<option value="6" >Olio extravergine di oliva</option>													<option value="11" >Paesane</option>													<option value="13" >Patronali</option>													<option value="88" >Pesce</option>													<option value="82" >Polenta</option>													<option value="10" >Popolari</option>													<option value="90" >Primi piatti</option>													<option value="12" >Religiose</option>													<option value="85" >Riso</option>													<option value="80" >Sociale</option>													<option value="18" >Sport e Gusto</option>													<option value="79" >Vegan</option>													<option value="3" >Vino</option>																		</select>
+		</p>
+									<p>
+					<select id="fld_date" name="date" data-placeholder="In qualsiasi data">						<option value="">In qualsiasi data</option>													<option value="9" >Questa settimana</option>													<option value="11" >La settimana prossima</option>													<option value="12" >Questo mese</option>													<option value="13" >Il mese prossimo</option>											</select>
+				</p>
+									<p id="searchRegion">
+						<select id="fld_region" name="region" data-placeholder="In tutte le regioni">							<option value="">In tutte le regioni</option>															<option value="1423" >Abruzzo</option>															<option value="2139" >Basilicata</option>															<option value="897" >Calabria</option>															<option value="898" >Campania</option>															<option value="899" >Emilia-Romagna</option>															<option value="900" >Friuli Venezia Giulia</option>															<option value="902" >Lazio</option>															<option value="903" >Liguria</option>															<option value="904" selected>Lombardia</option>															<option value="905" >Marche</option>															<option value="2652" >Molise</option>															<option value="906" >Piemonte</option>															<option value="907" >Puglia</option>															<option value="908" >Sardegna</option>															<option value="909" >Sicilia</option>															<option value="910" >Toscana</option>															<option value="911" >Trentino-Alto Adige</option>															<option value="912" >Umbria</option>															<option value="913" >Valle d'Aosta</option>															<option value="914" >Veneto</option>													</select>
+					</p>
+													<p id="searchArea">
+						<select id="fld_area" name="area" data-placeholder="In tutte le province">							<option value="">In tutte le province</option>															<option value="106" rel="909" >Agrigento</option>															<option value="26" rel="906" >Alessandria</option>															<option value="70" rel="905" >Ancona</option>															<option value="2" rel="910" >Arezzo</option>															<option value="72" rel="905" >Ascoli Piceno</option>															<option value="25" rel="906" >Asti</option>															<option value="88" rel="898" >Avellino</option>															<option value="91" rel="907" >Bari</option>															<option value="95" rel="907" >Barletta-Andria-Trani</option>															<option value="46" rel="914" >Belluno</option>															<option value="86" rel="898" >Benevento</option>															<option value="34" rel="904" >Bergamo</option>															<option value="27" rel="906" >Biella</option>															<option value="62" rel="899" >Bologna</option>															<option value="42" rel="911" >Bolzano</option>															<option value="35" rel="904" >Brescia</option>															<option value="93" rel="907" >Brindisi</option>															<option value="114" rel="908" >Cagliari</option>															<option value="107" rel="909" >Caltanissetta</option>															<option value="83" rel="2652" >Campobasso</option>															<option value="120" rel="908" >Carbonia-Iglesias</option>															<option value="85" rel="898" >Caserta</option>															<option value="109" rel="909" >Catania</option>															<option value="99" rel="897" >Catanzaro</option>															<option value="82" rel="1423" >Chieti</option>															<option value="31" rel="904" >Como</option>															<option value="98" rel="897" >Cosenza</option>															<option value="37" rel="904" >Cremona</option>															<option value="101" rel="897" >Crotone</option>															<option value="24" rel="906" >Cuneo</option>															<option value="108" rel="909" >Enna</option>															<option value="73" rel="905" >Fermo</option>															<option value="63" rel="899" >Ferrara</option>															<option value="1" rel="910" >Firenze</option>															<option value="90" rel="907" >Foggia</option>															<option value="65" rel="899" >Forlì-Cesena</option>															<option value="78" rel="902" >Frosinone</option>															<option value="56" rel="903" >Genova</option>															<option value="51" rel="900" >Gorizia</option>															<option value="3" rel="910" >Grosseto</option>															<option value="54" rel="903" >Imperia</option>															<option value="84" rel="2652" >Isernia</option>															<option value="79" rel="1423" >L'Aquila</option>															<option value="57" rel="903" >La Spezia</option>															<option value="77" rel="902" >Latina</option>															<option value="94" rel="907" >Lecce</option>															<option value="39" rel="904" >Lecco</option>															<option value="4" rel="910" >Livorno</option>															<option value="40" rel="904" >Lodi</option>															<option value="5" rel="910" >Lucca</option>															<option value="71" rel="905" >Macerata</option>															<option value="38" rel="904" >Mantova</option>															<option value="6" rel="910" >Massa-Carrara</option>															<option value="97" rel="2139" >Matera</option>															<option value="119" rel="908" >Medio Campidano</option>															<option value="105" rel="909" >Messina</option>															<option value="33" rel="904" >Milano</option>															<option value="61" rel="899" >Modena</option>															<option value="41" rel="904" >Monza e della Brianza</option>															<option value="87" rel="898" >Napoli</option>															<option value="23" rel="906" >Novara</option>															<option value="113" rel="908" >Nuoro</option>															<option value="118" rel="908" >Ogliastra</option>															<option value="117" rel="908" >Olbia-Tempio</option>															<option value="115" rel="908" >Oristano</option>															<option value="20" rel="914" >Padova</option>															<option value="104" rel="909" >Palermo</option>															<option value="59" rel="899" >Parma</option>															<option value="36" rel="904" >Pavia</option>															<option value="67" rel="912" >Perugia</option>															<option value="69" rel="905" >Pesaro e Urbino</option>															<option value="81" rel="1423" >Pescara</option>															<option value="58" rel="899" >Piacenza</option>															<option value="7" rel="910" >Pisa</option>															<option value="8" rel="910" >Pistoia</option>															<option value="53" rel="900" >Pordenone</option>															<option value="96" rel="2139" >Potenza</option>															<option value="9" rel="910" >Prato</option>															<option value="110" rel="909" >Ragusa</option>															<option value="64" rel="899" >Ravenna</option>															<option value="100" rel="897" >Reggio Calabria</option>															<option value="60" rel="899" >Reggio Emilia</option>															<option value="75" rel="902" >Rieti</option>															<option value="66" rel="899" >Rimini</option>															<option value="76" rel="902" >Roma</option>															<option value="49" rel="914" >Rovigo</option>															<option value="89" rel="898" >Salerno</option>															<option value="112" rel="908" >Sassari</option>															<option value="55" rel="903" >Savona</option>															<option value="10" rel="910" >Siena</option>															<option value="111" rel="909" >Siracusa</option>															<option value="32" rel="904" >Sondrio</option>															<option value="116" rel="908" >Sud Sardegna</option>															<option value="92" rel="907" >Taranto</option>															<option value="80" rel="1423" >Teramo</option>															<option value="68" rel="912" >Terni</option>															<option value="21" rel="906" >Torino</option>															<option value="103" rel="909" >Trapani</option>															<option value="43" rel="911" >Trento</option>															<option value="47" rel="914" >Treviso</option>															<option value="52" rel="900" >Trieste</option>															<option value="50" rel="900" >Udine</option>															<option value="29" rel="913" >Valle d'Aosta/Vallée </option>															<option value="30" rel="904" >Varese</option>															<option value="48" rel="914" >Venezia</option>															<option value="28" rel="906" >Verbano-Cusio-Ossola</option>															<option value="22" rel="906" >Vercelli</option>															<option value="44" rel="914" >Verona</option>															<option value="102" rel="897" >Vibo Valentia</option>															<option value="45" rel="914" >Vicenza</option>															<option value="74" rel="902" >Viterbo</option>													</select>
+					</p>
+															<p>
+			Contenente il seguente testo<br>			<input type="text" name="q" value="" />		</p>
+		<p class="resetLink" style="display:none">
+			<a href="#">
+				<i class="fas fa-times"></i>
+				Resetta il form di ricerca
+			</a>
+		</p>
+		<div class="searchButton">
+			<button class="mainButton" type="submit">
+				Cerca Eventi															</button>
+		</div>
+	</form>
+	<div class="clearBoth"></div>
+</div>
+
+	<div id="sidebarBanner" class="banner sideBox">
+					<div class="ad"><div class="adBox" data-adid="477"><a href="/ad/click/it/477" target="_blank" rel="nofollow"><img src="/_data/upload/campagna-sviluppo-gestionali-cloud-trigemit.jpg" alt="Sviluppo Gestionali Cloud Trigem.it"></a></div></div>			</div>
+
+<!-- Gallerie comuni -->
+
+	<div class="sideBox">
+		<!--
+<h2>Solo Sagre si rinnova!</h2>
+
+<p>A otto anni dalla sua nascita, <strong>il sito Solo Sagre riparte con una nuova versione</strong>, con l&#39;obiettivo di essere ancora pi&ugrave; facile da usare e completo.</p>
+
+<p>Facci sapere cosa pensi delle novit&agrave; <a href="http://www.solosagre.demo.trigem.it/info/sondaggio/"><strong>compilando un breve sondaggio</strong></a>. Aiutaci a migliorare&nbsp;ancora e lascia la tua opinione.</p>
+
+<p style="text-align:center"><a href="http://www.solosagre.demo.trigem.it/info/sondaggio/"><img alt="Compila il sondaggio di Solo Sagre" height="427" src="/_data/upload/image/sondaggio.jpg" width="640" /></a></p>
+
+<p><strong>&rarr; <a href="https://www.solosagre.demo.trigem.it/info/sondaggio/">Vai al sondaggio</a></strong></p>
+-->					<div class="ad"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5147707909315281"
+     crossorigin="anonymous"></script>
+<!-- solosagre.it - col dx - adattabile -->
+<ins class="adsbygoogle"
+     style="display:block"
+     data-ad-client="ca-pub-5147707909315281"
+     data-ad-slot="1994699526"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
+<script>
+     (adsbygoogle = window.adsbygoogle || []).push({});
+</script></div>			</div>
+</div><!-- #sidebar -->
+																																																							
+				</div><!-- .wrapper -->
+				
+								
+			</main><!-- #main -->
+			
+			<footer id="footer">
+				<div class="wrapper">
+					<div id="footerLogo">
+						<img src="/_tmpl/solosagre/assets/images/brand/solosagre-logo-web-dark.png" alt="Solo Sagre">					</div>
+					<div id="footerBlocks">
+						<div class="block">
+							<nav id="discoverMenu">
+								<h2>Scopri di più</h2>								<ul>
+																														<li><a href="/sagre/lombardia/" title="">Sagre in Lombardia</a></li>																					<li><a href="/sagre/veneto/" title="">Sagre in Veneto</a></li>																					<li><a href="/sagre/piemonte/" title="">Sagre in Piemonte</a></li>																					<li><a href="/sagre/emilia-romagna/" title="">Sagre in Emilia-Romagna</a></li>																					<li><a href="/sagre/lazio/" title="">Sagre nel Lazio</a></li>																					<li><a href="/sagre/liguria/" title="">Sagre in Liguria</a></li>																											</ul>
+							</nav>
+						</div>
+						<div class="block">
+							<nav id="infoMenu">
+								<h2>Informazioni</h2>								<ul>
+																														<li><a href="https://www.solosagre.it/info/chi-siamo/" title="">Chi siamo</a></li>																					<li><a href="https://www.solosagre.it/info/segnalazione-eventi/" title="">Segnalazione eventi</a></li>																					<li><a href="https://www.solosagre.it/info/contatti/" title="">Contatti</a></li>																					<li><a href="https://www.solosagre.it/info/lavora-con-noi/" title="">Lavora con noi</a></li>																					<li><a href="https://www.solosagre.it/info/sondaggio/" title="">Sondaggio</a></li>																					<li><a href="https://www.solosagre.it/info/privacy-policy/" title="">Privacy Policy</a></li>																					<li><a href="https://www.solosagre.it/info/cookie-policy/" title="">Cookie Policy</a></li>																											</ul>
+							</nav>
+						</div>
+						<div class="block">
+							<nav id="promotersMenu">
+								<h2></h2>								<ul>
+																	</ul>
+							</nav>
+						</div>
+						<div class="block">
+															<div id="footerSocial">
+																			<a href="https://www.facebook.com/solosagre/" title="Seguici su Facebook"><img src="/_tmpl/solosagre/assets/images/social/facebook.png" alt="Facebook" /></a>																			<a href="https://www.instagram.com/solosagre.it/" title="Seguici su Instagram"><img src="/_tmpl/solosagre/assets/images/social/instagram.png" alt="Instagram" /></a>																	</div>
+														<div id="colophon">
+								<p style="font-size:.75em;line-height:115%">Solosagre.it &egrave; un portale nazionale d&#39;informazione dedicato a sagre, fiere, feste paesane, espressioni veraci della cultura e delle tradizioni di un territorio.<br />
+<em>&ldquo;La tradizione non consiste nel conservare le ceneri ma nel mantenere viva una fiamma&rdquo;. </em><br />
+(Jean Jaur&egrave;s, politico francese dell&#39;800)</p>
+
+<p>Solosagre.it &egrave; una produzione di Trigem, Firenze. P.IVA 05722610481.</p>
+								<p>&copy; 2015-2026 tutti i diritti riservati</p>							</div>
+						</div>
+					</div>
+				</div>
+			</footer><!-- #footer -->
+		</div><!-- #container -->
+		
+				
+										<script>
+			$(document).ready(function(){
+				var adIds = new Array();
+				$('.adBox').each(function(){
+					adIds.push($(this).data('adid'));
+				});
+				jQuery.ajax({
+					type: "POST",
+					url: baseUrl + '/ad/view',
+					data: {
+						ad_ids: adIds.join(',')
+					},
+				});
+			});
+		</script>
+	</body>
+</html>
+ 

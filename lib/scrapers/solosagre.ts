@@ -18,6 +18,14 @@ interface ParsedEvent {
   image: string | null
 }
 
+// Forma condivisa da tutte le funzioni pure di parsing della Fase 8 (D-07 le userà
+// per il fail-loudly quando cheerio sostituirà queste regex in 08-03). Oggi `error`
+// non viene mai valorizzato: il comportamento resta identico a prima di questa estrazione.
+interface ParseOutcome {
+  events: ParsedEvent[]
+  error?: string
+}
+
 export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<ScrapeResult> {
   const startTime = Date.now()
 
@@ -27,7 +35,7 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Scrape
     const html = await response.text()
 
     // Step 2: Parse HTML to extract events
-    const parsedEvents = parseHTML(html)
+    const parsedEvents = parseSoloSagreHtml(html).events
 
     // Step 3: Transform to ScrapedEvent format with filtering
     const events = transformEvents(parsedEvents, params)
@@ -50,14 +58,14 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Scrape
   }
 }
 
-function parseHTML(html: string): ParsedEvent[] {
+export function parseSoloSagreHtml(html: string): ParseOutcome {
   const events: ParsedEvent[] = []
 
   // Regex pattern: Find all <div class="post"> blocks
   const postMatches = html.match(/<div class="post"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g)
 
   if (!postMatches) {
-    return events
+    return { events }
   }
 
   postMatches.forEach(post => {
@@ -101,7 +109,7 @@ function parseHTML(html: string): ParsedEvent[] {
     }
   })
 
-  return events
+  return { events }
 }
 
 function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): ScrapedEvent[] {

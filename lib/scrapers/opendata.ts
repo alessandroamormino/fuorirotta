@@ -47,7 +47,7 @@ export async function scrapeOpenData(params: ScrapeParams = {}): Promise<ScrapeR
     const data: OpenDataRecord[] = await response.json()
 
     // Transform to ScrapedEvent format
-    const events = transformEvents(data)
+    const events = transformOpenDataRecords(data)
 
     const duration = Date.now() - startTime
 
@@ -67,7 +67,7 @@ export async function scrapeOpenData(params: ScrapeParams = {}): Promise<ScrapeR
   }
 }
 
-function transformEvents(data: OpenDataRecord[]): ScrapedEvent[] {
+export function transformOpenDataRecords(data: OpenDataRecord[]): ScrapedEvent[] {
   const results: ScrapedEvent[] = []
 
   for (const item of data) {
