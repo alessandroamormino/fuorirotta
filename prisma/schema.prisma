@@ -62,6 +62,20 @@ model WorkflowExecution {
   @@map("workflow_executions")
 }
 
+model ScrapeRun {
+  id         Int      @id @default(autoincrement())
+  source     String   @db.VarChar(50)
+  region     String   @db.VarChar(50)
+  startedAt  DateTime @map("started_at") @db.Timestamp(6)
+  durationMs Int      @map("duration_ms")
+  eventCount Int      @map("event_count")
+  error      String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([source, region, startedAt], name: "idx_scrape_runs_source_region_started")
+  @@map("scrape_runs")
+}
+
 model MapClusterCache {
   id          String   @id @default("default")
   geojson     Json     // GeoJSON FeatureCollection with all event points
