@@ -7,7 +7,7 @@
  */
 
 import he from 'he'
-import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
+import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
 
 interface ParsedEvent {
@@ -46,7 +46,7 @@ interface DetailParseOutcome {
   error?: string
 }
 
-export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<ScrapeResult> {
+export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<AdapterResult> {
   const startTime = Date.now()
 
   try {

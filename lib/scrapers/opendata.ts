@@ -5,7 +5,7 @@
  * Queries Socrata API with SoQL date filtering and transforms JSON to Event schema.
  */
 
-import type { ScrapeParams, ScrapeResult, ScrapedEvent } from './types'
+import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
 
 interface OpenDataRecord {
@@ -26,7 +26,7 @@ interface OpenDataRecord {
   }
 }
 
-export async function scrapeOpenData(params: ScrapeParams = {}): Promise<ScrapeResult> {
+export async function scrapeOpenData(params: ScrapeParams = {}): Promise<AdapterResult> {
   const startTime = Date.now()
 
   try {

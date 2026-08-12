@@ -29,9 +29,15 @@ export interface ScrapeParams {
 export interface ScrapeResult {
   events: ScrapedEvent[]
   source: string
+  region: string
   duration: number // milliseconds
   error?: string
 }
+
+// Gli adapter non conoscono la propria regione: e' il registry (SRC-01) ad assegnarla.
+// L'obbligatorieta' di `region` su ScrapeResult fa si' che il compilatore garantisca che
+// nessun risultato arrivi allo storico scrape_runs senza regione.
+export type AdapterResult = Omit<ScrapeResult, 'region'>
 
 export interface RunResult {
   saved: number
