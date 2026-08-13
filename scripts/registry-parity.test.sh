@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Harness della prova di parità pre-refactor (SRC-05, D-04, D-05). Nessun framework,
-# nessuna fixture generata a runtime: le sei fixture e baseline.json sono congelate e
-# versionate (08-01, Task 1/2). Questo script:
-#   1. verifica che le sei fixture e baseline.json esistano e non siano vuoti
+# Harness della prova di parità (SRC-05, D-04, D-05). Nessun framework, nessuna fixture
+# generata a runtime: le sei fixture, baseline.json e baseline-cheerio.json sono congelate
+# e versionate (08-01 Task 1/2, 08-03 Task 3). Questo script:
+#   1. verifica che le sei fixture, baseline.json e baseline-cheerio.json esistano e non
+#      siano vuoti
 #   2. esegue `tsx scripts/parity.ts --compare` sul codice attuale — deve uscire 0
+#      contro il riferimento POST-refactor (`baseline-cheerio.json`, cheerio, 08-03)
 #   3. prova di non-vacuità (D-05): muta una copia della fixture e verifica che il
 #      confronto sappia fallire — un diff che passa sempre non è una prova
+#
+# `baseline.json` (riferimento PRE-refactor, parser a regex, bug incluso) resta nel repo
+# come documentazione storica ma non viene più letto da `scripts/parity.ts`: vedi
+# `lib/scrapers/__fixtures__/PARITY-DELTA.md` per il confronto dichiarato fra i due.
 #
 # Le mutazioni lavorano SEMPRE su copie in mktemp -d, mai sulle fixture versionate.
 set -euo pipefail
@@ -27,7 +33,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- 1. Le sei fixture e baseline.json esistono e non sono vuoti -----------------------
+# --- 1. Le sei fixture, baseline.json e baseline-cheerio.json esistono e non sono vuoti -
 
 required_files=(
   "solosagre-page1.html"
@@ -37,23 +43,25 @@ required_files=(
   "inlombardia-detail.html"
   "opendata-response.json"
   "baseline.json"
+  "baseline-cheerio.json"
 )
 for f in "${required_files[@]}"; do
   path="${fixtures_dir}/${f}"
   [[ -s "${path}" ]] || fail "fixture mancante o vuota: ${path}"
 done
-echo "ok  tutte le sei fixture e baseline.json esistono e non sono vuoti"
+echo "ok  tutte le sei fixture, baseline.json e baseline-cheerio.json esistono e non sono vuoti"
 
 # --- 2. Il confronto sul codice attuale deve passare ------------------------------------
 
 if ! (cd "${repo_root}" && npx tsx scripts/parity.ts --compare); then
-  fail "npx tsx scripts/parity.ts --compare e' uscito diverso da 0 sul codice attuale — la parità con baseline.json e' rotta"
+  fail "npx tsx scripts/parity.ts --compare e' uscito diverso da 0 sul codice attuale — la parità con baseline-cheerio.json e' rotta"
 fi
 echo "ok  npx tsx scripts/parity.ts --compare passa contro le fixture reali"
 
 # --- 3. Prova di non-vacuità #1 (D-05): itemprop="name" -> itemprop="title" ------------
-# Il titolo sparisce dall'unico post che il parser a regex estrae oggi dalla pagina 1
-# (parseSoloSagreHtml scarta un post senza titolo): il confronto deve segnalarlo.
+# Il titolo sparisce da tutti i post estratti da parseSoloSagreHtml (cheerio, 08-03):
+# ciascun post viene scartato dal filtro `title && date_start`, portando `solosagre` da
+# 10 voci (baseline-cheerio.json) a 0. Il confronto deve segnalarlo.
 
 tmp1="$(mktemp -d)"
 tmp_dirs+=("${tmp1}")
@@ -68,18 +76,16 @@ echo "ok  D-05 prova 1: rinominare itemprop=\"name\" fa fallire il confronto com
 
 # --- 4. Prova di non-vacuità #2: l'anchor di ogni post (class="post") sparisce ----------
 #
-# DEVIAZIONE DOCUMENTATA dal testo letterale del piano (Task 2C punto 4, che chiede di
-# rimuovere l'attributo di classe del CONTENITORE .postList): verificato empiricamente
-# che il parser a regex di oggi (parseSoloSagreHtml) non referenzia mai `.postList` — la
-# sua regex cerca solo `<div class="post"` ovunque nel documento, indipendentemente da
-# qualunque contenitore. Rimuovere la classe di .postList e' quindi un no-op sotto il
-# parser attuale (verificato: il confronto risulta identico, non fallisce). Questa e'
-# esattamente la fixture-anchor che D-07/SRC-06 introdurra' in 08-03 con cheerio
-# (container = $('.postList'), vedi 08-RESEARCH.md Pattern 3) — non esiste ancora oggi.
-# La seconda prova di non-vacuità qui rinomina invece l'anchor che il parser DI OGGI usa
-# davvero (class="post"), dimostrando che il confronto sa comunque rilevare una perdita
-# strutturale reale, distinta dalla prova 1 (che muta un campo dentro un post, non
-# l'anchor del post stesso).
+# STORIA (08-01 → 08-03): quando questa prova fu scritta in 08-01, il parser a regex non
+# referenziava mai `.postList` (cercava solo `<div class="post"` ovunque nel documento),
+# quindi mutare il CONTENITORE `.postList` (come chiedeva il testo letterale del piano di
+# allora) era un no-op verificato. Da 08-03 in poi, `parseSoloSagreHtml` usa cheerio con
+# `$('.postList')` come anchor strutturale vero (D-07, container-vs-item, vedi
+# 08-RESEARCH.md Pattern 3): rimuovere `class="post"` (l'anchor dei singoli eventi, non
+# del contenitore) fa scomparire tutti gli eventi pur restando l'anchor del contenitore
+# presente — esito legittimo "zero eventi", MA comunque una perdita reale rispetto a
+# `baseline-cheerio.json` (10 voci attese), quindi il confronto deve comunque fallire.
+# Distinta dalla prova 1: qui sparisce l'anchor dei post stessi, non un campo interno.
 tmp2="$(mktemp -d)"
 tmp_dirs+=("${tmp2}")
 cp "${fixtures_dir}/solosagre-page1.html" "${fixtures_dir}/inlombardia-list.html" \
@@ -91,4 +97,4 @@ if (cd "${repo_root}" && npx tsx scripts/parity.ts --compare --fixtures-dir "${t
 fi
 echo "ok  D-05 prova 2: rimuovere l'anchor class=\"post\" fa fallire il confronto come atteso"
 
-echo "PASS: parità di parsing pre-refactor (SRC-05), dimostrata capace di fallire (D-05)"
+echo "PASS: parità di parsing post-refactor contro baseline-cheerio.json (SRC-05), dimostrata capace di fallire (D-05)"

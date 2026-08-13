@@ -77,7 +77,7 @@ export function transformOpenDataRecords(data: OpenDataRecord[]): ScrapedEvent[]
     const eventStartDate = new Date(item.data_in)
     eventStartDate.setHours(0, 0, 0, 0)
 
-    let eventEndDate = item.data_fine ? new Date(item.data_fine) : new Date(eventStartDate)
+    const eventEndDate = item.data_fine ? new Date(item.data_fine) : new Date(eventStartDate)
     eventEndDate.setHours(23, 59, 59, 999)
 
     // Concatenate address parts (toponimo + indirizzo + civico)
