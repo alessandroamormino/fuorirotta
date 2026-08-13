@@ -8,6 +8,10 @@
  *              post-refactor, catturato dai parser cheerio dopo 08-03)
  *   --compare  riesegue le stesse funzioni contro le stesse fixture e confronta con
  *              `baseline-cheerio.json`; esce 1 e stampa il diff alla prima differenza
+ *   --pagination  verifica in memoria, senza rete e senza baseline, la paginazione
+ *              di SoloSagre (SRC-03, 08-05): parseSoloSagreTotalPages e
+ *              mergeSoloSagrePages contro le fixture solosagre-page{1,2,3}.html e
+ *              contro copie mutate della sola pagina 1 (mai scritte su disco)
  *
  * Normalizzazione, IDENTICA sui due lati, limitata a due sole operazioni:
  *   1. decodifica delle entità HTML (libreria `he`, già in package.json)
@@ -29,8 +33,15 @@
  */
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
+import assert from 'node:assert/strict'
 import he from 'he'
-import { parseSoloSagreHtml } from '../lib/scrapers/solosagre'
+import {
+  parseSoloSagreHtml,
+  parseSoloSagreTotalPages,
+  mergeSoloSagrePages,
+  deriveSoloSagreSourceId,
+  SOLOSAGRE_MAX_PAGES
+} from '../lib/scrapers/solosagre'
 import { parseInLombardiaCards, parseInLombardiaDetail } from '../lib/scrapers/inlombardia'
 import { transformOpenDataRecords } from '../lib/scrapers/opendata'
 
@@ -94,10 +105,14 @@ function captureAll(fixturesDir: string): Record<string, unknown> {
 
 // --- CLI -----------------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { mode: 'capture' | 'compare'; fixturesDir: string } {
-  const mode = argv[0] === '--capture' ? 'capture' : argv[0] === '--compare' ? 'compare' : null
+function parseArgs(argv: string[]): { mode: 'capture' | 'compare' | 'pagination'; fixturesDir: string } {
+  const mode =
+    argv[0] === '--capture' ? 'capture' :
+    argv[0] === '--compare' ? 'compare' :
+    argv[0] === '--pagination' ? 'pagination' :
+    null
   if (!mode) {
-    console.error('Uso: tsx scripts/parity.ts --capture | --compare [--fixtures-dir <path>]')
+    console.error('Uso: tsx scripts/parity.ts --capture | --compare | --pagination [--fixtures-dir <path>]')
     process.exit(2)
   }
   let fixturesDir = CANONICAL_FIXTURES_DIR
@@ -151,10 +166,73 @@ function runCompare(fixturesDir: string): void {
   process.exit(1)
 }
 
+// --- Paginazione SoloSagre (SRC-03, 08-05) ------------------------------------------------
+//
+// Sempre sulle fixture reali (solosagre-page{1,2,3}.html) e su varianti mutate SOLO in
+// memoria (mai scritte su disco): nessuna rete, nessun uso di baseline-cheerio.json.
+
+function runPagination(): void {
+  const p1 = readFixture(CANONICAL_FIXTURES_DIR, 'solosagre-page1.html')
+  const p2 = readFixture(CANONICAL_FIXTURES_DIR, 'solosagre-page2.html')
+  const p3 = readFixture(CANONICAL_FIXTURES_DIR, 'solosagre-page3.html')
+
+  // 1. Il totale letto da #paging sulla pagina 1 reale coincide con quanto dichiara il
+  //    markup stesso ("Pagina X di N"), letto qui dalla fixture e non scritto a mano.
+  const declaredMatch = p1.match(/Pagina\s+\d+\s+di\s+(\d+)/)
+  assert.ok(declaredMatch, 'la fixture solosagre-page1.html deve contenere "Pagina X di N"')
+  const declaredTotal = Number(declaredMatch![1])
+  assert.equal(parseSoloSagreTotalPages(p1), declaredTotal)
+  console.log(`ok  parseSoloSagreTotalPages legge il totale dichiarato dalla fixture (${declaredTotal})`)
+
+  // 2. Blocco #paging assente => 1 pagina, nessuna richiesta aggiuntiva
+  const noPaging = p1.replace(/<div id="paging">[\s\S]*?<\/div>/, '')
+  assert.equal(parseSoloSagreTotalPages(noPaging), 1)
+  console.log('ok  parseSoloSagreTotalPages senza blocco #paging restituisce 1')
+
+  // 3a. Totale assurdo (input remoto non fidato) => tetto SOLOSAGRE_MAX_PAGES
+  const absurd = p1.replace(declaredMatch![0], 'Pagina 1 di 999999')
+  assert.equal(parseSoloSagreTotalPages(absurd), SOLOSAGRE_MAX_PAGES)
+  console.log(`ok  parseSoloSagreTotalPages con un totale assurdo restituisce il tetto (${SOLOSAGRE_MAX_PAGES})`)
+
+  // 3b. Totale non numerico => 1
+  const nonNumeric = p1.replace(declaredMatch![0], 'Pagina 1 di N/D')
+  assert.equal(parseSoloSagreTotalPages(nonNumeric), 1)
+  console.log('ok  parseSoloSagreTotalPages con un totale non numerico restituisce 1')
+
+  // 4. mergeSoloSagrePages sulle tre fixture reali: conteggio pari ai sourceId distinti,
+  //    strettamente maggiore della sola pagina 1
+  const o1 = parseSoloSagreHtml(p1)
+  const o2 = parseSoloSagreHtml(p2)
+  const o3 = parseSoloSagreHtml(p3)
+  const allEvents = [...o1.events, ...o2.events, ...o3.events]
+  const distinctIds = new Set(allEvents.map(deriveSoloSagreSourceId))
+  const merged = mergeSoloSagrePages([o1, o2, o3])
+  assert.equal(merged.events.length, distinctIds.size)
+  assert.ok(merged.events.length > o1.events.length)
+  console.log(`ok  mergeSoloSagrePages su tre pagine: ${merged.events.length} eventi (pagina 1 sola: ${o1.events.length})`)
+
+  // 5. Passare due volte la stessa pagina: stessa lunghezza di un passaggio solo
+  //    (deduplicazione), ordine = prima occorrenza
+  const dupMerge = mergeSoloSagrePages([o1, o1])
+  assert.equal(dupMerge.events.length, o1.events.length)
+  assert.deepEqual(dupMerge.events.map(deriveSoloSagreSourceId), o1.events.map(deriveSoloSagreSourceId))
+  console.log('ok  passare due volte la stessa pagina dedupica senza alterare l\'ordine')
+
+  // 6. Stabilità dell'ordine fra due esecuzioni consecutive
+  const mergedA = mergeSoloSagrePages([o1, o2, o3])
+  const mergedB = mergeSoloSagrePages([o1, o2, o3])
+  assert.deepEqual(mergedA.events.map(deriveSoloSagreSourceId), mergedB.events.map(deriveSoloSagreSourceId))
+  console.log('ok  mergeSoloSagrePages produce la stessa sequenza di sourceId fra due esecuzioni')
+
+  console.log('PASS: paginazione SoloSagre (SRC-03) verificata su fixture, senza rete')
+}
+
 export function main(): void {
   const { mode, fixturesDir } = parseArgs(process.argv.slice(2))
   if (mode === 'capture') {
     runCapture(fixturesDir)
+  } else if (mode === 'pagination') {
+    runPagination()
   } else {
     runCompare(fixturesDir)
   }

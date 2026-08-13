@@ -15,6 +15,12 @@ import { fetchWithRetry } from './utils'
 // identicamente da entrambi gli scraper HTML quando l'anchor strutturale sparisce (D-07).
 export const MARKUP_DRIFT_ERROR = 'Selettore DOM non ha trovato eventi — possibile cambio di markup sulla pagina sorgente.'
 
+// Crawl-delay: 5 dichiarato da solosagre.it/robots.txt (D-08), verificato live 2026-08-11
+// (08-RESEARCH.md Pattern 2). Tetto difensivo (SOLOSAGRE_MAX_PAGES) indipendente dal
+// numero di pagine letto da #paging: quel numero è input remoto non fidato (T-08-16).
+export const SOLOSAGRE_CRAWL_DELAY_MS = 5000
+export const SOLOSAGRE_MAX_PAGES = 20
+
 // Testo di un elemento cheerio, o null se l'elemento non contiene alcun carattere
 // (replica la semantica della vecchia regex `[^<]+`, che richiedeva almeno un carattere
 // per considerare il campo presente — uno span vuoto restituiva `null`, non "").
@@ -45,25 +51,59 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Adapte
   const startTime = Date.now()
 
   try {
-    // Step 1: Fetch HTML from SoloSagre with retry logic
-    const response = await fetchWithRetry('https://www.solosagre.it/sagre/lombardia/')
-    const html = await response.text()
+    // Step 1: Fetch pagina 1 (serve comunque per il contenuto, nessun costo aggiuntivo)
+    const page1Response = await fetchWithRetry('https://www.solosagre.it/sagre/lombardia/')
+    const page1Html = await page1Response.text()
+    const page1Outcome = parseSoloSagreHtml(page1Html)
 
-    // Step 2: Parse HTML to extract events
-    const outcome = parseSoloSagreHtml(html)
+    const outcomes: ParseOutcome[] = [page1Outcome]
+
+    // Se pagina 1 ha già l'anchor mancante (markup cambiato), non ha senso proseguire
+    // la paginazione: il totale letto da #paging su un documento mutato non è affidabile.
+    if (!page1Outcome.error) {
+      const totalPages = parseSoloSagreTotalPages(page1Html)
+
+      for (let page = 2; page <= totalPages; page++) {
+        // Attesa PRIMA della richiesta, scritta nell'adapter (mai dentro fetchWithRetry).
+        await new Promise(resolve => setTimeout(resolve, SOLOSAGRE_CRAWL_DELAY_MS))
+
+        const pageResponse = await fetchWithRetry(`https://www.solosagre.it/sagre/lombardia/${page}/`)
+        const pageHtml = await pageResponse.text()
+        const pageOutcome = parseSoloSagreHtml(pageHtml)
+
+        if (pageOutcome.error) {
+          // Anchor mancante su una pagina successiva: markup cambiato, propagare
+          // l'errore come stabilito in 08-03 (D-07) e fermarsi.
+          outcomes.push(pageOutcome)
+          break
+        }
+
+        if (pageOutcome.events.length === 0) {
+          // Anchor presente, zero eventi: segnale coerente (il sito ha ripaginato
+          // mentre lo si leggeva, o N era sovrastimato), non un guasto. Ci si ferma
+          // qui senza aggiungere una pagina vuota e senza errore.
+          break
+        }
+
+        outcomes.push(pageOutcome)
+      }
+    }
+
+    // Step 2: Unire le pagine raccolte, deduplicando per sourceId
+    const merged = mergeSoloSagrePages(outcomes)
 
     // Step 3: Transform to ScrapedEvent format with filtering
-    const events = transformEvents(outcome.events, params)
+    const events = transformEvents(merged.events, params)
 
     const duration = Date.now() - startTime
 
     // Un markup cambiato non è un'eccezione: è un risultato che riporta un errore (D-07).
-    // outcome.error viene propagato qui, senza passare dal ramo catch.
+    // merged.error viene propagato qui, senza passare dal ramo catch.
     return {
       events,
       source: 'solosagre',
       duration,
-      ...(outcome.error ? { error: outcome.error } : {})
+      ...(merged.error ? { error: merged.error } : {})
     }
   } catch (error) {
     const duration = Date.now() - startTime
@@ -74,6 +114,62 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Adapte
       error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
+}
+
+// Legge il totale pagine dal blocco `#paging` ("Pagina X di N"). Se il blocco è assente,
+// una sola pagina di risultati è un esito legittimo: restituisce 1, nessuna richiesta
+// aggiuntiva. `N` è input remoto non fidato (T-08-16): un valore non intero, minore di 1
+// o assurdamente grande viene rifiutato — il tetto SOLOSAGRE_MAX_PAGES è indipendente dal
+// valore letto, così un markup mutato non può tradursi in un ciclo che martella il sito.
+export function parseSoloSagreTotalPages(html: string): number {
+  const $ = cheerio.load(html)
+  const paging = $('#paging')
+  if (paging.length === 0) return 1
+
+  const match = paging.text().match(/Pagina\s+\d+\s+di\s+(\d+)/)
+  if (!match) return 1
+
+  const total = Number(match[1])
+  if (!Number.isFinite(total) || !Number.isInteger(total) || total < 1) return 1
+  if (total > SOLOSAGRE_MAX_PAGES) return SOLOSAGRE_MAX_PAGES
+  return total
+}
+
+// Stesso identificativo usato sia dalla deduplicazione fra pagine sia dalla trasformazione
+// finale (transformEvents), così che le due non possano divergere. Se l'evento ha un URL,
+// l'id resta quello derivato dall'URL (comportamento invariato). Solo per gli eventi privi
+// di URL il ripiego cambia: prima era `String(Math.random())` (mai deduplicabile, una riga
+// nuova a ogni esecuzione), ora è deterministico da titolo + data di inizio, così lo stesso
+// evento senza URL produce sempre lo stesso sourceId.
+export function deriveSoloSagreSourceId(data: Pick<ParsedEvent, 'url' | 'title' | 'date_start'>): string {
+  const fromUrl = data.url ? data.url.split('/').pop()?.replace('.html', '') : null
+  if (fromUrl) return fromUrl
+  return `senza-url:${data.title ?? ''}|${data.date_start ?? ''}`
+}
+
+// Concatena gli eventi nell'ordine di pagina e poi di documento, deduplicando per
+// sourceId (prima occorrenza vince). Un evento che compare su due pagine adiacenti
+// (il sito ripagina mentre lo si sta leggendo) esce una volta sola. L'ordine risultante
+// è deterministico e identico fra due esecuzioni sugli stessi input. Se una qualunque
+// pagina riporta un errore (anchor mancante), quell'errore è propagato nel risultato.
+export function mergeSoloSagrePages(outcomes: ParseOutcome[]): ParseOutcome {
+  const seen = new Set<string>()
+  const events: ParsedEvent[] = []
+  let error: string | undefined
+
+  for (const outcome of outcomes) {
+    if (outcome.error && error === undefined) {
+      error = outcome.error
+    }
+    for (const event of outcome.events) {
+      const id = deriveSoloSagreSourceId(event)
+      if (seen.has(id)) continue
+      seen.add(id)
+      events.push(event)
+    }
+  }
+
+  return error !== undefined ? { events, error } : { events }
 }
 
 export function parseSoloSagreHtml(html: string): ParseOutcome {
@@ -153,10 +249,9 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
     // Extract city from location (split on comma or parenthesis, take first part)
     const locationCity = data.location ? data.location.split(/[,(]/)[0].trim() : null
 
-    // Extract sourceId from URL or generate random
-    const sourceId = data.url
-      ? data.url.split('/').pop()?.replace('.html', '') || String(Math.random())
-      : String(Math.random())
+    // Stesso identificativo usato dalla deduplicazione fra pagine (mergeSoloSagrePages),
+    // così che le due non possano divergere.
+    const sourceId = deriveSoloSagreSourceId(data)
 
     // Handle image URL (prepend domain if relative)
     let imageUrl: string | null = null

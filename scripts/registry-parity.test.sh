@@ -58,6 +58,16 @@ if ! (cd "${repo_root}" && npx tsx scripts/parity.ts --compare); then
 fi
 echo "ok  npx tsx scripts/parity.ts --compare passa contro le fixture reali"
 
+# --- 2bis. Paginazione SoloSagre (SRC-03, 08-05) -----------------------------------------
+# parseSoloSagreTotalPages/mergeSoloSagrePages verificate su fixture, senza rete: il
+# dettaglio dei casi è tutto dentro `scripts/parity.ts --pagination` (D-05 per i casi che
+# richiedono una fixture mutata, fatta solo in memoria da quello script).
+
+if ! (cd "${repo_root}" && npx tsx scripts/parity.ts --pagination); then
+  fail "npx tsx scripts/parity.ts --pagination e' uscito diverso da 0 — la paginazione di SoloSagre e' rotta"
+fi
+echo "ok  npx tsx scripts/parity.ts --pagination passa (SRC-03)"
+
 # --- 3. Prova di non-vacuità #1 (D-05): itemprop="name" -> itemprop="title" ------------
 # Il titolo sparisce da tutti i post estratti da parseSoloSagreHtml (cheerio, 08-03):
 # ciascun post viene scartato dal filtro `title && date_start`, portando `solosagre` da
