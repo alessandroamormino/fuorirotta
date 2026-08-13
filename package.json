@@ -16,10 +16,11 @@
     "db:dev:psql": "docker compose -f docker-compose.dev.yml exec postgres-dev psql -U fuorirotta -d fuorirotta_dev",
     "dev:local": "bash scripts/dev-db.sh npx next dev",
     "scrape:local": "bash scripts/dev-db.sh npx tsx lib/scrapers/runner.ts",
-    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh",
+    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh && npm run check:monitoring",
     "check:tokens": "! grep -rInE '#[0-9a-fA-F]{3,8}\\b' app components lib --include='*.ts' --include='*.tsx' --include='*.css' --exclude='globals.css' | grep -vE '&#[0-9]+;|&#x[0-9a-fA-F]+;'",
     "check:no-regex-parsing": "! grep -nE '\\.match(All)?\\(/[^/]*(<|class=)' lib/scrapers/solosagre.ts lib/scrapers/inlombardia.ts",
-    "check:parity": "bash scripts/registry-parity.test.sh"
+    "check:parity": "bash scripts/registry-parity.test.sh",
+    "check:monitoring": "bash scripts/monitoring-endpoint.test.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.1.0",
