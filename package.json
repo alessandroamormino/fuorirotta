@@ -16,7 +16,7 @@
     "db:dev:psql": "docker compose -f docker-compose.dev.yml exec postgres-dev psql -U fuorirotta -d fuorirotta_dev",
     "dev:local": "bash scripts/dev-db.sh npx next dev",
     "scrape:local": "bash scripts/dev-db.sh npx tsx lib/scrapers/runner.ts",
-    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh",
+    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh",
     "check:tokens": "! grep -rInE '#[0-9a-fA-F]{3,8}\\b' app components lib --include='*.ts' --include='*.tsx' --include='*.css' --exclude='globals.css' | grep -vE '&#[0-9]+;|&#x[0-9a-fA-F]+;'",
     "check:no-regex-parsing": "! grep -nE '\\.match(All)?\\(/[^/]*(<|class=)' lib/scrapers/solosagre.ts lib/scrapers/inlombardia.ts",
     "check:parity": "bash scripts/registry-parity.test.sh"
@@ -28,6 +28,7 @@
     "@radix-ui/react-popover": "^1.1.23",
     "@tailwindcss/typography": "^0.5.19",
     "@types/leaflet": "^1.9.21",
+    "cheerio": "^1.2.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",
     "he": "^1.2.0",

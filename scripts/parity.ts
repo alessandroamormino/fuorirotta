@@ -4,10 +4,10 @@
  *
  * Esegue le quattro funzioni pure di parsing/trasformazione contro le fixture congelate
  * di `lib/scrapers/__fixtures__/` e:
- *   --capture  scrive l'output normalizzato in `baseline.json` (il riferimento immutabile,
- *              catturato dal codice a regex PRIMA che cheerio lo sostituisca in 08-03)
+ *   --capture  scrive l'output normalizzato in `baseline-cheerio.json` (il riferimento
+ *              post-refactor, catturato dai parser cheerio dopo 08-03)
  *   --compare  riesegue le stesse funzioni contro le stesse fixture e confronta con
- *              `baseline.json`; esce 1 e stampa il diff alla prima differenza
+ *              `baseline-cheerio.json`; esce 1 e stampa il diff alla prima differenza
  *
  * Normalizzazione, IDENTICA sui due lati, limitata a due sole operazioni:
  *   1. decodifica delle entità HTML (libreria `he`, già in package.json)
@@ -16,9 +16,16 @@
  * che questo confronto esiste per trovare.
  *
  * `--fixtures-dir <path>` (solo in modalità --compare) sostituisce la directory da cui
- * leggere le QUATTRO fixture di input (non `baseline.json`, sempre letto dal percorso
- * canonico): usato da `scripts/registry-parity.test.sh` per le due prove di non-vacuità
- * (D-05), che confrontano una fixture mutata contro la baseline reale.
+ * leggere le QUATTRO fixture di input (non `baseline-cheerio.json`, sempre letto dal
+ * percorso canonico): usato da `scripts/registry-parity.test.sh` per le due prove di
+ * non-vacuità (D-05), che confrontano una fixture mutata contro la baseline reale.
+ *
+ * NOTA (08-03, risoluzione utente): `baseline.json` — il riferimento pre-refactor
+ * catturato dal parser a regex in 08-01, bug incluso (1 evento/pagina invece di 10 per
+ * solosagre) — NON viene più letto né scritto da questo script. Resta nel repo come
+ * documentazione storica di cosa faceva davvero il parser a regex; il confronto vivo
+ * usa `baseline-cheerio.json`. Vedi `lib/scrapers/__fixtures__/PARITY-DELTA.md` per il
+ * report delle differenze dichiarate fra i due riferimenti.
  */
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -28,7 +35,7 @@ import { parseInLombardiaCards, parseInLombardiaDetail } from '../lib/scrapers/i
 import { transformOpenDataRecords } from '../lib/scrapers/opendata'
 
 const CANONICAL_FIXTURES_DIR = join(__dirname, '..', 'lib', 'scrapers', '__fixtures__')
-const BASELINE_PATH = join(CANONICAL_FIXTURES_DIR, 'baseline.json')
+const BASELINE_PATH = join(CANONICAL_FIXTURES_DIR, 'baseline-cheerio.json')
 
 // --- Normalizzazione, identica in capture e compare -------------------------------------
 
@@ -112,7 +119,7 @@ function runCapture(fixturesDir: string): void {
 
 function runCompare(fixturesDir: string): void {
   if (!existsSync(BASELINE_PATH)) {
-    console.error(`baseline.json non trovata in ${BASELINE_PATH} — eseguire prima --capture`)
+    console.error(`baseline-cheerio.json non trovata in ${BASELINE_PATH} — eseguire prima --capture`)
     process.exit(1)
   }
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf-8'))
