@@ -67,6 +67,15 @@ export async function scrapeOpenData(params: ScrapeParams = {}): Promise<Adapter
   }
 }
 
+// opendata è l'unica delle tre sorgenti che passava `description` grezza dall'API senza
+// normalizzarla (solosagre e inlombardia strippano i tag alla fonte). Chiude il debito
+// residuo segnalato dall'audit di sicurezza della Fase 7 (T-08-19): rimozione dei tag di
+// markup e troncamento a 500 caratteri, stesso limite già applicato dalle altre due fonti.
+function normalizeDescription(raw: string | undefined): string {
+  if (!raw) return ''
+  return raw.replace(/<[^>]+>/g, '').trim().substring(0, 500)
+}
+
 export function transformOpenDataRecords(data: OpenDataRecord[]): ScrapedEvent[] {
   const results: ScrapedEvent[] = []
 
@@ -95,7 +104,7 @@ export function transformOpenDataRecords(data: OpenDataRecord[]): ScrapedEvent[]
       source: 'opendata_lombardia',
       sourceId: item.id || String(Math.random()),
       title: item.denom || 'Evento',
-      description: item.descriz || '',
+      description: normalizeDescription(item.descriz),
       dateStart: eventStartDate,
       dateEnd: eventEndDate,
       locationName: item.comune || 'Lombardia',

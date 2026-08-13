@@ -8,6 +8,10 @@
  *              post-refactor, catturato dai parser cheerio dopo 08-03)
  *   --compare  riesegue le stesse funzioni contro le stesse fixture e confronta con
  *              `baseline-cheerio.json`; esce 1 e stampa il diff alla prima differenza
+ *   --pagination  verifica in memoria, senza rete e senza baseline, la paginazione
+ *              di SoloSagre (SRC-03, 08-05): parseSoloSagreTotalPages e
+ *              mergeSoloSagrePages contro le fixture solosagre-page{1,2,3}.html e
+ *              contro copie mutate della sola pagina 1 (mai scritte su disco)
  *
  * Normalizzazione, IDENTICA sui due lati, limitata a due sole operazioni:
  *   1. decodifica delle entità HTML (libreria `he`, già in package.json)
@@ -29,8 +33,15 @@
  */
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
+import assert from 'node:assert/strict'
 import he from 'he'
-import { parseSoloSagreHtml } from '../lib/scrapers/solosagre'
+import {
+  parseSoloSagreHtml,
+  parseSoloSagreTotalPages,
+  mergeSoloSagrePages,
+  deriveSoloSagreSourceId,
+  SOLOSAGRE_MAX_PAGES
+} from '../lib/scrapers/solosagre'
 import { parseInLombardiaCards, parseInLombardiaDetail } from '../lib/scrapers/inlombardia'
 import { transformOpenDataRecords } from '../lib/scrapers/opendata'
 
@@ -94,10 +105,14 @@ function captureAll(fixturesDir: string): Record<string, unknown> {
 
 // --- CLI -----------------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { mode: 'capture' | 'compare'; fixturesDir: string } {
-  const mode = argv[0] === '--capture' ? 'capture' : argv[0] === '--compare' ? 'compare' : null
+function parseArgs(argv: string[]): { mode: 'capture' | 'compare' | 'pagination'; fixturesDir: string } {
+  const mode =
+    argv[0] === '--capture' ? 'capture' :
+    argv[0] === '--compare' ? 'compare' :
+    argv[0] === '--pagination' ? 'pagination' :
+    null
   if (!mode) {
-    console.error('Uso: tsx scripts/parity.ts --capture | --compare [--fixtures-dir <path>]')
+    console.error('Uso: tsx scripts/parity.ts --capture | --compare | --pagination [--fixtures-dir <path>]')
     process.exit(2)
   }
   let fixturesDir = CANONICAL_FIXTURES_DIR
@@ -117,6 +132,47 @@ function runCapture(fixturesDir: string): void {
   console.log(`  opendata: ${(captured.opendata as unknown[]).length} voci`)
 }
 
+function findFirstDiffLine(baselineJson: string, currentJson: string): { line: number; baseline: string; current: string } {
+  const baselineLines = baselineJson.split('\n')
+  const currentLines = currentJson.split('\n')
+  const maxLines = Math.max(baselineLines.length, currentLines.length)
+  for (let i = 0; i < maxLines; i++) {
+    if (baselineLines[i] !== currentLines[i]) {
+      return { line: i + 1, baseline: baselineLines[i] ?? '(assente)', current: currentLines[i] ?? '(assente)' }
+    }
+  }
+  return { line: -1, baseline: '', current: '' }
+}
+
+// opendata (08-05, T-08-19) normalizza `description` all'ingresso (rimozione tag +
+// troncamento 500 caratteri): è una differenza di output DICHIARATA, non un fallimento
+// del parsing. Ogni altro campo, e il conteggio eventi, devono restare identici alla
+// baseline — solo `description` ha il permesso di cambiare, e solo su questa sorgente.
+function compareOpenData(baseline: unknown[], current: unknown[]): { ok: boolean; changedDescriptions: number; error?: string } {
+  if (baseline.length !== current.length) {
+    return { ok: false, changedDescriptions: 0, error: `conteggio eventi diverso: baseline=${baseline.length} attuale=${current.length}` }
+  }
+  let changedDescriptions = 0
+  for (let i = 0; i < baseline.length; i++) {
+    const b = baseline[i] as Record<string, unknown>
+    const c = current[i] as Record<string, unknown>
+    for (const key of Object.keys(b)) {
+      if (key === 'description') continue
+      if (JSON.stringify(b[key]) !== JSON.stringify(c[key])) {
+        return {
+          ok: false,
+          changedDescriptions,
+          error: `campo "${key}" diverso su opendata[${i}] (sourceId=${String(b.sourceId)}): baseline=${JSON.stringify(b[key])} attuale=${JSON.stringify(c[key])}`
+        }
+      }
+    }
+    if (JSON.stringify(b.description) !== JSON.stringify(c.description)) {
+      changedDescriptions++
+    }
+  }
+  return { ok: true, changedDescriptions }
+}
+
 function runCompare(fixturesDir: string): void {
   if (!existsSync(BASELINE_PATH)) {
     console.error(`baseline-cheerio.json non trovata in ${BASELINE_PATH} — eseguire prima --capture`)
@@ -125,36 +181,111 @@ function runCompare(fixturesDir: string): void {
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf-8'))
   const current = captureAll(fixturesDir)
 
-  const baselineJson = JSON.stringify(baseline, null, 2)
-  const currentJson = JSON.stringify(current, null, 2)
+  let ok = true
 
-  if (baselineJson === currentJson) {
-    console.log('OK: output normalizzato identico alla baseline')
-    return
+  // solosagre / inlombardiaCards / inlombardiaDetail: confronto esatto invariato,
+  // nessuna differenza dichiarata su queste tre chiavi.
+  const restKeys = ['solosagre', 'inlombardiaCards', 'inlombardiaDetail'] as const
+  const baselineRest: Record<string, unknown> = {}
+  const currentRest: Record<string, unknown> = {}
+  for (const key of restKeys) {
+    baselineRest[key] = baseline[key]
+    currentRest[key] = current[key]
+  }
+  const baselineRestJson = JSON.stringify(baselineRest, null, 2)
+  const currentRestJson = JSON.stringify(currentRest, null, 2)
+
+  if (baselineRestJson !== currentRestJson) {
+    ok = false
+    const diff = findFirstDiffLine(baselineRestJson, currentRestJson)
+    console.error('DIFF: output normalizzato diverso dalla baseline (solosagre/inlombardia)')
+    console.error(`  prima differenza alla riga ${diff.line}:`)
+    console.error(`    baseline: ${diff.baseline}`)
+    console.error(`    attuale:  ${diff.current}`)
   }
 
-  const baselineLines = baselineJson.split('\n')
-  const currentLines = currentJson.split('\n')
-  const maxLines = Math.max(baselineLines.length, currentLines.length)
-  let firstDiffLine = -1
-  for (let i = 0; i < maxLines; i++) {
-    if (baselineLines[i] !== currentLines[i]) {
-      firstDiffLine = i
-      break
-    }
+  // opendata: confronto campo per campo, con l'eccezione dichiarata su description (T-08-19)
+  const opendataResult = compareOpenData(baseline.opendata as unknown[], current.opendata as unknown[])
+  if (!opendataResult.ok) {
+    ok = false
+    console.error(`DIFF: opendata — ${opendataResult.error}`)
   }
 
-  console.error('DIFF: output normalizzato diverso dalla baseline')
-  console.error(`  prima differenza alla riga ${firstDiffLine + 1}:`)
-  console.error(`    baseline: ${baselineLines[firstDiffLine] ?? '(assente)'}`)
-  console.error(`    attuale:  ${currentLines[firstDiffLine] ?? '(assente)'}`)
-  process.exit(1)
+  if (!ok) {
+    process.exit(1)
+  }
+
+  console.log('OK: output normalizzato identico alla baseline (solosagre, inlombardiaCards, inlombardiaDetail)')
+  console.log(`OK: opendata — differenza dichiarata sul solo campo "description" (T-08-19): ${opendataResult.changedDescriptions}/${(current.opendata as unknown[]).length} eventi con descrizione modificata dalla normalizzazione`)
+}
+
+// --- Paginazione SoloSagre (SRC-03, 08-05) ------------------------------------------------
+//
+// Sempre sulle fixture reali (solosagre-page{1,2,3}.html) e su varianti mutate SOLO in
+// memoria (mai scritte su disco): nessuna rete, nessun uso di baseline-cheerio.json.
+
+function runPagination(): void {
+  const p1 = readFixture(CANONICAL_FIXTURES_DIR, 'solosagre-page1.html')
+  const p2 = readFixture(CANONICAL_FIXTURES_DIR, 'solosagre-page2.html')
+  const p3 = readFixture(CANONICAL_FIXTURES_DIR, 'solosagre-page3.html')
+
+  // 1. Il totale letto da #paging sulla pagina 1 reale coincide con quanto dichiara il
+  //    markup stesso ("Pagina X di N"), letto qui dalla fixture e non scritto a mano.
+  const declaredMatch = p1.match(/Pagina\s+\d+\s+di\s+(\d+)/)
+  assert.ok(declaredMatch, 'la fixture solosagre-page1.html deve contenere "Pagina X di N"')
+  const declaredTotal = Number(declaredMatch![1])
+  assert.equal(parseSoloSagreTotalPages(p1), declaredTotal)
+  console.log(`ok  parseSoloSagreTotalPages legge il totale dichiarato dalla fixture (${declaredTotal})`)
+
+  // 2. Blocco #paging assente => 1 pagina, nessuna richiesta aggiuntiva
+  const noPaging = p1.replace(/<div id="paging">[\s\S]*?<\/div>/, '')
+  assert.equal(parseSoloSagreTotalPages(noPaging), 1)
+  console.log('ok  parseSoloSagreTotalPages senza blocco #paging restituisce 1')
+
+  // 3a. Totale assurdo (input remoto non fidato) => tetto SOLOSAGRE_MAX_PAGES
+  const absurd = p1.replace(declaredMatch![0], 'Pagina 1 di 999999')
+  assert.equal(parseSoloSagreTotalPages(absurd), SOLOSAGRE_MAX_PAGES)
+  console.log(`ok  parseSoloSagreTotalPages con un totale assurdo restituisce il tetto (${SOLOSAGRE_MAX_PAGES})`)
+
+  // 3b. Totale non numerico => 1
+  const nonNumeric = p1.replace(declaredMatch![0], 'Pagina 1 di N/D')
+  assert.equal(parseSoloSagreTotalPages(nonNumeric), 1)
+  console.log('ok  parseSoloSagreTotalPages con un totale non numerico restituisce 1')
+
+  // 4. mergeSoloSagrePages sulle tre fixture reali: conteggio pari ai sourceId distinti,
+  //    strettamente maggiore della sola pagina 1
+  const o1 = parseSoloSagreHtml(p1)
+  const o2 = parseSoloSagreHtml(p2)
+  const o3 = parseSoloSagreHtml(p3)
+  const allEvents = [...o1.events, ...o2.events, ...o3.events]
+  const distinctIds = new Set(allEvents.map(deriveSoloSagreSourceId))
+  const merged = mergeSoloSagrePages([o1, o2, o3])
+  assert.equal(merged.events.length, distinctIds.size)
+  assert.ok(merged.events.length > o1.events.length)
+  console.log(`ok  mergeSoloSagrePages su tre pagine: ${merged.events.length} eventi (pagina 1 sola: ${o1.events.length})`)
+
+  // 5. Passare due volte la stessa pagina: stessa lunghezza di un passaggio solo
+  //    (deduplicazione), ordine = prima occorrenza
+  const dupMerge = mergeSoloSagrePages([o1, o1])
+  assert.equal(dupMerge.events.length, o1.events.length)
+  assert.deepEqual(dupMerge.events.map(deriveSoloSagreSourceId), o1.events.map(deriveSoloSagreSourceId))
+  console.log('ok  passare due volte la stessa pagina dedupica senza alterare l\'ordine')
+
+  // 6. Stabilità dell'ordine fra due esecuzioni consecutive
+  const mergedA = mergeSoloSagrePages([o1, o2, o3])
+  const mergedB = mergeSoloSagrePages([o1, o2, o3])
+  assert.deepEqual(mergedA.events.map(deriveSoloSagreSourceId), mergedB.events.map(deriveSoloSagreSourceId))
+  console.log('ok  mergeSoloSagrePages produce la stessa sequenza di sourceId fra due esecuzioni')
+
+  console.log('PASS: paginazione SoloSagre (SRC-03) verificata su fixture, senza rete')
 }
 
 export function main(): void {
   const { mode, fixturesDir } = parseArgs(process.argv.slice(2))
   if (mode === 'capture') {
     runCapture(fixturesDir)
+  } else if (mode === 'pagination') {
+    runPagination()
   } else {
     runCompare(fixturesDir)
   }
