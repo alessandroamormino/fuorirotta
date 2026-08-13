@@ -14,6 +14,15 @@ import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
 import { MARKUP_DRIFT_ERROR } from './solosagre'
 
+// Crawl-delay: 10 dichiarato da in-lombardia.it/robots.txt (D-10). Copre ogni richiesta
+// successiva alla PRIMA richiesta fatta a questo host in tutto lo scrape — paginazione
+// AJAX e pagine di dettaglio, non "fra pagine": T-08-17.
+export const INLOMBARDIA_CRAWL_DELAY_MS = 10000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 // Stessa semantica di textOrNull in solosagre.ts: null se l'elemento non contiene
 // nessun carattere (replica la vecchia regex `[^<]+`, che richiedeva almeno un carattere).
 function textOrNull(el: Cheerio<AnyNode>): string | null {
@@ -78,7 +87,7 @@ export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<Adap
 
   try {
     // Step 1: Fetch all pages (with AJAX pagination)
-    const html = await fetchAllPages(params)
+    const { html } = await fetchAllPages(params)
 
     // Step 2: Parse HTML to extract events
     const outcome = parseInLombardiaCards(html)
@@ -109,7 +118,16 @@ export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<Adap
   }
 }
 
-async function fetchAllPages(params: ScrapeParams): Promise<string> {
+// Esportata (invariata come contratto pubblico oltre al tipo di ritorno) cosi'
+// scripts/scrape-measure.ts puo' eseguire la sola fase di lista, throttled, senza
+// passare da scrapeInLombardia (che scaricherebbe anche tutte le pagine di dettaglio).
+//
+// `maxPagesOverride` esiste solo per scripts/scrape-measure.ts (08-05): eseguire la
+// paginazione AJAX reale fino in fondo si è misurato durare oltre 30 pagine throttled a
+// 10s l'una senza segnali di arresto imminente (>5 minuti) — un costo sproporzionato per
+// una MISURA quando lo scopo è proiettare, non enumerare l'intero listato. Il tetto di
+// produzione (`maxPages = 200`) resta invariato quando l'override non è passato.
+export async function fetchAllPages(params: ScrapeParams, maxPagesOverride?: number): Promise<{ html: string; pagesFetched: number }> {
   const today = new Date()
   // Dates stay in YYYY-MM-DD — the site now uses this format natively
   const dateFrom = params.dateFrom || today.toISOString().split('T')[0]
@@ -118,7 +136,7 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6)
   const dateTo = params.dateTo || sixMonthsLater.toISOString().split('T')[0]
 
-  const maxPages = 200
+  const maxPages = maxPagesOverride ?? 200
 
   const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
@@ -136,7 +154,7 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   // Extract view_dom_id — required for AJAX pagination
   const viewDomIdMatch = initialHtml.match(/view_dom_id["']?:\s*["']([a-f0-9]+)["']/)
   if (!viewDomIdMatch) {
-    return initialHtml
+    return { html: initialHtml, pagesFetched: 0 }
   }
   const viewDomId = viewDomIdMatch[1]
 
@@ -198,6 +216,10 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
     const ajaxUrl = `https://www.in-lombardia.it/views/ajax?${queryParts}`
 
     try {
+      // Attesa PRIMA di ogni richiesta AJAX, compresa la prima (page=1): la richiesta
+      // precedente allo stesso host è initialResponse, fatta poco sopra senza attesa
+      // — quella resta l'unica richiesta esente in tutto lo scrape (D-10, T-08-17).
+      await sleep(INLOMBARDIA_CRAWL_DELAY_MS)
       const ajaxResponse = await fetchWithRetry(ajaxUrl, {
         headers: {
           'User-Agent': BROWSER_UA,
@@ -247,7 +269,7 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
   }
 
   console.log(`[InLombardia] Pagination complete: ${page - 1} AJAX pages fetched`)
-  return allHtml
+  return { html: allHtml, pagesFetched: page - 1 }
 }
 
 export function parseInLombardiaCards(html: string): ParseOutcome {
@@ -326,7 +348,9 @@ export function parseInLombardiaCards(html: string): ParseOutcome {
   return { events }
 }
 
-async function fetchDetailPage(url: string): Promise<DetailData> {
+// Esportata cosi' scripts/scrape-measure.ts puo' misurare un campione limitato di pagine
+// di dettaglio senza scaricarle tutte (potenzialmente ore, throttled a 10s l'una).
+export async function fetchDetailPage(url: string): Promise<DetailData> {
   try {
     // Fetch detail page with short timeout and 1 retry for speed
     const response = await fetchWithRetry(url, {
@@ -475,34 +499,22 @@ async function fetchDetailPages(events: ParsedEvent[]): Promise<Map<string, Deta
   const detailDataMap = new Map<string, DetailData>()
 
   // Filter to only events with valid URLs
-  const eventsWithUrls = events.filter(e => e.url && e.url.startsWith('http'))
-
-  const eventsToFetch = eventsWithUrls
+  const eventsToFetch = events.filter(e => e.url && e.url.startsWith('http'))
 
   if (eventsToFetch.length === 0) {
     return detailDataMap
   }
 
-  console.log(`[InLombardia] Fetching ${eventsToFetch.length} detail pages in batches of 10...`)
+  console.log(`[InLombardia] Fetching ${eventsToFetch.length} detail pages one at a time, ${INLOMBARDIA_CRAWL_DELAY_MS}ms apart...`)
 
-  // Process in batches of 10 concurrent requests
-  const batchSize = 10
-  for (let i = 0; i < eventsToFetch.length; i += batchSize) {
-    const batch = eventsToFetch.slice(i, i + batchSize)
-
-    // Use Promise.allSettled for resilience - individual failures don't crash the batch
-    const results = await Promise.allSettled(
-      batch.map(event =>
-        fetchDetailPage(event.url!).then(data => ({ url: event.url!, data }))
-      )
-    )
-
-    // Collect successful results
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        detailDataMap.set(result.value.url, result.value.data)
-      }
-    }
+  // Sequenziale, mai concorrente: dieci richieste in parallelo sarebbero l'esatto
+  // opposto di "una richiesta ogni dieci secondi allo stesso host" (D-10, T-08-17).
+  // Un fallimento su una singola pagina non deve interrompere le altre — fetchDetailPage
+  // gestisce già la degradazione controllata internamente (dati null, mai un throw).
+  for (const event of eventsToFetch) {
+    await sleep(INLOMBARDIA_CRAWL_DELAY_MS)
+    const data = await fetchDetailPage(event.url!)
+    detailDataMap.set(event.url!, data)
   }
 
   console.log(`[InLombardia] Fetched ${detailDataMap.size} detail pages successfully`)

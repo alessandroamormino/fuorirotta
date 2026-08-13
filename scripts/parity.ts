@@ -132,6 +132,47 @@ function runCapture(fixturesDir: string): void {
   console.log(`  opendata: ${(captured.opendata as unknown[]).length} voci`)
 }
 
+function findFirstDiffLine(baselineJson: string, currentJson: string): { line: number; baseline: string; current: string } {
+  const baselineLines = baselineJson.split('\n')
+  const currentLines = currentJson.split('\n')
+  const maxLines = Math.max(baselineLines.length, currentLines.length)
+  for (let i = 0; i < maxLines; i++) {
+    if (baselineLines[i] !== currentLines[i]) {
+      return { line: i + 1, baseline: baselineLines[i] ?? '(assente)', current: currentLines[i] ?? '(assente)' }
+    }
+  }
+  return { line: -1, baseline: '', current: '' }
+}
+
+// opendata (08-05, T-08-19) normalizza `description` all'ingresso (rimozione tag +
+// troncamento 500 caratteri): è una differenza di output DICHIARATA, non un fallimento
+// del parsing. Ogni altro campo, e il conteggio eventi, devono restare identici alla
+// baseline — solo `description` ha il permesso di cambiare, e solo su questa sorgente.
+function compareOpenData(baseline: unknown[], current: unknown[]): { ok: boolean; changedDescriptions: number; error?: string } {
+  if (baseline.length !== current.length) {
+    return { ok: false, changedDescriptions: 0, error: `conteggio eventi diverso: baseline=${baseline.length} attuale=${current.length}` }
+  }
+  let changedDescriptions = 0
+  for (let i = 0; i < baseline.length; i++) {
+    const b = baseline[i] as Record<string, unknown>
+    const c = current[i] as Record<string, unknown>
+    for (const key of Object.keys(b)) {
+      if (key === 'description') continue
+      if (JSON.stringify(b[key]) !== JSON.stringify(c[key])) {
+        return {
+          ok: false,
+          changedDescriptions,
+          error: `campo "${key}" diverso su opendata[${i}] (sourceId=${String(b.sourceId)}): baseline=${JSON.stringify(b[key])} attuale=${JSON.stringify(c[key])}`
+        }
+      }
+    }
+    if (JSON.stringify(b.description) !== JSON.stringify(c.description)) {
+      changedDescriptions++
+    }
+  }
+  return { ok: true, changedDescriptions }
+}
+
 function runCompare(fixturesDir: string): void {
   if (!existsSync(BASELINE_PATH)) {
     console.error(`baseline-cheerio.json non trovata in ${BASELINE_PATH} — eseguire prima --capture`)
@@ -140,30 +181,42 @@ function runCompare(fixturesDir: string): void {
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf-8'))
   const current = captureAll(fixturesDir)
 
-  const baselineJson = JSON.stringify(baseline, null, 2)
-  const currentJson = JSON.stringify(current, null, 2)
+  let ok = true
 
-  if (baselineJson === currentJson) {
-    console.log('OK: output normalizzato identico alla baseline')
-    return
+  // solosagre / inlombardiaCards / inlombardiaDetail: confronto esatto invariato,
+  // nessuna differenza dichiarata su queste tre chiavi.
+  const restKeys = ['solosagre', 'inlombardiaCards', 'inlombardiaDetail'] as const
+  const baselineRest: Record<string, unknown> = {}
+  const currentRest: Record<string, unknown> = {}
+  for (const key of restKeys) {
+    baselineRest[key] = baseline[key]
+    currentRest[key] = current[key]
+  }
+  const baselineRestJson = JSON.stringify(baselineRest, null, 2)
+  const currentRestJson = JSON.stringify(currentRest, null, 2)
+
+  if (baselineRestJson !== currentRestJson) {
+    ok = false
+    const diff = findFirstDiffLine(baselineRestJson, currentRestJson)
+    console.error('DIFF: output normalizzato diverso dalla baseline (solosagre/inlombardia)')
+    console.error(`  prima differenza alla riga ${diff.line}:`)
+    console.error(`    baseline: ${diff.baseline}`)
+    console.error(`    attuale:  ${diff.current}`)
   }
 
-  const baselineLines = baselineJson.split('\n')
-  const currentLines = currentJson.split('\n')
-  const maxLines = Math.max(baselineLines.length, currentLines.length)
-  let firstDiffLine = -1
-  for (let i = 0; i < maxLines; i++) {
-    if (baselineLines[i] !== currentLines[i]) {
-      firstDiffLine = i
-      break
-    }
+  // opendata: confronto campo per campo, con l'eccezione dichiarata su description (T-08-19)
+  const opendataResult = compareOpenData(baseline.opendata as unknown[], current.opendata as unknown[])
+  if (!opendataResult.ok) {
+    ok = false
+    console.error(`DIFF: opendata — ${opendataResult.error}`)
   }
 
-  console.error('DIFF: output normalizzato diverso dalla baseline')
-  console.error(`  prima differenza alla riga ${firstDiffLine + 1}:`)
-  console.error(`    baseline: ${baselineLines[firstDiffLine] ?? '(assente)'}`)
-  console.error(`    attuale:  ${currentLines[firstDiffLine] ?? '(assente)'}`)
-  process.exit(1)
+  if (!ok) {
+    process.exit(1)
+  }
+
+  console.log('OK: output normalizzato identico alla baseline (solosagre, inlombardiaCards, inlombardiaDetail)')
+  console.log(`OK: opendata — differenza dichiarata sul solo campo "description" (T-08-19): ${opendataResult.changedDescriptions}/${(current.opendata as unknown[]).length} eventi con descrizione modificata dalla normalizzazione`)
 }
 
 // --- Paginazione SoloSagre (SRC-03, 08-05) ------------------------------------------------
