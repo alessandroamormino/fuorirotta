@@ -2,13 +2,24 @@
  * InLombardia scraper
  *
  * Fetches paginated HTML via AJAX POST from in-lombardia.it
- * Handles AJAX pagination, parses article HTML, fetches detail pages for
- * JSON-LD structured data, and transforms to Event schema.
+ * Handles AJAX pagination, parses article HTML via cheerio (DOM selectors), fetches
+ * detail pages for JSON-LD structured data, and transforms to Event schema.
  */
 
 import he from 'he'
+import * as cheerio from 'cheerio'
+import type { Cheerio } from 'cheerio'
+import type { AnyNode } from 'domhandler'
 import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
+import { MARKUP_DRIFT_ERROR } from './solosagre'
+
+// Stessa semantica di textOrNull in solosagre.ts: null se l'elemento non contiene
+// nessun carattere (replica la vecchia regex `[^<]+`, che richiedeva almeno un carattere).
+function textOrNull(el: Cheerio<AnyNode>): string | null {
+  const raw = el.text()
+  return raw.length > 0 ? raw.trim() : null
+}
 
 interface ParsedEvent {
   title: string | null
@@ -46,6 +57,22 @@ interface DetailParseOutcome {
   error?: string
 }
 
+// Forma minima usata dal parser JSON-LD (schema.org Event) — sostituisce `any` con un
+// contratto tipizzato, coerente coi soli campi che questo file legge davvero.
+interface JsonLdEventItem {
+  '@type'?: string | string[]
+  description?: string
+  location?: {
+    name?: string
+    address?: {
+      streetAddress?: string
+      addressLocality?: string
+      postalCode?: string
+      addressRegion?: string
+    }
+  }
+}
+
 export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<AdapterResult> {
   const startTime = Date.now()
 
@@ -54,20 +81,22 @@ export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<Adap
     const html = await fetchAllPages(params)
 
     // Step 2: Parse HTML to extract events
-    const parsedEvents = parseInLombardiaCards(html).events
+    const outcome = parseInLombardiaCards(html)
 
     // Step 3: Fetch detail pages for rich data
-    const detailDataMap = await fetchDetailPages(parsedEvents)
+    const detailDataMap = await fetchDetailPages(outcome.events)
 
     // Step 4: Transform to ScrapedEvent format with filtering and detail data
-    const events = transformEvents(parsedEvents, params, detailDataMap)
+    const events = transformEvents(outcome.events, params, detailDataMap)
 
     const duration = Date.now() - startTime
 
+    // Un markup cambiato non è un'eccezione: è un risultato che riporta un errore (D-07).
     return {
       events,
       source: 'in-lombardia',
-      duration
+      duration,
+      ...(outcome.error ? { error: outcome.error } : {})
     }
   } catch (error) {
     const duration = Date.now() - startTime
@@ -197,7 +226,9 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
 
       if (insertCommand && insertCommand.data) {
         const pageHtml = insertCommand.data
-        const eventCount = (pageHtml.match(/<article/g) || []).length
+        // Conteggio via cheerio (non piu' regex): la logica di arresto della paginazione
+        // AJAX non cambia, cambia solo lo strumento con cui si contano gli elementi.
+        const eventCount = cheerio.load(pageHtml)('article').length
 
         if (eventCount === 0) {
           hasMorePages = false
@@ -220,52 +251,56 @@ async function fetchAllPages(params: ScrapeParams): Promise<string> {
 }
 
 export function parseInLombardiaCards(html: string): ParseOutcome {
-  const events: ParsedEvent[] = []
+  const $ = cheerio.load(html)
 
-  // Regex pattern: Find all <article class="...c-card..."> blocks
-  const cardMatches = html.match(/<article[^>]*class="[^"]*c-card[^"]*"[^>]*>([\s\S]*?)<\/article>/g)
-
-  if (!cardMatches) {
-    return { events }
+  // Anchor strutturale (D-07): il wrapper della vista Drupal che avvolge la griglia
+  // eventi. Verificato sulla fixture reale (08-RESEARCH.md Pattern 3): NON avvolge la
+  // card "in evidenza" renderizzata in un blocco overlay separato altrove nella pagina
+  // — non esiste quindi un unico contenitore che avvolga ogni `.c-card` della pagina.
+  // Come da fallback previsto dal piano, l'anchor resta `.view-content` (valida il
+  // rendering della sezione "Eventi" vera e propria) mentre la selezione delle card
+  // resta sull'intero documento, replicando lo scope della regex di oggi (che non era
+  // mai vincolata ad alcun contenitore). Dettagli nel SUMMARY.
+  const container = $('.view-content')
+  if (container.length === 0) {
+    return { events: [], error: MARKUP_DRIFT_ERROR }
   }
 
-  cardMatches.forEach(card => {
-    // Extract title
-    const titleMatch = card.match(/<h4[^>]*class="c-card__title"[^>]*>([^<]+)<\/h4>/)
-    const title = titleMatch ? titleMatch[1].trim() : null
+  const events: ParsedEvent[] = []
 
-    // Extract venue from <span class="organization"> inside c-card__location
-    const venueMatch = card.match(/<span[^>]*class="[^"]*organization[^"]*"[^>]*>([^<]+)<\/span>/)
-    const venue = venueMatch ? venueMatch[1].trim() : null
+  $('article.c-card').each((_, el) => {
+    const card = $(el)
 
-    // Extract address from <span class="address-line1"> inside c-card__location
-    const addressMatch = card.match(/<span[^>]*class="[^"]*address-line1[^"]*"[^>]*>([^<]+)<\/span>/)
-    const address = addressMatch ? addressMatch[1].trim() : null
+    const title = textOrNull(card.find('h4.c-card__title'))
+    const venue = textOrNull(card.find('.organization'))
+    const address = textOrNull(card.find('.address-line1'))
 
-    // Extract date from <time> elements inside c-card__date block (DD/MM/YYYY format)
-    // Supports single dates and date ranges (two <time> elements)
-    const timeMatches = [...card.matchAll(/<time[^>]*>(\d{2}\/\d{2}\/\d{4})<\/time>/g)]
+    // Date da elementi <time> nel formato DD/MM/YYYY, in ordine di documento.
+    // Uno o due elementi (data singola o intervallo), come oggi.
+    const dateTexts = card
+      .find('time')
+      .toArray()
+      .map(t => $(t).text().trim())
+      .filter(t => /^\d{2}\/\d{2}\/\d{4}$/.test(t))
     let dateStr: string | null = null
-    if (timeMatches.length >= 2) {
-      dateStr = `${timeMatches[0][1]} - ${timeMatches[1][1]}`
-    } else if (timeMatches.length === 1) {
-      dateStr = timeMatches[0][1]
+    if (dateTexts.length >= 2) {
+      dateStr = `${dateTexts[0]} - ${dateTexts[1]}`
+    } else if (dateTexts.length === 1) {
+      dateStr = dateTexts[0]
     }
 
-    // Extract category
-    const categoryMatch = card.match(/<div[^>]*class="c-card__labels"[^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/)
-    const category = categoryMatch ? he.decode(categoryMatch[1].trim()) : null
+    // Categoria: primo span dentro c-card__labels, in ordine di documento
+    const categoryText = textOrNull(card.find('.c-card__labels span').first())
+    const category = categoryText ? he.decode(categoryText) : null
 
-    // Extract URL
-    const urlMatch = card.match(/<a[^>]+href="([^"]+)"/)
-    let url = urlMatch ? urlMatch[1] : null
+    // URL: primo anchor della card
+    let url = card.find('a[href]').first().attr('href') ?? null
     if (url && !url.startsWith('http')) {
       url = 'https://www.in-lombardia.it' + url
     }
 
-    // Extract image
-    const imgMatch = card.match(/<img[^>]+src="([^"]+)"/)
-    let image = imgMatch ? imgMatch[1] : null
+    // Immagine: attributo src della prima img
+    let image = card.find('img').first().attr('src') ?? null
     if (image && image !== 'blank.gif' && !image.includes('blank.gif')) {
       if (!image.startsWith('http')) {
         image = 'https://www.in-lombardia.it' + (image.startsWith('/') ? image : '/' + image)
@@ -302,7 +337,7 @@ async function fetchDetailPage(url: string): Promise<DetailData> {
     const html = await response.text()
 
     return parseInLombardiaDetail(html).detail
-  } catch (error) {
+  } catch {
     // On error, return null data (graceful degradation)
     return { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null }
   }
@@ -328,7 +363,7 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
         const jsonData = JSON.parse(match[1])
 
         // JSON-LD may be an object, array, or have @graph wrapper
-        let items: any[] = []
+        let items: JsonLdEventItem[] = []
         if (Array.isArray(jsonData)) {
           items = jsonData
         } else if (jsonData['@graph'] && Array.isArray(jsonData['@graph'])) {
@@ -379,42 +414,40 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
             break // Found Event data, stop looking
           }
         }
-      } catch (jsonError) {
+      } catch {
         // Invalid JSON in this script tag, continue to next
         continue
       }
     }
 
-    // Fallback: extract description from HTML if JSON-LD didn't provide it
+    const $ = cheerio.load(html)
+
+    // Fallback: extract description from HTML if JSON-LD didn't provide it.
+    // Il contenitore viene individuato via cheerio, che gestisce l'annidamento dei
+    // tag correttamente (niente piu' conteggio manuale di profondita' sulle </div>).
     if (!description) {
-      // Find the opening tag of body-readmore, then extract until the matching closing </div>
-      const startMatch = html.match(/<div[^>]*class="body-readmore"[^>]*>/)
-      if (startMatch && startMatch.index !== undefined) {
-        const contentStart = startMatch.index + startMatch[0].length
-        let depth = 1
-        let i = contentStart
-        while (i < html.length && depth > 0) {
-          if (html.startsWith('<div', i)) depth++
-          else if (html.startsWith('</div', i)) depth--
-          if (depth > 0) i++
-        }
-        const innerHtml = html.slice(contentStart, i).trim()
-        if (innerHtml.length > 0) {
-          // Keep formatting tags, strip only scripts/styles and unwanted attributes
-          description = innerHtml
-            .replace(/<script[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[\s\S]*?<\/style>/gi, '')
-            .replace(/\s+class="[^"]*"/g, '')
-            .replace(/\s+id="[^"]*"/g, '')
-            .replace(/\s+style="[^"]*"/g, '')
-            .replace(/\s+/g, ' ')
-            .trim()
-        }
+      const innerHtml = ($('.body-readmore').html() || '').trim()
+      if (innerHtml.length > 0) {
+        // Keep formatting tags, strip only scripts/styles and unwanted attributes
+        // (pulizia su stringa gia' estratta, non parsing di markup: non intercettata
+        // dal gate check:no-regex-parsing)
+        const cleaned = innerHtml
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/\s+class="[^"]*"/g, '')
+          .replace(/\s+id="[^"]*"/g, '')
+          .replace(/\s+style="[^"]*"/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+        if (cleaned.length > 0) description = cleaned
       }
     }
 
-    // Extract coordinates from c-map data-url: @lat,lng,zoom
-    const mapMatch = html.match(/class="c-map"[^>]*data-url="[^"]*@([\d.\-]+),([\d.\-]+)/)
+    // Extract coordinates: attributo data-url letto via cheerio, poi l'estrazione dei
+    // due numeri dalla stringa "@lat,lng" resta un'espressione regolare — e' parsing
+    // di stringa, non di markup.
+    const mapDataUrl = $('.c-map').attr('data-url')
+    const mapMatch = mapDataUrl ? mapDataUrl.match(/@([\d.\-]+),([\d.\-]+)/) : null
     if (mapMatch) {
       latitude = parseFloat(mapMatch[1])
       longitude = parseFloat(mapMatch[2])
