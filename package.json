@@ -28,6 +28,7 @@
     "@radix-ui/react-popover": "^1.1.23",
     "@tailwindcss/typography": "^0.5.19",
     "@types/leaflet": "^1.9.21",
+    "cheerio": "^1.2.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",
     "he": "^1.2.0",

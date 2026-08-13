@@ -2,11 +2,26 @@
  * SoloSagre.it scraper
  *
  * Fetches and parses HTML from solosagre.it/sagre/lombardia/
- * Fetches event listings, parses HTML with regex, and transforms to Event schema.
+ * Fetches event listings, parses HTML via cheerio (DOM selectors), and transforms to Event schema.
  */
 
+import * as cheerio from 'cheerio'
+import type { Cheerio } from 'cheerio'
+import type { AnyNode } from 'domhandler'
 import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
+
+// Copy esatta della stringa d'errore fissata in 08-UI-SPEC.md/08-RESEARCH.md — usata
+// identicamente da entrambi gli scraper HTML quando l'anchor strutturale sparisce (D-07).
+export const MARKUP_DRIFT_ERROR = 'Selettore DOM non ha trovato eventi — possibile cambio di markup sulla pagina sorgente.'
+
+// Testo di un elemento cheerio, o null se l'elemento non contiene alcun carattere
+// (replica la semantica della vecchia regex `[^<]+`, che richiedeva almeno un carattere
+// per considerare il campo presente — uno span vuoto restituiva `null`, non "").
+function textOrNull(el: Cheerio<AnyNode>): string | null {
+  const raw = el.text()
+  return raw.length > 0 ? raw.trim() : null
+}
 
 interface ParsedEvent {
   title: string | null
@@ -35,17 +50,20 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Adapte
     const html = await response.text()
 
     // Step 2: Parse HTML to extract events
-    const parsedEvents = parseSoloSagreHtml(html).events
+    const outcome = parseSoloSagreHtml(html)
 
     // Step 3: Transform to ScrapedEvent format with filtering
-    const events = transformEvents(parsedEvents, params)
+    const events = transformEvents(outcome.events, params)
 
     const duration = Date.now() - startTime
 
+    // Un markup cambiato non è un'eccezione: è un risultato che riporta un errore (D-07).
+    // outcome.error viene propagato qui, senza passare dal ramo catch.
     return {
       events,
       source: 'solosagre',
-      duration
+      duration,
+      ...(outcome.error ? { error: outcome.error } : {})
     }
   } catch (error) {
     const duration = Date.now() - startTime
@@ -59,43 +77,31 @@ export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<Adapte
 }
 
 export function parseSoloSagreHtml(html: string): ParseOutcome {
-  const events: ParsedEvent[] = []
+  const $ = cheerio.load(html)
 
-  // Regex pattern: Find all <div class="post"> blocks
-  const postMatches = html.match(/<div class="post"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g)
-
-  if (!postMatches) {
-    return { events }
+  // Anchor strutturale (D-07): deve sempre esistere se il template non è cambiato.
+  // Il selettore CSS confronta i token di classe, non la stringa intera dell'attributo,
+  // quindi resta valido anche con `class="postList "` (spazi aggiuntivi nella fixture reale).
+  const container = $('.postList')
+  if (container.length === 0) {
+    return { events: [], error: MARKUP_DRIFT_ERROR }
   }
 
-  postMatches.forEach(post => {
-    // Extract title
-    const titleMatch = post.match(/<span itemprop="name">(.*?)<\/span>/)
-    const title = titleMatch ? titleMatch[1] : null
+  const events: ParsedEvent[] = []
 
-    // Extract URL
-    const urlMatch = post.match(/<a href="(https:\/\/www\.solosagre\.it\/[^"]+)"/)
-    const url = urlMatch ? urlMatch[1] : null
+  container.find('.post').each((_, el) => {
+    const post = $(el)
 
-    // Extract dates
-    const startMatch = post.match(/<time itemprop="startDate" datetime="([^"]+)">/)
-    const endMatch = post.match(/<time itemprop="endDate" datetime="([^"]+)">/)
-    const date_start = startMatch ? startMatch[1] : null
-    const date_end = endMatch ? endMatch[1] : null
+    const title = textOrNull(post.find('[itemprop="name"]'))
+    const url = post.find('a[href^="https://www.solosagre.it/"]').first().attr('href') ?? null
+    const date_start = post.find('[itemprop="startDate"]').attr('datetime') ?? null
+    const date_end = post.find('[itemprop="endDate"]').attr('datetime') ?? null
+    const location = textOrNull(post.find('[itemprop="location"]'))
+    const description = textOrNull(post.find('[itemprop="description"]'))
+    const truncatedDescription = description !== null ? description.substring(0, 500) : null
+    const image = post.find('img').first().attr('src') ?? null
 
-    // Extract location
-    const locationMatch = post.match(/<span itemprop="location">(.*?)<\/span>/)
-    const location = locationMatch ? locationMatch[1] : null
-
-    // Extract description
-    const descMatch = post.match(/<span itemprop="description">([\s\S]*?)<\/span>/)
-    const description = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').substring(0, 500) : null
-
-    // Extract image
-    const imgMatch = post.match(/<img[^>]+src="([^"]+)"/)
-    const image = imgMatch ? imgMatch[1] : null
-
-    // Only add if we have at least title and start date
+    // Only add if we have at least title and start date (comportamento invariato)
     if (title && date_start) {
       events.push({
         title,
@@ -103,7 +109,7 @@ export function parseSoloSagreHtml(html: string): ParseOutcome {
         date_start,
         date_end,
         location,
-        description,
+        description: truncatedDescription,
         image
       })
     }
@@ -133,10 +139,10 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
     if (!data.date_start) continue
 
     // Parse event dates and normalize to start/end of day
-    let eventStartDate = new Date(data.date_start)
+    const eventStartDate = new Date(data.date_start)
     eventStartDate.setHours(0, 0, 0, 0)
 
-    let eventEndDate = data.date_end ? new Date(data.date_end) : new Date(eventStartDate)
+    const eventEndDate = data.date_end ? new Date(data.date_end) : new Date(eventStartDate)
     eventEndDate.setHours(23, 59, 59, 999)
 
     // Filter: event must be active during requested period
