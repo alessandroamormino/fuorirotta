@@ -97,6 +97,44 @@ Non un'asserzione: tre riscontri indipendenti sulla fixture reale
    fa sparire l'anchor degli eventi (0 voci, stesso esito). Entrambe le mutazioni
    dimostrano che il gate è capace di fallire, non solo di passare per costruzione.
 
+## Copertura JSON-LD sulla pagina di dettaglio in-lombardia (gap G-08-1, 2026-08-14)
+
+`lib/scrapers/__fixtures__/inlombardia-detail.html` (congelata in `08-01`) non contiene
+alcun blocco `<script type="application/ld+json">`: il ramo JSON-LD di
+`parseInLombardiaDetail` non era quindi mai esercitato dall'harness di parità.
+
+Prima di congelare una nuova fixture, verificato **dal vivo** se il ramo è ancora
+raggiungibile su in-lombardia.it oggi: due pagine di dettaglio reali, diverse da quella
+già congelata, scaricate in sequenza rispettando il Crawl-delay di 10s (D-10, T-08-17,
+nessuna rete parallela):
+
+- `https://www.in-lombardia.it/evento/53a-marcia-del-po` (200, 293.802 caratteri)
+- `https://www.in-lombardia.it/evento/cremona-summer-festival-4` (200, 309.616 caratteri,
+  scaricata 10s dopo la prima)
+
+Nessuna delle due contiene `application/ld+json`. Sommate alla fixture già congelata,
+sono **3 pagine di dettaglio reali su 3** senza alcun blocco JSON-LD.
+
+**Conclusione onesta: non è stata congelata una fixture JSON-LD sintetica.** Il campione
+(3/3) non prova in senso assoluto che il ramo sia morto su ogni pagina del sito, ma è
+un'evidenza concreta, non un'ipotesi, che JSON-LD non è (più) il meccanismo con cui
+in-lombardia.it espone i dati strutturati degli eventi — quei dati vivono oggi nelle
+sezioni `.c-info-bar` (Task 4). Il ramo JSON-LD resta nel codice (migrato a selettori
+cheerio nel Task 2 del gap G-08-1, quindi non più intercettato dal gate
+`check:no-regex-parsing`), ma è segnalato qui come **candidato a rimozione futura** — una
+decisione che comporta togliere codice morto, non aggiungerne, e che questo gap lascia
+esplicitamente aperta invece di decidere unilateralmente.
+
+Le stesse due pagine confermano anche, su dati reali indipendenti dalla fixture
+congelata, la struttura usata dal Task 4 per `venueName`/`fullAddress`/immagine:
+- `53a-marcia-del-po`: sezione "Dove" con solo `.address-line1` ("Borgoforte di Borgo
+  Virgilio (MN)"), nessun `.organization` — venueName correttamente `null`, fullAddress
+  valorizzato.
+- `cremona-summer-festival-4`: sezione "Dove" con entrambi gli elementi separati
+  (`.organization` = "Cremona e Crema", `.address-line1` = "Cremona").
+- Entrambe le pagine hanno `.c-hero__image` con `background-image` valorizzato (non un
+  tag `<img>`), nessuna con un tag `tel:` in Contatti.
+
 ## Impatto per le fasi successive
 
 Se questo bug era presente anche in produzione da quando `solosagre.ts` è stato scritto, il
