@@ -176,11 +176,12 @@
   ],
   "inlombardiaDetail": {
     "description": "<p>L’<strong>Estate al Castello</strong> torna a farvi emozionare con la sua quattordicesima edizione: il <strong>Cortile delle Armi </strong>si trasforma in un palcoscenico a cielo aperto dal 12 giugno (con anteprima il 10 giugno), per ospitare fino al 9 settembre un programma di straordinari appuntamenti.</p> <p>La direzione artistica quest'anno porta la firma di Federico Russo.</p> <p>Sotto il cielo milanese una parata di cantautori di culto e nuove voci della scena italiana e internazionale, oltre a tanti omaggi ai miti del passato. <strong>Solisti, ensemble, band, cori e orchestre</strong> per farvi viaggiare su ogni frequenza e a ogni latitudine; ma anche musica che dialoga con la danza, con il cinema, con le parole.</p> <p>Dall'1 al 25 agosto il palco del Castello si trasforma in un'arena cinematografica con la rassegna di Cineteca Milano, che porta grandi classici e film cult accompagnati da eventi speciali.</p> <p>Le parole del teatro, pronto a lasciarvi col fiato sospeso e a farvi ridere di gusto; e le parole di ospiti eccezionali che, col favore delle stelle, vi intratterranno con chiacchierate intime e sincere.</p>",
-    "venueName": null,
-    "fullAddress": null,
+    "venueName": "Castello Sforzesco",
+    "fullAddress": "Piazza Castello, Milano",
     "phone": null,
     "latitude": 45.469417,
-    "longitude": 9.177672
+    "longitude": 9.177672,
+    "image": "https://www.in-lombardia.it/sites/default/files/styles/hero_full_h/public/evento/images/411044/212066/Castello%20ok.jpeg?itok=p2qLU-zs"
   },
   "opendata": [
     {
