@@ -8,7 +8,7 @@
 
 import he from 'he'
 import * as cheerio from 'cheerio'
-import type { Cheerio } from 'cheerio'
+import type { Cheerio, CheerioAPI } from 'cheerio'
 import type { AnyNode } from 'domhandler'
 import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
@@ -28,6 +28,21 @@ function sleep(ms: number): Promise<void> {
 function textOrNull(el: Cheerio<AnyNode>): string | null {
   const raw = el.text()
   return raw.length > 0 ? raw.trim() : null
+}
+
+// Individua la sezione `.c-info-bar__cell-content` il cui `.c-info-bar__title` corrisponde
+// (case-insensitive) al titolo cercato — per TESTO, non per posizione (fragile: l'ordine
+// "Quando"/"Dove"/"Contatti" non e' garantito dal markup, solo osservato sulla fixture).
+// gap G-08-1.
+function findInfoBarCell($: CheerioAPI, title: string): Cheerio<AnyNode> | null {
+  const wanted = title.trim().toLowerCase()
+  const cells = $('.c-info-bar__cell-content').toArray()
+  for (const cell of cells) {
+    const $cell = $(cell)
+    const cellTitle = $cell.find('.c-info-bar__title').first().text().trim().toLowerCase()
+    if (cellTitle === wanted) return $cell
+  }
+  return null
 }
 
 interface ParsedEvent {
@@ -52,6 +67,7 @@ interface DetailData {
   phone: string | null
   latitude: number | null
   longitude: number | null
+  image: string | null
 }
 
 // Stessa forma di ParseOutcome in solosagre.ts, dichiarata localmente per file (Fase 8).
@@ -363,7 +379,7 @@ export async function fetchDetailPage(url: string): Promise<DetailData> {
     return parseInLombardiaDetail(html).detail
   } catch {
     // On error, return null data (graceful degradation)
-    return { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null }
+    return { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null, image: null }
   }
 }
 
@@ -378,13 +394,18 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
     let latitude: number | null = null
     let longitude: number | null = null
 
-    // Extract JSON-LD structured data
-    const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/g
-    let match: RegExpExecArray | null
+    // $ disponibile da subito (era dichiarato piu' sotto): l'intero documento e' gia'
+    // parsato via cheerio prima ancora dell'estrazione JSON-LD, che ora legge i blocchi
+    // <script> come elementi DOM invece che con una regex sul markup grezzo (gap G-08-1).
+    const $ = cheerio.load(html)
 
-    while ((match = jsonLdPattern.exec(html)) !== null) {
+    // Extract JSON-LD structured data — blocchi individuati via selettore DOM, non piu'
+    // via regex `.exec()` su `html` grezzo (rimuove anche un bug latente: la vecchia
+    // `[\s\S]*?<\/script>` si rompeva su un payload JSON contenente un `</script>` non
+    // escaped).
+    $('script[type="application/ld+json"]').each((_, el) => {
       try {
-        const jsonData = JSON.parse(match[1])
+        const jsonData = JSON.parse($(el).text())
 
         // JSON-LD may be an object, array, or have @graph wrapper
         let items: JsonLdEventItem[] = []
@@ -439,12 +460,10 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
           }
         }
       } catch {
-        // Invalid JSON in this script tag, continue to next
-        continue
+        // Invalid JSON in this script tag, continue to next (stesso comportamento del
+        // vecchio try/catch-per-blocco, ora dentro .each invece che dentro while)
       }
-    }
-
-    const $ = cheerio.load(html)
+    })
 
     // Fallback: extract description from HTML if JSON-LD didn't provide it.
     // Il contenitore viene individuato via cheerio, che gestisce l'annidamento dei
@@ -467,6 +486,21 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
       }
     }
 
+    // Fallback: extract venueName/fullAddress from the "Dove" info-bar section if
+    // JSON-LD didn't provide them (oggi non li fornisce mai: vedi PARITY-DELTA.md,
+    // 3/3 pagine reali campionate senza JSON-LD). Stessa coppia di classi gia' usata da
+    // parseInLombardiaCards per la card in lista (.organization / .address-line1) —
+    // elementi figli separati nel markup, preferiti a uno split di stringa (gap G-08-1).
+    // .organization puo' essere assente (verificato su una pagina reale): in quel caso
+    // venueName resta correttamente null, fullAddress resta valorizzato.
+    if (!venueName || !fullAddress) {
+      const doveCell = findInfoBarCell($, 'Dove')
+      if (doveCell) {
+        if (!venueName) venueName = textOrNull(doveCell.find('.organization').first())
+        if (!fullAddress) fullAddress = textOrNull(doveCell.find('.address-line1').first())
+      }
+    }
+
     // Extract coordinates: attributo data-url letto via cheerio, poi l'estrazione dei
     // due numeri dalla stringa "@lat,lng" resta un'espressione regolare — e' parsing
     // di stringa, non di markup.
@@ -477,21 +511,49 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
       longitude = parseFloat(mapMatch[2])
     }
 
-    // Extract phone number from HTML (check tel: link, span, or p tag)
-    const phonePattern = /icon-phone[\s\S]{0,200}?(?:<a[^>]*href="tel:([^"]+)"|<(?:span|p)[^>]*>\s*([\d\s\+\-\.\/\(\)]{7,})\s*<\/(?:span|p)>)/
-    const phoneMatch = html.match(phonePattern)
-    if (phoneMatch) {
-      const phoneStr = phoneMatch[1] || phoneMatch[2]
-      if (phoneStr && phoneStr.length >= 7) {
-        // Clean phone string
-        phone = phoneStr.trim().replace(/\s+/g, ' ')
+    // Extract phone number: sezione "Contatti" individuata per titolo (gap G-08-1),
+    // non piu' una finestra di prossimita' di 200 caratteri attorno a "icon-phone" nel
+    // markup grezzo. Preferenza a un link tel:, altrimenti un nodo di testo con >= 7
+    // caratteri "cifra-simili" — sulla fixture reale la sezione Contatti contiene solo un
+    // link al sito (nessun tel:), quindi resta correttamente null, ma per il motivo giusto.
+    const contattiCell = findInfoBarCell($, 'Contatti')
+    if (contattiCell) {
+      const telHref = contattiCell.find('a[href^="tel:"]').first().attr('href')
+      if (telHref) {
+        phone = telHref.replace(/^tel:/, '').trim()
+      } else {
+        // Testo gia' estratto da cheerio (stringa, non markup): stesso principio della
+        // normalizzazione coordinate poco sopra, non intercettato dal gate.
+        const cellText = contattiCell.find('.c-info-bar__details').first().text()
+        const digitMatch = cellText.match(/[\d\s+\-.()/]{7,}/)
+        if (digitMatch) {
+          const candidate = digitMatch[0].trim().replace(/\s+/g, ' ')
+          if (candidate.replace(/\D/g, '').length >= 7) {
+            phone = candidate
+          }
+        }
       }
     }
 
-    return { detail: { description, venueName, fullAddress, phone, latitude, longitude } }
+    // Extract main image: la pagina di dettaglio non usa un <img> per la foto principale
+    // (era l'assunto iniziale, rivelatosi sbagliato: il primo <img> del documento e' una
+    // card della sovrapposizione di navigazione dell'header, non il contenuto della
+    // pagina — verificato con la catena degli antenati sulla fixture). La vera foto
+    // dell'evento e' il background-image CSS di .c-hero__image, confermato identico
+    // su due pagine live indipendenti (PARITY-DELTA.md). L'attributo style e' letto via
+    // cheerio; l'estrazione dell'URL dalla stringa del valore resta un'espressione
+    // regolare — stesso principio delle coordinate poco sopra, non parsing di markup.
+    const heroStyle = $('.c-hero__image').attr('style')
+    const heroUrlMatch = heroStyle ? heroStyle.match(/url\(['"]?([^'")]+)['"]?\)/) : null
+    let image: string | null = heroUrlMatch ? heroUrlMatch[1].trim() : null
+    if (image && !image.startsWith('http')) {
+      image = 'https://www.in-lombardia.it' + (image.startsWith('/') ? image : '/' + image)
+    }
+
+    return { detail: { description, venueName, fullAddress, phone, latitude, longitude, image } }
   } catch {
     // On error, return null data (graceful degradation) — comportamento identico a prima
-    return { detail: { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null } }
+    return { detail: { description: null, venueName: null, fullAddress: null, phone: null, latitude: null, longitude: null, image: null } }
   }
 }
 
@@ -609,6 +671,11 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, deta
     // For address: prefer detail fullAddress if richer, fallback to list-view address
     const address = detailData?.fullAddress || data.address
 
+    // Image: la card in lista e' 9/9 sull'immagine (PARITY-DELTA.md), quindi il dettaglio
+    // e' solo un fallback, mai un override, quando la lista non ne ha fornita una
+    // (gap G-08-1, Task 4).
+    const imageUrl = data.image || detailData?.image || null
+
     // Extract sourceId from URL or generate random
     const sourceId = data.url ? data.url.split('/').pop() || String(Math.random()) : String(Math.random())
 
@@ -625,7 +692,7 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, deta
       longitude,
       category: data.category || 'Evento',
       sourceUrl: data.url || 'https://www.in-lombardia.it',
-      imageUrl: data.image,
+      imageUrl,
       phone
     })
   }

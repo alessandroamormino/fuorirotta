@@ -15,7 +15,7 @@ di cosa faceva davvero il codice a regex, bug incluso. Il confronto vivo usato d
 |---|---|---|---|
 | `solosagre` | 1 | 10 | **+9** — bug corretto, vedi sotto |
 | `inlombardiaCards` | 9 | 9 | 0 — identico |
-| `inlombardiaDetail` | 1 oggetto (dettaglio singolo) | 1 oggetto (dettaglio singolo) | 0 — identico |
+| `inlombardiaDetail` | 1 oggetto (dettaglio singolo) | 1 oggetto (dettaglio singolo) | 0 sui campi migrati in `08-03`. Campi aggiunti dopo, in `08-G1`: vedi "Aggiornamento 2026-08-14" più sotto |
 | `opendata` | 1054 | 1054 | 0 — identico |
 
 ## Quali sorgenti sono cambiate e quali no
@@ -96,6 +96,107 @@ Non un'asserzione: tre riscontri indipendenti sulla fixture reale
    fallisce come atteso. Analogamente, rinominare `class="post"` in `class="postREMOVED"`
    fa sparire l'anchor degli eventi (0 voci, stesso esito). Entrambe le mutazioni
    dimostrano che il gate è capace di fallire, non solo di passare per costruzione.
+
+## Copertura JSON-LD sulla pagina di dettaglio in-lombardia (gap G-08-1, 2026-08-14)
+
+`lib/scrapers/__fixtures__/inlombardia-detail.html` (congelata in `08-01`) non contiene
+alcun blocco `<script type="application/ld+json">`: il ramo JSON-LD di
+`parseInLombardiaDetail` non era quindi mai esercitato dall'harness di parità.
+
+Prima di congelare una nuova fixture, verificato **dal vivo** se il ramo è ancora
+raggiungibile su in-lombardia.it oggi: due pagine di dettaglio reali, diverse da quella
+già congelata, scaricate in sequenza rispettando il Crawl-delay di 10s (D-10, T-08-17,
+nessuna rete parallela):
+
+- `https://www.in-lombardia.it/evento/53a-marcia-del-po` (200, 293.802 caratteri)
+- `https://www.in-lombardia.it/evento/cremona-summer-festival-4` (200, 309.616 caratteri,
+  scaricata 10s dopo la prima)
+
+Nessuna delle due contiene `application/ld+json`. Sommate alla fixture già congelata,
+sono **3 pagine di dettaglio reali su 3** senza alcun blocco JSON-LD.
+
+**Conclusione onesta: non è stata congelata una fixture JSON-LD sintetica.** Il campione
+(3/3) non prova in senso assoluto che il ramo sia morto su ogni pagina del sito, ma è
+un'evidenza concreta, non un'ipotesi, che JSON-LD non è (più) il meccanismo con cui
+in-lombardia.it espone i dati strutturati degli eventi — quei dati vivono oggi nelle
+sezioni `.c-info-bar` (Task 4). Il ramo JSON-LD resta nel codice (migrato a selettori
+cheerio nel Task 2 del gap G-08-1, quindi non più intercettato dal gate
+`check:no-regex-parsing`), ma è segnalato qui come **candidato a rimozione futura** — una
+decisione che comporta togliere codice morto, non aggiungerne, e che questo gap lascia
+esplicitamente aperta invece di decidere unilateralmente.
+
+Le stesse due pagine confermano anche, su dati reali indipendenti dalla fixture
+congelata, la struttura usata dal Task 4 per `venueName`/`fullAddress`/immagine:
+- `53a-marcia-del-po`: sezione "Dove" con solo `.address-line1` ("Borgoforte di Borgo
+  Virgilio (MN)"), nessun `.organization` — venueName correttamente `null`, fullAddress
+  valorizzato.
+- `cremona-summer-festival-4`: sezione "Dove" con entrambi gli elementi separati
+  (`.organization` = "Cremona e Crema", `.address-line1` = "Cremona").
+- Entrambe le pagine hanno `.c-hero__image` con `background-image` valorizzato (non un
+  tag `<img>`), nessuna con un tag `tel:` in Contatti.
+
+## Aggiornamento 2026-08-14 (gap G-08-1): `inlombardiaDetail` arricchito
+
+Questa sezione documenta la differenza fra `baseline-cheerio.json` **prima** di questo
+gap (catturato in `08-03`, solo migrazione a cheerio, zero nuovi campi estratti) e
+**dopo** (catturato qui, con l'estrazione allargata dalla decisione utente del test 1 di
+`08-UAT.md`: "adotta la strada migliore per leggere più informazioni possibili con lo
+scraper"). Le tre chiavi `solosagre`, `inlombardiaCards`, `opendata` sono **byte-identiche**
+fra le due catture (confronto deep-equal eseguito su entrambi i JSON prima di
+sovrascrivere il file); cambia solo `inlombardiaDetail`.
+
+### Conteggio campi valorizzati (su 1 solo oggetto di dettaglio, fixture congelata)
+
+| Campo | Prima (08-03) | Dopo (G-08-1) | Causa |
+|---|---|---|---|
+| `description` | 1/1 | 1/1 | invariato |
+| `latitude` / `longitude` | 1/1 | 1/1 | invariato |
+| `venueName` | 0/1 | 1/1 | nuovo: fallback dalla sezione "Dove" (`.organization`) quando JSON-LD non lo fornisce (oggi sempre, vedi sezione precedente) |
+| `fullAddress` | 0/1 | 1/1 | nuovo: fallback dalla sezione "Dove" (`.address-line1`) |
+| `phone` | 0/1 (regex a finestra di prossimità, per accidente) | 0/1 (selettore reale sulla sezione "Contatti") | stesso risultato, causa corretta — la pagina non ha davvero un telefono |
+| `image` (campo nuovo) | non esisteva | 1/1 | nuovo: `.c-hero__image` (background-image CSS), risolto ad URL assoluto |
+
+### Evidenza che i nuovi valori sono corretti (non un'asserzione)
+
+Estrazione diretta via `parseInLombardiaDetail` sulla fixture reale
+(`lib/scrapers/__fixtures__/inlombardia-detail.html`):
+
+```json
+{
+  "venueName": "Castello Sforzesco",
+  "fullAddress": "Piazza Castello, Milano",
+  "phone": null,
+  "image": "https://www.in-lombardia.it/sites/default/files/styles/hero_full_h/public/evento/images/411044/212066/Castello%20ok.jpeg?itok=p2qLU-zs"
+}
+```
+
+Riscontro indipendente sul markup grezzo della fixture:
+- `.c-info-bar__title` "Dove" → `.organization` = "Castello Sforzesco", `.address-line1` =
+  "Piazza Castello, Milano" (elementi separati, non uno split di stringa — verificato con
+  `$('.c-info-bar__cell-content').find('.c-info-bar__title')`, gli stessi selettori
+  `.organization`/`.address-line1` già usati da `parseInLombardiaCards` per le card in
+  lista, non inventati per l'occasione).
+- `.c-hero__image` ha attributo `style="background-image: url('/sites/default/files/...
+  /Castello%20ok.jpeg?itok=p2qLU-zs')"` — stessa immagine (stesso ID `411044/212066`) già
+  vista come thumbnail nella card di lista, a conferma che è davvero la foto dell'evento e
+  non un artefatto di estrazione.
+- `.c-info-bar__title` "Contatti" contiene solo un link "Sito web" (`https://www.yesmilano
+  .it/estatealcastello`), zero occorrenze di `tel:` nell'intera fixture (verificato con
+  `grep -o "tel:" ... | wc -l` → 0) — `phone: null` è quindi corretto, non un fallimento
+  silenzioso.
+- Due pagine di dettaglio live indipendenti (sezione precedente) confermano la stessa
+  struttura `.c-info-bar`/`.c-hero__image` su eventi diversi, escludendo che sia un caso
+  particolare della sola fixture congelata.
+
+### Conferma di non-regressione
+
+- `solosagre` e `opendata`: confronto deep-equal fra `baseline-cheerio.json` prima e dopo
+  questo aggiornamento → **invariati** (nessuna riga diversa in nessuno dei due oggetti).
+- `inlombardiaCards`: 9/9 card, **invariato** — questo gap tocca solo
+  `parseInLombardiaDetail`, mai `parseInLombardiaCards`.
+- `bash scripts/registry-parity.test.sh`: verde, incluse entrambe le prove di
+  non-vacuità D-05 (rinominare `itemprop="name"`, rimuovere `class="post"`), ancora capaci
+  di far fallire il confronto contro il nuovo riferimento.
 
 ## Impatto per le fasi successive
 
