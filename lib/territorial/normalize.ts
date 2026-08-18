@@ -51,6 +51,21 @@ if (require.main === module) {
 
   console.assert(normalizeComuneName('') === '', 'stringa vuota non deve lanciare e deve restituire vuoto')
 
+  // Edge encoding (06-03, must_haves): la stessa parola scritta in NFC (un
+  // solo code point per la 'o' con dieresi) e in NFD (o + diacritico
+  // combinante separato) deve normalizzare alla stessa chiave: la forma
+  // Unicode in cui la fonte ha scritto il CSV non deve cambiare l'esito del
+  // matching. Costruite via normalize() invece di digitare il carattere
+  // accentato, cosi' la differenza fra le due forme non dipende
+  // dall'encoding dell'editor che ha scritto questo file.
+  const oUmlautBase = 'B' + String.fromCharCode(0x00f6) + 'zen' // 'ö' precomposta (U+00F6)
+  const oUmlautNFC = oUmlautBase.normalize('NFC')
+  const oUmlautNFD = oUmlautBase.normalize('NFD')
+  console.assert(
+    oUmlautNFC !== oUmlautNFD && normalizeComuneName(oUmlautNFC) === normalizeComuneName(oUmlautNFD),
+    "la stessa parola in NFC e NFD deve normalizzare alla stessa chiave (atteso 'bozen')"
+  )
+
   // Comuni il cui nome inizia per "Sant"/"Santa" senza essere una forma di "Sant'"
   // non devono essere alterati: la parola intera deve combaciare, non il prefisso.
   console.assert(normalizeComuneName('Santena') === 'santena', "'Santena' non deve diventare 'sanena'")

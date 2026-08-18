@@ -1,0 +1,13 @@
+# Fixture SINTETICA per dimostrare la meccanica di --reconcile (TERR-05, D-02).
+# NON e' una riassegnazione ISTAT reale: il file ufficiale ISTAT delle
+# variazioni amministrative (data/Variazioni-amministrative-...xlsx),
+# ispezionato con --inspect in 06-03, si e' rivelato una tabella di
+# statistiche aggregate per regione/tipologia/anno (conteggi), non un elenco
+# riga-per-riga di codici prima/dopo. Nessuna fonte scaricabile con questo
+# livello di dettaglio e' stata trovata verificabile in questa sessione (vedi
+# 06-03-SUMMARY.md). '999999' e' un codice ISTAT inesistente, mai assegnato a
+# nessun comune reale (stessa convenzione di lib/territorial/resolve.ts, caso
+# 'Senza Centroide'): usato qui solo come "vecchio codice" fittizio che il
+# test rimappa sul codice reale e attuale di Milano.
+istat_code_old,istat_code_new
+999999,015146

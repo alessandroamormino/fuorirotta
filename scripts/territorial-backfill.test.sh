@@ -121,7 +121,12 @@ else
     ok "TERR-02: '' = ANY(aliases) non restituisce righe"
   fi
 
-  altoatesino="$(psql_dev "SELECT count(*) FROM comuni WHERE 'St. Ulrich' = ANY(aliases) OR 'Urtijei' = ANY(aliases)")"
+  # 'Bozen', non 'St. Ulrich'/'Urtijei' (bug ereditato dal Task 0 di 06-01,
+  # corretto in 06-03): verificato con query dirette contro Wikidata (fonte
+  # approvata al checkpoint) che Ortisei ha solo 'Ortisei' come P1448/P1705 —
+  # nessuna native label registrata per St. Ulrich/Urtijei al momento del
+  # fetch. 'Bozen' (Bolzano) e' invece reale e verificato (P1448, CC0).
+  altoatesino="$(psql_dev "SELECT count(*) FROM comuni WHERE 'Bozen' = ANY(aliases)")"
   if [[ "${altoatesino}" -lt 1 ]]; then
     fail "TERR-02: nessun comune altoatesino raggiungibile per alias tedesco/ladino (seed alias non ancora atterrato)"
   else
@@ -260,9 +265,16 @@ if [[ "${comuni_exists}" != "t" || ! -f "${seed_csv}" ]]; then
   fail "TERR-05: prerequisiti (tabella comuni + fixture di seed) non ancora presenti"
 else
   linked_before="$(psql_dev "SELECT count(*) FROM events WHERE comune_id IS NOT NULL")"
-  sample_comune_id="$(psql_dev "SELECT c.id FROM comuni c JOIN events e ON e.comune_id = c.id LIMIT 1")"
+  # Vincolato ai due istat_code del fixture (Milano/Bergamo), non un comune
+  # qualunque via LIMIT 1 senza ORDER BY (bug ereditato, scoperto in 06-03
+  # dopo il seed nazionale: con 7894 comuni e centinaia di eventi agganciati,
+  # 'LIMIT 1' senza filtro poteva pescare un comune ASSENTE dal fixture di
+  # reimport usato sotto — la mutazione su quella riga non poteva mai essere
+  # rilevata dal reimport per costruzione, e la sezione falliva a prescindere
+  # dalla correttezza del codice).
+  sample_comune_id="$(psql_dev "SELECT c.id FROM comuni c JOIN events e ON e.comune_id = c.id WHERE c.istat_code IN ('015146','016024') LIMIT 1")"
   if [[ -z "${sample_comune_id}" ]]; then
-    fail "TERR-05: nessun comune agganciato a un evento da usare per la prova di reimport"
+    fail "TERR-05: nessun comune del fixture di reimport (Milano/Bergamo) e' agganciato a un evento da usare per la prova"
   else
     original_name="$(psql_dev "SELECT name FROM comuni WHERE id = ${sample_comune_id}")"
     psql_dev "UPDATE comuni SET name = 'NOME ALTERATO PER PROVA' WHERE id = ${sample_comune_id}" >/dev/null

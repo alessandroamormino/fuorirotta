@@ -1,0 +1,547 @@
+# Fonte: Wikidata SPARQL, proprieta' P1448 (nome ufficiale) e P1705 (native label)
+# NON rdfs:label: in tedesco restituisce esonimi (Milano -> "Mailand"), non i nomi statutari
+# Licenza: CC0 1.0 (Wikidata) - https://www.wikidata.org/wiki/Wikidata:Licensing
+# Data di scarico: 2026-08-18
+# Rigenerazione: npx tsx scripts/fetch-wikidata-territorial.ts
+istat_code,alias
+048014,Città di Empoli
+080063,Reggio Calabria
+084001,Girgenti
+085004,Cartanissetta
+085004,Nissa
+001254,Sant Seond
+001256,Santantunin
+001275,La Tor dël Pélis
+001285,Voudjiň
+001289,Varisela
+015146,Milan
+001272,Turin
+027042,Venesia
+010025,Zena
+092009,Cagliari
+092009,Castéddu
+082053,Panormus
+082053,Palermu
+082053,Palièimmu
+007003,Aoste
+004078,Coni
+006003,Lissàndria
+108033,Monscia
+021008,Bozen
+031007,Goritz
+031007,Gorica
+032001,Devin Nabrežina
+006020,Ël Borgh ëd San Martin
+006045,Castellania
+006076,Fubine
+024079,Poiana Maggiore
+023030,Costermano
+023014,Brenzone
+023052,Negrar
+027001,Danon
+027011,Concuardie
+098061,Comune di Zelo Buon Persico
+015209,Sest San Giovann
+024084,Recoaro
+001307,Lhi Vialars
+001313,Vjy
+091073,Posada
+067041,Tèreme
+009056,Sann-a
+035033,Reggio Emilia
+039014,Ravvena
+090064,Sassari
+090064,Tàtari
+114027,Nùgoro
+095038,Oristano
+091037,Lanusei
+091095,Tortolì
+119009,Igrèsias
+083048,Comune di Messina
+006144,Comune di Rivalta Bormida
+005014,Calliano
+064096,Savignano
+090065,Sedini
+062016,Castelfranco
+087004,Jaciriali
+004051,Castellinaldo
+004115,Comune di Mango
+013107,Olonium
+030005,Darte
+018073,Godiasco
+001001,Ajé
+001003,Ala
+001008,Alpignan
+001010,Andrà
+001013,Vian-a
+001014,Asèj
+001022,Bardonescha
+001022,Bardonecia
+001023,Baron
+001024,Beinasch
+001045,Butijera Àuta
+018122,Rivanazzano
+025066,Vodo di Cadore
+030189,Plodn
+108008,Besana Briansa
+039001,Agl'Infulsẽ
+039007,Zirvia
+031020,Sant Lurinç dal Lusinç
+031021,San Pieri dal Lusinç
+031025,Vileš
+093002,Darbe
+093021,Vile di Flum
+093038,Sant Zorç de Richinvelde
+093039,Sant Martin di Voleson
+093040,San Quarin
+093041,San Vît dal Tiliment
+093049,Vît
+093050,Vivâr
+030001,Daèl
+030002,Damâr
+030004,Aquilêe
+076011,Barilli
+076099,Zhura
+080053,Montebello Ionico
+007058,Sent-Cretôblo
+007058,Sèn-Crétoublo
+007060,Én-Mar'éi
+007065,Sèn-Veunsein
+090068,Siligo
+063058,Pumpeje
+030106,San Vît di Feagne
+030104,Sante Marie la Lungje
+062075,Comune di Tocco Caudio
+086001,Aggira
+086002,Aiduni
+061012,Cancello e Arnone
+005020,Casorzo
+005031,Castelnuovo d’Asti
+030023,Çarvignan
+030064,Muçane
+030086,Podbonesec
+030100,San Zorç di Noiâr
+030101,San Zuan dal Nadison
+030103,Špeter Slovenov
+030103,Špietar
+030105,Sant Vît de Tor
+064005,Ariano
+064040,Guardia Lombarda
+064040,Comune di Guardia Lombardi
+064040,Guardia dei Lombardi
+064040,Guardiae de Lombardis
+064040,Guardialombarda
+064040,Guardiae Longobardorum
+078029,Cassano allo Ionio
+018154,Borgofranco
+019107,Torre de' Malamberti
+021015,Kaltern an der Weinstraße
+021110,Vintl
+111002,Armungia
+111002,Armunja
+092003,Assemini
+111003,Ballao
+111007,Burcei
+092011,Capoterra
+111011,Castiadas
+092015,Decimomannu
+111013,Decimoputzu
+111014,Dolianova
+111017,Donori
+092108,Elmas
+111019,Escolca
+111020,Esterzili
+111025,Gergei
+111026,Gesico
+111032,Guamaggiore
+068033,Popoli
+067008,Città di Campli
+083009,U Capu
+030111,Srednje
+030113,Taipane
+030113,Tipana
+030127,Taržizem
+030130,Vildivar
+030132,Verzegnas
+030133,Vile di Cjargne
+030135,Visc
+030136,Zui
+079005,Dandalli
+002002,Im Land
+063083,Torr'Annunziata
+004243,Vigneul
+004245,Vilaneuva dël Mondvì
+004248,Vinai
+043043,Monte Santo
+111033,Guasila
+012143,Cadregiá con Üsmàa
+071003,Anzano degli Irpini
+081001,Àrcamu
+083005,Comune di Barcellona Pozzo di Gotto
+088001,Acati
+088005,Spaccaforno
+088010,Santa Cruci Camarina
+028046,Loreja
+095074,Zeddiani
+021011,Brixen
+095086,Sagama
+095014,Bidonì
+011022,Porto Venere
+095075,Zerfaliu
+091067,Orune
+051026,Castello di Montevarchi
+051033,Castel San Giovanni
+017158,Puegnago sul Garda
+111039,Mandas
+092037,Maracalagonis
+111041,Monastir
+092109,Monserrato
+111042,Muravera
+111045,Nuragus
+111046,Nurallao
+111047,Nuraminis
+111048,Nurri
+111050,Orroli
+111051,Ortacesus
+111055,Pimentel
+092105,Quartucciu
+092051,Quartu Sant'Elena
+092051,Cuartu Sant'Aleni
+092050,Pula
+111058,Sadali
+111060,Samatzai
+111061,San Basilio
+111061,Santu 'Asili
+111064,San Nicolò Gerrei
+111065,San Sperate
+111065,Santu Sperau
+111069,Sant'Andrea Frius
+111069,Santu Andria Frius
+111066,San Vito
+111066,Santu 'Idu
+092066,Sarroch
+111074,Selegas
+111075,Senorbì
+111076,Serdiana
+111079,Serri
+092074,Sestu
+111082,Seulo
+111084,Siliqua
+111085,Silius
+092080,Sinnai
+111086,Siurgus Donigala
+111087,Soleminis
+111088,Suelli
+111093,Ussana
+092090,Uta
+111095,Vallermosa
+083080,Comune di San Pier Niceto
+083080,San Pieru Nicetu
+111099,Villanova Tulo
+111103,Villaputzu
+111104,Villasalto
+092099,Villa San Pietro
+092099,Santu Perdu
+092099,Santu Pedru
+111105,Villasimius
+111106,Villasor
+111106,Biddesorris
+111107,Villaspeciosa
+111006,Buggerru
+111016,Domusnovas
+111021,Fluminimaggiore
+111043,Musei
+119014,Perdaxus
+119017,Santu Juanni Sruexu
+119020,Santu Antiogu
+111098,Villamassargia
+111098,Bidda Matzràxia
+117014,Santu 'Ainju
+084037,Santa Elisabbetta
+084038,Santa Margarita
+084039,Sant'Àngilu Muxaru
+084040,Santu Stèfanu Quisquina
+084043,Villafranca
+021053,Montagna
+082004,'A Mìlicia
+082005,Parco
+082005,Parcu
+083003,Alì Marina
+021077,Innichen
+085003,Vutera
+085016,Santu Catallu
+085017,Santa Catarina
+085022,Villarba
+087018,Grammicheli
+087040,Santu Conu
+087044,San Petru Clarenza
+087045,Sant'Àita li Vattiati
+087046,Sant'Arfiu
+087047,Santa Marìa di Licuddìa
+087048,Santa Vinirina
+040041,San Mauro di Romagna
+114001,Aritzu
+114006,Vitzi
+091010,Bolotana
+091011,Borore
+091012,Bortigali
+091016,Desulo
+091017,Dorgali
+091018,Dualchi
+091025,Gadoni
+091027,Galtellì
+091028,Gavoi
+091038,Lei
+091040,Loculi
+091104,Lodine
+091041,Lodè
+091043,Lula
+091044,Macomer
+091046,Mamoiada
+091046,Mamujada
+091047,Meana Sardo
+091050,Noragugume
+091055,Oliena
+091056,Ollolai
+091057,Olzai
+091058,Onanì
+091059,Onifai
+091060,Oniferi
+091061,Orani
+091062,Orgosolo
+091063,Orosei
+091064,Orotelli
+091066,Ortueri
+091068,Osidda
+091070,Ottana
+091071,Ovodda
+091077,Sarule
+091083,Silanus
+091084,Sindia
+091085,Siniscola
+091086,Sorgono
+091090,Teti
+091091,Tiana
+091093,Tonara
+091094,Torpè
+091024,Fonni
+091024,Fonne
+022176,Soraga
+021030,Pfalzen
+021031,Völs am Schlern
+090061,Romana
+115002,Bidumajore
+115003,Ollasta Useddus
+115004,Abas
+095005,Allai
+095006,Arborea
+095007,Ardauli
+095007,Ardaule
+095008,Assolo
+095009,Asuni
+095010,Baradili
+095011,Baratili San Pietro
+095012,Baressa
+095013,Bauladu
+095015,Bonarcado
+095016,Boroneddu
+095079,Bosa
+095017,Busachi
+095018,Cabras
+095019,Cuglieri
+095019,Cullieri
+095077,Curcuris
+095080,Flussio
+095020,Fordongianus
+111023,Genoni
+095021,Ghilarza
+095022,Gonnoscodina
+095023,Gonnosnò
+095024,Gonnostramatza
+095082,Laconi
+095083,Magomadas
+095025,Marrubiu
+095026,Masullas
+095027,Milis
+095084,Modolo
+095028,Mogorella
+095029,Mogoro
+095085,Montresta
+095030,Morgongiori
+095031,Narbolia
+095032,Neoneli
+095033,Norbello
+095034,Nughedu Santa Vittoria
+095035,Nurachi
+095036,Nureci
+095037,Ollastra
+095039,Palmas Arborea
+095040,Pau
+095041,Paulilatino
+095042,Pompu
+095046,San Nicolò d'Arcidano
+095050,San Vero Milis
+095050,Sant 'Eru
+095047,Santa Giusta
+095047,Santa Justa
+095049,Santu Lussurgiu
+095049,Santu Lussurzu
+095051,Scano di Montiferro
+095052,Sedilo
+095053,Seneghe
+095054,Senis
+095055,Sennariolo
+095056,Siamaggiore
+095057,Siamanna
+095076,Siapiccia
+095058,Simala
+095059,Simaxis
+095060,Sini
+095061,Siris
+095078,Soddì
+095062,Solarussa
+095063,Sorradile
+095087,Suni
+095064,Tadasuni
+095065,Terralba
+095088,Tinnura
+095066,Tramatza
+095067,Tresnuraghes
+095068,Ula Tirso
+095069,Uras
+095070,Usellus
+115082,Santu Antoni Arruinas
+095073,Villa Verde
+095071,Villanova Truschedu
+095072,Villaurbana
+112003,Aldara
+111010,Carloforte
+042032,Umana
+111004,Barrali
+081014,Pantiḍḍirìa
+081020,San Vitu
+083087,Santa Marina
+083059,Motta d'Affermu
+082065,Santu Màuru
+083083,Santa Dumìnica
+083077,Santu Filippu
+083014,Comune di Castell'Umberto
+083088,Sant'Àncilu di Brolu
+083085,Sant'Alessiu Sìculu
+083084,Comune di Sant'Agata di Militello
+083023,Comune di Fondachelli Fantina
+083053,Mojo Alcantara
+036026,Comune di Montese
+021051,Meran
+058031,Scarpa
+092068,Selargius
+056005,Bassano di Sutri
+112001,l'Alguer
+092075,Settimo San Pietro
+095043,Riola Sardo
+083078,Comune di San Fratello
+083078,Santu Frateddu
+083004,Comune di Antillo
+083004,Antiddu
+083075,Comune di Rodì Milici
+083086,Santa Lucìa dû Mela
+083081,Comune di San Piero Patti
+083081,San Pieru Patti
+083081,Sanctus Petrus Super Pactas
+083022,Comune di Floresta
+083082,Santu Sarvaturi di Fitalia
+021106,Olang
+083030,Comune di Galati Mamertino
+021082,Sankt Martin in Thurn
+083105,Villafranca
+083001,Comune di Alcara Li Fusi
+083016,Comune di Castroreale
+111018,Escalaplano
+083089,Santa Tresa di Riva
+021098,Tramin an der Weinstraße
+090048,Olmedo
+090050,Osilo
+090050,Osile
+090051,Ossi
+090052,Ozieri
+090053,Padria
+090055,Pattada
+090056,Perfugas
+090057,Ploaghe
+090059,Pozzomaggiore
+090060,Putifigari
+090087,Santa Maria Coghinas
+090066,Semestene
+090067,Sennori
+090069,Sorso
+090089,Stintino
+090086,Tergu
+090071,Thiesi
+090072,Tissi
+021117,La Val
+021038,Algund
+021039,Lajen
+021042,Laas
+021063,Percha
+084002,Lisciànnira di la Rocca
+084026,Naru
+084029,Racalmutu
+084003,Araùna
+021006,Abtei
+091002,Arzana
+091005,Bari Sardo
+091006,Baunei
+091103,Cardedu
+091019,Elini
+091026,Gairo
+091039,Loceri
+091042,Lotzorai
+091069,Osini
+091072,Perdasdefogu
+111081,Seui
+091088,Talana
+091089,Tertenia
+091097,Triei
+091098,Ulassai
+091099,Urzulei
+091100,Ussassai
+091101,Villagrande Strisaili
+113001,Azos
+113002,Santu Franciscu d'Aglièntu
+113003,Alà
+113006,Belchidda
+113011,Figari
+113023,Sant'Antoni de Calanzanus
+087001,Jaci Bonaccossi
+087002,Jaci Casteddu
+087003,Jaci Catina
+087005,Jaci Sant'Antoniu
+083107,Comune di Acquedolci
+083107,Acquiduci
+087006,Adranu
+021001,Aldein
+021007,Barbian
+021010,Brenner
+021012,Branzoll
+021019,Kastelruth
+021022,Klausen
+016188,San Gioàn Biànch
+082027,Cifalù
+009002,Arbenga
+058008,Ponza
+058008,Ponza d'Arcinazzo
+021092,Sexten
+021013,Bruneck
+022029,Caderzone
+021076,Salorno
+021115,Sterzing
+021081,Sankt Lorenzen
+021113,Niederdorf
+022250,Sèn Jan
+008023,Cosio di Arroscia
+008063,Vallecrosia al mare
+009001,Arasce
+009025,Cixan
+009066,Vendùn
+070001,Kruč
+097093,Valle di Trozzo
