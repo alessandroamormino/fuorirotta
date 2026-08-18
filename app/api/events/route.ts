@@ -9,6 +9,7 @@ import {
 import { runAllScrapers } from "@/lib/scrapers";
 import { Prisma, Event as PrismaEvent } from "@prisma/client";
 import { Event } from "@/lib/types";
+import { calculateDistanceKm } from "@/lib/territorial/distance";
 
 // Helper per convertire Decimal in number
 function convertEventCoordinates(event: PrismaEvent): Event {
@@ -16,23 +17,14 @@ function convertEventCoordinates(event: PrismaEvent): Event {
 		...event,
 		latitude: event.latitude ? parseFloat(event.latitude.toString()) : null,
 		longitude: event.longitude ? parseFloat(event.longitude.toString()) : null,
+		resolvedLatitude: event.resolvedLatitude
+			? parseFloat(event.resolvedLatitude.toString())
+			: null,
+		resolvedLongitude: event.resolvedLongitude
+			? parseFloat(event.resolvedLongitude.toString())
+			: null,
 	};
 }
-
-const LOMBARDY_CITIES = [
-	"Milano",
-	"Bergamo",
-	"Brescia",
-	"Como",
-	"Cremona",
-	"Lecco",
-	"Lodi",
-	"Mantova",
-	"Monza",
-	"Pavia",
-	"Sondrio",
-	"Varese",
-];
 
 export async function GET(request: NextRequest) {
 	try {
@@ -51,7 +43,7 @@ export async function GET(request: NextRequest) {
 		const location = searchParams.get("location") || "";
 
 		// Estrai città dal parametro location
-		const cities = parseCitiesFromLocation(location);
+		const cities = await parseCitiesFromLocation(location);
 
 		// Build cache query
 		const today = new Date().toISOString().split("T")[0];
@@ -161,7 +153,7 @@ export async function GET(request: NextRequest) {
 			// Filtra per raggio
 			const filteredEvents = allEvents.filter((event) => {
 				if (!event.latitude || !event.longitude) return false;
-				const distance = calculateDistance(
+				const distance = calculateDistanceKm(
 					userLat,
 					userLng,
 					parseFloat(event.latitude.toString()),
@@ -317,31 +309,33 @@ export async function GET(request: NextRequest) {
 	}
 }
 
-function parseCitiesFromLocation(location: string): string[] {
-	return LOMBARDY_CITIES.filter((city) =>
-		location.toLowerCase().includes(city.toLowerCase())
-	);
-}
+// Estrae i nomi di comune contenuti nella stringa `location` interrogando la
+// tabella comuni (TERR-06): sostituisce la vecchia lista lombarda hardcoded
+// rimossa da questo file. Il contratto resta identico a prima — stringa in
+// ingresso, lista di nomi in uscita — cambia solo da dove arrivano i nomi.
+async function parseCitiesFromLocation(location: string): Promise<string[]> {
+	const trimmed = location.trim();
+	// Ritorno anticipato senza interrogare il DB: sotto i 4 caratteri una
+	// `contains` costruita male trasformerebbe una ricerca vuota/troppo corta
+	// in "tutti i comuni d'Italia" (edge empty).
+	if (trimmed.length < 4) return [];
 
-function calculateDistance(
-	lat1: number,
-	lon1: number,
-	lat2: number,
-	lon2: number
-): number {
-	const R = 6371; // Raggio Terra in km
-	const dLat = toRad(lat2 - lat1);
-	const dLon = toRad(lon2 - lon1);
-	const a =
-		Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-		Math.cos(toRad(lat1)) *
-			Math.cos(toRad(lat2)) *
-			Math.sin(dLon / 2) *
-			Math.sin(dLon / 2);
-	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-	return R * c;
-}
+	// position(name IN location) e' l'inverso di una contains: verifica che il
+	// nome del comune sia contenuto nella stringa utente, non il contrario.
+	// Tagged template -> query parametrizzata dal driver, mai concatenazione
+	// di stringhe (la stringa arriva da un parametro di query HTTP, T-06-14).
+	// length(name) >= 4 scarta i comuni di 2-3 lettere (Ne, Ro, Vo', Ala, Uta):
+	// senza questo filtro qualunque stringa che li contenga come sottostringa
+	// produrrebbe un falso positivo. La Fase 9 introduce un autocomplete sui
+	// comuni con selezione esplicita dell'utente: a quel punto questo filtro
+	// di lunghezza non serve più.
+	const rows = await prisma.$queryRaw<{ name: string }[]>`
+		SELECT name FROM comuni
+		WHERE length(name) >= 4
+		  AND position(lower(name) IN lower(${trimmed})) > 0
+		ORDER BY length(name) DESC, name ASC
+		LIMIT 20
+	`;
 
-function toRad(degrees: number): number {
-	return degrees * (Math.PI / 180);
+	return rows.map((row) => row.name);
 }

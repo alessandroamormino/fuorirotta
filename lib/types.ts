@@ -2,9 +2,14 @@ import { Event as PrismaEvent } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 
 // Converti Decimal in number per i campi coordinate
-export type Event = Omit<PrismaEvent, 'latitude' | 'longitude'> & {
+export type Event = Omit<
+  PrismaEvent,
+  'latitude' | 'longitude' | 'resolvedLatitude' | 'resolvedLongitude'
+> & {
   latitude: number | null
   longitude: number | null
+  resolvedLatitude: number | null
+  resolvedLongitude: number | null
 }
 
 export interface EventFilters {

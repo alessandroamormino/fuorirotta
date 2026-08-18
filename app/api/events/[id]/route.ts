@@ -9,6 +9,12 @@ function convertEventCoordinates(event: PrismaEvent): Event {
 		...event,
 		latitude: event.latitude ? parseFloat(event.latitude.toString()) : null,
 		longitude: event.longitude ? parseFloat(event.longitude.toString()) : null,
+		resolvedLatitude: event.resolvedLatitude
+			? parseFloat(event.resolvedLatitude.toString())
+			: null,
+		resolvedLongitude: event.resolvedLongitude
+			? parseFloat(event.resolvedLongitude.toString())
+			: null,
 	};
 }
 
