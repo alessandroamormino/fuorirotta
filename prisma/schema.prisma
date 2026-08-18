@@ -33,11 +33,55 @@ model Event {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
 
+  // Aggancio territoriale (Fase 6, D-01): una sola FK verso Comune, provincia e
+  // regione si leggono via join, mai copiate qui. Colonne di sorgente (latitude/
+  // longitude sopra) non vengono mai sovrascritte dal backfill (D-14): il punto
+  // usato dalla mappa vive in resolvedLatitude/resolvedLongitude, materializzato
+  // a scrittura (D-09), con coordinateSource che ne dichiara la provenienza
+  // ('source' | 'comune_centroid' | 'geocoded').
+  comuneId          Int?     @map("comune_id")
+  comune            Comune?  @relation(fields: [comuneId], references: [id])
+  resolvedLatitude  Decimal? @map("resolved_latitude") @db.Decimal(10, 8)
+  resolvedLongitude Decimal? @map("resolved_longitude") @db.Decimal(11, 8)
+  coordinateSource  String?  @map("coordinate_source") @db.VarChar(20)
+
   @@unique([source, sourceId], name: "events_source_source_id_key")
   @@index([dateStart], name: "idx_events_date_start")
   @@index([latitude, longitude], name: "idx_events_location")
   @@index([category], name: "idx_events_category")
+  @@index([comuneId])
   @@map("events")
+}
+
+// Anagrafica territoriale ISTAT (Fase 6): unica fonte di verita' per comune,
+// provincia e regione. PK surrogata (D-02): il codice ISTAT contiene le prime
+// 3 cifre della provincia e cambia in caso di riassegnazione provinciale, quindi
+// non puo' essere la chiave primaria — con una PK surrogata la riassegnazione
+// e' un UPDATE su istatCode, non una migrazione delle FK degli eventi.
+model Comune {
+  id           Int      @id @default(autoincrement())
+  istatCode    String   @unique @map("istat_code") @db.VarChar(6)
+  name         String   @db.VarChar(255)
+  // Nomi alternativi (D-03): bilingue/trilingue (es. Ortisei/St. Ulrich/Urtijei),
+  // un array copre tutti i casi senza cambiare schema. Mai null, default vuoto.
+  aliases      String[] @default([])
+  provinceCode String   @map("province_code") @db.VarChar(10)
+  provinceName String   @map("province_name") @db.VarChar(255)
+  regionCode   String   @map("region_code") @db.VarChar(10)
+  regionName   String   @map("region_name") @db.VarChar(255)
+  // Nullable di proposito: l'identita' ISTAT resta autoritativa anche quando la
+  // sorgente delle coordinate non copre questo comune. Un comune senza punto
+  // resta agganciabile (comuneId valorizzato) ma non produce centroide —
+  // comportamento dichiarato, non un NOT NULL che costringerebbe a inventarlo.
+  latitude     Decimal? @db.Decimal(10, 8)
+  longitude    Decimal? @db.Decimal(11, 8)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  events Event[]
+
+  @@index([aliases], type: Gin)
+  @@map("comuni")
 }
 
 model WorkflowExecution {
