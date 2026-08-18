@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-comuni-search-test/
 /out/
 
 # production
