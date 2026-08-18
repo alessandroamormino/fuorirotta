@@ -30,6 +30,16 @@ interface SearchFilters {
 
 type ActiveField = "where" | "when" | "mobile_search" | null;
 
+// Decisione D-17 (Fase 6, 06-04-PLAN.md): questa e' la terza copia delle
+// stesse dodici città lombarde che vivevano nelle altre due liste hardcoded
+// del filtro API e del fallback mappa — ma a differenza di quelle non è un
+// lookup territoriale: non porta coordinate e non serve a risolvere niente.
+// Porta sottotitolo e icona, contenuto redazionale ("Città alta", "Città dei
+// violini") che la tabella `Comune` non modella, quindi non è una
+// sostituzione uno-a-uno. Le altre due liste sono state eliminate in questa
+// fase (TERR-06); questa resta, annotata. La Fase 9 (Navbar Decomposition)
+// la prende in carico: il suggerimento diventerà un autocomplete servito
+// dalla tabella comuni e i sottotitoli editoriali avranno una casa dichiarata.
 const SUGGESTED_DESTINATIONS = [
 	{
 		name: "Nelle vicinanze",

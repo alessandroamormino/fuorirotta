@@ -166,11 +166,21 @@ export async function GET(request: NextRequest) {
 			events = filteredEvents.slice(offset, offset + limit);
 			total = filteredEvents.length;
 
-			// For map: use all filtered events with lightweight fields
+			// For map: use all filtered events with lightweight fields.
+			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
+			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
+			// al solo centroide del comune non avrebbero nessun punto da leggere.
 			mapEvents = filteredEvents.map((e) => ({
 				id: e.id,
 				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
 				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
+				resolvedLatitude: e.resolvedLatitude
+					? parseFloat(e.resolvedLatitude.toString())
+					: null,
+				resolvedLongitude: e.resolvedLongitude
+					? parseFloat(e.resolvedLongitude.toString())
+					: null,
+				coordinateSource: e.coordinateSource,
 				title: e.title,
 				dateStart: e.dateStart,
 				locationName: e.locationName,
@@ -190,7 +200,10 @@ export async function GET(request: NextRequest) {
 
 			total = await prisma.event.count({ where });
 
-			// Fetch lightweight event data for map (all matching events, no pagination)
+			// Fetch lightweight event data for map (all matching events, no pagination).
+			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
+			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
+			// al solo centroide del comune non avrebbero nessun punto da leggere.
 			const mapEventsRaw = await prisma.event.findMany({
 				where,
 				orderBy: { dateStart: "asc" },
@@ -198,6 +211,9 @@ export async function GET(request: NextRequest) {
 					id: true,
 					latitude: true,
 					longitude: true,
+					resolvedLatitude: true,
+					resolvedLongitude: true,
+					coordinateSource: true,
 					title: true,
 					dateStart: true,
 					locationName: true,
@@ -212,6 +228,12 @@ export async function GET(request: NextRequest) {
 				...e,
 				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
 				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
+				resolvedLatitude: e.resolvedLatitude
+					? parseFloat(e.resolvedLatitude.toString())
+					: null,
+				resolvedLongitude: e.resolvedLongitude
+					? parseFloat(e.resolvedLongitude.toString())
+					: null,
 			}));
 		}
 

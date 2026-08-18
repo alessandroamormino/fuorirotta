@@ -6,7 +6,6 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { Event } from "@/lib/types";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { getEventCoordinates } from "@/lib/cityCoordinates";
 
 interface EventsMapProps {
 	events: Event[];
@@ -224,11 +223,22 @@ export default function EventsMap({
 				popupRef.current = null;
 			}
 
-			// Compute events with coordinates for bounds fitting (always needed)
+			// Compute events with coordinates for bounds fitting (always needed).
+			// Il punto e' gia' stato risolto a scrittura dal backfill territoriale
+			// (D-09/D-14, Fase 6): include il centroide del comune per gli eventi
+			// senza coordinate proprie. Il client non calcola più nessun fallback,
+			// legge solo resolvedLatitude/resolvedLongitude — la stessa colonna
+			// letta dal GeoJSON precalcolato in lib/clusterCache.ts, cosi' gli
+			// eventi non si spostano a seconda che ci siano filtri attivi o no.
 			const eventsWithCoords = events
 				.map((event) => {
-					const coords = getEventCoordinates(event);
-					return coords ? { event, coords } : null;
+					if (event.resolvedLatitude == null || event.resolvedLongitude == null) {
+						return null;
+					}
+					return {
+						event,
+						coords: { lat: event.resolvedLatitude, lng: event.resolvedLongitude },
+					};
 				})
 				.filter(
 					(
