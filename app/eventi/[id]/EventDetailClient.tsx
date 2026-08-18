@@ -9,7 +9,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
 import { Calendar, MapPin, ExternalLink, Tag, ArrowLeft, Phone } from "lucide-react";
-import { decodeHtmlEntities } from "@/lib/utils";
+import { decodeHtmlEntities, htmlToPlainText } from "@/lib/utils";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -153,7 +153,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 					</motion.button>
 				</div>
 
-				<div className="container mx-auto px-4 max-w-7xl">
+				<div className="container mx-auto px-4 pb-8 md:pb-16 max-w-7xl">
 					{/* Hero Image */}
 					{event.imageUrl ? (
 						<motion.div
@@ -306,7 +306,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 								    restituisce il campo grezzo dell'API). dangerouslySetInnerHTML
 								    qui era solo una via d'ingresso XSS da contenuto scrapato — T-07-09. */}
 								<div className="text-foreground-secondary leading-relaxed prose prose-sm max-w-none whitespace-pre-line">
-										{event.description}
+										{htmlToPlainText(event.description)}
 									</div>
 									<p className="text-xs text-muted-foreground-subtle">Fonte: {event.source}</p>
 								</motion.div>
