@@ -170,7 +170,12 @@ fi
 #      precedente, updated_at cambiato). Se questo non si verifica, il confronto non sa
 #      distinguere uno stato diverso da uno uguale: fail esplicito, e NON eseguire il passo 5;
 #   5. solo ora, a dati fermi, riesegui una terza volta e verifica che il digest di stato sia
-#      identico a quello del passo 3;
+#      identico a quello immediatamente successivo al passo 4 (non a quello del passo 3: il
+#      passo 4 cambia deliberatamente updated_at dell'evento di prova, quindi il digest del
+#      passo 3 non puo' piu' coincidere con nessuno stato successivo — e' proprio quella
+#      differenza che il passo 4 doveva dimostrare di saper rilevare). Il confronto che conta
+#      per l'idempotenza (D-08) e' "l'esecuzione a dati fermi non cambia nulla rispetto a
+#      subito prima di lei", non rispetto a uno stato precedente alla mutazione deliberata;
 #   6. verifica che il report dell'ultima esecuzione dichiari updated: 0.
 if [[ "${comuni_exists}" != "t" || "${events_exist}" != "t" || "${comune_id_col}" != "1" ]]; then
   fail "TERR-04: prerequisiti (tabella comuni + colonne territoriali su events) non ancora presenti"
@@ -180,7 +185,11 @@ else
     fail "TERR-04: nessun comune in tabella da usare come location_name dell'evento di prova"
   else
     test_source_id="territorial-idempotency-$$"
-    test_event_id="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, location_name, latitude, longitude, created_at, updated_at) VALUES ('__territorial_test__', '${test_source_id}', 'Evento di prova idempotenza', now() + interval '30 days', '${seed_comune_name}', NULL, NULL, now(), now()) RETURNING id")"
+    # L'INSERT e' avvolto in un CTE con SELECT esterno: psql -tAc stampa comunque il
+    # tag di completamento ("INSERT 0 1") dopo un INSERT ... RETURNING, anche in
+    # modalita' tuples-only, corrompendo la cattura della sola colonna id. Con il
+    # comando top-level ridotto a un SELECT, il tag sparisce e resta solo l'id.
+    test_event_id="$(psql_dev "WITH ins AS (INSERT INTO events (source, source_id, title, date_start, location_name, latitude, longitude, created_at, updated_at) VALUES ('__territorial_test__', '${test_source_id}', 'Evento di prova idempotenza', now() + interval '30 days', '${seed_comune_name}', NULL, NULL, now(), now()) RETURNING id) SELECT id FROM ins")"
     if [[ -z "${test_event_id}" ]]; then
       fail "TERR-04: impossibile creare l'evento di prova"
     else
@@ -192,9 +201,9 @@ else
       else
         ok "TERR-04: l'evento di prova si aggancia al comune '${seed_comune_name}' alla prima esecuzione"
 
-        # passo 3: digest di stato su tutti gli eventi, updated_at incluso
-        digest_before="$(psql_dev "SELECT md5(string_agg(id::text||':'||coalesce(comune_id::text,'')||':'||coalesce(resolved_latitude::text,'')||':'||coalesce(resolved_longitude::text,'')||':'||coalesce(coordinate_source,'')||':'||extract(epoch from updated_at)::text, '|' ORDER BY id)) FROM events")"
-
+        # passo 3 (il digest di stato "a dati fermi" che conta per il passo 5 viene
+        # calcolato piu' sotto, subito dopo il passo 4: vedi il commento sopra il
+        # passo 5 sul perche' non e' questo il punto di confronto giusto) e
         # passo 4: prova di non-vacuita' — azzera a mano le colonne risolte dell'evento di prova
         pre_reset_updated_at="$(psql_dev "SELECT extract(epoch from updated_at)::text FROM events WHERE id = ${test_event_id}")"
         psql_dev "UPDATE events SET comune_id = NULL, resolved_latitude = NULL, resolved_longitude = NULL, coordinate_source = NULL WHERE id = ${test_event_id}" >/dev/null
@@ -216,14 +225,19 @@ else
         if [[ "${vacuity_ok}" == "1" ]]; then
           ok "TERR-04: la prova di non-vacuita' ha rilevato la differenza deliberata (comune_id riscritto, updated_at cambiato)"
 
+          # digest "a dati fermi": lo stato subito dopo il passo 4, che e' il punto di
+          # partenza reale su cui il passo 5 deve dimostrarsi un no-op (vedi commento
+          # sopra il passo 5 sul perche' non e' il digest del passo 3).
+          digest_at_rest="$(psql_dev "SELECT md5(string_agg(id::text||':'||coalesce(comune_id::text,'')||':'||coalesce(resolved_latitude::text,'')||':'||coalesce(resolved_longitude::text,'')||':'||coalesce(coordinate_source,'')||':'||extract(epoch from updated_at)::text, '|' ORDER BY id)) FROM events")"
+
           # passo 5: a dati fermi, terza esecuzione — digest deve essere identico
           run_dev npx tsx scripts/backfill-events.ts >/tmp/territorial-backfill-run3.log 2>&1 || true
           digest_after="$(psql_dev "SELECT md5(string_agg(id::text||':'||coalesce(comune_id::text,'')||':'||coalesce(resolved_latitude::text,'')||':'||coalesce(resolved_longitude::text,'')||':'||coalesce(coordinate_source,'')||':'||extract(epoch from updated_at)::text, '|' ORDER BY id)) FROM events")"
 
-          if [[ "${digest_after}" != "${digest_before}" ]]; then
-            fail "TERR-04: il digest di stato e' cambiato dopo l'esecuzione a dati fermi (${digest_before} -> ${digest_after}) — non e' un no-op"
+          if [[ "${digest_after}" != "${digest_at_rest}" ]]; then
+            fail "TERR-04: il digest di stato e' cambiato dopo l'esecuzione a dati fermi (${digest_at_rest} -> ${digest_after}) — non e' un no-op"
           else
-            ok "TERR-04: digest di stato identico a dati fermi (${digest_before})"
+            ok "TERR-04: digest di stato identico a dati fermi (${digest_at_rest})"
           fi
 
           # passo 6: il report dichiara updated: 0 sull'ultima esecuzione

@@ -1,0 +1,7 @@
+# Fixture del tracer (06-01): due comuni reali, Milano e Bergamo. istat_code,
+# province_code/name e region_code/name dall'elenco ufficiale ISTAT dei
+# comuni; latitude/longitude da lib/cityCoordinates.ts, gia' presente nel
+# repository. Nessun valore inventato.
+istat_code,name,aliases,province_code,province_name,region_code,region_name,latitude,longitude
+015146,Milano,,MI,Milano,03,Lombardia,45.4642,9.19
+016024,Bergamo,,BG,Bergamo,03,Lombardia,45.6983,9.6773
