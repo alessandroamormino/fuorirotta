@@ -10,21 +10,9 @@ import { runAllScrapers } from "@/lib/scrapers";
 import { Prisma, Event as PrismaEvent } from "@prisma/client";
 import { Event } from "@/lib/types";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
+import { serializeEvent } from "@/lib/serializeEvent";
 
 // Helper per convertire Decimal in number
-function convertEventCoordinates(event: PrismaEvent): Event {
-	return {
-		...event,
-		latitude: event.latitude ? parseFloat(event.latitude.toString()) : null,
-		longitude: event.longitude ? parseFloat(event.longitude.toString()) : null,
-		resolvedLatitude: event.resolvedLatitude
-			? parseFloat(event.resolvedLatitude.toString())
-			: null,
-		resolvedLongitude: event.resolvedLongitude
-			? parseFloat(event.resolvedLongitude.toString())
-			: null,
-	};
-}
 
 export async function GET(request: NextRequest) {
 	try {
@@ -150,14 +138,21 @@ export async function GET(request: NextRequest) {
 				orderBy: { dateStart: "asc" },
 			});
 
-			// Filtra per raggio
+			// Filtra per raggio sul punto RISOLTO, lo stesso che legge la mappa
+			// (D-09/D-14): un evento agganciato al solo centroide del comune ha
+			// latitude/longitude di sorgente nulle, e filtrando su quelle sparirebbe
+			// dai risultati pur avendo un punto perfettamente valido.
+			// I confronti sono su null e non sulla verita' del valore: 0 e' una
+			// coordinata valida e un test falsy la scarterebbe in silenzio.
 			const filteredEvents = allEvents.filter((event) => {
-				if (!event.latitude || !event.longitude) return false;
+				const lat = event.resolvedLatitude ?? event.latitude;
+				const lng = event.resolvedLongitude ?? event.longitude;
+				if (lat === null || lng === null) return false;
 				const distance = calculateDistanceKm(
 					userLat,
 					userLng,
-					parseFloat(event.latitude.toString()),
-					parseFloat(event.longitude.toString())
+					parseFloat(lat.toString()),
+					parseFloat(lng.toString())
 				);
 				return distance <= radiusKm;
 			});
@@ -309,7 +304,7 @@ export async function GET(request: NextRequest) {
 		// ==============================================
 
 		return NextResponse.json({
-			events: events.map(convertEventCoordinates),
+			events: events.map(serializeEvent),
 			mapEvents, // ALL matching events (lightweight) for map rendering
 			total,
 			limit,

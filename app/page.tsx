@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Event } from "@/lib/types";
+import { serializeEvent } from "@/lib/serializeEvent";
 import HomeClient from "./HomeClient";
 
 export const revalidate = 300; // Rivalidate ogni 5 minuti
@@ -19,16 +20,8 @@ export default async function Home() {
 		}),
 	]);
 
-	// Converti Decimal e Date in tipi primitivi serializzabili per il client component
-	const initialEvents = rawEvents.map((e) => ({
-		...e,
-		latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
-		longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
-		dateStart: e.dateStart.toISOString(),
-		dateEnd: e.dateEnd?.toISOString() ?? null,
-		createdAt: e.createdAt.toISOString(),
-		updatedAt: e.updatedAt.toISOString(),
-	})) as unknown as Event[];
+	// Decimal e Date non attraversano il confine Server -> Client Component.
+	const initialEvents: Event[] = rawEvents.map(serializeEvent);
 
 	return <HomeClient initialEvents={initialEvents} initialTotal={total} />;
 }

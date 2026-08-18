@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { decodeHtmlEntities } from "@/lib/utils";
 import { Event } from "@/lib/types";
+import { serializeEvent } from "@/lib/serializeEvent";
 import EventDetailClient from "./EventDetailClient";
 
 const BASE_URL = (
@@ -106,17 +107,7 @@ export default async function EventDetailPage({
 		: null;
 
 	// Serializza l'evento per il client component (Date → string, Decimal → number)
-	const serializedEvent = event
-		? ({
-				...event,
-				latitude: event.latitude ? parseFloat(event.latitude.toString()) : null,
-				longitude: event.longitude ? parseFloat(event.longitude.toString()) : null,
-				dateStart: event.dateStart.toISOString(),
-				dateEnd: event.dateEnd?.toISOString() ?? null,
-				createdAt: event.createdAt.toISOString(),
-				updatedAt: event.updatedAt.toISOString(),
-			} as unknown as Event)
-		: null;
+	const serializedEvent = event ? serializeEvent(event) : null;
 
 	return (
 		<>

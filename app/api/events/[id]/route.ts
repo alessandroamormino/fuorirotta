@@ -1,22 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { serializeEvent } from "@/lib/serializeEvent";
 import { prisma } from "@/lib/prisma";
-import { Event as PrismaEvent } from "@prisma/client";
-import { Event } from "@/lib/types";
-
-// Helper per convertire Decimal in number
-function convertEventCoordinates(event: PrismaEvent): Event {
-	return {
-		...event,
-		latitude: event.latitude ? parseFloat(event.latitude.toString()) : null,
-		longitude: event.longitude ? parseFloat(event.longitude.toString()) : null,
-		resolvedLatitude: event.resolvedLatitude
-			? parseFloat(event.resolvedLatitude.toString())
-			: null,
-		resolvedLongitude: event.resolvedLongitude
-			? parseFloat(event.resolvedLongitude.toString())
-			: null,
-	};
-}
 
 export async function GET(
 	request: NextRequest,
@@ -38,7 +22,7 @@ export async function GET(
 			return NextResponse.json({ error: "Event not found" }, { status: 404 });
 		}
 
-		return NextResponse.json(convertEventCoordinates(event));
+		return NextResponse.json(serializeEvent(event));
 	} catch (error) {
 		console.error("Error fetching event:", error);
 		return NextResponse.json(
