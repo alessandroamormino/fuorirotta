@@ -12,13 +12,24 @@ interface ClusterCacheData {
  */
 export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // UTC, non ora locale del processo: il Postgres locale gira in UTC (vedi
+  // docker-compose.dev.yml) e la verifica TERR-07 confronta questo conteggio
+  // con `date_trunc('day', now())`, che usa il timezone di sessione del DB.
+  // Con setHours() (ora locale) il confine "oggi" si sfasa di 1-2h rispetto
+  // al DB a seconda dell'ora legale, includendo/escludendo eventi diversi
+  // vicino a mezzanotte — bug scoperto eseguendo la verifica del piano 06-01
+  // contro dati reali (2269 vs 2249 eventi).
+  today.setUTCHours(0, 0, 0, 0);
 
+  // Il punto usato dalla mappa e' quello materializzato dal backfill territoriale
+  // (resolvedLatitude/resolvedLongitude), non le colonne di sorgente: include il
+  // centroide del comune per gli eventi senza coordinate proprie (D-09/D-14,
+  // Fase 6). latitude/longitude restano lette dal backfill ma non da qui.
   const events = await prisma.event.findMany({
     where: {
       dateStart: { gte: today },
-      latitude: { not: null },
-      longitude: { not: null },
+      resolvedLatitude: { not: null },
+      resolvedLongitude: { not: null },
     },
     select: {
       id: true,
@@ -27,8 +38,8 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
       locationName: true,
       category: true,
       imageUrl: true,
-      latitude: true,
-      longitude: true,
+      resolvedLatitude: true,
+      resolvedLongitude: true,
     },
     orderBy: { dateStart: 'asc' },
   });
@@ -40,8 +51,8 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
       geometry: {
         type: 'Point' as const,
         coordinates: [
-          parseFloat(event.longitude!.toString()),
-          parseFloat(event.latitude!.toString()),
+          parseFloat(event.resolvedLongitude!.toString()),
+          parseFloat(event.resolvedLatitude!.toString()),
         ],
       },
       properties: {

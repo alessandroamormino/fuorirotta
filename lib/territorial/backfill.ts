@@ -16,6 +16,7 @@
  */
 import { prisma } from '../prisma'
 import { buildComuneIndex, resolveComune, type ComuneRow, type MatchStep } from './resolve'
+import { updateClusterCache } from '../clusterCache'
 import type { Prisma } from '@prisma/client'
 
 export type BackfillReport = {
@@ -23,6 +24,7 @@ export type BackfillReport = {
   updated: number
   unchanged: number
   byStep: Record<MatchStep, number>
+  clusterFeatureCount: number
 }
 
 const BATCH_SIZE = 5
@@ -73,6 +75,7 @@ export async function backfillEvents(): Promise<BackfillReport> {
     updated: 0,
     unchanged: 0,
     byStep: { exact: 0, normalized: 0, unmatched: 0, no_input: 0 },
+    clusterFeatureCount: 0,
   }
 
   for (let i = 0; i < events.length; i += BATCH_SIZE) {
@@ -119,6 +122,13 @@ export async function backfillEvents(): Promise<BackfillReport> {
       else report.updated++
     }
   }
+
+  // Senza ricalcolare qui, un evento appena materializzato al centroide resta
+  // fuori dal GeoJSON fino al prossimo trigger naturale della cache: il piano
+  // sembrerebbe fallito quando invece ha funzionato (Pitfall 4, RESEARCH.md).
+  await updateClusterCache()
+  const cache = await prisma.mapClusterCache.findUnique({ where: { id: 'default' } })
+  report.clusterFeatureCount = cache?.eventCount ?? 0
 
   return report
 }

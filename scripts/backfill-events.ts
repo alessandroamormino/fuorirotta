@@ -18,6 +18,7 @@ async function main() {
   console.log(`[Territorial] updated: ${report.updated}`)
   console.log(`[Territorial] unchanged: ${report.unchanged}`)
   console.log(`[Territorial] byStep: ${JSON.stringify(report.byStep)}`)
+  console.log(`[Territorial] clusterFeatureCount: ${report.clusterFeatureCount}`)
 }
 
 main()
