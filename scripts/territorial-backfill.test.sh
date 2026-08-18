@@ -366,6 +366,25 @@ else
   fi
 fi
 
+# --- Sezione 9 (D-15) — il runner chiama il backfill dopo saveEvents ----------------------
+# Gate durevole contro la rimozione accidentale della chiamata: verifica che in
+# lib/scrapers/runner.ts esista almeno una riga DI CODICE che invoca
+# backfillEvents(), escludendo le righe di commento (// * /*) prima di
+# contare — altrimenti un commento che nomina la funzione basterebbe a far
+# passare il gate, e un controllo che si accontenta di una parola scritta in
+# un commento non controlla niente.
+runner_file="${repo_root}/lib/scrapers/runner.ts"
+if [[ ! -f "${runner_file}" ]]; then
+  fail "D-15: ${runner_file} non esiste"
+else
+  code_calls="$(grep -v '^[[:space:]]*\(//\|\*\|/\*\)' "${runner_file}" | grep -c 'backfillEvents(' || true)"
+  if [[ "${code_calls}" -lt 1 ]]; then
+    fail "D-15: nessuna riga di codice in lib/scrapers/runner.ts invoca backfillEvents() — senza quella chiamata ogni scrape futuro crea eventi che nessuno aggancia"
+  else
+    ok "D-15: lib/scrapers/runner.ts contiene almeno una chiamata a backfillEvents() in codice (non in commento)"
+  fi
+fi
+
 # --- Riepilogo -------------------------------------------------------------------------------
 if [[ "${#failures[@]}" -gt 0 ]]; then
   echo ""

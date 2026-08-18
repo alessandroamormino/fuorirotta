@@ -12,6 +12,7 @@ import { SOURCE_REGISTRY, getSourceById } from './registry'
 import { saveEvents, logMetrics } from './utils'
 import { truncateError } from './health'
 import { prisma } from '../prisma'
+import { backfillEvents } from '../territorial/backfill'
 import type { ScrapeParams, ScrapeResult, RunResult } from './types'
 
 /**
@@ -70,6 +71,25 @@ export async function runAllScrapers(params?: ScrapeParams): Promise<RunResult> 
     const { saved, skipped } = await saveEvents(allEvents)
 
     console.log(`[Scraper] Done. ${saved} new events saved to database.`)
+
+    // Aggancio territoriale in coda a ogni scrape (D-15).
+    // Perche' qui e non dentro saveEvents: l'aggancio esiste in una sola
+    // implementazione al mondo (la cascata di lib/territorial/), esercitata a
+    // ogni scrape invece che una volta sola — una regressione del matching si
+    // vede subito, invece di restare latente fino al prossimo backfill manuale.
+    // Perche' l'errore propaga, a differenza di recordScrapeRuns qui sopra:
+    // quando questa chiamata parte gli eventi sono gia' persistiti, quindi
+    // propagare non perde niente; inghiottire l'errore ricreerebbe esattamente
+    // lo scenario che D-15 esiste per impedire — eventi che si accumulano
+    // senza comune mentre tutto sembra funzionare. La finestra di incoerenza
+    // dichiarata sono i millisecondi fra le due chiamate.
+    // Costo basso per costruzione (D-08): il backfill ripassa su tutti gli
+    // eventi ma scrive solo dove il valore differisce, quindi a dati fermi
+    // scrive quasi niente.
+    const backfillReport = await backfillEvents()
+    console.log(
+      `[Scraper] Backfill territoriale: ${backfillReport.updated} agganciati/aggiornati, ${backfillReport.unchanged} invariati su ${backfillReport.scanned} eventi (no_input: ${backfillReport.byStep.no_input}).`
+    )
 
     return {
       saved,
