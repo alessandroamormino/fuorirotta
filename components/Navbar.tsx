@@ -333,6 +333,21 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															}}
 															className="flex-1 text-sm outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
 														/>
+														{mobileSearchInput && (
+															<button
+																type="button"
+																aria-label="Svuota il campo destinazione"
+																onClick={() => {
+																	setMobileSearchInput("");
+																	setFilters({ ...filters, location: "", radius: undefined });
+																	setIsNearbySearch(false);
+																	setSelectedRadius(null);
+																}}
+																className="flex-shrink-0 w-6 h-6 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
+															>
+																<X className="w-3.5 h-3.5 text-muted-foreground" />
+															</button>
+														)}
 													</div>
 
 													<p className="text-xs font-semibold text-muted-foreground-subtle mb-3">
@@ -533,7 +548,12 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 														whileTap={{ scale: 0.97 }}
 														onClick={() => {
 															const label = `Nelle vicinanze (${mobileCustomRadius} km)`;
-															setMobileSearchInput(label);
+															// L'etichetta NON entra nell'input: la mostra gia' la pill
+															// della searchbar. Lasciandola qui, riaprire "Dove?" mostrava
+															// i risultati di ricerca per una stringa senza senso invece
+															// delle destinazioni suggerite, e per cambiare filtro
+															// bisognava cancellare la frase a mano.
+															setMobileSearchInput("");
 															setFilters({
 																...filters,
 																location: label,
@@ -724,7 +744,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 								<div className="hidden sm:block flex-1 relative">
 									<div
 										onClick={() => setActiveField("where")}
-										className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
+										className="relative px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
 									>
 										<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 											Dove
@@ -750,6 +770,25 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 											onFocus={() => setActiveField("where")}
 											readOnly={isNearbySearch}
 										/>
+										{searchInput && (
+											<button
+												type="button"
+												aria-label="Svuota il campo destinazione"
+												onClick={(e) => {
+													// stopPropagation: il div genitore ha un onClick che
+													// riapre il pannello "Dove", che riaprirebbe subito
+													// cio' che questo bottone ha appena chiuso.
+													e.stopPropagation();
+													setSearchInput("");
+													setFilters({ ...filters, location: "", radius: undefined });
+													setIsNearbySearch(false);
+													setSelectedRadius(null);
+												}}
+												className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
+											>
+												<X className="w-3.5 h-3.5 text-muted-foreground" />
+											</button>
+										)}
 									</div>
 									{activeField === "where" && (
 										<motion.div

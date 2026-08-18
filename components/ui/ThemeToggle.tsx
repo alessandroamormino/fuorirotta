@@ -29,7 +29,10 @@ export default function ThemeToggle() {
 			onClick={toggleTheme}
 			aria-label={isDark ? "Passa al tema chiaro" : "Passa al tema scuro"}
 			// ponytail: fixed top-right z-[300] is a provisional placement, Phase 12 decides the final spot
-			className="fixed top-4 right-4 z-[300] flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors"
+			/* Su mobile in basso a destra: in alto copriva la search bar del Navbar
+			   ("Inizia la ricerca"), che occupa tutta la larghezza. Da md in su la
+			   barra non arriva ai bordi e la posizione originale in alto va bene. */
+			className="fixed bottom-4 right-4 md:bottom-auto md:top-4 z-[300] flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors"
 		>
 			{isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
 		</button>
