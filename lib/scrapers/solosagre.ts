@@ -268,7 +268,11 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
       description: data.description || '',
       dateStart: eventStartDate,
       dateEnd: eventEndDate,
-      locationName: locationCity || 'Lombardia',
+      // 'Lombardia' non e' un comune: e' un'affermazione falsa in un campo che
+      // significa "comune". Con null il report del backfill distingue "la
+      // sorgente non l'ha dato" (no_input) da "l'ha dato e non l'abbiamo
+      // risolto" (unmatched) — due problemi diversi con due rimedi diversi (D-16).
+      locationName: locationCity || null,
       address: null,
       latitude: null,
       longitude: null,

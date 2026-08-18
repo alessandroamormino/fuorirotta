@@ -206,3 +206,31 @@ drasticamente inferiore a quanto assunto altrove nel progetto — indipendente d
 paginazione (SRC-03) già noto e trattato in `08-05`. Questo piano (08-03) chiude solo la
 migrazione del *parsing*: non applica alcuna scrittura a produzione né esegue uno scrape
 reale contro il database (vedi `<database_safety>` nel prompt dell'agente).
+
+## Aggiornamento 2026-08-18 — D-16 (Fase 6)
+
+**Righe modificate e perché.** `lib/scrapers/solosagre.ts:275` (`locationName: locationCity || 'Lombardia'`) e `lib/scrapers/opendata.ts:114` (`locationName: item.comune || 'Lombardia'`) scrivono ora `null` invece del letterale `'Lombardia'`. `'Lombardia'` non è un comune: è un'affermazione falsa in un campo che il resolver territoriale della Fase 6 interpreta come nome di comune da cercare. Con `null`, il backfill distingue `no_input` (la sorgente non ha dato il dato) da `unmatched` (l'abbiamo cercato e non risolto) — due problemi diversi con due rimedi diversi (D-16, `.planning/phases/06-territorial-data-model/06-CONTEXT.md`).
+
+**Esito misurato di `npx tsx scripts/parity.ts --compare` subito dopo la modifica:**
+
+```
+OK: output normalizzato identico alla baseline (solosagre, inlombardiaCards, inlombardiaDetail)
+OK: opendata — differenza dichiarata sul solo campo "description" (T-08-19): 0/1054 eventi con descrizione modificata dalla normalizzazione
+```
+
+Confronto **verde**, exit 0. Delta di parità: **zero**.
+
+**Perché il delta è zero — verificato con un conteggio, non solo assunto.** La superficie che `captureAll()` congela per SoloSagre è `parseSoloSagreHtml(...)`, un parser HTML a monte del mapping a `ScrapeResult` in cui vive la riga modificata: la baseline `solosagre` non esercita mai quel ramo, quindi non poteva cambiare. Per OpenData la superficie catturata **è** `transformOpenDataRecords(...)`, che contiene la riga modificata — qui il delta zero dipende dai dati della fixture, non dalla struttura del test. Conteggio di controllo eseguito sulla fixture congelata (`lib/scrapers/__fixtures__/opendata-response.json`, 1054 record): **0 record** hanno `comune` assente o falsy, quindi **0 record** avrebbero mai preso il ramo di fallback. La spiegazione regge.
+
+**Baseline non ricatturata.** `--capture` non è stato eseguito: il confronto era verde, quindi non c'era nessun cambiamento reale da congelare. Ricatturare una baseline invariata avrebbe sostituito un riferimento verificato con uno nuovo senza motivo (T-06-17).
+
+**Conteggi per sorgente, invariati:**
+
+| Sorgente | Prima di D-16 | Dopo D-16 | Variazione |
+|---|---|---|---|
+| `solosagre` | 10 | 10 | 0 |
+| `inlombardiaCards` | 9 | 9 | 0 |
+| `inlombardiaDetail` | 1 oggetto | 1 oggetto | 0 |
+| `opendata` | 1054 | 1054 | 0 (0 descrizioni cambiate) |
+
+`npm run check:parity` (`scripts/registry-parity.test.sh`) rieseguito dopo la modifica: verde, incluse le sue prove di non-vacuità.

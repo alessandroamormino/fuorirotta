@@ -107,7 +107,11 @@ export function transformOpenDataRecords(data: OpenDataRecord[]): ScrapedEvent[]
       description: normalizeDescription(item.descriz),
       dateStart: eventStartDate,
       dateEnd: eventEndDate,
-      locationName: item.comune || 'Lombardia',
+      // 'Lombardia' non e' un comune: e' un'affermazione falsa in un campo che
+      // significa "comune". Con null il report del backfill distingue "la
+      // sorgente non l'ha dato" (no_input) da "l'ha dato e non l'abbiamo
+      // risolto" (unmatched) — due problemi diversi con due rimedi diversi (D-16).
+      locationName: item.comune || null,
       address,
       latitude,
       longitude,
