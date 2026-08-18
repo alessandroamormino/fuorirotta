@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import Link from "next/link";
 import Image from "next/image";
 import DateRangeField from "@/components/ui/DateRangeField";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 interface NavbarProps {
 	onSearch: (filters: SearchFilters) => void;
@@ -276,6 +277,10 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 								>
 									<Map className="w-5 h-5 text-muted-foreground" />
 								</motion.button>
+								{/* Tema: qui e non flottante. Su mobile non esiste un angolo
+								    libero — in alto copriva la searchbar, in basso la
+								    paginazione. Dentro questo pannello non copre nulla. */}
+								<ThemeToggle className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center text-muted-foreground" />
 								<motion.button
 									whileTap={{ scale: 0.9 }}
 									onClick={() => {

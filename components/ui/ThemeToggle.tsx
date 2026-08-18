@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
 
-export default function ThemeToggle() {
+/**
+ * `className` permette di montarlo dentro un contenitore invece che flottante.
+ * Serve perche' su mobile la posizione fissa non ha un angolo libero: in alto
+ * copriva la searchbar, in basso la paginazione. Nel Navbar viene montato come
+ * quarta icona del pannello di ricerca, dove non puo' coprire nulla.
+ */
+export default function ThemeToggle({ className }: { className?: string }) {
 	const [isDark, setIsDark] = useState(false);
 
 	useEffect(() => {
@@ -28,11 +34,12 @@ export default function ThemeToggle() {
 			type="button"
 			onClick={toggleTheme}
 			aria-label={isDark ? "Passa al tema chiaro" : "Passa al tema scuro"}
-			// ponytail: fixed top-right z-[300] is a provisional placement, Phase 12 decides the final spot
-			/* Su mobile in basso a destra: in alto copriva la search bar del Navbar
-			   ("Inizia la ricerca"), che occupa tutta la larghezza. Da md in su la
-			   barra non arriva ai bordi e la posizione originale in alto va bene. */
-			className="fixed bottom-4 right-4 md:bottom-auto md:top-4 z-[300] flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors"
+			className={
+				className ??
+				// Default: flottante in alto a destra, ma solo da md in su.
+				// Su mobile lo monta il Navbar (vedi sopra).
+				"fixed top-4 right-4 z-[300] hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors"
+			}
 		>
 			{isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
 		</button>
