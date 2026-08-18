@@ -323,11 +323,24 @@ else
       ok "TERR-07: il numero di feature nel GeoJSON coincide con gli eventi futuri risolti (${feature_count})"
     fi
 
-    lost_pins="$(psql_dev "SELECT count(*) FROM events WHERE latitude IS NOT NULL AND resolved_latitude IS NULL")"
+    # Corretto in 06-02: questa sezione nasce in 06-01 quando D-11 non esisteva
+    # ancora e il centroide non sostituiva mai la sorgente (D-09 originale:
+    # "la sorgente vince sempre", punto e basta). Con D-11 (06-02) una
+    # coordinata di sorgente IMPLAUSIBILE (0,0 o fuori bbox Italia) viene
+    # trattata come assente e sostituita dal centroide SOLO se un comune si
+    # aggancia — se il comune resta non risolto, quell'evento perde
+    # legittimamente il pin (meglio nessun pin che un pin fantasma a 0,0).
+    # L'invariante corretto oggi non e' piu' "ogni latitude non nulla produce
+    # un resolved_latitude", ma "ogni latitude PLAUSIBILE (D-11) produce un
+    # resolved_latitude" — la sorgente, quando plausibile, vince sempre
+    # (D-14) a prescindere dall'aggancio del comune. Stessi limiti di
+    # lib/territorial/bbox.ts (ITALY_BOUNDS), duplicati qui perche' questo
+    # file bash non puo' importare il modulo TypeScript.
+    lost_pins="$(psql_dev "SELECT count(*) FROM events WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND NOT (latitude = 0 AND longitude = 0) AND latitude BETWEEN 35.2 AND 47.15 AND longitude BETWEEN 6.6 AND 18.6 AND resolved_latitude IS NULL")"
     if [[ "${lost_pins}" != "0" ]]; then
-      fail "TERR-07: ${lost_pins} eventi con latitude di sorgente non nulla hanno resolved_latitude nulla (pin persi)"
+      fail "TERR-07: ${lost_pins} eventi con latitude di sorgente PLAUSIBILE hanno resolved_latitude nulla (pin persi)"
     else
-      ok "TERR-07: nessun evento con coordinate di sorgente ha perso il pin dopo il repoint"
+      ok "TERR-07: nessun evento con coordinate di sorgente plausibili ha perso il pin dopo il repoint"
     fi
 
     sample_check="$(psql_dev "SELECT count(*) FROM map_cluster_cache, jsonb_array_elements(geojson->'features') f JOIN events e ON (f->'properties'->>'id')::int = e.id WHERE (f->'geometry'->'coordinates'->>0)::numeric <> e.resolved_longitude OR (f->'geometry'->'coordinates'->>1)::numeric <> e.resolved_latitude")"

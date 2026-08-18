@@ -18,7 +18,16 @@ async function main() {
   console.log(`[Territorial] updated: ${report.updated}`)
   console.log(`[Territorial] unchanged: ${report.unchanged}`)
   console.log(`[Territorial] byStep: ${JSON.stringify(report.byStep)}`)
+  console.log(`[Territorial] implausibleReplaced: ${report.implausibleReplaced}`)
+  console.log(`[Territorial] no_input: ${report.byStep.no_input} (sorgente non ha dato nulla, distinto da unmatched/ambiguous)`)
   console.log(`[Territorial] clusterFeatureCount: ${report.clusterFeatureCount}`)
+
+  // Raggruppato per frequenza decrescente (D-06): e' il raggruppamento a
+  // rendere il fallimento diagnosticabile, non l'elenco riga per riga.
+  console.log(`[Territorial] unresolved (unmatched + ambiguous): ${report.unresolved.reduce((sum, r) => sum + r.count, 0)} eventi, ${report.unresolved.length} valori distinti`)
+  for (const { value, count } of report.unresolved.slice(0, 20)) {
+    console.log(`[Territorial]   ${value} × ${count}`)
+  }
 }
 
 main()

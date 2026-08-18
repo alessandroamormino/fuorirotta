@@ -13,6 +13,14 @@
  *
  * Il `data` della update contiene solo le quattro colonne territoriali:
  * `latitude`/`longitude` di sorgente non vengono mai lette in scrittura (D-14).
+ *
+ * Il report (D-06) raggruppa i valori non risolti (`unmatched`/`ambiguous`)
+ * per frequenza decrescente: e' il raggruppamento a rendere il fallimento
+ * diagnosticabile, non l'elenco riga per riga. Gli esiti `no_input` NON
+ * entrano in questa lista — vanno contati a parte (`byStep.no_input`) perche'
+ * D-16 vuole poter distinguere "la sorgente non l'ha dato" da "l'abbiamo
+ * cercato e non risolto": sommarli renderebbe di nuovo indistinguibili due
+ * problemi diversi. Nessuna soglia aborta l'esecuzione (D-06).
  */
 import { prisma } from '../prisma'
 import { buildComuneIndex, resolveComune, type ComuneRow, type MatchStep } from './resolve'
@@ -25,6 +33,12 @@ export type BackfillReport = {
   unchanged: number
   byStep: Record<MatchStep, number>
   clusterFeatureCount: number
+  // Ordinato per count decrescente, a parita' di count per valore crescente
+  // (ordinamento stabile fra esecuzioni). Solo unmatched/ambiguous.
+  unresolved: Array<{ value: string; count: number }>
+  // Numero di eventi la cui coordinata di sorgente e' stata scartata perche'
+  // implausibile (D-11) e sostituita dal centroide.
+  implausibleReplaced: number
 }
 
 const BATCH_SIZE = 5
@@ -74,9 +88,24 @@ export async function backfillEvents(): Promise<BackfillReport> {
     scanned: events.length,
     updated: 0,
     unchanged: 0,
-    byStep: { exact: 0, normalized: 0, unmatched: 0, no_input: 0 },
+    byStep: {
+      exact: 0,
+      normalized: 0,
+      alias: 0,
+      homonym_distance: 0,
+      homonym_region: 0,
+      ambiguous: 0,
+      unmatched: 0,
+      no_input: 0,
+    },
     clusterFeatureCount: 0,
+    unresolved: [],
+    implausibleReplaced: 0,
   }
+
+  // value cercato -> conteggio, solo per unmatched/ambiguous (no_input escluso,
+  // vedi commento header).
+  const unresolvedCounts = new Map<string, number>()
 
   for (let i = 0; i < events.length; i += BATCH_SIZE) {
     const batch = events.slice(i, i + BATCH_SIZE)
@@ -111,17 +140,34 @@ export async function backfillEvents(): Promise<BackfillReport> {
           })
         }
 
-        return { matchStep: resolved.matchStep, unchanged }
+        return {
+          matchStep: resolved.matchStep,
+          unchanged,
+          candidateName: resolved.candidateName,
+          locationName: event.locationName,
+          sourceCoordinateRejected: resolved.sourceCoordinateRejected,
+        }
       })
     )
 
     for (const result of results) {
       if (result.status === 'rejected') throw result.reason
-      report.byStep[result.value.matchStep]++
-      if (result.value.unchanged) report.unchanged++
+      const value = result.value
+      report.byStep[value.matchStep]++
+      if (value.unchanged) report.unchanged++
       else report.updated++
+      if (value.sourceCoordinateRejected) report.implausibleReplaced++
+
+      if (value.matchStep === 'unmatched' || value.matchStep === 'ambiguous') {
+        const key = value.candidateName ?? value.locationName ?? ''
+        unresolvedCounts.set(key, (unresolvedCounts.get(key) ?? 0) + 1)
+      }
     }
   }
+
+  report.unresolved = [...unresolvedCounts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => (b.count !== a.count ? b.count - a.count : a.value.localeCompare(b.value)))
 
   // Senza ricalcolare qui, un evento appena materializzato al centroide resta
   // fuori dal GeoJSON fino al prossimo trigger naturale della cache: il piano
