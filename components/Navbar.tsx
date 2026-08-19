@@ -18,6 +18,11 @@ import DateRangeField from "@/components/ui/DateRangeField";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import DestinationField from "@/components/navbar/DestinationField";
 import type { SearchFilters } from "@/lib/types";
+import {
+	SUGGESTED_DESTINATIONS,
+	DEST_PREVIEW_COUNT,
+	RADIUS_OPTIONS,
+} from "@/lib/destinations";
 
 interface NavbarProps {
 	onSearch: (filters: SearchFilters) => void;
@@ -25,45 +30,6 @@ interface NavbarProps {
 }
 
 type ActiveField = "where" | "when" | "mobile_search" | null;
-
-// Decisione D-17 (Fase 6, 06-04-PLAN.md): questa e' la terza copia delle
-// stesse dodici città lombarde che vivevano nelle altre due liste hardcoded
-// del filtro API e del fallback mappa — ma a differenza di quelle non è un
-// lookup territoriale: non porta coordinate e non serve a risolvere niente.
-// Porta sottotitolo e icona, contenuto redazionale ("Città alta", "Città dei
-// violini") che la tabella `Comune` non modella, quindi non è una
-// sostituzione uno-a-uno. Le altre due liste sono state eliminate in questa
-// fase (TERR-06); questa resta, annotata. La Fase 9 (Navbar Decomposition)
-// la prende in carico: il suggerimento diventerà un autocomplete servito
-// dalla tabella comuni e i sottotitoli editoriali avranno una casa dichiarata.
-const SUGGESTED_DESTINATIONS = [
-	{
-		name: "Nelle vicinanze",
-		subtitle: "Destinazioni vicine a te",
-		icon: "nearby",
-		isNearby: true,
-	},
-	{ name: "Milano", subtitle: "Capitale lombarda", icon: "city" },
-	{ name: "Bergamo", subtitle: "Città alta", icon: "castle" },
-	{ name: "Brescia", subtitle: "Leonessa d'Italia", icon: "monument" },
-	{ name: "Como", subtitle: "Città dei laghi", icon: "lake" },
-	{ name: "Cremona", subtitle: "Città dei violini", icon: "music" },
-	{ name: "Lecco", subtitle: "Tra lago e montagne", icon: "mountain" },
-	{ name: "Lodi", subtitle: "Città storica", icon: "castle" },
-	{ name: "Mantova", subtitle: "Città d'arte", icon: "monument" },
-	{ name: "Monza", subtitle: "Città della corona", icon: "city" },
-	{ name: "Pavia", subtitle: "Università storica", icon: "monument" },
-	{ name: "Sondrio", subtitle: "Porta della Valtellina", icon: "mountain" },
-	{ name: "Varese", subtitle: "Città giardino", icon: "lake" },
-];
-
-const RADIUS_OPTIONS = [
-	{ value: 10, label: "10 km", subtitle: "Vicinissimo" },
-	{ value: 20, label: "20 km", subtitle: "Nelle vicinanze" },
-	{ value: 50, label: "50 km", subtitle: "Zona estesa" },
-];
-
-const DEST_PREVIEW_COUNT = 3;
 
 export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 	const [activeField, setActiveField] = useState<ActiveField | null>(null);
