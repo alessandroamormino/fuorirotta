@@ -16,6 +16,7 @@ import Image from "next/image";
 import DateRangeField from "@/components/ui/DateRangeField";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import DestinationField from "@/components/navbar/DestinationField";
+import MobileRadiusStep from "@/components/navbar/MobileRadiusStep";
 import type { SearchFilters } from "@/lib/types";
 import { SUGGESTED_DESTINATIONS, RADIUS_OPTIONS } from "@/lib/destinations";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
@@ -270,109 +271,13 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													)}
 												</motion.div>
 											) : (
-												<motion.div
+												<MobileRadiusStep
 													key="dove-nearby"
-													initial={{ opacity: 0, x: 16 }}
-													animate={{ opacity: 1, x: 0 }}
-													exit={{ opacity: 0, x: 16 }}
-													transition={{ duration: 0.2 }}
-												>
-													{/* Header con back */}
-													<div className="flex items-center gap-3 mb-6">
-														<motion.button
-															whileTap={{ scale: 0.9 }}
-															onClick={() => setMobileNearbyOpen(false)}
-															className="w-8 h-8 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
-														>
-															<ChevronLeft className="w-5 h-5 text-muted-foreground" />
-														</motion.button>
-														<h2 className="text-2xl font-bold text-foreground">
-															Nelle vicinanze
-														</h2>
-													</div>
-
-													{/* Opzioni predefinite */}
-													<div className="grid grid-cols-1 gap-2 mb-5">
-														{RADIUS_OPTIONS.map((r) => (
-															<motion.button
-																key={r.value}
-																whileTap={{ scale: 0.98 }}
-																onClick={() => radius.setCustom(r.value)}
-																className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
-																	radius.custom === r.value
-																		? "border-primary bg-primary/5"
-																		: "border-muted-strong hover:border-border"
-																}`}
-															>
-																<div className="text-left">
-																	<div className="font-semibold text-foreground text-sm">
-																		{r.label}
-																	</div>
-																	<div className="text-xs text-muted-foreground-subtle">
-																		{r.subtitle}
-																	</div>
-																</div>
-																{radius.custom === r.value && (
-																	<div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-																		<svg
-																			className="w-3 h-3 text-primary-foreground"
-																			fill="none"
-																			viewBox="0 0 24 24"
-																			stroke="currentColor"
-																		>
-																			<path
-																				strokeLinecap="round"
-																				strokeLinejoin="round"
-																				strokeWidth={3}
-																				d="M5 13l4 4L19 7"
-																			/>
-																		</svg>
-																	</div>
-																)}
-															</motion.button>
-														))}
-													</div>
-
-													{/* Slider personalizzato */}
-													<div className="bg-muted rounded-xl p-4 mb-6">
-														<div className="flex items-center justify-between mb-3">
-															<span className="text-sm font-medium text-foreground-secondary">
-																Distanza personalizzata
-															</span>
-															<span className="text-base font-bold text-primary">
-																{radius.custom} km
-															</span>
-														</div>
-														<input
-															type="range"
-															min="5"
-															max="200"
-															step="5"
-															value={radius.custom}
-															onChange={(e) =>
-																radius.setCustom(Number(e.target.value))
-															}
-															className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-															style={{
-																background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((radius.custom - 5) / 195) * 100}%, var(--border) ${((radius.custom - 5) / 195) * 100}%, var(--border) 100%)`,
-															}}
-														/>
-														<div className="flex justify-between text-xs text-muted-foreground-faint mt-1">
-															<span>5 km</span>
-															<span>200 km</span>
-														</div>
-													</div>
-
-													{/* Conferma */}
-													<motion.button
-														whileHover={{ scale: 1.02 }}
-														whileTap={{ scale: 0.97 }}
-														onClick={radius.applyCustomMobile}
-														className="w-full py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl transition-colors"
-													>
-														Conferma
-													</motion.button>
-												</motion.div>
+													value={radius.custom}
+													onValueChange={radius.setCustom}
+													onBack={() => setMobileNearbyOpen(false)}
+													onConfirm={radius.applyCustomMobile}
+												/>
 											)}
 										</AnimatePresence>
 									</div>
