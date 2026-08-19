@@ -40,6 +40,15 @@ export default function DestinationField({
 }: DestinationFieldProps) {
 	const [results, setResults] = useState<ComuneResult[]>([]);
 	const [highlightedIndex, setHighlightedIndex] = useState(-1);
+	// Dalla Fase 9 piano 03 il testo digitato e' stato condiviso fra la superficie
+	// mobile e quella desktop (useNavbarSearch), cosi' che il pannello desktop veda
+	// cio' che l'utente ha fatto nell'overlay. Effetto collaterale: digitando
+	// nell'overlay mobile anche QUESTO campo riceve il valore, pur essendo nascosto
+	// dal breakpoint, e apriva la sua listbox ancorata a un input di larghezza 0 —
+	// che finiva a schermo in alto a sinistra, sopra l'header. Il focus e' il
+	// discriminante corretto: la listbox appartiene al campo che l'utente sta
+	// usando davvero, non a ogni istanza montata che condivide il testo.
+	const [hasFocus, setHasFocus] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -79,7 +88,7 @@ export default function DestinationField({
 		};
 	}, [value]);
 
-	const isOpen = results.length > 0;
+	const isOpen = hasFocus && results.length > 0;
 
 	const handleSelect = (comune: ComuneResult) => {
 		setResults([]);
@@ -120,7 +129,14 @@ export default function DestinationField({
 					placeholder={placeholder}
 					value={value}
 					onChange={(e) => onValueChange(e.target.value)}
-					onFocus={onFocus}
+					onFocus={() => {
+						setHasFocus(true);
+						onFocus?.();
+					}}
+					// Sicuro rispetto alla selezione col mouse: gli option fanno
+					// preventDefault su onMouseDown, quindi cliccarli non toglie il
+					// focus all'input e questo blur non scatta prima dell'onClick.
+					onBlur={() => setHasFocus(false)}
 					onKeyDown={handleKeyDown}
 					readOnly={readOnly}
 					className={className}
