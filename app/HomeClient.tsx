@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
-import { Event } from "@/lib/types";
+import { Event, SearchFilters } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
 import { ChevronLeft, ChevronRight, Filter, Loader2, Map, X } from "lucide-react";
@@ -20,13 +20,6 @@ const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 		</div>
 	),
 });
-
-interface SearchFilters {
-	location: string;
-	dateFrom: Date | null;
-	dateTo: Date | null;
-	radius?: number;
-}
 
 interface HomeClientProps {
 	initialEvents: Event[];
@@ -44,6 +37,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			dateFrom: filters.dateFrom?.toISOString() || '',
 			dateTo: filters.dateTo?.toISOString() || '',
 			radius: filters.radius || '',
+			comuneId: filters.comuneId ?? '',
+			comuneIstatCode: filters.comuneIstatCode || '',
 			category: category || 'all'
 		});
 	};
@@ -145,6 +140,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					dateFrom: parsed.dateFrom ? new Date(parsed.dateFrom) : null,
 					dateTo: parsed.dateTo ? new Date(parsed.dateTo) : null,
 					radius: parsed.radius,
+					comuneId: parsed.comuneId,
+					comuneIstatCode: parsed.comuneIstatCode,
 				};
 				setSearchFilters(activeFilters);
 			} catch { /* ignore */ }
@@ -216,6 +213,15 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			const isNearbySearch = searchFilters.location?.startsWith("Nelle vicinanze");
 			if (searchFilters.location && !isNearbySearch) {
 				params.append("location", searchFilters.location);
+			}
+
+			// Identita' esatta del comune selezionato dall'autocomplete (D-01):
+			// viaggia insieme al testo libero, non al suo posto.
+			if (searchFilters.comuneId) {
+				params.append("comuneId", searchFilters.comuneId.toString());
+			}
+			if (searchFilters.comuneIstatCode) {
+				params.append("istatCode", searchFilters.comuneIstatCode);
 			}
 
 			if (selectedCategory && selectedCategory !== "all")

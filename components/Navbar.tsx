@@ -16,17 +16,12 @@ import Link from "next/link";
 import Image from "next/image";
 import DateRangeField from "@/components/ui/DateRangeField";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import DestinationField from "@/components/navbar/DestinationField";
+import type { SearchFilters } from "@/lib/types";
 
 interface NavbarProps {
 	onSearch: (filters: SearchFilters) => void;
 	onOpenMap?: () => void;
-}
-
-interface SearchFilters {
-	location: string;
-	dateFrom: Date | null;
-	dateTo: Date | null;
-	radius?: number;
 }
 
 type ActiveField = "where" | "when" | "mobile_search" | null;
@@ -754,18 +749,38 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 											Dove
 										</label>
-										<input
-											type="text"
+										<DestinationField
 											placeholder="Cerca destinazioni"
 											value={searchInput}
-											onChange={(e) => {
-												const value = capitalizeFirstLetter(e.target.value);
-												setSearchInput(value);
-												setFilters({ ...filters, location: value });
+											onValueChange={(value) => {
+												const capitalized = capitalizeFirstLetter(value);
+												setSearchInput(capitalized);
+												// Qualunque scrittura non selezionata azzera l'identita'
+												// esatta del comune (D-01): un nome digitato dopo una
+												// selezione non deve ereditare comuneId/comuneIstatCode
+												// di una destinazione diversa.
+												setFilters({
+													...filters,
+													location: capitalized,
+													comuneId: undefined,
+													comuneIstatCode: undefined,
+												});
 												if (isNearbySearch) {
 													setIsNearbySearch(false);
 													setSelectedRadius(null);
 												}
+											}}
+											onSelect={(comune) => {
+												setSearchInput(comune.name);
+												setFilters({
+													...filters,
+													location: comune.name,
+													comuneId: comune.id,
+													comuneIstatCode: comune.istatCode,
+												});
+												setIsNearbySearch(false);
+												setSelectedRadius(null);
+												setActiveField("when");
 											}}
 											className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-muted-foreground-faint ${
 												isNearbySearch

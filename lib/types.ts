@@ -12,6 +12,22 @@ export type Event = Omit<
   resolvedLongitude: number | null
 }
 
+// Filtri di ricerca della Navbar (D-01). comuneId e comuneIstatCode
+// coesistono e sono mutuamente sufficienti: il ramo di filtro comune in
+// /api/events si attiva se almeno uno dei due e' valorizzato. comuneId e'
+// la chiave surrogata di Comune, nota solo dopo una selezione dall'autocomplete
+// (app/api/comuni/search); comuneIstatCode e' il codice ISTAT, l'unico che le
+// destinazioni suggerite (09-03) possono dichiarare in anticipo, perche' la
+// chiave surrogata e' un autoincrement diverso fra locale e produzione.
+export interface SearchFilters {
+  location: string
+  dateFrom: Date | null
+  dateTo: Date | null
+  radius?: number
+  comuneId?: number
+  comuneIstatCode?: string
+}
+
 export interface EventFilters {
   search?: string
   category?: string

@@ -30,6 +30,17 @@ export async function GET(request: NextRequest) {
 		const offset = parseInt(searchParams.get("offset") || "0");
 		const location = searchParams.get("location") || "";
 
+		// Identita' esatta del comune selezionata dall'autocomplete (D-01, D-07,
+		// T-09-05): comuneId accettato solo se intero positivo, altrimenti
+		// ignorato senza mai raggiungere Prisma o produrre un 500.
+		const comuneIdParam = searchParams.get("comuneId");
+		const parsedComuneId = comuneIdParam ? parseInt(comuneIdParam, 10) : NaN;
+		const comuneId =
+			Number.isInteger(parsedComuneId) && parsedComuneId > 0
+				? parsedComuneId
+				: null;
+		const istatCode = searchParams.get("istatCode") || "";
+
 		// Estrai città dal parametro location
 		const cities = await parseCitiesFromLocation(location);
 
@@ -108,8 +119,22 @@ export async function GET(request: NextRequest) {
 			where.category = { equals: category, mode: "insensitive" };
 		}
 
-		// Filtro città: usa contains case-insensitive per più flessibilità
-		if (location) {
+		// Identita' esatta del comune (D-01): un evento agganciato a comuneId ma
+		// con un locationName diverso deve comunque comparire, e un evento senza
+		// comuneId (tutti quelli di in-lombardia, che non nomina mai il comune)
+		// ma con locationName corrispondente non deve sparire. L'OR e' l'unica
+		// forma che soddisfa entrambe le meta' — un match esatto perderebbe gli
+		// 862 eventi su 2652 senza comuneId.
+		if (comuneId || istatCode) {
+			const comuneBranch = comuneId
+				? { comuneId }
+				: { comune: { istatCode } };
+			const locationBranch = location
+				? [{ locationName: { contains: location, mode: "insensitive" as const } }]
+				: [];
+			where.OR = [...(where.OR || []), comuneBranch, ...locationBranch];
+		} else if (location) {
+			// Filtro città: usa contains case-insensitive per più flessibilità
 			where.locationName = { contains: location, mode: "insensitive" };
 		} else if (cities.length > 0) {
 			// Fallback: se location matcha città suggerite, usa OR per tutte
