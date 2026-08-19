@@ -1,22 +1,14 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import {
-	Search,
-	ChevronLeft,
-	ChevronDown,
-	X,
-	LayoutList,
-	Map,
-} from "lucide-react";
+import { Search, ChevronLeft, X } from "lucide-react";
 import { it } from "date-fns/locale";
 import { format } from "date-fns";
 import Link from "next/link";
 import Image from "next/image";
 import DateRangeField from "@/components/ui/DateRangeField";
-import ThemeToggle from "@/components/ui/ThemeToggle";
 import DestinationField from "@/components/navbar/DestinationField";
-import MobileRadiusStep from "@/components/navbar/MobileRadiusStep";
+import MobileSearchOverlay from "@/components/navbar/MobileSearchOverlay";
 import type { SearchFilters } from "@/lib/types";
 import { SUGGESTED_DESTINATIONS, RADIUS_OPTIONS } from "@/lib/destinations";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
@@ -32,335 +24,28 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 	const {
 		activeField,
 		setActiveField,
-		mobileDestExpanded,
 		setMobileDestExpanded,
-		mobileWhenOpen,
 		setMobileWhenOpen,
-		mobileNearbyOpen,
-		setMobileNearbyOpen,
 		searchBarRef,
 	} = panels;
 	const hasActiveFilters = search.hasActiveFilters;
-	const visibleDestinations = destinations.visible;
 	const getIconForDestination = destinations.iconFor;
 
 	return (
 		<>
-			{/* ── MOBILE FULLSCREEN OVERLAY ── */}
-			<AnimatePresence>
-				{activeField === "mobile_search" && (
-					<motion.div
-						key="mobile-overlay"
-						initial={{ opacity: 0, y: "-100%" }}
-						animate={{ opacity: 1, y: 0 }}
-						exit={{ opacity: 0, y: "-100%" }}
-						transition={{ type: "spring", damping: 30, stiffness: 300 }}
-						data-mobile-overlay="true"
-						className="fixed inset-0 z-[200] bg-muted flex flex-col sm:hidden"
-					>
-						{/* Header */}
-						<div
-							className="flex items-center px-5 pb-4 bg-muted relative"
-							style={{ paddingTop: "max(env(safe-area-inset-top), 16px)" }}
-						>
-							{/* Logo a sinistra */}
-							<div className="flex-1 flex items-center">
-								<Link
-									href="/"
-									onClick={() => {
-										setActiveField(null);
-										setMobileDestExpanded(false);
-										setMobileWhenOpen(false);
-									}}
-								>
-									<div className="flex items-center gap-2">
-										<Image
-											src="/images/logo.svg"
-											alt="Fuorirotta"
-											width={32}
-											height={32}
-											className="w-8 h-8"
-											loading="eager"
-											priority
-										/>
-										<span className="text-base font-bold text-primary">
-											Fuorirotta
-										</span>
-									</div>
-								</Link>
-							</div>
-							<div className="flex-1 flex justify-end gap-2">
-								<motion.button
-									whileTap={{ scale: 0.9 }}
-									onClick={() => {
-										setActiveField(null);
-										setMobileDestExpanded(false);
-										setMobileWhenOpen(false);
-									}}
-									className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center"
-									title="Lista"
-								>
-									<LayoutList className="w-5 h-5 text-muted-foreground" />
-								</motion.button>
-								<motion.button
-									whileTap={{ scale: 0.9 }}
-									onClick={() => {
-										setActiveField(null);
-										setMobileDestExpanded(false);
-										setMobileWhenOpen(false);
-										onOpenMap?.();
-									}}
-									className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center"
-									title="Mappa"
-								>
-									<Map className="w-5 h-5 text-muted-foreground" />
-								</motion.button>
-								{/* Tema: qui e non flottante. Su mobile non esiste un angolo
-								    libero — in alto copriva la searchbar, in basso la
-								    paginazione. Dentro questo pannello non copre nulla. */}
-								<ThemeToggle className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center text-muted-foreground" />
-								<motion.button
-									whileTap={{ scale: 0.9 }}
-									onClick={() => {
-										setActiveField(null);
-										setMobileDestExpanded(false);
-										setMobileWhenOpen(false);
-									}}
-									className="w-11 h-11 rounded-full bg-surface shadow flex items-center justify-center"
-								>
-									<X className="w-5 h-5 text-foreground-secondary" />
-								</motion.button>
-							</div>
-						</div>
-
-						{/* ── VISTA DOVE (collassata quando calendario aperto) ── */}
-						<AnimatePresence initial={false}>
-							{!mobileWhenOpen && (
-								<motion.div
-									key="dove-expanded"
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-									exit={{ opacity: 0 }}
-									transition={{ duration: 0.2 }}
-									className="flex-1 overflow-y-auto px-4 pb-32"
-								>
-									{/* BOX DOVE espanso */}
-									<div className="bg-surface rounded-2xl shadow-sm p-5 mb-3">
-										<AnimatePresence mode="wait" initial={false}>
-											{!mobileNearbyOpen ? (
-												<motion.div
-													key="dove-normal"
-													initial={{ opacity: 0, x: -16 }}
-													animate={{ opacity: 1, x: 0 }}
-													exit={{ opacity: 0, x: -16 }}
-													transition={{ duration: 0.2 }}
-												>
-													<h2 className="text-2xl font-bold text-foreground mb-4">
-														Dove?
-													</h2>
-													<div className="flex items-center gap-3 border border-border rounded-xl px-4 py-3 mb-5">
-														<Search className="w-4 h-4 text-muted-foreground-faint flex-shrink-0" />
-														<input
-															autoFocus
-															type="text"
-															placeholder="Cerca destinazioni"
-															value={search.input}
-															onChange={(e) => search.setInput(e.target.value)}
-															className="flex-1 text-sm outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
-														/>
-														{search.input && (
-															<button
-																type="button"
-																aria-label="Svuota il campo destinazione"
-																onClick={() => search.setInput("")}
-																className="flex-shrink-0 w-6 h-6 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
-															>
-																<X className="w-3.5 h-3.5 text-muted-foreground" />
-															</button>
-														)}
-													</div>
-
-													<p className="text-xs font-semibold text-muted-foreground-subtle mb-3">
-														{search.input.trim()
-															? "Risultati"
-															: "Destinazioni suggerite"}
-													</p>
-
-													{/* Lista con altezza max + scroll — "Quando" rimane sempre visibile */}
-													<div className="overflow-y-auto max-h-[45vh] grid grid-cols-1 gap-1">
-														{visibleDestinations.length > 0 ? (
-															visibleDestinations.map((dest) => (
-																<motion.button
-																	key={dest.name}
-																	whileTap={{ scale: 0.98 }}
-																	onClick={() => {
-																		if (dest.isNearby) {
-																			setMobileNearbyOpen(true);
-																		} else {
-																			destinations.selectSuggested(dest);
-																			setMobileWhenOpen(true);
-																		}
-																	}}
-																	className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted transition-all text-left"
-																>
-																	<div className="w-10 h-10 bg-muted-strong rounded-lg flex items-center justify-center text-xl flex-shrink-0">
-																		{getIconForDestination(dest.icon)}
-																	</div>
-																	<div className="flex-1 min-w-0">
-																		<div className="font-medium text-foreground text-sm truncate">
-																			{dest.name}
-																		</div>
-																		<div className="text-xs text-muted-foreground-subtle truncate">
-																			{dest.subtitle}
-																		</div>
-																	</div>
-																</motion.button>
-															))
-														) : (
-															/* Nessun risultato → "Cerca città: xxx" */
-															<motion.button
-																whileTap={{ scale: 0.98 }}
-																onClick={() => {
-																	setFilters({
-																		...filters,
-																		location: search.input,
-																	});
-																	setMobileWhenOpen(true);
-																}}
-																className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted transition-all text-left"
-															>
-																<div className="w-10 h-10 bg-muted-strong rounded-lg flex items-center justify-center text-xl flex-shrink-0">
-																	<Search className="w-4 h-4 text-muted-foreground-subtle" />
-																</div>
-																<div className="flex-1 min-w-0">
-																	<div className="font-medium text-foreground text-sm">
-																		Cerca città:{" "}
-																		<span className="text-primary">
-																			{search.input}
-																		</span>
-																	</div>
-																	<div className="text-xs text-muted-foreground-subtle">
-																		Cerca eventi in questa zona
-																	</div>
-																</div>
-															</motion.button>
-														)}
-													</div>
-
-													{/* Mostra tutte / meno — solo se non si sta cercando */}
-													{destinations.canToggle &&
-														!mobileDestExpanded && (
-															<motion.button
-																whileTap={{ scale: 0.97 }}
-																onClick={() => setMobileDestExpanded(true)}
-																className="mt-3 w-full flex items-center justify-center gap-1 py-2 text-sm font-semibold text-muted-foreground-subtle hover:text-foreground-strong transition-colors"
-															>
-																<ChevronDown className="w-4 h-4" />
-																Mostra più destinazioni
-															</motion.button>
-														)}
-													{destinations.canToggle && mobileDestExpanded && (
-														<motion.button
-															whileTap={{ scale: 0.97 }}
-															onClick={() => setMobileDestExpanded(false)}
-															className="mt-3 w-full flex items-center justify-center gap-1 py-2 text-sm font-semibold text-muted-foreground-subtle hover:text-foreground-strong transition-colors"
-														>
-															<ChevronDown className="w-4 h-4 rotate-180" />
-															Mostra meno
-														</motion.button>
-													)}
-												</motion.div>
-											) : (
-												<MobileRadiusStep
-													key="dove-nearby"
-													value={radius.custom}
-													onValueChange={radius.setCustom}
-													onBack={() => setMobileNearbyOpen(false)}
-													onConfirm={radius.applyCustomMobile}
-												/>
-											)}
-										</AnimatePresence>
-									</div>
-
-									{/* BOX QUANDO collassato */}
-									<button
-										onClick={() => setMobileWhenOpen(true)}
-										className="w-full bg-surface rounded-2xl shadow-sm px-5 py-4 flex items-center justify-between text-left mb-3"
-									>
-										<span className="text-sm text-muted-foreground-faint font-medium">
-											Quando
-										</span>
-										<span className="text-sm font-semibold text-foreground">
-											{filters.dateFrom && filters.dateTo
-												? `${format(filters.dateFrom, "d MMM", { locale: it })} – ${format(filters.dateTo, "d MMM", { locale: it })}`
-												: "Aggiungi date"}
-										</span>
-									</button>
-								</motion.div>
-							)}
-						</AnimatePresence>
-
-						{/* ── VISTA CALENDARIO (quando aperto) ── */}
-						<AnimatePresence initial={false}>
-							{mobileWhenOpen && (
-								<motion.div
-									key="quando-expanded"
-									initial={{ opacity: 0, x: 40 }}
-									animate={{ opacity: 1, x: 0 }}
-									exit={{ opacity: 0, x: 40 }}
-									transition={{ type: "spring", damping: 28, stiffness: 320 }}
-									className="flex-1 flex flex-col overflow-hidden"
-								>
-									{/* Dove collassato (pill) */}
-									<div className="px-4 pt-1 pb-2">
-										<button
-											onClick={() => setMobileWhenOpen(false)}
-											className="w-full bg-surface rounded-2xl shadow-sm px-5 py-4 flex items-center justify-between text-left"
-										>
-											<span className="text-sm text-muted-foreground-faint font-medium">
-												Dove
-											</span>
-											<span className="text-sm font-semibold text-foreground truncate max-w-[200px]">
-												{filters.location || "Sono flessibile"}
-											</span>
-										</button>
-									</div>
-
-									{/* Box calendario: header fisso + mesi scrollabili */}
-									<DateRangeField
-										variant="mobile"
-										dateFrom={filters.dateFrom}
-										dateTo={filters.dateTo}
-										onChange={(range) =>
-											setFilters((f) => ({ ...f, ...range }))
-										}
-									/>
-								</motion.div>
-							)}
-						</AnimatePresence>
-
-						{/* Footer fisso */}
-						<div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-muted-strong px-5 py-4 flex items-center justify-between gap-4 sm:hidden">
-							<motion.button
-								whileTap={{ scale: 0.96 }}
-								onClick={search.clearMobile}
-								className="text-sm font-semibold text-foreground-secondary underline underline-offset-2"
-							>
-								Cancella tutto
-							</motion.button>
-							<motion.button
-								whileHover={{ scale: 1.02 }}
-								whileTap={{ scale: 0.97 }}
-								onClick={search.submitMobile}
-								className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-full transition-colors shadow-lg"
-							>
-								<Search className="w-4 h-4" />
-								Cerca
-							</motion.button>
-						</div>
-					</motion.div>
-				)}
-			</AnimatePresence>
+			<MobileSearchOverlay
+				open={activeField === "mobile_search"}
+				onOpenChange={(open) => {
+					if (!open) setActiveField(null);
+				}}
+				filters={filters}
+				setFilters={setFilters}
+				search={search}
+				radius={radius}
+				panels={panels}
+				destinations={destinations}
+				onOpenMap={onOpenMap}
+			/>
 
 			{/* ── NAVBAR ── */}
 			<nav

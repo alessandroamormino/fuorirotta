@@ -21,6 +21,10 @@ interface DestinationFieldProps {
 	className?: string;
 	readOnly?: boolean;
 	onFocus?: () => void;
+	// Overlay mobile (09-04): l'input Dove originale portava autoFocus,
+	// perso se non inoltrato — nessun effetto sull'unico altro call site
+	// (desktop), che non lo passa.
+	autoFocus?: boolean;
 }
 
 const LISTBOX_ID = "destination-field-listbox";
@@ -37,6 +41,7 @@ export default function DestinationField({
 	className,
 	readOnly,
 	onFocus,
+	autoFocus,
 }: DestinationFieldProps) {
 	const [results, setResults] = useState<ComuneResult[]>([]);
 	const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -128,6 +133,7 @@ export default function DestinationField({
 					type="text"
 					placeholder={placeholder}
 					value={value}
+					autoFocus={autoFocus}
 					onChange={(e) => onValueChange(e.target.value)}
 					onFocus={() => {
 						setHasFocus(true);
