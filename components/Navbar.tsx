@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
 	Search,
@@ -18,154 +17,31 @@ import DateRangeField from "@/components/ui/DateRangeField";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import DestinationField from "@/components/navbar/DestinationField";
 import type { SearchFilters } from "@/lib/types";
-import {
-	SUGGESTED_DESTINATIONS,
-	DEST_PREVIEW_COUNT,
-	RADIUS_OPTIONS,
-} from "@/lib/destinations";
+import { SUGGESTED_DESTINATIONS, RADIUS_OPTIONS } from "@/lib/destinations";
+import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
 
 interface NavbarProps {
 	onSearch: (filters: SearchFilters) => void;
 	onOpenMap?: () => void;
 }
 
-type ActiveField = "where" | "when" | "mobile_search" | null;
-
 export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
-	const [activeField, setActiveField] = useState<ActiveField | null>(null);
-	const [filters, setFilters] = useState<SearchFilters>({
-		location: "",
-		dateFrom: null,
-		dateTo: null,
-	});
-	const searchBarRef = useRef<HTMLDivElement>(null);
-	const activeFieldRef = useRef<ActiveField | null>(null);
-	const [searchInput, setSearchInput] = useState("");
-	const [showRadiusSelector, setShowRadiusSelector] = useState(false);
-	const [selectedRadius, setSelectedRadius] = useState<number | null>(null);
-	const [customRadius, setCustomRadius] = useState(30);
-	const [isNearbySearch, setIsNearbySearch] = useState(false);
-
-	// Mobile overlay state
-	const [mobileSearchInput, setMobileSearchInput] = useState("");
-	const [mobileDestExpanded, setMobileDestExpanded] = useState(false);
-	const [mobileWhenOpen, setMobileWhenOpen] = useState(false);
-	const [mobileNearbyOpen, setMobileNearbyOpen] = useState(false);
-	const [mobileCustomRadius, setMobileCustomRadius] = useState(20);
-
-	// Sincronizza il ref con lo state (il listener mousedown ha closure stale)
-	useEffect(() => {
-		activeFieldRef.current = activeField;
-	}, [activeField]);
-
-	useEffect(() => {
-		const handleClickOutside = (event: MouseEvent) => {
-			// Non chiudere mai se il mobile overlay è aperto
-			if (activeFieldRef.current === "mobile_search") return;
-			if (
-				searchBarRef.current &&
-				!searchBarRef.current.contains(event.target as Node)
-			) {
-				setActiveField(null);
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, []);
-
-	// Blocca scroll body quando overlay mobile è aperto
-	useEffect(() => {
-		if (activeField === "mobile_search") {
-			document.body.style.overflow = "hidden";
-		} else {
-			document.body.style.overflow = "";
-		}
-		return () => {
-			document.body.style.overflow = "";
-		};
-	}, [activeField]);
-
-	const handleSearch = () => {
-		onSearch({ ...filters, radius: selectedRadius || undefined });
-		setActiveField(null);
-	};
-
-	const handleMobileSearch = () => {
-		onSearch({ ...filters, radius: selectedRadius || undefined });
-		setActiveField(null);
-		setMobileDestExpanded(false);
-		setMobileWhenOpen(false);
-	};
-
-	const capitalizeFirstLetter = (str: string) => {
-		if (!str) return str;
-		return str.charAt(0).toUpperCase() + str.slice(1);
-	};
-
-	const handleClearSearch = () => {
-		setFilters({
-			location: "",
-			dateFrom: null,
-			dateTo: null,
-			radius: undefined,
-		});
-		setSearchInput("");
-		setMobileSearchInput("");
-		setSelectedRadius(null);
-		setIsNearbySearch(false);
-		setActiveField(null);
-		onSearch({ location: "", dateFrom: null, dateTo: null, radius: undefined });
-	};
-
-	const handleMobileClear = () => {
-		setFilters({
-			location: "",
-			dateFrom: null,
-			dateTo: null,
-			radius: undefined,
-		});
-		setMobileSearchInput("");
-		setSelectedRadius(null);
-		setIsNearbySearch(false);
-		setMobileDestExpanded(false);
-		setMobileWhenOpen(false);
-	};
-
-	const getIconForDestination = (iconType: string) => {
-		switch (iconType) {
-			case "nearby":
-				return "📍";
-			case "city":
-				return "🏙️";
-			case "castle":
-				return "🏰";
-			case "lake":
-				return "🏞️";
-			case "monument":
-				return "🏛️";
-			case "music":
-				return "🎵";
-			case "mountain":
-				return "⛰️";
-			default:
-				return "📍";
-		}
-	};
-
-	const hasActiveFilters =
-		filters.location || filters.dateFrom || filters.dateTo;
-
-	const filteredDestinations = mobileSearchInput.trim()
-		? SUGGESTED_DESTINATIONS.filter((d) =>
-				d.name.toLowerCase().includes(mobileSearchInput.toLowerCase()),
-			)
-		: SUGGESTED_DESTINATIONS;
-
-	const visibleDestinations = mobileSearchInput.trim()
-		? filteredDestinations
-		: mobileDestExpanded
-			? SUGGESTED_DESTINATIONS
-			: SUGGESTED_DESTINATIONS.slice(0, DEST_PREVIEW_COUNT);
+	const { filters, setFilters, search, radius, panels, destinations } =
+		useNavbarSearch({ onSearch });
+	const {
+		activeField,
+		setActiveField,
+		mobileDestExpanded,
+		setMobileDestExpanded,
+		mobileWhenOpen,
+		setMobileWhenOpen,
+		mobileNearbyOpen,
+		setMobileNearbyOpen,
+		searchBarRef,
+	} = panels;
+	const hasActiveFilters = search.hasActiveFilters;
+	const visibleDestinations = destinations.visible;
+	const getIconForDestination = destinations.iconFor;
 
 	return (
 		<>
@@ -287,28 +163,15 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															autoFocus
 															type="text"
 															placeholder="Cerca destinazioni"
-															value={mobileSearchInput}
-															onChange={(e) => {
-																const value = capitalizeFirstLetter(
-																	e.target.value,
-																);
-																setMobileSearchInput(value);
-																setFilters({ ...filters, location: value });
-																setIsNearbySearch(false);
-																setSelectedRadius(null);
-															}}
+															value={search.input}
+															onChange={(e) => search.setInput(e.target.value)}
 															className="flex-1 text-sm outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
 														/>
-														{mobileSearchInput && (
+														{search.input && (
 															<button
 																type="button"
 																aria-label="Svuota il campo destinazione"
-																onClick={() => {
-																	setMobileSearchInput("");
-																	setFilters({ ...filters, location: "", radius: undefined });
-																	setIsNearbySearch(false);
-																	setSelectedRadius(null);
-																}}
+																onClick={() => search.setInput("")}
 																className="flex-shrink-0 w-6 h-6 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
 															>
 																<X className="w-3.5 h-3.5 text-muted-foreground" />
@@ -317,7 +180,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													</div>
 
 													<p className="text-xs font-semibold text-muted-foreground-subtle mb-3">
-														{mobileSearchInput.trim()
+														{search.input.trim()
 															? "Risultati"
 															: "Destinazioni suggerite"}
 													</p>
@@ -333,13 +196,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																		if (dest.isNearby) {
 																			setMobileNearbyOpen(true);
 																		} else {
-																			setMobileSearchInput(dest.name);
-																			setFilters({
-																				...filters,
-																				location: dest.name,
-																			});
-																			setIsNearbySearch(false);
-																			setSelectedRadius(null);
+																			destinations.selectSuggested(dest);
 																			setMobileWhenOpen(true);
 																		}
 																	}}
@@ -365,7 +222,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																onClick={() => {
 																	setFilters({
 																		...filters,
-																		location: mobileSearchInput,
+																		location: search.input,
 																	});
 																	setMobileWhenOpen(true);
 																}}
@@ -378,7 +235,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	<div className="font-medium text-foreground text-sm">
 																		Cerca città:{" "}
 																		<span className="text-primary">
-																			{mobileSearchInput}
+																			{search.input}
 																		</span>
 																	</div>
 																	<div className="text-xs text-muted-foreground-subtle">
@@ -390,10 +247,8 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													</div>
 
 													{/* Mostra tutte / meno — solo se non si sta cercando */}
-													{!mobileSearchInput.trim() &&
-														!mobileDestExpanded &&
-														SUGGESTED_DESTINATIONS.length >
-															DEST_PREVIEW_COUNT && (
+													{destinations.canToggle &&
+														!mobileDestExpanded && (
 															<motion.button
 																whileTap={{ scale: 0.97 }}
 																onClick={() => setMobileDestExpanded(true)}
@@ -403,7 +258,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																Mostra più destinazioni
 															</motion.button>
 														)}
-													{!mobileSearchInput.trim() && mobileDestExpanded && (
+													{destinations.canToggle && mobileDestExpanded && (
 														<motion.button
 															whileTap={{ scale: 0.97 }}
 															onClick={() => setMobileDestExpanded(false)}
@@ -442,9 +297,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															<motion.button
 																key={r.value}
 																whileTap={{ scale: 0.98 }}
-																onClick={() => setMobileCustomRadius(r.value)}
+																onClick={() => radius.setCustom(r.value)}
 																className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
-																	mobileCustomRadius === r.value
+																	radius.custom === r.value
 																		? "border-primary bg-primary/5"
 																		: "border-muted-strong hover:border-border"
 																}`}
@@ -457,7 +312,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																		{r.subtitle}
 																	</div>
 																</div>
-																{mobileCustomRadius === r.value && (
+																{radius.custom === r.value && (
 																	<div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
 																		<svg
 																			className="w-3 h-3 text-primary-foreground"
@@ -485,7 +340,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																Distanza personalizzata
 															</span>
 															<span className="text-base font-bold text-primary">
-																{mobileCustomRadius} km
+																{radius.custom} km
 															</span>
 														</div>
 														<input
@@ -493,13 +348,13 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															min="5"
 															max="200"
 															step="5"
-															value={mobileCustomRadius}
+															value={radius.custom}
 															onChange={(e) =>
-																setMobileCustomRadius(Number(e.target.value))
+																radius.setCustom(Number(e.target.value))
 															}
 															className="w-full h-2 rounded-lg appearance-none cursor-pointer"
 															style={{
-																background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((mobileCustomRadius - 5) / 195) * 100}%, var(--border) ${((mobileCustomRadius - 5) / 195) * 100}%, var(--border) 100%)`,
+																background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((radius.custom - 5) / 195) * 100}%, var(--border) ${((radius.custom - 5) / 195) * 100}%, var(--border) 100%)`,
 															}}
 														/>
 														<div className="flex justify-between text-xs text-muted-foreground-faint mt-1">
@@ -512,24 +367,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													<motion.button
 														whileHover={{ scale: 1.02 }}
 														whileTap={{ scale: 0.97 }}
-														onClick={() => {
-															const label = `Nelle vicinanze (${mobileCustomRadius} km)`;
-															// L'etichetta NON entra nell'input: la mostra gia' la pill
-															// della searchbar. Lasciandola qui, riaprire "Dove?" mostrava
-															// i risultati di ricerca per una stringa senza senso invece
-															// delle destinazioni suggerite, e per cambiare filtro
-															// bisognava cancellare la frase a mano.
-															setMobileSearchInput("");
-															setFilters({
-																...filters,
-																location: label,
-																radius: mobileCustomRadius,
-															});
-															setSelectedRadius(mobileCustomRadius);
-															setIsNearbySearch(true);
-															setMobileNearbyOpen(false);
-															setMobileWhenOpen(true);
-														}}
+														onClick={radius.applyCustomMobile}
 														className="w-full py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl transition-colors"
 													>
 														Conferma
@@ -600,7 +438,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 						<div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-muted-strong px-5 py-4 flex items-center justify-between gap-4 sm:hidden">
 							<motion.button
 								whileTap={{ scale: 0.96 }}
-								onClick={handleMobileClear}
+								onClick={search.clearMobile}
 								className="text-sm font-semibold text-foreground-secondary underline underline-offset-2"
 							>
 								Cancella tutto
@@ -608,7 +446,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 							<motion.button
 								whileHover={{ scale: 1.02 }}
 								whileTap={{ scale: 0.97 }}
-								onClick={handleMobileSearch}
+								onClick={search.submitMobile}
 								className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-full transition-colors shadow-lg"
 							>
 								<Search className="w-4 h-4" />
@@ -675,7 +513,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										<div className="flex items-center gap-2 px-2 py-2 min-w-0">
 											<motion.button
 												whileTap={{ scale: 0.9 }}
-												onClick={handleClearSearch}
+												onClick={search.clear}
 												className="w-9 h-9 flex-shrink-0 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
 											>
 												<ChevronLeft className="w-5 h-5 text-foreground-secondary" />
@@ -717,46 +555,21 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										</label>
 										<DestinationField
 											placeholder="Cerca destinazioni"
-											value={searchInput}
-											onValueChange={(value) => {
-												const capitalized = capitalizeFirstLetter(value);
-												setSearchInput(capitalized);
-												// Qualunque scrittura non selezionata azzera l'identita'
-												// esatta del comune (D-01): un nome digitato dopo una
-												// selezione non deve ereditare comuneId/comuneIstatCode
-												// di una destinazione diversa.
-												setFilters({
-													...filters,
-													location: capitalized,
-													comuneId: undefined,
-													comuneIstatCode: undefined,
-												});
-												if (isNearbySearch) {
-													setIsNearbySearch(false);
-													setSelectedRadius(null);
-												}
-											}}
+											value={search.input}
+											onValueChange={search.setInput}
 											onSelect={(comune) => {
-												setSearchInput(comune.name);
-												setFilters({
-													...filters,
-													location: comune.name,
-													comuneId: comune.id,
-													comuneIstatCode: comune.istatCode,
-												});
-												setIsNearbySearch(false);
-												setSelectedRadius(null);
+												destinations.selectComune(comune);
 												setActiveField("when");
 											}}
 											className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-muted-foreground-faint ${
-												isNearbySearch
+												radius.isNearby
 													? "text-foreground cursor-not-allowed font-medium"
 													: "text-foreground-secondary"
 											}`}
 											onFocus={() => setActiveField("where")}
-											readOnly={isNearbySearch}
+											readOnly={radius.isNearby}
 										/>
-										{searchInput && (
+										{search.input && (
 											<button
 												type="button"
 												aria-label="Svuota il campo destinazione"
@@ -765,10 +578,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													// riapre il pannello "Dove", che riaprirebbe subito
 													// cio' che questo bottone ha appena chiuso.
 													e.stopPropagation();
-													setSearchInput("");
-													setFilters({ ...filters, location: "", radius: undefined });
-													setIsNearbySearch(false);
-													setSelectedRadius(null);
+													search.setInput("");
 												}}
 												className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
 											>
@@ -828,7 +638,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 											exit={{ opacity: 0, scale: 0.8 }}
 											whileHover={{ scale: 1.05 }}
 											whileTap={{ scale: 0.95 }}
-											onClick={handleClearSearch}
+											onClick={search.clear}
 											className="px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted-strong rounded-full transition-colors"
 										>
 											Cancella
@@ -837,7 +647,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									<motion.button
 										whileHover={{ scale: 1.05 }}
 										whileTap={{ scale: 0.95 }}
-										onClick={handleSearch}
+										onClick={search.submit}
 										className="w-12 h-12 bg-primary hover:bg-primary-hover rounded-full flex items-center justify-center transition-colors"
 									>
 										<Search className="w-5 h-5 text-primary-foreground" />
@@ -865,7 +675,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 								>
 									<AnimatePresence mode="wait">
 										{/* Where Dropdown */}
-										{activeField === "where" && !showRadiusSelector && (
+										{activeField === "where" && !radius.showSelector && (
 											<motion.div
 												key="where"
 												initial={{ opacity: 0, x: -20 }}
@@ -885,15 +695,9 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															whileTap={{ scale: 0.98 }}
 															onClick={() => {
 																if (dest.isNearby) {
-																	setShowRadiusSelector(true);
+																	radius.setShowSelector(true);
 																} else {
-																	setSearchInput(dest.name);
-																	setFilters({
-																		...filters,
-																		location: dest.name,
-																	});
-																	setIsNearbySearch(false);
-																	setSelectedRadius(null);
+																	destinations.selectSuggested(dest);
 																	setActiveField("when");
 																}
 															}}
@@ -917,7 +721,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 										)}
 
 										{/* Radius Selector */}
-										{activeField === "where" && showRadiusSelector && (
+										{activeField === "where" && radius.showSelector && (
 											<motion.div
 												key="radius"
 												initial={{ opacity: 0, x: -20 }}
@@ -928,7 +732,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 											>
 												<div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
 													<motion.button
-														onClick={() => setShowRadiusSelector(false)}
+														onClick={() => radius.setShowSelector(false)}
 														whileHover={{ scale: 1.05 }}
 														whileTap={{ scale: 0.95 }}
 														className="w-7 h-7 sm:w-8 sm:h-8 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
@@ -952,25 +756,12 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													</h3>
 												</div>
 												<div className="grid grid-cols-1 gap-4">
-													{RADIUS_OPTIONS.map((radius) => (
+													{RADIUS_OPTIONS.map((opt) => (
 														<motion.button
-															key={radius.value}
+															key={opt.value}
 															whileHover={{ backgroundColor: "var(--muted)" }}
 															whileTap={{ scale: 0.98 }}
-															onClick={() => {
-																setSelectedRadius(radius.value);
-																setSearchInput(
-																	`Nelle vicinanze (${radius.label})`,
-																);
-																setFilters({
-																	...filters,
-																	location: `Nelle vicinanze (${radius.label})`,
-																	radius: radius.value,
-																});
-																setIsNearbySearch(true);
-																setShowRadiusSelector(false);
-																setActiveField("when");
-															}}
+															onClick={() => radius.applyPreset(opt.value, opt.label)}
 															className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-muted transition-all text-left"
 														>
 															<div className="w-10 h-10 sm:w-12 sm:h-12 bg-muted-strong rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
@@ -978,10 +769,10 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															</div>
 															<div className="flex-1">
 																<div className="font-medium text-foreground text-sm sm:text-base">
-																	{radius.label}
+																	{opt.label}
 																</div>
 																<div className="text-xs sm:text-sm text-muted-foreground-subtle">
-																	{radius.subtitle}
+																	{opt.subtitle}
 																</div>
 															</div>
 														</motion.button>
@@ -995,7 +786,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	Distanza personalizzata
 																</div>
 																<div className="text-xl sm:text-2xl font-bold text-primary">
-																	{customRadius} km
+																	{radius.custom} km
 																</div>
 															</div>
 															<div className="mb-4">
@@ -1004,13 +795,13 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 																	min="5"
 																	max="200"
 																	step="5"
-																	value={customRadius}
+																	value={radius.custom}
 																	onChange={(e) =>
-																		setCustomRadius(Number(e.target.value))
+																		radius.setCustom(Number(e.target.value))
 																	}
 																	className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer"
 																	style={{
-																		background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((customRadius - 5) / 195) * 100}%, var(--border) ${((customRadius - 5) / 195) * 100}%, var(--border) 100%)`,
+																		background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((radius.custom - 5) / 195) * 100}%, var(--border) ${((radius.custom - 5) / 195) * 100}%, var(--border) 100%)`,
 																	}}
 																/>
 																<div className="flex justify-between text-xs text-muted-foreground-subtle mt-1">
@@ -1021,20 +812,7 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 															<motion.button
 																whileHover={{ scale: 1.02 }}
 																whileTap={{ scale: 0.98 }}
-																onClick={() => {
-																	setSelectedRadius(customRadius);
-																	setSearchInput(
-																		`Nelle vicinanze (${customRadius} km)`,
-																	);
-																	setFilters({
-																		...filters,
-																		location: `Nelle vicinanze (${customRadius} km)`,
-																		radius: customRadius,
-																	});
-																	setIsNearbySearch(true);
-																	setShowRadiusSelector(false);
-																	setActiveField("when");
-																}}
+																onClick={radius.applyCustomDesktop}
 																className="w-full px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:shadow-lg transition-all"
 															>
 																Applica
