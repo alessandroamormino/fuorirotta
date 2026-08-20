@@ -111,16 +111,42 @@ export default function DesktopSearchDropdown({
 		}
 	};
 
+	// Ancoraggio: floating-ui posiziona SOLO la cornice esterna, larga quanto la
+	// barra di ricerca e sempre align="start" — l'equivalente esatto del vecchio
+	// `absolute top-full mt-4`. Lo spostamento orizzontale fra "Dove" e "Quando"
+	// resta invece in CSS sul motion.div interno, cosi' la prop `layout` di framer
+	// puo' animarlo come faceva prima.
+	//
+	// Perche' non basta align="start"|"end": floating-ui applica una transform sul
+	// wrapper del popover, che `layout` non vede. Il risultato era la posizione che
+	// saltava di colpo mentre solo la larghezza si animava — e, al montaggio, la
+	// comparsa in diagonale dall'angolo, perche' la posizione viene calcolata dopo
+	// il paint.
 	return (
 		<Popover.Portal forceMount>
 			<AnimatePresence>
 				{open && (
 					<Popover.ContentUnstyled
 						asChild
-						align={activeField === "when" ? "end" : "start"}
+						align="start"
 						sideOffset={16}
 						onOpenAutoFocus={(e) => e.preventDefault()}
+						// La barra di ricerca NON e' "fuori": cliccare "Quando" mentre
+						// "Dove" e' aperto deve cambiare campo, non chiudere. Senza questo,
+						// il dismiss layer di Radix chiude il pannello e si mangia il click,
+						// che non raggiunge mai il campo — da cui il secondo click
+						// necessario, e lo smontaggio che azzera l'animazione `layout`.
+						onInteractOutside={(event) => {
+							const anchor = (event.target as HTMLElement | null)?.closest?.(
+								"[data-navbar-searchbar]",
+							);
+							if (anchor) event.preventDefault();
+						}}
 					>
+						<div
+							style={{ width: "var(--radix-popover-trigger-width)" }}
+							className="relative"
+						>
 						<motion.div
 							layout
 							initial={{ opacity: 0, y: -10 }}
@@ -130,8 +156,10 @@ export default function DesktopSearchDropdown({
 								layout: { type: "spring", damping: 30, stiffness: 400 },
 								opacity: { duration: 0.2 },
 							}}
-							className={`bg-surface/95 backdrop-blur-md rounded-3xl shadow-2xl border border-surface/30 overflow-hidden w-full ${
-								activeField === "where" ? "sm:w-[500px]" : "sm:w-[700px]"
+							className={`bg-surface/95 backdrop-blur-md rounded-3xl shadow-2xl border border-surface/30 overflow-hidden absolute top-0 ${
+								activeField === "where"
+									? "left-0 right-0 sm:left-0 sm:right-auto sm:w-[500px]"
+									: "left-0 right-0 sm:left-auto sm:right-0 sm:w-[700px]"
 							}`}
 						>
 							<AnimatePresence mode="wait">
@@ -295,6 +323,7 @@ export default function DesktopSearchDropdown({
 								)}
 							</AnimatePresence>
 						</motion.div>
+						</div>
 					</Popover.ContentUnstyled>
 				)}
 			</AnimatePresence>

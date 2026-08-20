@@ -103,7 +103,14 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 								}}
 							>
 								<Popover.Anchor asChild>
-									<div className="w-full flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 rounded-full shadow-lg hover:shadow-xl transition-all px-2 relative">
+									{/* data-navbar-searchbar: marcatore letto da onInteractOutside
+									    in DesktopSearchDropdown. La barra non conta come "fuori",
+									    cosi' passare da "Dove" a "Quando" cambia campo con un solo
+									    click e senza smontare il pannello. */}
+									<div
+										data-navbar-searchbar
+										className="w-full flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 rounded-full shadow-lg hover:shadow-xl transition-all px-2 relative"
+									>
 										{/* Mobile: searchbar */}
 										<MobileSearchbarTrigger
 											hasActiveFilters={hasActiveFilters}
