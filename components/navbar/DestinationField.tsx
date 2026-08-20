@@ -25,6 +25,13 @@ interface DestinationFieldProps {
 	// perso se non inoltrato — nessun effetto sull'unico altro call site
 	// (desktop), che non lo passa.
 	autoFocus?: boolean;
+	// D-19 (esteso al mobile il 2026-08-20): quando true, il popover di
+	// QUESTO campo non si apre mai — resta un input di solo testo, la
+	// chiamata di rete al debounce non parte nemmeno. Usato dove un'altra
+	// superficie e' gia' l'unica fonte di suggerimenti (il pannello
+	// desktop unificato, la lista "Risultati" dell'overlay mobile), per
+	// evitare due superfici di suggerimenti visibili insieme.
+	disableSuggestions?: boolean;
 }
 
 const LISTBOX_ID = "destination-field-listbox";
@@ -42,6 +49,7 @@ export default function DestinationField({
 	readOnly,
 	onFocus,
 	autoFocus,
+	disableSuggestions,
 }: DestinationFieldProps) {
 	const [results, setResults] = useState<ComuneResult[]>([]);
 	const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -57,6 +65,9 @@ export default function DestinationField({
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
+		// D-19: nessuna chiamata di rete se questo campo non deve mai
+		// mostrare il proprio popover — un'altra superficie ci pensa gia'.
+		if (disableSuggestions) return;
 		if (value.trim().length === 0) {
 			// Svuota i risultati quando il prop value diventa vuoto (es. dopo
 			// Cancella dal genitore); non c'e' modo di farlo durante il render
@@ -91,9 +102,9 @@ export default function DestinationField({
 			clearTimeout(timeoutId);
 			controller.abort();
 		};
-	}, [value]);
+	}, [value, disableSuggestions]);
 
-	const isOpen = hasFocus && results.length > 0;
+	const isOpen = !disableSuggestions && hasFocus && results.length > 0;
 
 	const handleSelect = (comune: ComuneResult) => {
 		setResults([]);

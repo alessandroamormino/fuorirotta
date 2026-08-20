@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { SearchFilters } from "@/lib/types";
 import {
 	SUGGESTED_DESTINATIONS,
@@ -49,8 +49,6 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 		dateFrom: null,
 		dateTo: null,
 	});
-	const searchBarRef = useRef<HTMLDivElement>(null);
-	const activeFieldRef = useRef<ActiveField>(null);
 
 	// D-11: searchInput/mobileSearchInput erano due stati paralleli, mutuamente
 	// esclusivi per breakpoint. Unificati in uno solo: nessuna differenza
@@ -70,25 +68,12 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 	const [mobileWhenOpen, setMobileWhenOpen] = useState(false);
 	const [mobileNearbyOpen, setMobileNearbyOpen] = useState(false);
 
-	// Sincronizza il ref con lo state (il listener mousedown ha closure stale)
-	useEffect(() => {
-		activeFieldRef.current = activeField;
-	}, [activeField]);
-
-	useEffect(() => {
-		const handleClickOutside = (event: MouseEvent) => {
-			// Non chiudere mai se il mobile overlay è aperto
-			if (activeFieldRef.current === "mobile_search") return;
-			if (
-				searchBarRef.current &&
-				!searchBarRef.current.contains(event.target as Node)
-			) {
-				setActiveField(null);
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, []);
+	// T-09-13: il listener manuale su `document` che chiudeva il dropdown al
+	// click fuori (e il ref che lo supportava) sono spariti da qui nello
+	// stesso commit in cui il dropdown desktop adotta Popover (D-13,
+	// DesktopSearchDropdown.tsx): e' Radix, non piu' questo hook, a possedere
+	// la chiusura per click esterno, Escape e il ripristino del focus. Il
+	// mobile overlay (Dialog) non ha mai usato questo listener.
 
 	// Blocca scroll body quando overlay mobile è aperto
 	useEffect(() => {
@@ -330,7 +315,6 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 			setMobileWhenOpen,
 			mobileNearbyOpen,
 			setMobileNearbyOpen,
-			searchBarRef,
 		},
 		destinations: {
 			visible,

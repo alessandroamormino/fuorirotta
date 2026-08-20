@@ -44,4 +44,25 @@ const Content = React.forwardRef<
   );
 });
 
-export { Root, Trigger, Anchor, Portal, Content, Close };
+/**
+ * `Content` senza alcuna classe — per superfici che non sono un popover per
+ * forma (es. un pannello largo quanto la barra di ricerca, ancorato sotto di
+ * essa) e che quindi non possono annullare le classi fisse di `Content`
+ * (`z-[200]`, `max-h-[70vh]`, `min-w-[10rem]`, `rounded-lg`, `border-border`,
+ * `shadow-xl`, `p-2`).
+ *
+ * Perche' serve un export separato invece di passare `className` a `Content`:
+ * `cn()` in lib/utils.ts e' un join di stringhe senza tailwind-merge (Fase 7,
+ * D-09), e l'ordine delle regole nel CSS compilato non segue l'ordine delle
+ * classi nell'attributo — le classi di `Content` vincono comunque sulle
+ * proprie. Stesso conflitto gia' documentato e risolto in Fase 9 su
+ * `Dialog.ContentUnstyled`.
+ *
+ * Usare con `asChild` per innestare il comportamento Radix (chiusura per
+ * click esterno, Escape, ripristino del focus, posizionamento ancorato) sul
+ * proprio elemento, che resta l'unico a portare classi. Il call site deve
+ * fornire il proprio `Portal`.
+ */
+const ContentUnstyled = PopoverPrimitive.Content;
+
+export { Root, Trigger, Anchor, Portal, Content, ContentUnstyled, Close };

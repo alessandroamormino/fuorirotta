@@ -243,6 +243,13 @@ export default function MobileSearchOverlay({
 															setMobileWhenOpen(true);
 														}}
 														className="flex-1 text-sm outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
+														// D-19 (esteso al mobile il 2026-08-20): la lista
+														// "Risultati" qui sotto (destinations.visible)
+														// resta l'unica superficie di suggerimenti — il
+														// popover di autocomplete di questo campo non deve
+														// aprirsi sopra di essa mostrando la stessa
+														// informazione due volte.
+														disableSuggestions
 													/>
 													{search.input && (
 														<button
