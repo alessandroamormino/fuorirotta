@@ -1,4 +1,8 @@
 "use client";
+// useState locale per il nodo DOM del contenitore risultati "Dove" (D-19) e
+// per il suo contatore, piu' gli onClick dei campi e le animazioni
+// framer-motion (motion.div/motion.button); chiama inoltre l'hook condiviso
+// useNavbarSearch, che possiede lo stato dei filtri (D-12).
 
 import { useState } from "react";
 import { motion } from "framer-motion";
