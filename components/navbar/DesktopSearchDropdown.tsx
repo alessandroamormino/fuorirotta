@@ -53,7 +53,6 @@ interface DesktopRadiusBag {
 }
 
 interface DesktopDestinationsBag {
-	visible: SuggestedDestination[];
 	iconFor: (iconType: string) => string;
 	selectSuggested: (dest: SuggestedDestination) => void;
 }
@@ -67,6 +66,14 @@ interface DesktopSearchDropdownProps {
 	destinations: DesktopDestinationsBag;
 	filters: SearchFilters;
 	setFilters: Dispatch<SetStateAction<SearchFilters>>;
+	// D-19 (corretta il 2026-08-20): il campo Dove desktop vive nella barra
+	// collassata (Navbar.tsx), fuori da questo pannello — il nodo dove
+	// DestinationField teletrasporta (createPortal) la sua lista di
+	// risultati deve quindi arrivare da li'. resultsCount arriva dallo
+	// stesso posto: serve per decidere fra la lista e il fallback "Cerca
+	// citta'" senza duplicare lo stato del fetch qui.
+	resultsContainerRef: (el: HTMLDivElement | null) => void;
+	resultsCount: number;
 }
 
 // Dropdown desktop "Dove"/"Quando", spostato verbatim da Navbar.tsx (D-09) e
@@ -81,6 +88,8 @@ export default function DesktopSearchDropdown({
 	destinations,
 	filters,
 	setFilters,
+	resultsContainerRef,
+	resultsCount,
 }: DesktopSearchDropdownProps) {
 	const isFiltering = searchInput.trim().length > 0;
 
@@ -136,16 +145,18 @@ export default function DesktopSearchDropdown({
 										transition={{ duration: 0.2 }}
 										className="p-4 sm:p-8"
 									>
-										{/* D-19 (2026-08-19, esteso al mobile il 2026-08-20): il
-										    pannello e' unificato — digitando, i preset escono con
-										    una transizione e vengono sostituiti dai risultati
-										    filtrati nello stesso contenitore, intestazione compresa.
-										    Stessa logica gia' esistente sull'overlay mobile
-										    (baseline riga 3, "Risultati"): il mobile e' il
-										    riferimento, non un secondo caso da parametrizzare. Il
-										    popover di autocomplete di DestinationField resta
-										    spento su questo campo (disableSuggestions) proprio per
-										    non avere due superfici visibili insieme. */}
+										{/* D-19 (corretta il 2026-08-20, dopo la regressione di
+										    7852a38): il pannello e' unificato — digitando, i preset
+										    escono con una transizione e vengono sostituiti, nello
+										    stesso contenitore, dai risultati DI /api/comuni/search
+										    (non da un filtro locale sui 13 preset, che e'
+										    esattamente cio' che 7852a38 aveva fatto per errore e
+										    che spegneva l'autocomplete su database, UI-02). Il campo
+										    Dove (Navbar.tsx) passa a DestinationField il nodo DOM
+										    del contenitore qui sotto (resultsContainerRef): la
+										    lista arriva via createPortal invece che in un Popover
+										    proprio, cosi' resta una sola superficie di
+										    suggerimenti. */}
 										<AnimatePresence mode="wait" initial={false}>
 											{!isFiltering ? (
 												<motion.div
@@ -201,58 +212,41 @@ export default function DesktopSearchDropdown({
 													<h3 className="text-xs sm:text-sm font-semibold text-foreground mb-4 sm:mb-6">
 														Risultati
 													</h3>
-													<div className="grid grid-cols-1 gap-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
-														{destinations.visible.length > 0 ? (
-															destinations.visible.map((dest) => (
-																<motion.button
-																	key={dest.name}
-																	whileHover={{ backgroundColor: "var(--muted)" }}
-																	whileTap={{ scale: 0.98 }}
-																	onClick={() => selectOrOpenRadius(dest)}
-																	className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-muted transition-all text-left"
-																>
-																	<div className="w-10 h-10 sm:w-12 sm:h-12 bg-muted-strong rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
-																		{destinations.iconFor(dest.icon)}
-																	</div>
-																	<div className="flex-1 min-w-0">
-																		<div className="font-medium text-foreground text-sm sm:text-base truncate">
-																			{dest.name}
-																		</div>
-																		<div className="text-xs sm:text-sm text-muted-foreground-subtle truncate">
-																			{dest.subtitle}
-																		</div>
-																	</div>
-																</motion.button>
-															))
-														) : (
-															/* Nessun risultato → "Cerca città: xxx", stesso
-															   fallback del mobile (baseline riga 3). */
-															<motion.button
-																whileHover={{ backgroundColor: "var(--muted)" }}
-																whileTap={{ scale: 0.98 }}
-																onClick={() => {
-																	handleSearchFallback(searchInput);
-																	setActiveField("when");
-																}}
-																className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-muted transition-all text-left"
-															>
-																<div className="w-10 h-10 sm:w-12 sm:h-12 bg-muted-strong rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
-																	<Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground-subtle" />
+													{resultsCount === 0 && (
+														/* Nessun risultato → "Cerca città: xxx", stesso
+														   fallback del mobile (baseline riga 3). */
+														<motion.button
+															whileHover={{ backgroundColor: "var(--muted)" }}
+															whileTap={{ scale: 0.98 }}
+															onClick={() => {
+																handleSearchFallback(searchInput);
+																setActiveField("when");
+															}}
+															className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-xl hover:bg-muted transition-all text-left w-full"
+														>
+															<div className="w-10 h-10 sm:w-12 sm:h-12 bg-muted-strong rounded-lg flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
+																<Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground-subtle" />
+															</div>
+															<div className="flex-1 min-w-0">
+																<div className="font-medium text-foreground text-sm sm:text-base">
+																	Cerca città:{" "}
+																	<span className="text-primary">
+																		{searchInput}
+																	</span>
 																</div>
-																<div className="flex-1 min-w-0">
-																	<div className="font-medium text-foreground text-sm sm:text-base">
-																		Cerca città:{" "}
-																		<span className="text-primary">
-																			{searchInput}
-																		</span>
-																	</div>
-																	<div className="text-xs sm:text-sm text-muted-foreground-subtle">
-																		Cerca eventi in questa zona
-																	</div>
+																<div className="text-xs sm:text-sm text-muted-foreground-subtle">
+																	Cerca eventi in questa zona
 																</div>
-															</motion.button>
-														)}
-													</div>
+															</div>
+														</motion.button>
+													)}
+													{/* Nodo di destinazione del portal di DestinationField
+													    (vedi commento sopra): resta vuoto finche' l'utente
+													    non digita, il fetch e' li' che vive. */}
+													<div
+														ref={resultsContainerRef}
+														className="max-h-[400px] overflow-y-auto pr-2 scrollbar-thin"
+													/>
 												</motion.div>
 											)}
 										</AnimatePresence>

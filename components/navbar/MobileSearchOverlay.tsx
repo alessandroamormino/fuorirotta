@@ -26,6 +26,7 @@
  * Il contenitore resta il `motion.div fixed inset-0` originale, invariato.
  */
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
 	Search,
@@ -112,6 +113,17 @@ export default function MobileSearchOverlay({
 		mobileNearbyOpen,
 		setMobileNearbyOpen,
 	} = panels;
+
+	const isFiltering = Boolean(search.input.trim());
+
+	// D-19 (corretta il 2026-08-20, dopo la regressione di 7852a38): il
+	// nodo dove DestinationField teletrasporta (createPortal) la sua
+	// lista di risultati DB, e quante righe ha trovato — qui, non nel
+	// campo stesso, perche' l'intestazione e il fallback "Cerca citta'"
+	// restano di competenza del pannello, non dell'input.
+	const [resultsContainer, setResultsContainer] =
+		useState<HTMLDivElement | null>(null);
+	const [resultsCount, setResultsCount] = useState(0);
 
 	// Chiusura unica per logo/X/"Lista": azzera visibilita' e passo interno,
 	// cosi' riaprire l'overlay riparte sempre dalla vista "Dove" espansa.
@@ -243,13 +255,13 @@ export default function MobileSearchOverlay({
 															setMobileWhenOpen(true);
 														}}
 														className="flex-1 text-sm outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
-														// D-19 (esteso al mobile il 2026-08-20): la lista
-														// "Risultati" qui sotto (destinations.visible)
-														// resta l'unica superficie di suggerimenti — il
-														// popover di autocomplete di questo campo non deve
-														// aprirsi sopra di essa mostrando la stessa
-														// informazione due volte.
-														disableSuggestions
+														// D-19 (corretta il 2026-08-20): la lista arriva nel
+														// contenitore "Risultati" qui sotto via
+														// createPortal, non in un popover proprio — una
+														// sola superficie di suggerimenti, alimentata
+														// dall'autocomplete su database.
+														resultsContainer={resultsContainer}
+														onResultsChange={setResultsCount}
 													/>
 													{search.input && (
 														<button
@@ -264,19 +276,55 @@ export default function MobileSearchOverlay({
 												</div>
 
 												<p className="text-xs font-semibold text-muted-foreground-subtle mb-3">
-													{search.input.trim()
-														? "Risultati"
-														: "Destinazioni suggerite"}
+													{isFiltering ? "Risultati" : "Destinazioni suggerite"}
 												</p>
 
-												{/* Lista con altezza max + scroll — "Quando" rimane sempre visibile.
-												    D-16: questo pannello filtra dal vivo su search.input e
-												    mostra il fallback "Cerca città: ..." quando non trova nulla —
-												    a differenza del pannello desktop, che non filtra mai. Asimmetria
-												    preesistente conservata di proposito, non un dimenticanza. */}
-												<div className="overflow-y-auto max-h-[45vh] grid grid-cols-1 gap-1">
-													{destinations.visible.length > 0 ? (
-														destinations.visible.map((dest) => (
+												{isFiltering ? (
+													/* D-19 (corretta il 2026-08-20, dopo la regressione
+													   di 7852a38): stesso contenitore di prima, ma la
+													   sorgente e' l'autocomplete su database
+													   (/api/comuni/search), non un filtro locale sui 13
+													   preset — quello era esattamente la regressione,
+													   spegneva l'autocomplete su tutta la superficie
+													   mobile (UI-02). DestinationField (sopra) porta qui
+													   i risultati via createPortal. */
+													<div className="overflow-y-auto max-h-[45vh] flex flex-col gap-1">
+														<div ref={setResultsContainer} />
+														{resultsCount === 0 && (
+															/* Nessun risultato → "Cerca città: xxx" */
+															<motion.button
+																whileTap={{ scale: 0.98 }}
+																onClick={() => {
+																	setFilters({
+																		...filters,
+																		location: search.input,
+																	});
+																	setMobileWhenOpen(true);
+																}}
+																className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted transition-all text-left"
+															>
+																<div className="w-10 h-10 bg-muted-strong rounded-lg flex items-center justify-center text-xl flex-shrink-0">
+																	<Search className="w-4 h-4 text-muted-foreground-subtle" />
+																</div>
+																<div className="flex-1 min-w-0">
+																	<div className="font-medium text-foreground text-sm">
+																		Cerca città:{" "}
+																		<span className="text-primary">
+																			{search.input}
+																		</span>
+																	</div>
+																	<div className="text-xs text-muted-foreground-subtle">
+																		Cerca eventi in questa zona
+																	</div>
+																</div>
+															</motion.button>
+														)}
+													</div>
+												) : (
+													/* Lista con altezza max + scroll — "Quando" rimane
+													   sempre visibile. */
+													<div className="overflow-y-auto max-h-[45vh] grid grid-cols-1 gap-1">
+														{destinations.visible.map((dest) => (
 															<motion.button
 																key={dest.name}
 																whileTap={{ scale: 0.98 }}
@@ -302,37 +350,9 @@ export default function MobileSearchOverlay({
 																	</div>
 																</div>
 															</motion.button>
-														))
-													) : (
-														/* Nessun risultato → "Cerca città: xxx" */
-														<motion.button
-															whileTap={{ scale: 0.98 }}
-															onClick={() => {
-																setFilters({
-																	...filters,
-																	location: search.input,
-																});
-																setMobileWhenOpen(true);
-															}}
-															className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted transition-all text-left"
-														>
-															<div className="w-10 h-10 bg-muted-strong rounded-lg flex items-center justify-center text-xl flex-shrink-0">
-																<Search className="w-4 h-4 text-muted-foreground-subtle" />
-															</div>
-															<div className="flex-1 min-w-0">
-																<div className="font-medium text-foreground text-sm">
-																	Cerca città:{" "}
-																	<span className="text-primary">
-																		{search.input}
-																	</span>
-																</div>
-																<div className="text-xs text-muted-foreground-subtle">
-																	Cerca eventi in questa zona
-																</div>
-															</div>
-														</motion.button>
-													)}
-												</div>
+														))}
+													</div>
+												)}
 
 												{/* Mostra tutte / meno — solo se non si sta cercando */}
 												{destinations.canToggle && !mobileDestExpanded && (

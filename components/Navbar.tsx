@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import { it } from "date-fns/locale";
@@ -29,6 +30,18 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 	// Il dropdown desktop e' aperto per ogni activeField tranne il caso
 	// mobile_search (che apre invece l'overlay fullscreen sopra) e null.
 	const dropdownOpen = activeField !== null && activeField !== "mobile_search";
+
+	// D-19 (corretta il 2026-08-20, dopo la regressione di 7852a38): il
+	// campo Dove desktop vive in questa barra collassata, il contenitore
+	// dei suoi risultati vive nel pannello aperto da DesktopSearchDropdown
+	// — due componenti fratelli, non genitore/figlio. Questo stato porta
+	// il nodo DOM del contenitore (e il conteggio dei risultati) dall'uno
+	// all'altro, cosi' DestinationField puo' teletrasportare (createPortal)
+	// la sua lista dentro l'unico contenitore visibile invece di aprire un
+	// popover proprio sopra di esso.
+	const [whereResultsContainer, setWhereResultsContainer] =
+		useState<HTMLDivElement | null>(null);
+	const [whereResultsCount, setWhereResultsCount] = useState(0);
 
 	return (
 		<>
@@ -125,11 +138,11 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 													}`}
 													onFocus={() => setActiveField("where")}
 													readOnly={radius.isNearby}
-													// D-19: il pannello unificato in DesktopSearchDropdown
-													// e' l'unica superficie di suggerimenti sul
-													// desktop — il popover di questo campo non deve
-													// aprirsi sopra di esso.
-													disableSuggestions
+													// D-19 (corretta il 2026-08-20): la lista arriva nel
+													// pannello unificato di DesktopSearchDropdown via
+													// createPortal, non in un popover proprio.
+													resultsContainer={whereResultsContainer}
+													onResultsChange={setWhereResultsCount}
 												/>
 												{search.input && (
 													<button
@@ -231,6 +244,8 @@ export default function Navbar({ onSearch, onOpenMap }: NavbarProps) {
 									destinations={destinations}
 									filters={filters}
 									setFilters={setFilters}
+									resultsContainerRef={setWhereResultsContainer}
+									resultsCount={whereResultsCount}
 								/>
 							</Popover.Root>
 						</div>

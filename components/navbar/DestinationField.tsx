@@ -3,7 +3,7 @@
 // debounce, fetch e AbortController per scartare risposte fuori ordine (D-12).
 
 import { useEffect, useRef, useState } from "react";
-import * as Popover from "@/components/ui/Popover";
+import { createPortal } from "react-dom";
 
 interface ComuneResult {
 	id: number;
@@ -25,13 +25,23 @@ interface DestinationFieldProps {
 	// perso se non inoltrato — nessun effetto sull'unico altro call site
 	// (desktop), che non lo passa.
 	autoFocus?: boolean;
-	// D-19 (esteso al mobile il 2026-08-20): quando true, il popover di
-	// QUESTO campo non si apre mai — resta un input di solo testo, la
-	// chiamata di rete al debounce non parte nemmeno. Usato dove un'altra
-	// superficie e' gia' l'unica fonte di suggerimenti (il pannello
-	// desktop unificato, la lista "Risultati" dell'overlay mobile), per
-	// evitare due superfici di suggerimenti visibili insieme.
-	disableSuggestions?: boolean;
+	// D-19 (corretta il 2026-08-20, dopo la regressione di 7852a38): la
+	// lista dei risultati non apre piu' un Popover proprio — verrebbe
+	// visualizzata come una seconda superficie di suggerimenti sopra
+	// quella del pannello genitore (desktop) o duplicata sopra la lista
+	// gia' presente (mobile). Con createPortal la lista viene
+	// teletrasportata dentro il nodo DOM che il genitore fornisce qui —
+	// che E' il pannello "Destinazioni suggerite"/"Risultati" — cosi'
+	// resta un solo contenitore visibile per superficie. Se il genitore
+	// non ha ancora montato un nodo, i risultati restano in stato ma non
+	// vengono disegnati da nessuna parte (nessun crash, nessun flash).
+	resultsContainer?: HTMLElement | null;
+	// Il genitore possiede l'intestazione ("Risultati" vs "Destinazioni
+	// suggerite") e il fallback "Cerca citta'": deve sapere se il fetch
+	// ha prodotto risultati senza possedere lo stato del fetch, che resta
+	// qui (RESEARCH.md Pitfall 3/4: valore sincrono, debounce solo sulla
+	// rete, race guard sull'AbortController).
+	onResultsChange?: (count: number) => void;
 }
 
 const LISTBOX_ID = "destination-field-listbox";
@@ -49,7 +59,8 @@ export default function DestinationField({
 	readOnly,
 	onFocus,
 	autoFocus,
-	disableSuggestions,
+	resultsContainer,
+	onResultsChange,
 }: DestinationFieldProps) {
 	const [results, setResults] = useState<ComuneResult[]>([]);
 	const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -57,17 +68,13 @@ export default function DestinationField({
 	// mobile e quella desktop (useNavbarSearch), cosi' che il pannello desktop veda
 	// cio' che l'utente ha fatto nell'overlay. Effetto collaterale: digitando
 	// nell'overlay mobile anche QUESTO campo riceve il valore, pur essendo nascosto
-	// dal breakpoint, e apriva la sua listbox ancorata a un input di larghezza 0 —
-	// che finiva a schermo in alto a sinistra, sopra l'header. Il focus e' il
-	// discriminante corretto: la listbox appartiene al campo che l'utente sta
-	// usando davvero, non a ogni istanza montata che condivide il testo.
+	// dal breakpoint. Il focus e' il discriminante corretto: la lista appartiene al
+	// campo che l'utente sta usando davvero, non a ogni istanza montata che
+	// condivide il testo.
 	const [hasFocus, setHasFocus] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
-		// D-19: nessuna chiamata di rete se questo campo non deve mai
-		// mostrare il proprio popover — un'altra superficie ci pensa gia'.
-		if (disableSuggestions) return;
 		if (value.trim().length === 0) {
 			// Svuota i risultati quando il prop value diventa vuoto (es. dopo
 			// Cancella dal genitore); non c'e' modo di farlo durante il render
@@ -102,9 +109,13 @@ export default function DestinationField({
 			clearTimeout(timeoutId);
 			controller.abort();
 		};
-	}, [value, disableSuggestions]);
+	}, [value]);
 
-	const isOpen = !disableSuggestions && hasFocus && results.length > 0;
+	useEffect(() => {
+		onResultsChange?.(results.length);
+	}, [results, onResultsChange]);
+
+	const isOpen = hasFocus && results.length > 0;
 
 	const handleSelect = (comune: ComuneResult) => {
 		setResults([]);
@@ -132,70 +143,59 @@ export default function DestinationField({
 	};
 
 	return (
-		<Popover.Root
-			open={isOpen}
-			onOpenChange={(open) => {
-				if (!open) setResults([]);
-			}}
-		>
-			<Popover.Anchor asChild>
-				<input
-					ref={inputRef}
-					type="text"
-					placeholder={placeholder}
-					value={value}
-					autoFocus={autoFocus}
-					onChange={(e) => onValueChange(e.target.value)}
-					onFocus={() => {
-						setHasFocus(true);
-						onFocus?.();
-					}}
-					// Sicuro rispetto alla selezione col mouse: gli option fanno
-					// preventDefault su onMouseDown, quindi cliccarli non toglie il
-					// focus all'input e questo blur non scatta prima dell'onClick.
-					onBlur={() => setHasFocus(false)}
-					onKeyDown={handleKeyDown}
-					readOnly={readOnly}
-					className={className}
-					role="combobox"
-					aria-expanded={isOpen}
-					aria-autocomplete="list"
-					aria-controls={LISTBOX_ID}
-					aria-activedescendant={
-						highlightedIndex >= 0
-							? `destination-field-option-${highlightedIndex}`
-							: undefined
-					}
-				/>
-			</Popover.Anchor>
-			{/* onOpenAutoFocus/onCloseAutoFocus: il focus resta sempre nell'input,
-			    mai nel pannello — altrimenti digitare aprirebbe il popover e
-			    rimuoverebbe il focus dal campo a meta' parola. */}
-			<Popover.Content
-				align="start"
-				onOpenAutoFocus={(e) => e.preventDefault()}
-				onCloseAutoFocus={(e) => e.preventDefault()}
-			>
-				<ul id={LISTBOX_ID} role="listbox" className="flex flex-col gap-0.5">
-					{results.map((r, index) => (
-						<li key={r.id}>
-							<button
-								type="button"
-								id={`destination-field-option-${index}`}
-								role="option"
-								aria-selected={index === highlightedIndex}
-								onMouseDown={(e) => e.preventDefault()}
-								onClick={() => handleSelect(r)}
-								className={`block w-full truncate rounded-md px-3 py-2 text-left text-sm text-foreground-secondary ${
-									index === highlightedIndex ? "bg-muted" : "hover:bg-muted"
-								}`}
-							>
-								{r.name} — {r.provinceName}, {r.regionName}
-							</button>
-						</li>
-					))}
-				</ul>
-			</Popover.Content>
-		</Popover.Root>
+		<>
+			<input
+				ref={inputRef}
+				type="text"
+				placeholder={placeholder}
+				value={value}
+				autoFocus={autoFocus}
+				onChange={(e) => onValueChange(e.target.value)}
+				onFocus={() => {
+					setHasFocus(true);
+					onFocus?.();
+				}}
+				// Sicuro rispetto alla selezione col mouse: gli option fanno
+				// preventDefault su onMouseDown, quindi cliccarli non toglie il
+				// focus all'input e questo blur non scatta prima dell'onClick.
+				onBlur={() => setHasFocus(false)}
+				onKeyDown={handleKeyDown}
+				readOnly={readOnly}
+				className={className}
+				role="combobox"
+				aria-expanded={isOpen}
+				aria-autocomplete="list"
+				aria-controls={LISTBOX_ID}
+				aria-activedescendant={
+					highlightedIndex >= 0
+						? `destination-field-option-${highlightedIndex}`
+						: undefined
+				}
+			/>
+			{isOpen && resultsContainer
+				? createPortal(
+						<ul id={LISTBOX_ID} role="listbox" className="flex flex-col gap-0.5">
+							{results.map((r, index) => (
+								<li key={r.id}>
+									<button
+										type="button"
+										id={`destination-field-option-${index}`}
+										role="option"
+										aria-selected={index === highlightedIndex}
+										onMouseDown={(e) => e.preventDefault()}
+										onClick={() => handleSelect(r)}
+										className={`block w-full truncate rounded-md px-3 py-2 text-left text-sm text-foreground-secondary ${
+											index === highlightedIndex ? "bg-muted" : "hover:bg-muted"
+										}`}
+									>
+										{r.name} — {r.provinceName}, {r.regionName}
+									</button>
+								</li>
+							))}
+						</ul>,
+						resultsContainer,
+					)
+				: null}
+		</>
 	);
 }
