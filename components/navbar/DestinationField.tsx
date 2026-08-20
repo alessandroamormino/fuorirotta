@@ -73,8 +73,20 @@ export default function DestinationField({
 	// condivide il testo.
 	const [hasFocus, setHasFocus] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
+	// Selezionare un comune scrive il suo nome in `value`, che riaccende
+	// questo effect e rifarebbe il fetch per un testo che l'utente non ha
+	// digitato: richiesta sprecata, e la lista tornerebbe piena mentre il
+	// pannello sta gia' uscendo verso "Quando". Si salta una volta sola,
+	// poi il ref si azzera — cosi' ridigitare lo stesso nome piu' tardi
+	// cerca di nuovo.
+	const justSelectedRef = useRef<string | null>(null);
 
 	useEffect(() => {
+		if (justSelectedRef.current === value) {
+			justSelectedRef.current = null;
+			return;
+		}
+
 		if (value.trim().length === 0) {
 			// Svuota i risultati quando il prop value diventa vuoto (es. dopo
 			// Cancella dal genitore); non c'e' modo di farlo durante il render
@@ -118,6 +130,7 @@ export default function DestinationField({
 	const isOpen = hasFocus && results.length > 0;
 
 	const handleSelect = (comune: ComuneResult) => {
+		justSelectedRef.current = comune.name;
 		setResults([]);
 		setHighlightedIndex(-1);
 		onSelect({ id: comune.id, istatCode: comune.istatCode, name: comune.name });
@@ -183,7 +196,19 @@ export default function DestinationField({
 										role="option"
 										aria-selected={index === highlightedIndex}
 										onMouseDown={(e) => e.preventDefault()}
-										onClick={() => handleSelect(r)}
+										// stopPropagation: la lista e' teletrasportata nel
+										// pannello con createPortal, ma nel React tree resta
+										// figlia di questo campo — e React propaga gli eventi
+										// lungo il React tree, non il DOM. Senza questo, il
+										// click risale fino al wrapper del campo Dove
+										// (Navbar.tsx), il cui onClick rimette activeField a
+										// "where" subito dopo che onSelect l'ha portato a
+										// "when": il pannello sfarfalla e torna indietro
+										// invece di passare al passo successivo.
+										onClick={(e) => {
+											e.stopPropagation();
+											handleSelect(r);
+										}}
 										className={`block w-full truncate rounded-md px-3 py-2 text-left text-sm text-foreground-secondary ${
 											index === highlightedIndex ? "bg-muted" : "hover:bg-muted"
 										}`}
