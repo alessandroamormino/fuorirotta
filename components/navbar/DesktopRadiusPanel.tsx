@@ -103,7 +103,7 @@ export default function DesktopRadiusPanel({
 								step="5"
 								value={value}
 								onChange={(e) => onValueChange(Number(e.target.value))}
-								className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer"
+								className="slider w-full h-2 bg-border rounded-lg appearance-none cursor-pointer"
 								style={{
 									background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((value - 5) / 195) * 100}%, var(--border) ${((value - 5) / 195) * 100}%, var(--border) 100%)`,
 								}}

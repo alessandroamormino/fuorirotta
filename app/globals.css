@@ -213,7 +213,12 @@ input[type="range"].slider::-webkit-slider-thumb {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--primary);
+  /* Il pallino sta sopra la parte di traccia riempita di --primary: il token
+     "cio' che si legge sopra il primary" e' esattamente questo. Bianco in
+     chiaro (come richiesto in UAT), scuro in tema scuro — dove un pallino
+     bianco sul teal chiaro avrebbe poco contrasto. */
+  background: var(--primary-foreground);
+  border: 1px solid var(--border);
   cursor: pointer;
   box-shadow: var(--sh-sm);
   transition: all 0.2s;
@@ -228,9 +233,9 @@ input[type="range"].slider::-moz-range-thumb {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--primary-foreground);
   cursor: pointer;
-  border: none;
+  border: 1px solid var(--border);
   box-shadow: var(--sh-sm);
   transition: all 0.2s;
 }
