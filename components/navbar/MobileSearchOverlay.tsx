@@ -3,35 +3,27 @@
 // stato locale di chiusura: tutti dipendenti dal runtime del browser (D-12).
 
 /**
- * D-13 — adozione di Dialog: eccezione dichiarata.
+ * D-13 — adozione di Dialog: riuscita, per una strada diversa da quella ovvia.
  *
- * `Dialog.Content` (components/ui/Dialog.tsx) porta classi fisse da dialogo
- * centrato (`max-w-lg`, `rounded-lg`, `p-6`, `max-h-[90vh]`,
- * `top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`) pensate per essere
- * annullate dal `className` del call site. In questo repo pero' `cn()`
- * (lib/utils.ts) e' un join di stringhe senza tailwind-merge, per scelta
- * dichiarata in Fase 7 (D-09: "fixed variant sets don't need class-conflict
- * resolution") — non fa alcuna risoluzione dei conflitti fra classi.
+ * `Dialog.Content` (il wrapper stilizzato) NON e' utilizzabile qui: porta classi
+ * fisse da dialogo centrato (`max-w-lg`, `p-6`, `top-1/2 left-1/2 -translate-*`)
+ * pensate per essere annullate dal `className` del call site, ma `cn()` in
+ * lib/utils.ts e' un join di stringhe senza tailwind-merge (Fase 7, D-09) e
+ * l'ordine delle regole nel CSS compilato non segue l'ordine delle classi
+ * nell'attributo: `.top-1/2` e `.p-6` sono generate dopo `.inset-0` e `.p-0` e
+ * vincono comunque. Verificato empiricamente compilando con
+ * @tailwindcss/postcss. Il risultato sarebbe un riquadro centrato da ~512px con
+ * padding invece di un overlay a schermo intero: regressione visiva reale (D-15).
  *
- * Verificato empiricamente (build @tailwindcss/postcss su uno scratch file,
- * non committato) che l'ordine delle regole nel CSS compilato NON segue
- * l'ordine con cui le classi sono scritte nell'attributo: `.top-1\/2` e
- * `.p-6` vengono generate DOPO `.inset-0` e `.p-0` nel foglio di stile, quindi
- * vincono comunque sulle classi di annullamento passate via `className`.
- * Il risultato osservabile sarebbe un riquadro centrato largo ~512px con
- * padding, non un overlay a schermo intero — una regressione visiva reale,
- * non ipotetica (D-15).
+ * La via d'uscita e' `Dialog.ContentUnstyled` + `asChild`: Radix innesta il
+ * proprio comportamento sul `motion.div` esistente, che resta l'unico a portare
+ * classi — il conflitto di specificita' semplicemente non si presenta. Da qui
+ * arrivano focus trap, chiusura con Escape, ripristino del focus al trigger e
+ * `aria-modal`, cioe' il contenuto vero di D-13, senza spostare un pixel e
+ * senza reimplementare a mano nulla di cio' che RESEARCH.md "Don't Hand-Roll"
+ * vieta.
  *
- * Per questo il contenitore resta il `motion.div fixed inset-0` originale,
- * invariato pixel per pixel. Il guadagno di accessibilita' di D-13 che si
- * può ottenere senza rischio geometrico — `role="dialog"`, `aria-modal` e un
- * titolo `sr-only` collegato via `aria-labelledby` — è comunque applicato
- * qui sotto: zero impatto visivo, quindi non viola l'invarianza. Focus trap,
- * chiusura con Escape e ripristino del focus restano NON implementati in
- * questo piano (richiederebbero di reimplementarli a mano, che è
- * esattamente cio' che RESEARCH.md "Don't Hand-Roll" vieta): la copertura
- * completa di D-13 per l'overlay mobile resta un lavoro futuro, annotato nel
- * SUMMARY di questo piano.
+ * Il contenitore resta il `motion.div fixed inset-0` originale, invariato.
  */
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -51,6 +43,7 @@ import DateRangeField from "@/components/ui/DateRangeField";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import DestinationField from "@/components/navbar/DestinationField";
 import MobileRadiusStep from "@/components/navbar/MobileRadiusStep";
+import * as Dialog from "@/components/ui/Dialog";
 import type { SearchFilters } from "@/lib/types";
 import type { SuggestedDestination } from "@/lib/destinations";
 
@@ -129,23 +122,32 @@ export default function MobileSearchOverlay({
 	};
 
 	return (
-		<AnimatePresence>
-			{open && (
-				<motion.div
-					key="mobile-overlay"
-					initial={{ opacity: 0, y: "-100%" }}
-					animate={{ opacity: 1, y: 0 }}
-					exit={{ opacity: 0, y: "-100%" }}
-					transition={{ type: "spring", damping: 30, stiffness: 300 }}
-					data-mobile-overlay="true"
-					role="dialog"
-					aria-modal="true"
-					aria-labelledby="mobile-search-overlay-title"
-					className="fixed inset-0 z-[200] bg-muted flex flex-col sm:hidden"
-				>
-					<h2 id="mobile-search-overlay-title" className="sr-only">
-						Ricerca eventi
-					</h2>
+		<Dialog.Root open={open} onOpenChange={onOpenChange}>
+			{/* forceMount: senza, Radix smonta il contenuto all'istante della
+			    chiusura e l'animazione di uscita di AnimatePresence non verrebbe
+			    mai vista. Con forceMount la presenza la governa AnimatePresence,
+			    Radix governa solo il comportamento. */}
+			<Dialog.Portal forceMount>
+				<AnimatePresence>
+					{open && (
+						<Dialog.ContentUnstyled
+							asChild
+							// Il focus iniziale resta all'input Dove, che porta gia'
+							// autoFocus: e' il comportamento registrato in baseline e
+							// va preservato. Il focus e' comunque dentro l'overlay,
+							// quindi il trap di Radix funziona lo stesso.
+							onOpenAutoFocus={(e) => e.preventDefault()}
+						>
+							<motion.div
+								key="mobile-overlay"
+								initial={{ opacity: 0, y: "-100%" }}
+								animate={{ opacity: 1, y: 0 }}
+								exit={{ opacity: 0, y: "-100%" }}
+								transition={{ type: "spring", damping: 30, stiffness: 300 }}
+								data-mobile-overlay="true"
+								className="fixed inset-0 z-[200] bg-muted flex flex-col sm:hidden"
+							>
+								<Dialog.Title className="sr-only">Ricerca eventi</Dialog.Title>
 					{/* Header */}
 					<div
 						className="flex items-center px-5 pb-4 bg-muted relative"
@@ -439,9 +441,12 @@ export default function MobileSearchOverlay({
 							<Search className="w-4 h-4" />
 							Cerca
 						</motion.button>
-					</div>
-				</motion.div>
-			)}
-		</AnimatePresence>
+							</div>
+							</motion.div>
+						</Dialog.ContentUnstyled>
+					)}
+				</AnimatePresence>
+			</Dialog.Portal>
+		</Dialog.Root>
 	);
 }
