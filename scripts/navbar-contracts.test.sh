@@ -25,26 +25,25 @@ fail() {
   exit 1
 }
 
-client_files=(
-  "components/navbar/DestinationField.tsx"
-  "components/navbar/MobileRadiusStep.tsx"
-  "components/navbar/MobileSearchOverlay.tsx"
-  "components/navbar/DesktopRadiusPanel.tsx"
-  "components/navbar/DesktopSearchDropdown.tsx"
-  "components/Navbar.tsx"
-)
+# WR-04: le liste erano hard-coded e MobileSearchbarTrigger.tsx (un vero
+# componente client: "use client" + framer-motion + onClick) non compariva
+# in nessuna delle due, sfuggendo sia al controllo D-12 sia al controllo
+# D-09/D-10. Derivate da components/navbar/*.tsx cosi' un settimo componente
+# futuro non puo' sfuggire allo stesso modo.
+# mapfile/readarray richiede bash 4+: non e' un'opzione portabile qui, il
+# bash di sistema su macOS resta 3.2 (licenza GPLv3, mai aggiornato da
+# Apple) — read -r in un while e' l'equivalente compatibile.
+navbar_components=()
+while IFS= read -r f; do
+  navbar_components+=("${f}")
+done < <(find components/navbar -name '*.tsx' | sort)
+client_files=("${navbar_components[@]}" "components/Navbar.tsx")
 server_files=(
   "lib/destinations.ts"
   "lib/hooks/useNavbarSearch.ts"
   "lib/types.ts"
 )
-surface_files=(
-  "components/navbar/DestinationField.tsx"
-  "components/navbar/MobileRadiusStep.tsx"
-  "components/navbar/MobileSearchOverlay.tsx"
-  "components/navbar/DesktopRadiusPanel.tsx"
-  "components/navbar/DesktopSearchDropdown.tsx"
-)
+surface_files=("${navbar_components[@]}")
 
 for f in "${client_files[@]}" "${server_files[@]}"; do
   [[ -f "${f}" ]] || fail "file atteso assente: ${f}"
@@ -81,7 +80,7 @@ for f in "${client_files[@]}"; do
   has_client_directive_with_reason "${f}" \
     || fail "D-12: ${f} non porta 'use client' in prima riga con un commento di motivazione entro le righe 2-4"
 done
-echo "ok  D-12: tutti e sei i file client portano la direttiva e un commento di motivazione"
+echo "ok  D-12: tutti e ${#client_files[@]} i file client portano la direttiva e un commento di motivazione"
 
 for f in "${server_files[@]}"; do
   grep -q 'use client' "${f}" && fail "D-12: ${f} porta la direttiva 'use client' ma non e' un componente — non dovrebbe averne bisogno"
@@ -123,6 +122,6 @@ for f in "${surface_files[@]}"; do
     fail "D-09/D-10: ${f} chiama useNavbarSearch per conto proprio — lo stato deve restare nella shell e arrivare via props"
   fi
 done
-echo "ok  D-09/D-10: nessuno dei cinque componenti di superficie richiama l'hook per conto proprio"
+echo "ok  D-09/D-10: nessuno dei ${#surface_files[@]} componenti di superficie richiama l'hook per conto proprio"
 
 echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10)"
