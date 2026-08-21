@@ -135,13 +135,20 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		if (savedFilters) {
 			try {
 				const parsed = JSON.parse(savedFilters);
+				// sessionStorage e' scrivibile da qualunque script sulla stessa
+				// origine: comuneId/comuneIstatCode arrivavano diretti in un
+				// parametro URL senza controllo di tipo. Il server valida comuneId
+				// (deve essere intero positivo, altrimenti ignorato), ma
+				// istatCode no — innocuo oggi perche' Prisma parametrizza, ma
+				// una guardia di tipo qui costa una riga.
 				activeFilters = {
 					location: parsed.location || "",
 					dateFrom: parsed.dateFrom ? new Date(parsed.dateFrom) : null,
 					dateTo: parsed.dateTo ? new Date(parsed.dateTo) : null,
-					radius: parsed.radius,
-					comuneId: parsed.comuneId,
-					comuneIstatCode: parsed.comuneIstatCode,
+					radius: typeof parsed.radius === "number" ? parsed.radius : undefined,
+					comuneId: typeof parsed.comuneId === "number" ? parsed.comuneId : undefined,
+					comuneIstatCode:
+						typeof parsed.comuneIstatCode === "string" ? parsed.comuneIstatCode : undefined,
 				};
 				setSearchFilters(activeFilters);
 			} catch { /* ignore */ }
@@ -154,7 +161,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
-			if (page > 1) fetchEvents(page);
+			if (page > 1) fetchEvents(page, activeFilters);
 			return;
 		}
 
@@ -169,9 +176,12 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				total: initialTotal,
 				query: queryKey,
 			});
-			if (page > 1) fetchEvents(page);
+			if (page > 1) fetchEvents(page, activeFilters);
 		} else {
-			fetchEvents(page);
+			// WR-06: activeFilters esplicito, non il default searchFilters della
+			// closure — setSearchFilters(activeFilters) sopra non e' ancora
+			// visibile qui, stesso giro di funzione.
+			fetchEvents(page, activeFilters);
 		}
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -200,7 +210,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		}
 	}, [searchFilters, selectedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	const fetchEvents = async (page: number) => {
+	// WR-06: filters (default = searchFilters) invece di leggere searchFilters
+	// dalla closure. Il mount effect sotto chiama setSearchFilters(activeFilters)
+	// e poi fetchEvents(page) nello stesso giro: setState non e' sincrono, quindi
+	// quella chiamata catturava ancora lo stato iniziale vuoto, non
+	// activeFilters — al reload con filtri salvati in sessionStorage e una
+	// useEventCache fredda, l'app interrogava eventi non filtrati mentre la
+	// Navbar mostrava gia' i filtri ripristinati. Le altre call site (bottoni
+	// di paginazione, l'effect [searchFilters]) restano corrette lasciando il
+	// default, perche' li' il render e' gia' allineato allo stato corrente.
+	const fetchEvents = async (page: number, filters: SearchFilters = searchFilters) => {
 		if (process.env.APP_DEBUG === "true") {
 			console.log(`[Fetch] Page ${page}`);
 		}
@@ -210,18 +229,18 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			const params = new URLSearchParams();
 			params.append("page", page.toString());
 
-			const isNearbySearch = searchFilters.location?.startsWith("Nelle vicinanze");
-			if (searchFilters.location && !isNearbySearch) {
-				params.append("location", searchFilters.location);
+			const isNearbySearch = filters.location?.startsWith("Nelle vicinanze");
+			if (filters.location && !isNearbySearch) {
+				params.append("location", filters.location);
 			}
 
 			// Identita' esatta del comune selezionato dall'autocomplete (D-01):
 			// viaggia insieme al testo libero, non al suo posto.
-			if (searchFilters.comuneId) {
-				params.append("comuneId", searchFilters.comuneId.toString());
+			if (filters.comuneId) {
+				params.append("comuneId", filters.comuneId.toString());
 			}
-			if (searchFilters.comuneIstatCode) {
-				params.append("istatCode", searchFilters.comuneIstatCode);
+			if (filters.comuneIstatCode) {
+				params.append("istatCode", filters.comuneIstatCode);
 			}
 
 			if (selectedCategory && selectedCategory !== "all")
@@ -234,21 +253,21 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				return `${year}-${month}-${day}`;
 			};
 
-			if (searchFilters.dateFrom) {
-				params.append("dateFrom", formatLocalDate(searchFilters.dateFrom));
+			if (filters.dateFrom) {
+				params.append("dateFrom", formatLocalDate(filters.dateFrom));
 			}
 
-			if (searchFilters.dateTo) {
-				params.append("dateTo", formatLocalDate(searchFilters.dateTo));
-			} else if (searchFilters.dateFrom) {
-				params.append("dateTo", formatLocalDate(searchFilters.dateFrom));
+			if (filters.dateTo) {
+				params.append("dateTo", formatLocalDate(filters.dateTo));
+			} else if (filters.dateFrom) {
+				params.append("dateTo", formatLocalDate(filters.dateFrom));
 			}
 
 			if (userLocation) {
 				params.append("lat", userLocation.lat.toString());
 				params.append("lng", userLocation.lng.toString());
-				if (searchFilters.radius) {
-					params.append("radius", searchFilters.radius.toString());
+				if (filters.radius) {
+					params.append("radius", filters.radius.toString());
 				}
 			}
 
@@ -279,7 +298,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			setTotal(newTotal);
 
 			if (page === 1) {
-				const queryKey = generateQueryKey(searchFilters, selectedCategory);
+				const queryKey = generateQueryKey(filters, selectedCategory);
 				setCachedEvents(queryKey, {
 					events: newEvents,
 					mapEvents: newMapEvents,
