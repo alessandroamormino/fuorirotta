@@ -170,6 +170,14 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 			...f,
 			location: `Nelle vicinanze (${label})`,
 			radius: value,
+			// WR-02: passare a un raggio e' un cambio di destinazione tanto
+			// quanto digitare un nuovo testo — setInput gia' azzera questi due
+			// campi, gli applier del raggio no. Senza il reset, un comuneId
+			// selezionato in precedenza sopravvive e /api/events lo AND-a al
+			// filtro raggio: una ricerca "nelle vicinanze" restituisce in
+			// silenzio solo gli eventi del comune scelto prima.
+			comuneId: undefined,
+			comuneIstatCode: undefined,
 		}));
 		setIsNearbySearch(true);
 		setShowRadiusSelector(false);
@@ -188,6 +196,9 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 			...f,
 			location: `Nelle vicinanze (${customRadius} km)`,
 			radius: customRadius,
+			// WR-02: vedi applyPreset sopra — stesso reset, stesso motivo.
+			comuneId: undefined,
+			comuneIstatCode: undefined,
 		}));
 		setIsNearbySearch(true);
 		setShowRadiusSelector(false);
@@ -205,6 +216,14 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 			...f,
 			location: label,
 			radius: customRadius,
+			// WR-02: vedi applyPreset sopra — stesso reset, stesso motivo. Su
+			// mobile e' anche il percorso piu' facilmente raggiungibile: questo
+			// e' l'unico applier che svuota searchInput lasciando un'etichetta
+			// in filters.location, cosi' la lista preset (incluso "Nelle
+			// vicinanze") torna raggiungibile con l'identita' del comune ancora
+			// impostata, se non azzerata qui.
+			comuneId: undefined,
+			comuneIstatCode: undefined,
 		}));
 		setSelectedRadius(customRadius);
 		setIsNearbySearch(true);
