@@ -26,8 +26,17 @@ export async function GET(request: NextRequest) {
 		const lat = searchParams.get("lat");
 		const lng = searchParams.get("lng");
 		const radius = searchParams.get("radius");
-		const limit = parseInt(searchParams.get("limit") || "16");
-		const offset = parseInt(searchParams.get("offset") || "0");
+		// WR-03: limit/offset raggiungevano Prisma non validati — parseInt("abc")
+		// e' NaN, che come take/skip fa 500-are Prisma per un typo di querystring;
+		// senza limite superiore, ?limit=100000000 legge l'intera tabella; con
+		// offset negativo, filteredEvents.slice(-5, ...) restituisce la coda
+		// invece di segnalare l'errore.
+		const clampInt = (raw: string | null, def: number, min: number, max: number) => {
+			const n = parseInt(raw ?? "", 10);
+			return Number.isInteger(n) ? Math.min(Math.max(n, min), max) : def;
+		};
+		const limit = clampInt(searchParams.get("limit"), 16, 1, 100);
+		const offset = clampInt(searchParams.get("offset"), 0, 0, 100_000);
 		const location = searchParams.get("location") || "";
 
 		// Identita' esatta del comune selezionata dall'autocomplete (D-01, D-07,
