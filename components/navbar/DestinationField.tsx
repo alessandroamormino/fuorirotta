@@ -2,7 +2,7 @@
 // stato locale della query dei risultati, useEffect con setTimeout per il
 // debounce, fetch e AbortController per scartare risposte fuori ordine (D-12).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface ComuneResult {
@@ -44,8 +44,6 @@ interface DestinationFieldProps {
 	onResultsChange?: (count: number) => void;
 }
 
-const LISTBOX_ID = "destination-field-listbox";
-
 // Foglia client dell'autocomplete comuni (D-03, D-04, D-05): l'input e lo
 // stato dei risultati vivono nello stesso componente, cosi' il valore
 // mostrato si aggiorna sincrono a ogni tasto e il debounce agisce solo sulla
@@ -62,6 +60,12 @@ export default function DestinationField({
 	resultsContainer,
 	onResultsChange,
 }: DestinationFieldProps) {
+	// WR-07: era una costante di modulo condivisa fra le due istanze montate
+	// simultaneamente quando l'overlay mobile e' aperto (quella desktop vive in
+	// un wrapper "hidden sm:block" sempre montato) — entrambe le combobox
+	// dichiaravano lo stesso aria-controls, e almeno una puntava sempre a un
+	// nodo inesistente. useId() da' a ogni istanza un id univoco e stabile.
+	const listboxId = useId();
 	const [results, setResults] = useState<ComuneResult[]>([]);
 	const [highlightedIndex, setHighlightedIndex] = useState(-1);
 	// Dalla Fase 9 piano 03 il testo digitato e' stato condiviso fra la superficie
@@ -184,21 +188,24 @@ export default function DestinationField({
 				role="combobox"
 				aria-expanded={isOpen}
 				aria-autocomplete="list"
-				aria-controls={LISTBOX_ID}
+				aria-controls={listboxId}
 				aria-activedescendant={
 					highlightedIndex >= 0
-						? `destination-field-option-${highlightedIndex}`
+						? `${listboxId}-option-${highlightedIndex}`
 						: undefined
 				}
 			/>
 			{isOpen && resultsContainer
 				? createPortal(
-						<ul id={LISTBOX_ID} role="listbox" className="flex flex-col gap-0.5">
+						<ul id={listboxId} role="listbox" className="flex flex-col gap-0.5">
 							{results.map((r, index) => (
-								<li key={r.id}>
+								// role="presentation": ARIA richiede che gli option siano
+								// figli diretti (di proprieta') del listbox — l'implicito
+								// listitem di <li> spezzava quel legame (WR-07).
+								<li key={r.id} role="presentation">
 									<button
 										type="button"
-										id={`destination-field-option-${index}`}
+										id={`${listboxId}-option-${index}`}
 										role="option"
 										aria-selected={index === highlightedIndex}
 										onMouseDown={(e) => e.preventDefault()}
