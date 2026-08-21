@@ -107,12 +107,22 @@ export async function GET(request: NextRequest) {
 			where.dateStart.lte = new Date(dateTo);
 		}
 
+		// WR-01: search e il ramo comuneId/cities generano ciascuno il proprio
+		// gruppo OR — fonderli in un solo array where.OR (come faceva prima)
+		// trasforma AND(search-OR, restrizione-OR) in un'unica disgiunzione
+		// piatta, e il termine di ricerca smette di filtrare. Ogni gruppo vive
+		// nel proprio { OR: [...] } dentro where.AND, cosi' Prisma li combina
+		// con AND come previsto.
+		const andGroups: Prisma.EventWhereInput[] = [];
+
 		if (search) {
-			where.OR = [
-				{ title: { contains: search, mode: "insensitive" } },
-				{ description: { contains: search, mode: "insensitive" } },
-				{ locationName: { contains: search, mode: "insensitive" } },
-			];
+			andGroups.push({
+				OR: [
+					{ title: { contains: search, mode: "insensitive" } },
+					{ description: { contains: search, mode: "insensitive" } },
+					{ locationName: { contains: search, mode: "insensitive" } },
+				],
+			});
 		}
 
 		if (category && category !== "all") {
@@ -132,18 +142,21 @@ export async function GET(request: NextRequest) {
 			const locationBranch = location
 				? [{ locationName: { contains: location, mode: "insensitive" as const } }]
 				: [];
-			where.OR = [...(where.OR || []), comuneBranch, ...locationBranch];
+			andGroups.push({ OR: [comuneBranch, ...locationBranch] });
 		} else if (location) {
 			// Filtro città: usa contains case-insensitive per più flessibilità
 			where.locationName = { contains: location, mode: "insensitive" };
 		} else if (cities.length > 0) {
 			// Fallback: se location matcha città suggerite, usa OR per tutte
-			where.OR = [
-				...(where.OR || []),
-				...cities.map((city) => ({
+			andGroups.push({
+				OR: cities.map((city) => ({
 					locationName: { contains: city, mode: "insensitive" },
 				})),
-			];
+			});
+		}
+
+		if (andGroups.length > 0) {
+			where.AND = andGroups;
 		}
 
 		// GESTIONE FILTRO RAGGIO
