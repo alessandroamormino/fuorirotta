@@ -285,18 +285,25 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 	// baseline 09-01, non prevista dai documenti di pianificazione). L'hook
 	// espone il derivato; quale superficie lo usa resta una scelta del
 	// markup, che 09-04/09-05 replicheranno com'e' oggi.
-	const filteredDestinations = searchInput.trim()
-		? SUGGESTED_DESTINATIONS.filter((d) =>
-				d.name.toLowerCase().includes(searchInput.toLowerCase()),
-			)
-		: SUGGESTED_DESTINATIONS;
+	//
+	// WR-09: filteredDestinations era un filtro locale con includes() su
+	// SUGGESTED_DESTINATIONS — esattamente il meccanismo che D-19 ha rimosso
+	// (la stessa regressione che 7852a38 aveva gia' causato una volta).
+	// Restava irraggiungibile: `visible` lo consumava solo nel ramo FALSE del
+	// ternario isFiltering ? … : … in MobileSearchOverlay, dove
+	// searchInput.trim() e' per definizione vuoto. Rimosso per non invitare
+	// una futura modifica a ricollegarlo e rirompere D-19 in silenzio.
+	const visible = mobileDestExpanded
+		? SUGGESTED_DESTINATIONS
+		: SUGGESTED_DESTINATIONS.slice(0, DEST_PREVIEW_COUNT);
 
-	const visible = searchInput.trim()
-		? filteredDestinations
-		: mobileDestExpanded
-			? SUGGESTED_DESTINATIONS
-			: SUGGESTED_DESTINATIONS.slice(0, DEST_PREVIEW_COUNT);
-
+	// WR-09: il Fix suggerito dal reviewer toglieva anche il guard
+	// !searchInput.trim() da qui, ma i bottoni "Mostra piu'/meno" in
+	// MobileSearchOverlay sono fratelli non condizionati del ternario
+	// isFiltering — solo questo guard li nasconde mentre isFiltering e' true
+	// (l'utente sta davvero digitando). Rimuoverlo li farebbe comparire sotto
+	// i risultati di una ricerca libera in corso: una regressione visibile,
+	// non presente nel codice sorgente del reviewer. Conservato deliberatamente.
 	const canToggle =
 		!searchInput.trim() && SUGGESTED_DESTINATIONS.length > DEST_PREVIEW_COUNT;
 
@@ -312,15 +319,17 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 			clearMobile,
 			hasActiveFilters,
 		},
+		// WR-09: selected/setSelected/setIsNearby erano esposti ma senza
+		// nessun call site fuori dall'hook (grep su components/, app/, lib/).
+		// selectedRadius/setSelectedRadius/setIsNearbySearch restano usati
+		// internamente (submit, clear, applyPreset, ...) — solo la loro
+		// esposizione qui era morta.
 		radius: {
-			selected: selectedRadius,
-			setSelected: setSelectedRadius,
 			custom: customRadius,
 			setCustom: setCustomRadius,
 			showSelector: showRadiusSelector,
 			setShowSelector: setShowRadiusSelector,
 			isNearby: isNearbySearch,
-			setIsNearby: setIsNearbySearch,
 			applyPreset,
 			applyCustomDesktop,
 			applyCustomMobile,
