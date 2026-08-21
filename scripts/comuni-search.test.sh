@@ -8,7 +8,13 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 repo_root="$(cd -- "${script_dir}/.." >/dev/null 2>&1 && pwd -P)"
-port="${PORT:-39882}"
+# WR-05: PORT e' una variabile ambientale comune (es. esportata dalla shell
+# di uno sviluppatore con `next dev` gia' attivo su :3000). Ereditarla per una
+# porta effimera fissa significa che stop_server sotto puo' fare kill -9 del
+# dev server dello sviluppatore invece del server di questo harness — esattamente
+# cio' che NEXT_TEST_DIST_DIR (next.config.ts) e' stato introdotto per evitare.
+# COMUNI_TEST_PORT non collide con nessuna variabile ambientale comune.
+port="${COMUNI_TEST_PORT:-39882}"
 
 # Il lock di sviluppo di Next (.next/dev/lock) e' per-distDir, non per-porta:
 # se un'altra istanza di `next dev` e' gia' attiva su questo progetto (es.
@@ -49,8 +55,14 @@ stop_server() {
     kill "${server_pid}" 2>/dev/null || true
     wait "${server_pid}" 2>/dev/null || true
     server_pid=""
+    # WR-05: la rete di sicurezza lsof resta dentro il guard su server_pid —
+    # solo se QUESTO script ha davvero avviato un server ha senso riguadagnare
+    # la porta con un kill -9. Senza il guard, stop_server chiamata da un path
+    # di errore precoce (prima ancora di avviare `next dev`, es. dev-db.sh
+    # fallito) farebbe comunque un kill -9 incondizionato di chiunque sia in
+    # ascolto su ${port} — un processo che questo script non possiede.
+    lsof -ti tcp:"${port}" 2>/dev/null | xargs kill -9 2>/dev/null || true
   fi
-  lsof -ti tcp:"${port}" 2>/dev/null | xargs kill -9 2>/dev/null || true
 }
 
 cleanup() {
