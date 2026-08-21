@@ -22,6 +22,12 @@ export async function GET(request: NextRequest) {
 
 		const normalizedQuery = normalizeComuneName(trimmed);
 
+		// Il guard deve stare sulla stringa che il matcher usa davvero: normalizzare
+		// "..." produce "" e startsWith("") matcha ogni riga della tabella (CR-01).
+		if (!normalizedQuery) {
+			return NextResponse.json({ results: [] });
+		}
+
 		const rows = await prisma.comune.findMany({
 			select: {
 				id: true,

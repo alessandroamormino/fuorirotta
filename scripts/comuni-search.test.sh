@@ -137,6 +137,18 @@ if echo "${body5_raw}" | grep -qi 'comuni'; then
 fi
 echo "ok  GET /api/comuni/search con sintassi SQL nel parametro q risponde senza 500 e senza leak del nome tabella (T-09-01)"
 
+# --- 5b. q di sola punteggiatura normalizza a "" -> results vuoto (CR-01) ---
+# normalizeComuneName("...") === "" e "".startsWith("") e' vero per ogni riga:
+# senza il guard sulla stringa normalizzata questo restituiva 8 comuni arbitrari.
+resp5b="${tmp_dir}/resp5b.json"
+http_code="$(curl -s -o "${resp5b}" -w '%{http_code}' -G --data-urlencode "q=..." --max-time 15 "http://127.0.0.1:${port}/api/comuni/search")"
+[[ "${http_code}" == "200" ]] || fail "CR-01: atteso 200 su q di sola punteggiatura, ottenuto ${http_code}"
+node -e "
+  const body = require('${resp5b}');
+  if (body.results.length !== 0) throw new Error('q di sola punteggiatura ha restituito risultati: ' + JSON.stringify(body.results));
+" || fail "CR-01: q='...' ha restituito risultati invece di un array vuoto (il guard sulla stringa normalizzata manca o non funziona)"
+echo "ok  GET /api/comuni/search?q=... (sola punteggiatura, normalizza a stringa vuota) risponde con results vuoto (CR-01)"
+
 # --- 6. ordine: q=Como -> Como e' il primo elemento (match esatto, D-04) ----
 resp6="${tmp_dir}/resp6.json"
 http_code="$(curl -s -o "${resp6}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/api/comuni/search?q=Como")"
