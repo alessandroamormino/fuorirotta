@@ -123,11 +123,17 @@ export default function DestinationField({
 		};
 	}, [value]);
 
-	useEffect(() => {
-		onResultsChange?.(results.length);
-	}, [results, onResultsChange]);
-
 	const isOpen = hasFocus && results.length > 0;
+
+	useEffect(() => {
+		// Il genitore decide fra lista e fallback: deve ricevere quante righe sono
+		// davvero disegnate, non quante ne ha trovate il fetch (CR-02). Altrimenti
+		// a input sfocato mentre results.length > 0 (es. click su "Risultati" o
+		// sul padding del pannello: il Popover di Radix non ha un focus trap) il
+		// pannello non mostra ne' la lista (isOpen === false) ne' il fallback
+		// (resultsCount ancora > 0).
+		onResultsChange?.(isOpen ? results.length : 0);
+	}, [isOpen, results, onResultsChange]);
 
 	const handleSelect = (comune: ComuneResult) => {
 		justSelectedRef.current = comune.name;
