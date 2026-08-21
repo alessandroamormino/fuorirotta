@@ -59,6 +59,7 @@ interface OverlayRadius {
 	custom: number;
 	setCustom: (value: number) => void;
 	applyCustomMobile: () => void;
+	isNearby: boolean;
 }
 
 interface OverlayPanels {
@@ -114,7 +115,15 @@ export default function MobileSearchOverlay({
 		setMobileNearbyOpen,
 	} = panels;
 
-	const isFiltering = Boolean(search.input.trim());
+	// Stesso ragionamento del pannello desktop (CR-03): il campo non e' vuoto
+	// anche quando porta un'etichetta che l'utente non ha digitato (comune gia'
+	// scelto, o "Nelle vicinanze (N km)"), in quel caso il pannello deve
+	// tornare alle destinazioni suggerite, non offrire "Cerca citta': <etichetta>".
+	const isFiltering =
+		Boolean(search.input.trim()) &&
+		!radius.isNearby &&
+		!filters.comuneId &&
+		!filters.comuneIstatCode;
 
 	// D-19 (corretta il 2026-08-20, dopo la regressione di 7852a38): il
 	// nodo dove DestinationField teletrasporta (createPortal) la sua

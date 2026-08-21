@@ -50,6 +50,7 @@ interface DesktopRadiusBag {
 	setCustom: (value: number) => void;
 	applyPreset: (value: number, label: string) => void;
 	applyCustomDesktop: () => void;
+	isNearby: boolean;
 }
 
 interface DesktopDestinationsBag {
@@ -91,7 +92,16 @@ export default function DesktopSearchDropdown({
 	resultsContainerRef,
 	resultsCount,
 }: DesktopSearchDropdownProps) {
-	const isFiltering = searchInput.trim().length > 0;
+	// Il campo non e' vuoto anche quando porta un'etichetta che l'utente non ha
+	// digitato (comune gia' scelto, o "Nelle vicinanze (N km)"): in quei casi il
+	// pannello deve tornare ai preset, non offrire "Cerca citta': <etichetta>"
+	// (CR-03). isNearbySearch copre il percorso raggio, comuneId/comuneIstatCode
+	// il percorso selezione.
+	const isFiltering =
+		searchInput.trim().length > 0 &&
+		!radius.isNearby &&
+		!filters.comuneId &&
+		!filters.comuneIstatCode;
 
 	const handleSearchFallback = (value: string) =>
 		setFilters((f) => ({ ...f, location: value }));
