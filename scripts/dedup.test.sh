@@ -15,6 +15,22 @@
 # ciascuna sezione verifica atterrano in piani diversi, 10-02..10-05); un'uscita
 # al primo fallimento nasconderebbe le sezioni successive e renderebbe
 # impossibile vedere in un colpo solo quali sono ancora scoperte.
+#
+# --- Prova che la sezione S3 (soglia D-09/D-10) e' capace di fallire (10-03) --
+# Un gate che non ha mai fallito non ha mai controllato niente (stessa
+# convenzione di non-vacuita' di scripts/territorial-backfill.test.sh). La
+# soglia tarata di lib/dedup/config.ts, TITLE_SIMILARITY_THRESHOLD = 0.56,
+# e' stata misurata il 2026-08-22 su scripts/dedup-fixtures.ts e provata a
+# fallire in entrambe le direzioni con scripts/dedup-threshold-check.ts:
+# - abbassando la soglia a 0.50 (sotto max_no_merge = 0.5152), la coppia
+#   no_merge `sulzano-street-food-vs-music-festival` (SULZANO STREET FOOD
+#   FESTIVAL / Sulzano Music Festival, score 0.5152) si fonde erroneamente:
+#   lo script esce 1 nominandola;
+# - alzando la soglia a 0.60 (sopra min_merge = 0.5625), la coppia merge
+#   `sagra-dell-offella` (SAGRA DELL'OFFELLA / Sagra dell'Offella di Parona
+#   2026, score 0.5625) smette di fondersi: lo script esce 1 nominandola.
+# Con la soglia tarata riportata a 0.56, entrambe le coppie tornano corrette
+# e la sezione S3 e' verde.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
