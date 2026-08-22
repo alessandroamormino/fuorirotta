@@ -11,8 +11,32 @@ import { Prisma, Event as PrismaEvent } from "@prisma/client";
 import { Event } from "@/lib/types";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { serializeEvent } from "@/lib/serializeEvent";
+import { composeEvent, groupMembersByCanonical } from "@/lib/dedup/compose";
 
 // Helper per convertire Decimal in number
+
+// DEDUP-04: compone i campi di ciascun evento canonico con la sua versione
+// piu' ricca (D-13), con UNA sola query aggiuntiva per il lotto passato, mai
+// una per evento (niente N+1). Fattorizzata perche' e' chiamata da entrambi i
+// rami raggio/non-raggio: applicarla a un solo percorso riprodurrebbe
+// esattamente il difetto che WR-01 ha gia' corretto su questo stesso file per
+// search/cities.
+async function withComposedFields<T extends PrismaEvent>(
+	events: T[]
+): Promise<T[]> {
+	if (events.length === 0) return events;
+
+	const canonicalIds = events.map((e) => e.id);
+	const members = await prisma.event.findMany({
+		where: { canonicalEventId: { in: canonicalIds } },
+		orderBy: { id: "asc" },
+	});
+	const membersByCanonical = groupMembersByCanonical(members);
+
+	return events.map(
+		(e) => composeEvent(e, membersByCanonical.get(e.id) ?? []) as T
+	);
+}
 
 export async function GET(request: NextRequest) {
 	try {
@@ -210,15 +234,22 @@ export async function GET(request: NextRequest) {
 				return distance <= radiusKm;
 			});
 
-			// Applica paginazione sui risultati filtrati
-			events = filteredEvents.slice(offset, offset + limit);
+			// DEDUP-04: compone una volta sola l'intero set filtrato (non solo la
+			// pagina) perche' la stessa lista alimenta sia la pagina corrente sia i
+			// dati della mappa: una sola query aggiuntiva serve entrambi gli usi,
+			// invece delle due chiamate separate del ramo senza raggio (dove pagina
+			// e mappa arrivano gia' da due query DB distinte).
+			const composedFilteredEvents = await withComposedFields(filteredEvents);
+
+			// Applica paginazione sui risultati filtrati e composti
+			events = composedFilteredEvents.slice(offset, offset + limit);
 			total = filteredEvents.length;
 
-			// For map: use all filtered events with lightweight fields.
+			// For map: use all filtered events (composed) with lightweight fields.
 			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
 			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
 			// al solo centroide del comune non avrebbero nessun punto da leggere.
-			mapEvents = filteredEvents.map((e) => ({
+			mapEvents = composedFilteredEvents.map((e) => ({
 				id: e.id,
 				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
 				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
@@ -239,41 +270,39 @@ export async function GET(request: NextRequest) {
 			}));
 		} else {
 			// Senza filtro raggio: query normale con paginazione DB
-			events = await prisma.event.findMany({
+			const pageEvents = await prisma.event.findMany({
 				where,
 				orderBy: { dateStart: "asc" },
 				take: limit,
 				skip: offset,
 			});
+			// DEDUP-04: compone solo la pagina corrente, una query aggiuntiva sui
+			// soli membri dei gruppi di questa pagina (niente N+1).
+			events = await withComposedFields(pageEvents);
 
 			total = await prisma.event.count({ where });
 
-			// Fetch lightweight event data for map (all matching events, no pagination).
+			// Fetch dati per la mappa (tutti gli eventi che matchano, non
+			// paginati). DEDUP-04: servono i campi componibili (title/imageUrl/
+			// locationName/category) per non mostrare nel popup un valore diverso
+			// dalla scheda dello stesso evento fuso — description non serve alla
+			// mappa e resta fuori. La select ristretta di prima e' sostituita da
+			// righe complete: comporre solo i campi necessari via una select
+			// parziale avrebbe richiesto una seconda forma ad-hoc di
+			// composeEvent; riusare le righe intere e la stessa funzione
+			// factorizzata e' piu' semplice e non introduce divergenze, e il
+			// costo in byte e' accettabile al volume attuale (~2.700 eventi).
 			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
 			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
 			// al solo centroide del comune non avrebbero nessun punto da leggere.
 			const mapEventsRaw = await prisma.event.findMany({
 				where,
 				orderBy: { dateStart: "asc" },
-				select: {
-					id: true,
-					latitude: true,
-					longitude: true,
-					resolvedLatitude: true,
-					resolvedLongitude: true,
-					coordinateSource: true,
-					title: true,
-					dateStart: true,
-					locationName: true,
-					category: true,
-					imageUrl: true,
-					source: true,
-					sourceId: true,
-				},
 			});
+			const composedMapEvents = await withComposedFields(mapEventsRaw);
 
-			mapEvents = mapEventsRaw.map((e) => ({
-				...e,
+			mapEvents = composedMapEvents.map((e) => ({
+				id: e.id,
 				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
 				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
 				resolvedLatitude: e.resolvedLatitude
@@ -282,6 +311,14 @@ export async function GET(request: NextRequest) {
 				resolvedLongitude: e.resolvedLongitude
 					? parseFloat(e.resolvedLongitude.toString())
 					: null,
+				coordinateSource: e.coordinateSource,
+				title: e.title,
+				dateStart: e.dateStart,
+				locationName: e.locationName,
+				category: e.category,
+				imageUrl: e.imageUrl,
+				source: e.source,
+				sourceId: e.sourceId,
 			}));
 		}
 
