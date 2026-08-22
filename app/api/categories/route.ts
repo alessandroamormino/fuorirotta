@@ -3,11 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
 	try {
+		// DEDUP-01: canonicalEventId: null su ENTRAMBE le query sotto — sul
+		// distinct che estrae le categorie e sul count per categoria. Altrimenti
+		// la faccetta dichiarerebbe piu' eventi di quanti la lista poi ne mostri.
 		const categories = await prisma.event.findMany({
 			where: {
 				category: {
 					not: null,
 				},
+				canonicalEventId: null,
 			},
 			select: {
 				category: true,
@@ -22,7 +26,7 @@ export async function GET() {
 		const categoriesWithCount = await Promise.all(
 			categories.map(async (cat: { category: string | null }) => {
 				const count = await prisma.event.count({
-					where: { category: cat.category },
+					where: { category: cat.category, canonicalEventId: null },
 				});
 				return {
 					name: cat.category,

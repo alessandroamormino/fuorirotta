@@ -1,4 +1,6 @@
 import { prisma } from './prisma';
+import type { Event as PrismaEvent } from '@prisma/client';
+import { composeEvent, groupMembersByCanonical } from './dedup/compose';
 
 interface ClusterCacheData {
   geojson: GeoJSON.FeatureCollection;
@@ -25,11 +27,17 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
   // (resolvedLatitude/resolvedLongitude), non le colonne di sorgente: include il
   // centroide del comune per gli eventi senza coordinate proprie (D-09/D-14,
   // Fase 6). latitude/longitude restano lette dal backfill ma non da qui.
+  //
+  // DEDUP-01: canonicalEventId: null, altrimenti un duplicato certo resta
+  // visibile come due pin sovrapposti sulla stessa mappa (senza questo
+  // filtro, updateClusterCache() richiamata in coda al passo di dedup
+  // ricalcolerebbe comunque la cache sulle righe membro).
   const events = await prisma.event.findMany({
     where: {
       dateStart: { gte: today },
       resolvedLatitude: { not: null },
       resolvedLongitude: { not: null },
+      canonicalEventId: null,
     },
     select: {
       id: true,
@@ -40,13 +48,48 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
       imageUrl: true,
       resolvedLatitude: true,
       resolvedLongitude: true,
+      source: true,
     },
     orderBy: { dateStart: 'asc' },
   });
 
+  // DEDUP-04: componi title/locationName/category/imageUrl con lo stesso
+  // schema a due query gia' usato da /api/events (una query membri per il
+  // lotto, mai una per riga) — cosi' il popup della mappa e la scheda
+  // dell'evento non possono mai mostrare un valore diverso per lo stesso
+  // evento fuso. Il cast e' verso i soli campi selezionati sopra: composeEvent
+  // legge solo COMPOSABLE_FIELDS + source/id, tutti presenti in questa select.
+  let composedEvents = events;
+  if (events.length > 0) {
+    const canonicalIds = events.map((e) => e.id);
+    const members = await prisma.event.findMany({
+      where: { canonicalEventId: { in: canonicalIds } },
+      select: {
+        id: true,
+        canonicalEventId: true,
+        title: true,
+        locationName: true,
+        category: true,
+        imageUrl: true,
+        source: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+    const membersByCanonical = groupMembersByCanonical(
+      members as unknown as PrismaEvent[]
+    );
+    composedEvents = events.map(
+      (e) =>
+        composeEvent(
+          e as unknown as PrismaEvent,
+          membersByCanonical.get(e.id) ?? []
+        ) as unknown as typeof e
+    );
+  }
+
   return {
     type: 'FeatureCollection',
-    features: events.map(event => ({
+    features: composedEvents.map(event => ({
       type: 'Feature' as const,
       geometry: {
         type: 'Point' as const,

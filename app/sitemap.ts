@@ -14,6 +14,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 	const from = new Date();
 	from.setDate(from.getDate() - 30);
 
+	// DEDUP-01: solo id canonici. Un URL verso una riga membro finirebbe su un
+	// redirect 307 (D-15) e metterebbe l'URL indicizzato in contraddizione col
+	// canonical dichiarato dalla pagina stessa.
 	const events = await prisma.event.findMany({
 		select: {
 			id: true,
@@ -24,6 +27,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 			dateStart: {
 				gte: from,
 			},
+			canonicalEventId: null,
 		},
 		orderBy: {
 			dateStart: "asc",
