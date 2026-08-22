@@ -108,8 +108,14 @@ export async function GET(request: NextRequest) {
 			? new Date(dateFrom)
 			: new Date(new Date().setHours(0, 0, 0, 0));
 
+		// DEDUP-01: un evento presente in piu' sorgenti compare una volta sola.
+		// Va nel where di base (non in uno dei due rami raggio/non-raggio piu'
+		// sotto) perche' sono due percorsi di codice distinti che altrimenti
+		// erediterebbero il filtro solo uno dei due — esattamente il difetto che
+		// WR-01 ha gia' corretto in Fase 9 su questo stesso file per search/cities.
 		const where: any = {
 			dateStart: { gte: startDate },
+			canonicalEventId: null,
 		};
 
 		if (dateTo) {

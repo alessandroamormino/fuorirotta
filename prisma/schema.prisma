@@ -45,11 +45,27 @@ model Event {
   resolvedLongitude Decimal? @map("resolved_longitude") @db.Decimal(11, 8)
   coordinateSource  String?  @map("coordinate_source") @db.VarChar(20)
 
+  // Deduplica cross-sorgente (Fase 10, D-01/D-04): self-relation opzionale.
+  // canonicalEventId nullo significa "riga canonica, oppure mai valutata come
+  // duplicato"; valorizzato significa "riga membro che punta al MIN(id) del
+  // gruppo". Nessuna riga viene mai cancellata: la fusione si annulla
+  // azzerando queste tre colonne. mergeScore e' un punteggio euristico
+  // 0.0-1.0 (Float, non Decimal: non serve precisione esatta). mergeReason
+  // e' una stringa leggibile (es. "exact;comune=123;date=2026-08-22") che
+  // spiega perche' la fusione e' avvenuta, o "no_geo" per le righe senza
+  // comuneId (D-07).
+  canonicalEventId Int?     @map("canonical_event_id")
+  canonicalEvent   Event?   @relation("EventCanonical", fields: [canonicalEventId], references: [id])
+  duplicates       Event[]  @relation("EventCanonical")
+  mergeScore       Float?   @map("merge_score")
+  mergeReason      String?  @map("merge_reason") @db.VarChar(255)
+
   @@unique([source, sourceId], name: "events_source_source_id_key")
   @@index([dateStart], name: "idx_events_date_start")
   @@index([latitude, longitude], name: "idx_events_location")
   @@index([category], name: "idx_events_category")
   @@index([comuneId])
+  @@index([canonicalEventId])
   @@map("events")
 }
 

@@ -13,6 +13,7 @@ import { saveEvents, logMetrics } from './utils'
 import { truncateError } from './health'
 import { prisma } from '../prisma'
 import { backfillEvents } from '../territorial/backfill'
+import { dedupeEvents } from '../dedup/dedupe'
 import type { ScrapeParams, ScrapeResult, RunResult } from './types'
 
 /**
@@ -89,6 +90,21 @@ export async function runAllScrapers(params?: ScrapeParams): Promise<RunResult> 
     const backfillReport = await backfillEvents()
     console.log(
       `[Scraper] Backfill territoriale: ${backfillReport.updated} agganciati/aggiornati, ${backfillReport.unchanged} invariati su ${backfillReport.scanned} eventi (no_input: ${backfillReport.byStep.no_input}).`
+    )
+
+    // Deduplica cross-sorgente in coda al backfill territoriale (D-03, Fase 10).
+    // Perche' qui e dopo il backfill: il match usa comuneId, che e' il backfill
+    // ad assegnare — dedup prima del backfill vedrebbe ogni riga senza comune
+    // ancora risolto e le classificherebbe tutte 'no_geo'.
+    // Perche' l'errore propaga, per la stessa ragione gia' scritta sopra per il
+    // backfill territoriale (decisione D-15 della Fase 6, da non confondere con
+    // la D-15 di questa fase, che riguarda il percorso di dettaglio): quando la
+    // chiamata parte gli eventi sono gia' persistiti, quindi propagare non perde
+    // niente, mentre inghiottirlo lascerebbe accumulare duplicati mentre tutto
+    // sembra funzionare.
+    const dedupReport = await dedupeEvents()
+    console.log(
+      `[Scraper] Dedup: ${dedupReport.groups} gruppi, ${dedupReport.merged} righe fuse, ${dedupReport.updated} scritture, ${dedupReport.unchanged} invariate su ${dedupReport.scanned} eventi (noGeo: ${dedupReport.noGeo}).`
     )
 
     return {

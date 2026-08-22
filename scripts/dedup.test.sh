@@ -120,12 +120,18 @@ elif [[ "${dedup_events_script_exists}" != "1" ]]; then
 else
   run_dev npx tsx scripts/dedup-events.ts >/tmp/dedup-events-run1.log 2>&1 || true
 
-  declare -A known_groups=(
-    ["sagra della brusadela|2419|2026-08-22"]="brusadela"
-    ["sagra del gorgonzola a lomello|2372|2026-08-27"]="gorgonzola"
-    ["sagra del luccio in salsa|2623|2026-09-03"]="luccio"
+  # Array indicizzato, non associativo (D-19): il bash di sistema su macOS
+  # (/bin/bash) e' 3.2, che non supporta `declare -A` — sotto `set -u` la
+  # sintassi ["chiave"]="valore" veniva interpretata come un'espansione di
+  # variabile e falliva con "unbound variable" non appena schema_ready
+  # diventava 1 (10-02). La "label" del valore non era comunque mai letta nel
+  # corpo del loop: la chiave da sola basta.
+  known_groups=(
+    "sagra della brusadela|2419|2026-08-22"
+    "sagra del gorgonzola a lomello|2372|2026-08-27"
+    "sagra del luccio in salsa|2623|2026-09-03"
   )
-  for key in "${!known_groups[@]}"; do
+  for key in "${known_groups[@]}"; do
     frammento="${key%%|*}"
     rest="${key#*|}"
     comune="${rest%%|*}"
