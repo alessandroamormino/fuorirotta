@@ -247,12 +247,18 @@ export async function dedupeEvents(): Promise<DedupReport> {
 
   const disjointSet = new DisjointSet()
   const bestVerdictFor = new Map<number, BestVerdict>()
+  // Righe di un bucket saltato per dimensione: al passo 5 conservano lo stato
+  // che hanno gia' sul database invece di essere azzerate. Senza questo insieme
+  // un bucket che cresce oltre MAX_BUCKET_SIZE fra due esecuzioni annullerebbe
+  // fusioni gia' assegnate, contraddicendo l'invariante dichiarata nell'header.
+  const skippedIds = new Set<number>()
 
   // 3. Per ogni bucket, tutte le coppie non ordinate; matchPair su ciascuna;
   // ogni verdetto merge:true diventa un arco.
   for (const bucket of buckets.values()) {
     if (bucket.length > MAX_BUCKET_SIZE) {
       report.bucketsSkipped++
+      for (const event of bucket) skippedIds.add(event.id)
       console.warn(
         `[Dedup] bucket saltato per dimensione (${bucket.length} > ${MAX_BUCKET_SIZE}): ${bucket[0].comuneId}|${dayUTC(bucket[0].dateStart)}`
       )
@@ -289,6 +295,19 @@ export async function dedupeEvents(): Promise<DedupReport> {
     if (event.comuneId === null) {
       targets.set(event.id, { canonicalEventId: null, mergeScore: null, mergeReason: 'no_geo' })
       report.noGeo++
+      continue
+    }
+
+    // Bucket saltato: nessuna coppia e' stata valutata, quindi non sappiamo
+    // nulla di nuovo su questa riga. Conservare lo stato precedente la lascia
+    // invariata (lo scrittore diff-only non produce nessuna scrittura), invece
+    // di azzerare una fusione che l'ultima valutazione completa aveva stabilito.
+    if (skippedIds.has(event.id)) {
+      targets.set(event.id, {
+        canonicalEventId: event.canonicalEventId,
+        mergeScore: event.mergeScore,
+        mergeReason: event.mergeReason,
+      })
       continue
     }
 
