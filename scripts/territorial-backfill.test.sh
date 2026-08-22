@@ -316,9 +316,15 @@ else
     fail "TERR-07: nessuna riga map_cluster_cache con id='default' (cache mai calcolata)"
   else
     feature_count="$(psql_dev "SELECT jsonb_array_length((SELECT geojson->'features' FROM map_cluster_cache WHERE id='default'))")"
-    expected_count="$(psql_dev "SELECT count(*) FROM events WHERE date_start >= date_trunc('day', now()) AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
+    # DEDUP-01 (Fase 10, 10-05): dal momento in cui computeClusterData() filtra
+    # canonical_event_id IS NULL (senza, la mappa mostrerebbe due pin sovrapposti
+    # per un duplicato certo), il conteggio atteso deve applicare lo stesso filtro,
+    # altrimenti questa sezione confronterebbe un totale pre-dedup con una cache
+    # correttamente post-dedup — non e' la mappa ad essere rotta, e' questa riga
+    # di verifica che va aggiornata alla nuova definizione corretta.
+    expected_count="$(psql_dev "SELECT count(*) FROM events WHERE date_start >= date_trunc('day', now()) AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL AND canonical_event_id IS NULL")"
     if [[ "${feature_count}" != "${expected_count}" ]]; then
-      fail "TERR-07: il numero di feature nel GeoJSON (${feature_count}) e' diverso dagli eventi futuri con coordinate risolte non nulle (${expected_count})"
+      fail "TERR-07: il numero di feature nel GeoJSON (${feature_count}) e' diverso dagli eventi futuri canonici con coordinate risolte non nulle (${expected_count})"
     else
       ok "TERR-07: il numero di feature nel GeoJSON coincide con gli eventi futuri risolti (${feature_count})"
     fi
