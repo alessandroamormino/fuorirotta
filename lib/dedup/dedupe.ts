@@ -16,17 +16,17 @@
  *
  * Grammatica di `merge_reason` (dichiarata una volta sola, qui, e mai
  * duplicata altrove): la stringa scritta su una riga MEMBRO e'
- * `exact;comune=<comuneId>;date=<YYYY-MM-DD>` (gradino 1, questo piano) oppure
- * (da 10-03) `trgm=<score>;comune=<comuneId>;date=<YYYY-MM-DD>` (gradino 2);
- * la stringa scritta su una riga senza comune e' esattamente `no_geo`, senza
- * suffissi — cosi' la metrica di D-07 e' contabile con
- * `WHERE merge_reason = 'no_geo'`, una query sola; ogni altra riga ha
- * `merge_reason` null.
+ * `exact;comune=<comuneId>;date=<YYYY-MM-DD>` (gradino 1, 10-02) oppure
+ * `trgm=<score arrotondato a 2 decimali>;comune=<comuneId>;date=<YYYY-MM-DD>`
+ * (gradino 2, pg_trgm, questo piano); la stringa scritta su una riga senza
+ * comune e' esattamente `no_geo`, senza suffissi — cosi' la metrica di D-07 e'
+ * contabile con `WHERE merge_reason = 'no_geo'`, una query sola; ogni altra
+ * riga ha `merge_reason` null.
  */
 import { prisma } from '../prisma'
 import { updateClusterCache } from '../clusterCache'
 import { normalizeTitle } from './normalizeTitle'
-import { MAX_BUCKET_SIZE } from './config'
+import { MAX_BUCKET_SIZE, TITLE_SIMILARITY_THRESHOLD } from './config'
 
 export type MatchInput = {
   id: number
@@ -83,8 +83,16 @@ function dayUTC(date: Date): string {
  *    (D-08 gradino 1). Due titoli che normalizzano entrambi a stringa vuota
  *    non producono MAI un match: l'uguaglianza fra due stringhe vuote non e'
  *    un'uguaglianza di titolo.
- * 5. altrimenti, in questo piano, 'below_threshold' — il gradino 2 (pg_trgm)
- *    arriva in 10-03 e sostituisce solo questo ramo.
+ * 5. gradino 2 (pg_trgm, questo piano): se uno dei due titoli normalizzati e'
+ *    stringa vuota -> 'not_comparable', nessuna query (un titolo non
+ *    normalizzabile non e' confrontabile). Altrimenti si interroga
+ *    `similarity()` sui titoli NORMALIZZATI (non i titoli grezzi: il gradino 2
+ *    eredita la stessa insensibilita' a maiuscole/diacritici del gradino 1) e
+ *    si confronta con `TITLE_SIMILARITY_THRESHOLD` (lib/dedup/config.ts, unica
+ *    sorgente del numero — il gradino 1 non lo legge mai, D-09). `score` porta
+ *    sempre il valore misurato, anche quando non basta a fondere: serve a
+ *    diagnosticare una coppia rimasta appena sotto senza rieseguire
+ *    l'algoritmo.
  */
 export async function matchPair(a: MatchInput, b: MatchInput): Promise<MatchVerdict> {
   if (a.comuneId === null || b.comuneId === null) {
@@ -105,7 +113,22 @@ export async function matchPair(a: MatchInput, b: MatchInput): Promise<MatchVerd
     return { merge: true, score: 1, reason: 'exact' }
   }
 
-  return { merge: false, score: null, reason: 'below_threshold' }
+  if (titleA === '' || titleB === '') {
+    return { merge: false, score: null, reason: 'not_comparable' }
+  }
+
+  // Tagged template -> query parametrizzata dal driver, mai concatenazione di
+  // stringhe (T-10-01, stesso idioma gia' applicato in
+  // app/api/events/route.ts per il parsing delle citta').
+  const rows = await prisma.$queryRaw<{ sim: number }[]>`
+    SELECT similarity(${titleA}, ${titleB}) AS sim
+  `
+  const sim = rows[0]?.sim ?? 0
+
+  if (sim >= TITLE_SIMILARITY_THRESHOLD) {
+    return { merge: true, score: sim, reason: `trgm=${sim.toFixed(2)}` }
+  }
+  return { merge: false, score: sim, reason: 'below_threshold' }
 }
 
 /**
@@ -242,7 +265,11 @@ export async function dedupeEvents(): Promise<DedupReport> {
         const b = bucket[j]
         const verdict = await matchPair(a, b)
         report.pairsEvaluated++
-        report.byReason[verdict.reason] = (report.byReason[verdict.reason] ?? 0) + 1
+        // Chiave di statistica normalizzata: 'trgm=0.87' e 'trgm=0.91' sono lo
+        // stesso motivo ai fini del conteggio aggregato, il punteggio esatto
+        // vive gia' per intero in merge_reason sulla riga del database.
+        const reasonKey = verdict.reason.split('=')[0]
+        report.byReason[reasonKey] = (report.byReason[reasonKey] ?? 0) + 1
 
         if (verdict.merge && verdict.score !== null) {
           disjointSet.union(a.id, b.id)
