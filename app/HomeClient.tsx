@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Event, SearchFilters } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
+import CategoryFilterBar from "@/components/CategoryFilterBar";
+import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
 import { ChevronLeft, ChevronRight, Filter, Loader2, Map, X } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
 
@@ -46,7 +48,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const [events, setEvents] = useState<Event[]>(initialEvents);
 	const [mapEvents, setMapEvents] = useState<Event[]>(initialEvents);
 	const [loading, setLoading] = useState(false);
-	const [selectedCategory] = useState<string>("all");
+	const [selectedCategory, setSelectedCategory] = useState<string>("all");
+	const [categories, setCategories] = useState<{ name: string; count: number }[]>([]);
 	const [clusterGeoJSON, setClusterGeoJSON] = useState<any>(null);
 
 	const [searchFilters, setSearchFilters] = useState<SearchFilters>({ location: "", dateFrom: null, dateTo: null, radius: undefined });
@@ -54,8 +57,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		lat: number;
 		lng: number;
 	} | null>(null);
+	// Il termine categoria e' qui apposta: senza, effectiveClusterGeoJSON sotto
+	// continuerebbe a servire la cache cluster precalcolata (non filtrata per
+	// categoria) mentre la lista e' gia' filtrata — due risposte diverse sullo
+	// stesso schermo (11-UI-SPEC.md, Interaction contract).
 	const hasActiveFilters = !!(
-		searchFilters.location || searchFilters.dateFrom || searchFilters.dateTo || searchFilters.radius
+		searchFilters.location || searchFilters.dateFrom || searchFilters.dateTo || searchFilters.radius ||
+		(selectedCategory && selectedCategory !== "all")
 	);
 	const effectiveClusterGeoJSON = hasActiveFilters ? null : clusterGeoJSON;
 
@@ -92,6 +100,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	}, [searchFilters]);
 
 	useEffect(() => {
+		sessionStorage.setItem("selectedCategory", selectedCategory);
+	}, [selectedCategory]);
+
+	useEffect(() => {
 		if (navigator.geolocation) {
 			navigator.geolocation.getCurrentPosition(
 				(position) => {
@@ -121,6 +133,23 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				}
 			})
 			.catch(err => console.warn('[Clusters] Failed to load cached clusters:', err));
+	}, []);
+
+	// Faccetta categorie: un solo fetch al mount, mai rieseguito al cambio
+	// filtri (i count delle chip sono globali per design, la loro somma e'
+	// il totale non filtrato — vedi RESEARCH.md/11-UI-SPEC.md D-09).
+	useEffect(() => {
+		fetch('/api/categories')
+			.then(res => {
+				if (!res.ok) throw new Error('Categories fetch failed');
+				return res.json();
+			})
+			.then(data => {
+				if (Array.isArray(data)) {
+					setCategories(data);
+				}
+			})
+			.catch(err => console.warn('[Categories] Failed to load categories facet:', err));
 	}, []);
 
 	// On mount: check if user has active filters or cached data; otherwise use SSR data
@@ -154,7 +183,21 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			} catch { /* ignore */ }
 		}
 
-		const queryKey = generateQueryKey(activeFilters, selectedCategory);
+		// T-11-11: sessionStorage e' scrivibile da qualunque script sulla stessa
+		// origine. Un valore ripristinato accettato solo se e' "all" o uno dei 7
+		// nomi canonici dichiarati — qualunque altra cosa viene scartata senza
+		// essere applicata (mai inviata come query param).
+		let activeCategory = selectedCategory;
+		const savedCategory = sessionStorage.getItem("selectedCategory");
+		if (
+			savedCategory &&
+			(savedCategory === "all" || (CANONICAL_CATEGORIES as readonly string[]).includes(savedCategory))
+		) {
+			activeCategory = savedCategory;
+			setSelectedCategory(activeCategory);
+		}
+
+		const queryKey = generateQueryKey(activeFilters, activeCategory);
 		const cached = getCachedEvents(queryKey);
 
 		if (cached) {
@@ -166,7 +209,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		}
 
 		const hasFilters =
-			activeFilters.location || activeFilters.dateFrom || activeFilters.dateTo || activeFilters.radius;
+			activeFilters.location || activeFilters.dateFrom || activeFilters.dateTo || activeFilters.radius ||
+			(activeCategory && activeCategory !== "all");
 
 		if (!hasFilters && initialEvents.length > 0) {
 			// Use SSR data and seed the cache
@@ -322,6 +366,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		setSearchFilters(filters);
 	};
 
+	// Idempotente: riselezionare la chip attiva (incluso "Tutte" mentre "Tutte"
+	// e' attiva) non deve scrivere stato ne' innescare un refetch (T-11-12).
+	const handleCategorySelect = (value: string) => {
+		if (value === selectedCategory) return;
+		setSelectedCategory(value);
+	};
+
 	const handleScroll = () => {
 		if (!scrollContainerRef.current) return;
 		const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
@@ -341,7 +392,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				className="fixed left-0 right-0 bottom-0 overflow-hidden"
 				style={{ top: navHeight }}
 			>
-				<div className="container mx-auto px-4 py-4 h-full flex gap-6">
+				<div className="container mx-auto px-4 py-4 h-full flex flex-col gap-3">
+					<CategoryFilterBar
+						categories={categories}
+						selected={selectedCategory}
+						onSelect={handleCategorySelect}
+					/>
+					<div className="flex-1 min-h-0 flex gap-6">
 					<div className="flex-1 min-w-0 flex flex-col min-h-0">
 						<div className="flex-1 min-h-0 pb-4 relative">
 							<div
@@ -513,6 +570,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								Espandi mappa
 							</motion.button>
 						</div>
+					</div>
 					</div>
 				</div>
 			</main>
