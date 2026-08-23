@@ -28,6 +28,16 @@ model Event {
   latitude     Decimal?  @db.Decimal(10, 8)
   longitude    Decimal?  @db.Decimal(11, 8)
   category     String?   @db.VarChar(100)
+  // Categoria canonica (Fase 11, D-12): promossa a identita' primaria di
+  // categoria, e' cio' su cui ogni lettura filtra e raggruppa; `category`
+  // sopra resta il valore grezzo di sorgente, retrocesso a solo dato di
+  // provenienza che rende la deriva di mappatura diagnosticabile (D-11).
+  // NOT NULL con default a livello di database uguale a FALLBACK_CATEGORY
+  // in lib/categories/taxonomy.ts ('Altro'): anche un percorso di scrittura
+  // che bypassasse canonicalizeCategory() interamente atterrerebbe dentro
+  // la tassonomia invece che su NULL (CAT-04, belt-and-suspenders). Le due
+  // stringhe vanno cambiate insieme se mai cambiano.
+  canonicalCategory String @default("Altro") @map("canonical_category") @db.VarChar(50)
   sourceUrl    String?   @map("source_url") @db.VarChar(1000)
   imageUrl     String?   @map("image_url") @db.VarChar(1000)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
@@ -64,6 +74,7 @@ model Event {
   @@index([dateStart], name: "idx_events_date_start")
   @@index([latitude, longitude], name: "idx_events_location")
   @@index([category], name: "idx_events_category")
+  @@index([canonicalCategory], name: "idx_events_canonical_category")
   @@index([comuneId])
   @@index([canonicalEventId])
   @@map("events")
