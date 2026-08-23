@@ -463,7 +463,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								<div className="flex justify-between items-center gap-2 sm:gap-4">
 									<p className="text-muted-foreground text-xs sm:text-sm font-medium">
 										{total}
-										<span className="hidden lg:inline"> Eventi totali</span>
+										<span className="hidden lg:inline">{total === 1 ? " Evento totale" : " Eventi totali"}</span>
 									</p>
 									<div className="bg-surface border border-accent/30 rounded-full flex items-center gap-1 sm:gap-2 px-2 py-2">
 										{(() => {
