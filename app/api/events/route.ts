@@ -397,14 +397,11 @@ export async function GET(request: NextRequest) {
 		}
 		// ==============================================
 
-		// Fase 11: la lista paginata mostra la colonna canonica in `category`,
-		// non quella grezza composta da withComposedFields() (che compone solo
-		// il testo di sorgente, mai canonicalCategory - vedi il commento sopra
-		// COMPOSABLE_FIELDS in lib/dedup/compose.ts). Senza questa riga il
-		// filtro sulla lista funziona ma la scheda mostrerebbe il valore
-		// grezzo (es. "Sagra") invece del nome canonico richiesto.
+		// Fase 11 (CR-01): la sovrascrittura category <- canonicalCategory ora
+		// vive nel seam condiviso serializeEvent() (lib/serializeEvent.ts), non
+		// piu' qui — cosi' ogni chiamante la eredita senza doverla ripetere.
 		return NextResponse.json({
-			events: events.map((e) => serializeEvent({ ...e, category: e.canonicalCategory })),
+			events: events.map((e) => serializeEvent(e)),
 			mapEvents, // ALL matching events (lightweight) for map rendering
 			total,
 			limit,

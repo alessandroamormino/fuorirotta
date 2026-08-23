@@ -12,10 +12,17 @@ import type { Event } from './types'
  * state aggiornate e le due SSR no — ed e' esattamente il tipo di deriva che
  * quattro copie rendono inevitabile. Una funzione sola: aggiungere una colonna
  * Decimal in futuro e' un punto solo da toccare.
+ *
+ * Fase 11 (CR-01): `category` e' sempre sovrascritto con `canonicalCategory`
+ * qui, nel seam condiviso da OGNI chiamante (route lista, route dettaglio,
+ * pagina dettaglio SSR, home SSR) invece che ripetuto call-site per call-site.
+ * `canonicalCategory` e' NOT NULL con default 'Altro' (prisma/schema.prisma),
+ * quindi la sovrascrittura e' sempre sicura.
  */
 export function serializeEvent(event: PrismaEvent): Event {
   return {
     ...event,
+    category: event.canonicalCategory,
     latitude: decimalToNumber(event.latitude),
     longitude: decimalToNumber(event.longitude),
     resolvedLatitude: decimalToNumber(event.resolvedLatitude),
