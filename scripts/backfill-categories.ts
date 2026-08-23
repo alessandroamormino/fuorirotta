@@ -19,7 +19,7 @@ import { prisma } from '../lib/prisma'
 import { canonicalizeCategory } from '../lib/categories/taxonomy'
 import { updateClusterCache } from '../lib/clusterCache'
 
-const BATCH_SIZE = 25
+const BATCH_SIZE = 5 // stesso vincolo di connection pool documentato in lib/scrapers/utils.ts (limite 9)
 
 async function main() {
   const rows = await prisma.event.findMany({
