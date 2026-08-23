@@ -29,6 +29,7 @@ async function main() {
   let scanned = 0
   let updated = 0
   let unchanged = 0
+  let failed = 0
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
@@ -47,12 +48,23 @@ async function main() {
       })
     )
 
-    for (const result of results) {
+    // WR-02: un fallimento non deve piu' abbandonare l'intero backfill al
+    // primo errore ne' loggare solo err.message senza dire quale riga —
+    // stesso idioma di saveEvents() (lib/scrapers/utils.ts): logga id/source
+    // e continua sulle righe restanti.
+    results.forEach((result, idx) => {
       scanned++
-      if (result.status === 'rejected') throw result.reason
+      if (result.status === 'rejected') {
+        failed++
+        console.error(
+          `[Categories] riga id=${batch[idx].id} source=${batch[idx].source} fallita:`,
+          result.reason
+        )
+        return
+      }
       if (result.value) updated++
       else unchanged++
-    }
+    })
   }
 
   // Senza questa chiamata la cache dei cluster della mappa continua a servire
@@ -61,7 +73,9 @@ async function main() {
   // backfill territoriale e per dedup-events).
   await updateClusterCache()
 
-  console.log(`[Categories] scanned: ${scanned} updated: ${updated} unchanged: ${unchanged}`)
+  console.log(
+    `[Categories] scanned: ${scanned} updated: ${updated} unchanged: ${unchanged} failed: ${failed}`
+  )
 }
 
 main()
