@@ -45,6 +45,7 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
       dateStart: true,
       locationName: true,
       category: true,
+      canonicalCategory: true,
       imageUrl: true,
       resolvedLatitude: true,
       resolvedLongitude: true,
@@ -89,6 +90,11 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
 
   return {
     type: 'FeatureCollection',
+    // Fase 11: il popup della mappa (non filtrata) pubblica il nome canonico,
+    // non la colonna grezza — cosi' popup filtrato e non filtrato nominano la
+    // stessa categoria per lo stesso evento. canonicalCategory NON e' composta
+    // (vedi commento in lib/dedup/compose.ts sopra COMPOSABLE_FIELDS): si legge
+    // sempre dalla riga canonica, mai da un membro fuso.
     features: composedEvents.map(event => ({
       type: 'Feature' as const,
       geometry: {
@@ -103,7 +109,7 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
         title: event.title,
         dateStart: event.dateStart.toISOString(),
         locationName: event.locationName || '',
-        category: event.category || '',
+        category: event.canonicalCategory || '',
         imageUrl: event.imageUrl || '',
       },
     })),
