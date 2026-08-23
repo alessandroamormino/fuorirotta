@@ -20,7 +20,7 @@
     "seed:comuni": "bash scripts/dev-db.sh npx tsx scripts/seed-comuni.ts",
     "backfill:territorial": "bash scripts/dev-db.sh npx tsx scripts/backfill-events.ts",
     "dedup:events": "bash scripts/dev-db.sh npx tsx scripts/dedup-events.ts",
-    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh && bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && npm run check:navbar && bash scripts/dedup.test.sh",
+    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh && bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && npm run check:navbar && bash scripts/dedup.test.sh && bash scripts/category-taxonomy.test.sh",
     "check:tokens": "! grep -rInE '#[0-9a-fA-F]{3,8}\\b' app components lib --include='*.ts' --include='*.tsx' --include='*.css' --exclude='globals.css' | grep -vE '&#[0-9]+;|&#x[0-9a-fA-F]+;'",
     "check:no-regex-parsing": "! grep -nE '\\.(match(All)?|exec)\\(/[^/]*(<|class=)|=\\s*/[^/]*(<|class=)' lib/scrapers/solosagre.ts lib/scrapers/inlombardia.ts",
     "check:parity": "bash scripts/registry-parity.test.sh",
