@@ -57,8 +57,17 @@ export function canonicalizeCategory(
     return FALLBACK_CATEGORY
   }
 
+  // WR-01: NON `entry?.categoryMap[trimmed]`. Se `trimmed` coincide con una
+  // proprieta' ereditata da Object.prototype ('constructor', 'toString',
+  // 'hasOwnProperty', ecc.), quel lookup restituirebbe la funzione ereditata
+  // invece di undefined, bypassando sia il fallback Altro sia il warning di
+  // deriva (D-11) — e un valore non-stringa arriverebbe a Prisma come
+  // canonicalCategory. hasOwnProperty esclude sempre la catena di prototipo.
   const entry = getSourceById(source)
-  const mapped = entry?.categoryMap[trimmed]
+  const mapped =
+    entry && Object.prototype.hasOwnProperty.call(entry.categoryMap, trimmed)
+      ? entry.categoryMap[trimmed]
+      : undefined
   if (mapped) {
     return mapped as CanonicalCategory
   }

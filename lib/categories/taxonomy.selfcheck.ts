@@ -84,6 +84,29 @@ assert(
   "canonicalizeCategory('sorgente-inesistente', 'Sagra') deve restituire 'Altro'"
 )
 
+// WR-01: un valore grezzo che coincide con una proprieta' ereditata da
+// Object.prototype non deve mai "matchare" — un `entry?.categoryMap[x]` senza
+// hasOwnProperty restituirebbe la funzione ereditata invece di undefined,
+// bypassando sia il fallback Altro sia il warning di deriva (D-11). Ogni
+// sorgente reale di SOURCE_REGISTRY viene provata, non solo una a campione.
+const prototypePollutionKeys = [
+  'constructor',
+  'toString',
+  'valueOf',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString'
+]
+for (const entry of SOURCE_REGISTRY) {
+  for (const key of prototypePollutionKeys) {
+    assert(
+      canonicalizeCategory(entry.id, key) === 'Altro',
+      `canonicalizeCategory('${entry.id}', '${key}') deve restituire 'Altro', non una proprieta' ereditata da Object.prototype`
+    )
+  }
+}
+
 // Spazi circostanti non devono gonfiare il bucket Altro.
 assert(
   canonicalizeCategory('opendata_lombardia', '  Sagra ') === 'Sagre e feste',
