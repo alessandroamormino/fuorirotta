@@ -37,6 +37,22 @@ export interface SourceRegistryEntry {
    * volume (1.060); solosagre (3) porta solo 21 eventi con testi molto scarni.
    */
   trustRank: number
+  /**
+   * Mappa valore grezzo di categoria -> nome canonico (Fase 11, D-10).
+   * Campo OBBLIGATORIO e non opzionale, cosi' il typecheck costringe ogni
+   * sorgente futura (Fase 15, rollout nazionale) a dichiarare la propria
+   * mappatura invece di scivolare dentro con un default silenzioso.
+   *
+   * Tipizzato Record<string, string> e non Record<string, CanonicalCategory>
+   * apposta: importare CanonicalCategory da lib/categories/taxonomy.ts qui
+   * creerebbe un ciclo di import (taxonomy.ts legge gia' questo file tramite
+   * getSourceById). E' il self-check di taxonomy.ts a provare che ogni
+   * valore sia un nome canonico reale.
+   *
+   * Letta SOLO da canonicalizeCategory() in lib/categories/taxonomy.ts, cosi'
+   * il registry resta l'unica sede dichiarativa (D-10).
+   */
+  categoryMap: Record<string, string>
 }
 
 // Gli id sono ESATTAMENTE le stringhe gia' scritte in produzione in `events.source`.
@@ -53,7 +69,10 @@ export const SOURCE_REGISTRY: SourceRegistryEntry[] = [
     url: 'https://www.solosagre.it/sagre/lombardia/',
     schedule: '0 */4 * * *',
     scrape: scrapeSoloSagre,
-    trustRank: 3
+    trustRank: 3,
+    categoryMap: {
+      Sagra: 'Sagre e feste'
+    }
   },
   {
     id: 'opendata_lombardia',
@@ -62,7 +81,11 @@ export const SOURCE_REGISTRY: SourceRegistryEntry[] = [
     url: 'https://www.dati.lombardia.it/resource/hs8z-dcey.json',
     schedule: '0 */4 * * *',
     scrape: scrapeOpenData,
-    trustRank: 2
+    trustRank: 2,
+    categoryMap: {
+      Sagra: 'Sagre e feste',
+      Fiera: 'Fiere e mercati'
+    }
   },
   {
     id: 'in-lombardia',
@@ -71,7 +94,24 @@ export const SOURCE_REGISTRY: SourceRegistryEntry[] = [
     url: 'https://www.in-lombardia.it/eventi',
     schedule: '0 */4 * * *',
     scrape: scrapeInLombardia,
-    trustRank: 1
+    trustRank: 1,
+    categoryMap: {
+      'Musica e spettacolo': 'Musica e spettacolo',
+      'Arte e Cultura': 'Arte e cultura',
+      'Turismo religioso': 'Arte e cultura',
+      'Food & Wine': 'Food & Wine',
+      Sport: 'Sport e outdoor',
+      'Active & Green': 'Sport e outdoor',
+      Montagne: 'Sport e outdoor',
+      Cicloturismo: 'Sport e outdoor',
+      Parchi: 'Sport e outdoor',
+      Laghi: 'Sport e outdoor',
+      Itinerari: 'Sport e outdoor',
+      Lifestyle: 'Altro',
+      Borghi: 'Altro',
+      'Top Events': 'Altro',
+      Wellness: 'Altro'
+    }
   }
 ]
 
