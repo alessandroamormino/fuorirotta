@@ -70,14 +70,27 @@ export default function CategoryFilterBar({
 	// (comportamento dichiarato in 11-UI-SPEC.md), quindi serve uno stato
 	// locale separato dalla prop `selected` per tracciare quale chip e' nel
 	// tab order in questo momento.
-	const [focusedIndex, setFocusedIndex] = useState(activeIndex);
+	//
+	// WR-03: tracciato per `value` (identita' del chip), non per indice
+	// numerico di posizione. `items` puo' riordinarsi fra un fetch e l'altro
+	// (fallback su CANONICAL_CATEGORIES prima della risposta di /api/categories,
+	// poi ordine reale di orderCategories()): un indice memorizzato punterebbe
+	// alla posizione sbagliata dopo un riordino che non cambia pero' la
+	// selezione (l'unico caso in cui l'effect sotto si risincronizza).
+	const [focusedValue, setFocusedValue] = useState(items[activeIndex]?.value);
 
 	useEffect(() => {
-		setFocusedIndex(activeIndex);
+		setFocusedValue(items[activeIndex]?.value);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeIndex]);
 
+	const focusedIndexRaw = items.findIndex((item) => item.value === focusedValue);
+	// Se il chip a fuoco e' sparito (es. cambio di elenco categorie), ricadi
+	// sulla chip selezionata invece di un tabIndex tutto a -1.
+	const focusedIndex = focusedIndexRaw === -1 ? activeIndex : focusedIndexRaw;
+
 	const focusChip = (index: number) => {
-		setFocusedIndex(index);
+		setFocusedValue(items[index]?.value);
 		chipRefs.current[index]?.focus();
 	};
 
