@@ -72,13 +72,13 @@ trap cleanup EXIT
 cd "${repo_root}"
 
 # --- Sezione S1 (CAT-02 + CAT-04, pura, nessun database) -----------------------------------
-if [[ ! -f "${repo_root}/lib/categories/taxonomy.ts" ]]; then
-  fail "S1: lib/categories/taxonomy.ts non esiste ancora"
+if [[ ! -f "${repo_root}/lib/categories/taxonomy.selfcheck.ts" ]]; then
+  fail "S1: lib/categories/taxonomy.selfcheck.ts non esiste ancora"
 else
-  if npx tsx lib/categories/taxonomy.ts >"${tmp_dir}/taxonomy-selfcheck.log" 2>&1; then
-    ok "S1: il self-check di lib/categories/taxonomy.ts esce 0"
+  if npx tsx lib/categories/taxonomy.selfcheck.ts >"${tmp_dir}/taxonomy-selfcheck.log" 2>&1; then
+    ok "S1: il self-check di lib/categories/taxonomy.selfcheck.ts esce 0"
   else
-    fail "S1: il self-check di lib/categories/taxonomy.ts fallisce (vedi ${tmp_dir}/taxonomy-selfcheck.log)"
+    fail "S1: il self-check di lib/categories/taxonomy.selfcheck.ts fallisce (vedi ${tmp_dir}/taxonomy-selfcheck.log)"
   fi
 fi
 
