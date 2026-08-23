@@ -9,6 +9,7 @@
 
 import type { ScrapeResult, ScrapedEvent } from './types'
 import { prisma } from '../prisma'
+import { canonicalizeCategory } from '../categories/taxonomy'
 
 interface FetchWithRetryOptions extends RequestInit {
   retries?: number
@@ -168,8 +169,14 @@ export async function saveEvents(
       const batch = events.slice(i, i + batchSize)
 
       const results = await Promise.allSettled(
-        batch.map(event =>
-          prisma.event.upsert({
+        batch.map(event => {
+          // CAT-01: calcolato una volta per evento, scritto su ENTRAMBI i rami
+          // dell'upsert. Il ramo update e' obbligatorio quanto il create: un
+          // evento ri-scrapato passa da li', e senza questa riga terrebbe per
+          // sempre il valore canonico calcolato sotto la mappatura vecchia se
+          // la sorgente cambia markup.
+          const canonicalCategory = canonicalizeCategory(event.source, event.category)
+          return prisma.event.upsert({
             where: {
               events_source_source_id_key: {
                 source: event.source,
@@ -188,6 +195,7 @@ export async function saveEvents(
               latitude: event.latitude,
               longitude: event.longitude,
               category: event.category,
+              canonicalCategory,
               sourceUrl: event.sourceUrl,
               imageUrl: event.imageUrl,
               phone: event.phone
@@ -202,13 +210,14 @@ export async function saveEvents(
               latitude: event.latitude,
               longitude: event.longitude,
               category: event.category,
+              canonicalCategory,
               sourceUrl: event.sourceUrl,
               imageUrl: event.imageUrl,
               phone: event.phone,
               updatedAt: new Date()
             }
           })
-        )
+        })
       )
 
       results.forEach((result, idx) => {

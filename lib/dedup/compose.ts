@@ -24,6 +24,18 @@ import { SOURCE_REGISTRY } from '../scrapers/registry'
 // - `id`/`source`/`sourceId`/`createdAt`/`updatedAt` e le tre colonne di
 //   fusione (`canonicalEventId`/`mergeScore`/`mergeReason`) sono identita' e
 //   contabilita' della riga, mai del "contenuto" dell'evento.
+// - `canonicalCategory` (Fase 11) e' DELIBERATAMENTE ESCLUSO, in deviazione
+//   da RESEARCH.md Pitfall 3 che lo elencava fra i candidati componibili.
+//   composeEvent() prende il primo valore NON VUOTO in ordine di trustRank,
+//   ma canonicalCategory e' NOT NULL con default 'Altro': non e' mai vuoto,
+//   quindi comporlo vincerebbe sempre sul membro di trustRank piu' alto anche
+//   quando il suo valore e' solo il fallback di default. Il filtro di
+//   /api/events legge invece la colonna MEMORIZZATA sulla riga canonica (mai
+//   composta): un gruppo la cui riga piu' fidata mappa su Altro mostrerebbe
+//   un badge composto diverso dal risultato della lista che lo ha restituito
+//   sotto una categoria specifica — la stessa divergenza che Pitfall 3 voleva
+//   evitare, riprodotta esattamente componendo una colonna che e' anche una
+//   chiave di filtro.
 export const COMPOSABLE_FIELDS = [
   'title',
   'description',

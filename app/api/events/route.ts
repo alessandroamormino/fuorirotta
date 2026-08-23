@@ -164,8 +164,12 @@ export async function GET(request: NextRequest) {
 			});
 		}
 
+		// Fase 11 (D-12): il filtro legge la colonna canonica, mai quella
+		// grezza. Un nome canonico non compare mai nella colonna raw, quindi
+		// filtrare su where.category restituirebbe sempre zero righe. Additivo
+		// alla restrizione canonicalEventId:null sopra (D-13), non la sostituisce.
 		if (category && category !== "all") {
-			where.category = { equals: category, mode: "insensitive" };
+			where.canonicalCategory = { equals: category, mode: "insensitive" };
 		}
 
 		// Identita' esatta del comune (D-01): un evento agganciato a comuneId ma
@@ -263,7 +267,7 @@ export async function GET(request: NextRequest) {
 				title: e.title,
 				dateStart: e.dateStart,
 				locationName: e.locationName,
-				category: e.category,
+				category: e.canonicalCategory,
 				imageUrl: e.imageUrl,
 				source: e.source,
 				sourceId: e.sourceId,
@@ -315,7 +319,7 @@ export async function GET(request: NextRequest) {
 				title: e.title,
 				dateStart: e.dateStart,
 				locationName: e.locationName,
-				category: e.category,
+				category: e.canonicalCategory,
 				imageUrl: e.imageUrl,
 				source: e.source,
 				sourceId: e.sourceId,
@@ -393,8 +397,14 @@ export async function GET(request: NextRequest) {
 		}
 		// ==============================================
 
+		// Fase 11: la lista paginata mostra la colonna canonica in `category`,
+		// non quella grezza composta da withComposedFields() (che compone solo
+		// il testo di sorgente, mai canonicalCategory - vedi il commento sopra
+		// COMPOSABLE_FIELDS in lib/dedup/compose.ts). Senza questa riga il
+		// filtro sulla lista funziona ma la scheda mostrerebbe il valore
+		// grezzo (es. "Sagra") invece del nome canonico richiesto.
 		return NextResponse.json({
-			events: events.map(serializeEvent),
+			events: events.map((e) => serializeEvent({ ...e, category: e.canonicalCategory })),
 			mapEvents, // ALL matching events (lightweight) for map rendering
 			total,
 			limit,
