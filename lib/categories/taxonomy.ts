@@ -5,7 +5,7 @@
  * solo i dati dichiarativi di SOURCE_REGISTRY (Fase 8/10), esattamente come
  * lib/dedup/compose.ts legge trustRank per la composizione a lettura.
  */
-import { getSourceById } from '../scrapers/registry'
+import { getSourceById, SOURCE_REGISTRY } from '../scrapers/registry'
 
 // I 7 nomi canonici, in ordine di volume misurato (D-01). 'Altro' e' sempre
 // l'ultimo per posizione dichiarata, non per conteggio (orderCategories sotto
@@ -172,11 +172,6 @@ if (require.main === module) {
   )
 
   // Ogni valore di ogni categoryMap deve essere un membro di CANONICAL_CATEGORIES.
-  // Import dinamico via require per evitare un ciclo statico con registry.ts
-  // (registry.ts non importa taxonomy.ts, ma qui serve la lista completa).
-  const { SOURCE_REGISTRY } = require('../scrapers/registry') as {
-    SOURCE_REGISTRY: { id: string; categoryMap: Record<string, string> }[]
-  }
   for (const entry of SOURCE_REGISTRY) {
     for (const [raw, canonical] of Object.entries(entry.categoryMap)) {
       assert(
