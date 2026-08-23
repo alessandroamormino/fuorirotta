@@ -91,6 +91,12 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const [currentPage, setCurrentPage] = useState<number>(1);
 	const [total, setTotal] = useState(initialTotal);
 
+	// WR-04: due chip cliccati in rapida sequenza lanciano due fetch
+	// concorrenti; senza un identificatore di generazione, l'ULTIMA risposta
+	// che ARRIVA (non l'ultima INVIATA) vince — con rete variabile la UI
+	// potrebbe mostrare gli eventi della categoria A mentre il chip attivo e' B.
+	const requestIdRef = useRef(0);
+
 	useEffect(() => {
 		sessionStorage.setItem("currentPage", currentPage.toString());
 	}, [currentPage]);
@@ -264,6 +270,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// di paginazione, l'effect [searchFilters]) restano corrette lasciando il
 	// default, perche' li' il render e' gia' allineato allo stato corrente.
 	const fetchEvents = async (page: number, filters: SearchFilters = searchFilters) => {
+		const requestId = ++requestIdRef.current;
 		if (process.env.APP_DEBUG === "true") {
 			console.log(`[Fetch] Page ${page}`);
 		}
@@ -321,12 +328,18 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 			const response = await fetch(`/api/events?${params}`);
 
+			// Risposta superata da un fetchEvents piu' recente: ignorala, non
+			// toccare lo stato (che appartiene gia' alla richiesta corrente).
+			if (requestId !== requestIdRef.current) return;
+
 			if (!response.ok) {
 				setLoading(false);
 				return;
 			}
 
 			const data = await response.json();
+
+			if (requestId !== requestIdRef.current) return;
 
 			if (data.error || !data.events) {
 				setLoading(false);
@@ -351,6 +364,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				});
 			}
 		} catch (error) {
+			if (requestId !== requestIdRef.current) return;
 			if (process.env.APP_DEBUG === "true") {
 				console.error("[fetchEvents] Error:", error);
 			}
@@ -358,7 +372,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			setMapEvents([]);
 			setTotal(0);
 		} finally {
-			setLoading(false);
+			if (requestId === requestIdRef.current) setLoading(false);
 		}
 	};
 
