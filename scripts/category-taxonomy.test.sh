@@ -158,10 +158,33 @@ if wait_for_port "${port}"; then
     fi
   fi
 
+  # --- Sezione S5 (UAT § Gaps bullet 3: il gate non caricava mai il bundle browser) --------------
+  # Status 200 non basta: l'overlay d'errore di Next in dev risponde 200 con
+  # l'eccezione dentro l'HTML, ed e' esattamente cosi' che un crash di homepage
+  # intera e' passato a suite verde in passato (corretto in 71c7414). --max-time
+  # 90 (non 15 come S3/S4) perche' e' la prima richiesta alla route / e il dev
+  # server la compila al volo.
+  homepage_response="${tmp_dir}/homepage.html"
+  homepage_http_code="$(curl -s -o "${homepage_response}" -w '%{http_code}' --max-time 90 "http://127.0.0.1:${port}/")"
+  if [[ "${homepage_http_code}" != "200" ]]; then
+    fail "S5: GET / ha risposto ${homepage_http_code}, atteso 200"
+  elif grep -q -F 'ReferenceError' "${homepage_response}" || grep -q -F 'module is not defined' "${homepage_response}"; then
+    if grep -q -F 'ReferenceError' "${homepage_response}"; then
+      fail "S5: la homepage renderizzata contiene ReferenceError (overlay d'errore di Next, non un crash reale della pagina)"
+    else
+      fail "S5: la homepage renderizzata contiene 'module is not defined'"
+    fi
+  elif ! (grep -q -F 'role="radiogroup"' "${homepage_response}" && grep -q -F 'Filtra per categoria' "${homepage_response}"); then
+    fail "S5: la homepage renderizzata non contiene il chip row (role=radiogroup + 'Filtra per categoria'), l'albero dell'app non e' stato renderizzato"
+  else
+    ok "S5: GET / risponde 200, nessun errore di bundle, chip row presente in SSR"
+  fi
+
   stop_server
 else
   fail "S3: dev server locale non avviato, S3/S4 non verificabili"
   fail "S4: dev server locale non avviato, S3/S4 non verificabili"
+  fail "S5: dev server locale non avviato, S5 non verificabile"
 fi
 
 # --- Riepilogo ----------------------------------------------------------------------------------
