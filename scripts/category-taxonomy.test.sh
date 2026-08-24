@@ -15,6 +15,16 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -
 repo_root="$(cd -- "${script_dir}/.." >/dev/null 2>&1 && pwd -P)"
 port="${PORT:-39882}"
 
+# Rule 3 (11-05, checkpoint Task 5): il lock di sviluppo di Next (.next/dev/lock)
+# e' per-distDir, non per-porta. Se un'altra istanza di `next dev` e' gia' attiva
+# su questo progetto (es. il server usato per la verifica manuale del checkpoint
+# su :3100), un secondo avvio su una porta diversa si blocca in silenzio senza
+# mai rispondere alle richieste HTTP di S3-S5. NEXT_TEST_DIST_DIR (next.config.ts)
+# isola questo harness in un distDir separato, stesso rimedio gia' usato da
+# scripts/comuni-search.test.sh, ripulito a fine esecuzione.
+test_dist_dir=".next-category-taxonomy-test"
+export NEXT_TEST_DIST_DIR="${test_dist_dir}"
+
 failures=()
 fail() {
   echo "FAIL: $1"
@@ -66,6 +76,7 @@ stop_server() {
 cleanup() {
   stop_server
   rm -rf "${tmp_dir}"
+  rm -rf "${repo_root}/${test_dist_dir}"
 }
 trap cleanup EXIT
 
