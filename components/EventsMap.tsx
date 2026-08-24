@@ -500,12 +500,26 @@ export default function EventsMap({
 			}
 		};
 
-		// Aspetta che la mappa sia caricata
+		// Aspetta che la mappa sia caricata. "load" e' one-shot per l'intera vita
+		// della mappa: se questo effect gira mentre isStyleLoaded() e' falso DOPO
+		// che il load iniziale e' gia' avvenuto, once("load", ...) non scatta mai
+		// piu' e l'aggiornamento va perso in silenzio — la causa dell'intermittenza
+		// misurata al checkpoint di 11-05-PLAN.md (Difetto A). "idle" si ripete a
+		// ogni giro, quindi non ha questo limite.
 		if (mapRef.current.isStyleLoaded()) {
 			updateMarkers();
 		} else {
-			mapRef.current.once("load", updateMarkers);
+			mapRef.current.once("idle", updateMarkers);
 		}
+
+		// Rimuove un handler "idle" ancora in coda quando un run piu' recente di
+		// questo stesso effect parte prima che sia scattato: senza questo cleanup
+		// updateMarkers cattura `events` per closure, e l'handler vecchio
+		// sovrascriverebbe la mappa con dati ormai superati non appena l'idle
+		// arriva.
+		return () => {
+			mapRef.current?.off("idle", updateMarkers);
+		};
 	}, [events, initialGeoJSON, onEventClick, disablePopups]);
 
 	// Gestisci marker della posizione dell'utente
