@@ -255,7 +255,14 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		} else {
 			setLoading(true);
 			setEvents([]);
-			setMapEvents([]);
+			// Gap 1 di 11-VERIFICATION.md: azzerare qui i pin della mappa li
+			// svuota per 50-75ms prima che i dati nuovi arrivino (misurato in
+			// Chrome), a ogni cambio categoria con cache miss. mapEvents resta
+			// quindi quello della selezione precedente finche' fetchEvents non
+			// scrive dati reali del server — una categoria davvero senza
+			// risultati svuota comunque la mappa, perche' quella scrittura
+			// arriva da un array vuoto ricevuto dal server, non da un azzeramento
+			// anticipato qui.
 			fetchEvents(1);
 		}
 	}, [searchFilters, selectedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -369,7 +376,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				console.error("[fetchEvents] Error:", error);
 			}
 			setEvents([]);
-			setMapEvents([]);
+			// Gemello d'errore dello stesso gap: un /api/events fallito non deve
+			// azzerare i pin della mappa. La lista mostra lo stato vuoto esistente
+			// (nessuna regressione), la mappa conserva l'ultima risposta valida —
+			// e' il comportamento che 11-UI-SPEC.md (error/map-view) dichiara.
 			setTotal(0);
 		} finally {
 			if (requestId === requestIdRef.current) setLoading(false);
