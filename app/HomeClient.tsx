@@ -97,15 +97,26 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// potrebbe mostrare gli eventi della categoria A mentre il chip attivo e' B.
 	const requestIdRef = useRef(0);
 
+	// Gap 2 di 11-VERIFICATION.md: senza questa guardia, al mount React esegue
+	// i tre effect di scrittura qui sotto PRIMA dell'effect di ripristino piu'
+	// in basso, e li esegue con lo stato iniziale di default — sovrascrivendo
+	// in sessionStorage il valore appena salvato che il ripristino sta per
+	// leggere. Il flag resta spento finche' il ripristino non e' avvenuto,
+	// cosi' nessuno dei tre effect scrive prima di aver letto.
+	const hydratedRef = useRef(false);
+
 	useEffect(() => {
+		if (!hydratedRef.current) return;
 		sessionStorage.setItem("currentPage", currentPage.toString());
 	}, [currentPage]);
 
 	useEffect(() => {
+		if (!hydratedRef.current) return;
 		sessionStorage.setItem("searchFilters", JSON.stringify(searchFilters));
 	}, [searchFilters]);
 
 	useEffect(() => {
+		if (!hydratedRef.current) return;
 		sessionStorage.setItem("selectedCategory", selectedCategory);
 	}, [selectedCategory]);
 
@@ -163,7 +174,12 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		// Read sessionStorage after hydration to avoid SSR mismatch
 		const savedPage = sessionStorage.getItem("currentPage");
 		const savedFilters = sessionStorage.getItem("searchFilters");
-		const page = savedPage ? parseInt(savedPage, 10) : 1;
+		// T-11-05-01: ora che la persistenza funziona davvero, un valore
+		// manomesso in sessionStorage raggiungerebbe fetchEvents(page) e quindi
+		// l'offset inviato a /api/events. Accettato solo se e' un intero >= 1,
+		// altrimenti resta il default 1.
+		const parsedPage = savedPage ? parseInt(savedPage, 10) : NaN;
+		const page = Number.isInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
 		if (page !== 1) setCurrentPage(page);
 
 		let activeFilters = searchFilters;
@@ -202,6 +218,12 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			activeCategory = savedCategory;
 			setSelectedCategory(activeCategory);
 		}
+
+		// Da qui in poi il ripristino e' completo: gli effect di persistenza
+		// possono tornare a scrivere. Questo punto e' l'unico attraversato in
+		// ogni caso — il ramo `cached` piu' sotto contiene un `return`
+		// anticipato che salterebbe qualunque assegnazione messa dopo di se'.
+		hydratedRef.current = true;
 
 		const queryKey = generateQueryKey(activeFilters, activeCategory);
 		const cached = getCachedEvents(queryKey);
