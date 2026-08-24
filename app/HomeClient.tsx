@@ -294,9 +294,12 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// e poi fetchEvents(page) nello stesso giro: setState non e' sincrono, quindi
 	// quella chiamata catturava ancora lo stato iniziale vuoto, non
 	// activeFilters — al reload con filtri salvati in sessionStorage e una
-	// useEventCache fredda, l'app interrogava eventi non filtrati mentre la
-	// Navbar mostrava gia' i filtri ripristinati. Le altre call site (bottoni
-	// di paginazione, l'effect [searchFilters]) restano corrette lasciando il
+	// useEventCache fredda, l'app interrogava eventi non filtrati. Nota
+	// corretta in 11-05 (Difetto B): a questo punto della history la Navbar
+	// NON mostrava ancora i filtri ripristinati — restava sui default vuoti
+	// finche' l'utente non toccava un campo, perche' searchFilters non
+	// raggiungeva mai useNavbarSearch. Le altre call site (bottoni di
+	// paginazione, l'effect [searchFilters]) restano corrette lasciando il
 	// default, perche' li' il render e' gia' allineato allo stato corrente.
 	const fetchEvents = async (page: number, filters: SearchFilters = searchFilters) => {
 		const requestId = ++requestIdRef.current;
@@ -432,7 +435,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 	return (
 		<div className="min-h-screen bg-accent/5">
-			<Navbar onSearch={handleSearch} onOpenMap={() => setIsMapExpanded(true)} />
+			<Navbar
+				onSearch={handleSearch}
+				onOpenMap={() => setIsMapExpanded(true)}
+				restoredFilters={searchFilters}
+			/>
 
 			<main
 				className="fixed left-0 right-0 bottom-0 overflow-hidden"

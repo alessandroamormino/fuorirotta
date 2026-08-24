@@ -10,6 +10,11 @@ type ActiveField = "where" | "when" | "mobile_search" | null;
 
 interface UseNavbarSearchArgs {
 	onSearch: (filters: SearchFilters) => void;
+	// Difetto B (checkpoint Task 5, 11-05-PLAN.md): valore proveniente da
+	// HomeClient.searchFilters, che si aggiorna sia al ripristino post-mount
+	// da sessionStorage sia a ogni submit fatto da questa stessa Navbar (eco
+	// del proprio invio, innocuo). Sincronizzato una sola volta, vedi sotto.
+	restoredFilters?: SearchFilters;
 }
 
 const capitalizeFirstLetter = (str: string) => {
@@ -42,7 +47,7 @@ const getIconForDestination = (iconType: string) => {
 // D-10). Il markup resta diviso per superficie (mobile/desktop); qui vive
 // solo la logica condivisa. Restituisce pochi oggetti coerenti, non 14
 // valori sciolti (RESEARCH.md Pitfall 5).
-export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
+export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchArgs) {
 	const [activeField, setActiveField] = useState<ActiveField>(null);
 	const [filters, setFilters] = useState<SearchFilters>({
 		location: "",
@@ -62,6 +67,35 @@ export function useNavbarSearch({ onSearch }: UseNavbarSearchArgs) {
 	// dell'intero piano (vedi SUMMARY e checkpoint del Task 3).
 	const [customRadius, setCustomRadius] = useState(20);
 	const [isNearbySearch, setIsNearbySearch] = useState(false);
+
+	// Difetto B (checkpoint Task 5, 11-05-PLAN.md): searchFilters e' ripristinato
+	// da sessionStorage in un effect POST-mount di HomeClient, quindi al primo
+	// render restoredFilters arriva ancora vuoto — un valore "iniziale" passato
+	// come prop non basterebbe. Sincronizzato durante il render (non in un
+	// effect: setState sincrono in un effect innesca render a cascata,
+	// react-hooks/set-state-in-effect), col pattern "adjust state on prop
+	// change" della doc React — confronto con l'ultimo riferimento visto,
+	// aggiornato solo quando cambia davvero. Applicato una sola volta, quando
+	// arriva un valore non vuoto: dopo quel giro l'oggetto restoredFilters
+	// cambia comunque di riferimento a ogni submit fatto da questa stessa
+	// Navbar (search.submit chiama onSearch, che risale a HomeClient e
+	// ridiscende qui identico), la guardia lo ignora percio' non calpesta mai
+	// quello che l'utente sta digitando in un campo aperto.
+	const [prevRestoredFilters, setPrevRestoredFilters] = useState(restoredFilters);
+	const [hasSyncedRestored, setHasSyncedRestored] = useState(false);
+	if (restoredFilters !== prevRestoredFilters) {
+		setPrevRestoredFilters(restoredFilters);
+		const hasRestored =
+			restoredFilters &&
+			(restoredFilters.location || restoredFilters.dateFrom || restoredFilters.dateTo);
+		if (hasRestored && !hasSyncedRestored) {
+			setHasSyncedRestored(true);
+			setFilters(restoredFilters);
+			setSearchInputState(restoredFilters.location || "");
+			setSelectedRadius(restoredFilters.radius ?? null);
+			setIsNearbySearch(Boolean(restoredFilters.radius));
+		}
+	}
 
 	// Mobile overlay state — resta per superficie, non ha equivalente desktop.
 	const [mobileDestExpanded, setMobileDestExpanded] = useState(false);
