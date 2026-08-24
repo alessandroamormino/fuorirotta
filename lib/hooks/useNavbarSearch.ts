@@ -130,6 +130,20 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 	// comuneId/comuneIstatCode di suo.
 	const setInput = (value: string) => {
 		const capitalized = capitalizeFirstLetter(value);
+		// Difetto C (checkpoint Task 5, 11-05-PLAN.md): svuotare l'ultimo
+		// filtro rimasto (Dove, quando anche Quando e' gia' vuoto) e' "parti
+		// da zero", non "pulisci il campo" — stesso comportamento di clear()
+		// piu' sotto: filtri azzerati e onSearch propagato, come al primo
+		// caricamento. Seam unico: sia la X desktop sia quella del campo
+		// dentro l'overlay mobile chiamano gia' setInput("") per svuotare il
+		// testo, quindi ereditano il reset senza che nessun call site duplichi
+		// la condizione. Se restano le date, lo scope non si estende: il
+		// comportamento resta quello di sotto, invariato. Non tocca
+		// selectedCategory: questo hook non lo conosce nemmeno.
+		if (!capitalized && !filters.dateFrom && !filters.dateTo) {
+			clear();
+			return;
+		}
 		setSearchInputState(capitalized);
 		setFilters((f) => ({
 			...f,
