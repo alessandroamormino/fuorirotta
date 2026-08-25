@@ -140,8 +140,12 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 		// la condizione. Se restano le date, lo scope non si estende: il
 		// comportamento resta quello di sotto, invariato. Non tocca
 		// selectedCategory: questo hook non lo conosce nemmeno.
+		// WR-02: usa resetFilters (non clear()) — questo percorso scatta a ogni
+		// tasto premuto nel campo Dove (anche dentro l'overlay mobile), e clear()
+		// tocca anche activeField chiudendo il pannello/Dialog di ricerca a meta'
+		// digitazione. resetFilters lascia il pannello aperto.
 		if (!capitalized && !filters.dateFrom && !filters.dateTo) {
-			clear();
+			resetFilters();
 			return;
 		}
 		setSearchInputState(capitalized);
@@ -171,10 +175,13 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 		setMobileWhenOpen(false);
 	};
 
-	// D-16: comportamento preesistente conservato, non un dimenticanza. Il
-	// "Cancella" desktop propaga subito il reset a valle chiamando onSearch —
-	// la lista eventi sotto si aggiorna nello stesso istante.
-	const clear = () => {
+	// WR-02: solo-reset-filtri, senza toccare activeField ne' i pannelli
+	// mobile — estratta da clear() perche' setInput() (che scatta a ogni
+	// tasto, anche dentro l'overlay mobile) non deve chiudere il pannello o
+	// smontare il Dialog di ricerca. clear() sotto resta la variante completa
+	// per il bottone "Cancella" esplicito: chiama questa e in piu' chiude il
+	// pannello.
+	const resetFilters = () => {
 		setFilters({
 			location: "",
 			dateFrom: null,
@@ -184,8 +191,15 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 		setSearchInputState("");
 		setSelectedRadius(null);
 		setIsNearbySearch(false);
-		setActiveField(null);
 		onSearch({ location: "", dateFrom: null, dateTo: null, radius: undefined });
+	};
+
+	// D-16: comportamento preesistente conservato, non un dimenticanza. Il
+	// "Cancella" desktop propaga subito il reset a valle chiamando onSearch —
+	// la lista eventi sotto si aggiorna nello stesso istante.
+	const clear = () => {
+		resetFilters();
+		setActiveField(null);
 	};
 
 	// D-16: controparte asimmetrica di clear() sopra. "Cancella tutto" mobile
