@@ -365,6 +365,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			if (requestId !== requestIdRef.current) return;
 
 			if (!response.ok) {
+				// WR-01: stessa politica del catch sotto — lista vuota, totale
+				// azzerato, mappa invariata (conserva l'ultima risposta valida).
+				setEvents([]);
+				setTotal(0);
 				setLoading(false);
 				return;
 			}
@@ -374,6 +378,9 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			if (requestId !== requestIdRef.current) return;
 
 			if (data.error || !data.events) {
+				// WR-01: vedi commento sopra, stessa politica.
+				setEvents([]);
+				setTotal(0);
 				setLoading(false);
 				return;
 			}
@@ -401,10 +408,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				console.error("[fetchEvents] Error:", error);
 			}
 			setEvents([]);
-			// Gemello d'errore dello stesso gap: un /api/events fallito non deve
-			// azzerare i pin della mappa. La lista mostra lo stato vuoto esistente
-			// (nessuna regressione), la mappa conserva l'ultima risposta valida —
-			// e' il comportamento che 11-UI-SPEC.md (error/map-view) dichiara.
+			// WR-01: politica unificata sui tre rami di errore di fetchEvents
+			// (eccezione qui, risposta non-ok e corpo malformato/segnalato sopra):
+			// la lista si svuota, il totale va a 0, la mappa NON viene toccata e
+			// conserva l'ultima risposta valida — e' il comportamento che
+			// 11-UI-SPEC.md (error/map-view) dichiara.
 			setTotal(0);
 		} finally {
 			if (requestId === requestIdRef.current) setLoading(false);
