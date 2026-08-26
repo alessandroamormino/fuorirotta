@@ -16,6 +16,7 @@ import MobileSearchOverlay from "@/components/navbar/MobileSearchOverlay";
 import MobileSearchbarTrigger from "@/components/navbar/MobileSearchbarTrigger";
 import DesktopSearchDropdown from "@/components/navbar/DesktopSearchDropdown";
 import * as Popover from "@/components/ui/Popover";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 import type { SearchFilters } from "@/lib/types";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
 
@@ -73,9 +74,10 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 				className="fixed top-2 left-0 right-0 z-50 px-4 py-4"
 			>
 				<div className="container mx-auto">
-					<div className="flex items-center justify-center gap-8">
-						{/* Logo */}
-						<div className="absolute left-4 md:left-8 lg:left-15">
+					<div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+						{/* Logo — in flusso (D-10): non piu' absolute, fratello flex-none
+						    della zona di ricerca e del toggle. */}
+						<div className="flex-none">
 							<Link href="/">
 								<motion.div
 									className="flex items-center space-x-3 cursor-pointer"
@@ -87,7 +89,7 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 										alt="Fuorirotta Logo"
 										width={40}
 										height={40}
-										className="hidden sm:block w-8 h-8 sm:w-10 sm:h-10"
+										className="w-8 h-8 sm:w-10 sm:h-10"
 										loading="eager"
 										priority
 									/>
@@ -98,7 +100,9 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 							</Link>
 						</div>
 
-						{/* Search Bar */}
+						{/* Search Bar — flex-1 min-w-0 (D-10): cede spazio per prima,
+						    non invade quello del logo/toggle a larghezze intermedie. */}
+						<div className="flex-1 min-w-0 flex justify-center">
 						<div className="w-full max-w-3xl relative">
 							<Popover.Root
 								open={dropdownOpen}
@@ -264,6 +268,13 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 								/>
 							</Popover.Root>
 						</div>
+						</div>
+
+						{/* Toggle tema — un solo montaggio in tutto il prodotto reso a
+						    utente (D-09), sempre visibile in tutti e quattro gli stati
+						    e su entrambi i breakpoint. Stessa forma visiva del mount
+						    flottante rimosso, solo riposizionata (17-UI-SPEC.md). */}
+						<ThemeToggle className="flex-none flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors" />
 					</div>
 				</div>
 			</nav>
