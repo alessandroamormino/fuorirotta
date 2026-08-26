@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,6 +11,15 @@ import CategoryFilterBar from "@/components/CategoryFilterBar";
 import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
 import { ChevronLeft, ChevronRight, Filter, Loader2, Map, X } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
+
+// Il blocco di ripristino da sessionStorage (sotto, useIsomorphicLayoutEffect)
+// deve girare PRIMA del primo paint: useLayoutEffect farebbe questo su
+// server e client, ma emette un warning in SSR perche' HomeClient e' un
+// componente client reso anche lato server. useEffect li' non lo emette ma
+// gira dopo il paint, lasciando un frame non filtrato visibile. Questa
+// costante sceglie l'uno o l'altro in base a dove gira — solo quel blocco la
+// usa, gli altri effect del file restano passivi.
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -176,8 +185,15 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			.catch(err => console.warn('[Categories] Failed to load categories facet:', err));
 	}, []);
 
-	// On mount: check if user has active filters or cached data; otherwise use SSR data
-	useEffect(() => {
+	// On mount: check if user has active filters or cached data; otherwise use SSR data.
+	// Layout effect (non passivo): gira dopo il render ma prima del paint, cosi'
+	// il frame non filtrato non viene mai disegnato — nessuna pillola stretta
+	// visibile nemmeno per un frame dopo un reload con filtri attivi. hydratedRef
+	// resta comunque la guardia che rende l'ordine dichiarato invece che
+	// accidentale: i tre effect passivi di scrittura sotto girano sempre dopo
+	// (le passive effect committano solo dopo tutti i layout effect), ma senza
+	// il flag scriverebbero comunque i default prima che questo blocco legga.
+	useIsomorphicLayoutEffect(() => {
 		// Read sessionStorage after hydration to avoid SSR mismatch
 		const savedPage = sessionStorage.getItem("currentPage");
 		const savedFilters = sessionStorage.getItem("searchFilters");
@@ -263,7 +279,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			// visibile qui, stesso giro di funzione.
 			fetchEvents(page, activeFilters);
 		}
-	}, []); // eslint-disable-line react-hooks/exhaustive-deps
+	}, []);
 
 	const [isInitialMount, setIsInitialMount] = useState(true);
 

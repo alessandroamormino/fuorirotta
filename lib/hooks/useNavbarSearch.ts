@@ -185,20 +185,14 @@ export function useNavbarSearch({ filters, onFiltersChange, onSearch }: UseNavba
 		setActiveField(null);
 	};
 
-	// D-16: controparte asimmetrica di clear() sopra. "Cancella tutto" mobile
-	// azzera solo lo stato locale e i pannelli dell'overlay — NON chiama
-	// onSearch. La lista sotto resta ferma finche' non si preme di nuovo
-	// Cerca. Divergenza preesistente dalla baseline, conservata di proposito.
+	// D-08: l'asimmetria con clear() sopra e' chiusa. "Cancella tutto" mobile
+	// azzera i filtri con la stessa resetFilters() di clear() — che propaga
+	// subito con onSearch, l'eccezione dell'ultimo filtro rimasto (D-08) — e
+	// si limita in piu' a chiudere i pannelli mobile. Non chiude il Dialog
+	// dell'overlay: quello resta il comportamento di oggi, D-08 unifica solo
+	// la propagazione, non la resa.
 	const clearMobile = () => {
-		setFilters({
-			location: "",
-			dateFrom: null,
-			dateTo: null,
-			radius: undefined,
-		});
-		setInputOverride(null);
-		setSelectedRadius(null);
-		setIsNearbySearch(false);
+		resetFilters();
 		setMobileDestExpanded(false);
 		setMobileWhenOpen(false);
 	};
