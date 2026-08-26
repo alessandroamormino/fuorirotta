@@ -27,6 +27,11 @@
 #         D-09/D-10 della Fase 9 sopra (fasi diverse, decisioni diverse:
 #         qui e' posizione del toggle/logo, li' era chiamata unica
 #         dell'hook).
+#   D-01/D-02/D-04/D-05 (Fase 17, piano 03)  la pillola collassata desktop
+#         e' lo stesso componente condiviso col mobile (SearchbarTrigger.tsx,
+#         montato due volte, nessuna terza copia), e il morph pillola/barra
+#         usa la stessa famiglia di animazione a molla dei due
+#         layoutId="activeRing" gia' presenti — non un secondo layoutId.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -295,4 +300,74 @@ if echo "${default_classname_block}" | grep -qE '\bfixed\b'; then
 fi
 echo "ok  D-09: il default di ThemeToggle non e' mai 'fixed' — un montaggio nudo resta in flusso"
 
-echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17)"
+# --- D-01/D-02/D-04/D-05 (Fase 17, piano 03): una sola pillola, una sola ----
+# famiglia di animazione -------------------------------------------------
+#
+# D-01/D-02  la pillola collassata desktop e' lo stesso componente montato
+#            dal mobile — nessuna terza implementazione della stessa idea.
+# D-04       il morph pillola/barra usa la stessa famiglia di animazione a
+#            molla dei due layoutId="activeRing" gia' presenti, non un
+#            secondo layoutId (che animerebbe l'anello invece della forma).
+# D-05       SearchbarTrigger.tsx e' l'unico file, montato due volte da
+#            components/Navbar.tsx (una per superficie).
+
+# 1. Il copy della pillola compare esattamente una volta in components/: un
+# conteggio esatto, non una ricerca di assenza, e' cio' che rende
+# falsificabile "non e' una terza copia". Commenti filtrati prima di
+# contare — un commento che nomina il copy a scopo di documentazione (come
+# quello poco sopra in questo stesso file, o nel componente) e' legittimo e
+# non deve far fallire il gate.
+pill_copy_count=0
+while IFS= read -r f; do
+  file_count="$(strip_comments "${f}" | grep -c 'Inizia la ricerca' || true)"
+  pill_copy_count=$((pill_copy_count + file_count))
+done < <(find components -name '*.tsx' | sort)
+[[ "${pill_copy_count}" -eq 1 ]] \
+  || fail "D-02/D-05: 'Inizia la ricerca' compare ${pill_copy_count} volte (fuori dai commenti) in components/*.tsx (atteso esattamente 1) — rischio di una seconda implementazione della pillola"
+echo "ok  D-02/D-05: il copy della pillola compare esattamente una volta (fuori dai commenti) in components/"
+
+# 2. Il componente e' montato da entrambe le superfici, e la vecchia
+# implementazione mobile-only non esiste piu'.
+if [[ -f components/navbar/MobileSearchbarTrigger.tsx ]]; then
+  fail "D-05: components/navbar/MobileSearchbarTrigger.tsx esiste ancora — doveva essere rinominato in SearchbarTrigger.tsx (promozione, non una copia)"
+fi
+searchbar_mount_count="$(grep -c '<SearchbarTrigger' components/Navbar.tsx)"
+[[ "${searchbar_mount_count}" -eq 2 ]] \
+  || fail "D-05: components/Navbar.tsx monta <SearchbarTrigger ${searchbar_mount_count} volte (attese esattamente 2 — una per superficie)"
+echo "ok  D-05: SearchbarTrigger e' l'unica implementazione, montata due volte (mobile + desktop) in components/Navbar.tsx"
+
+# 3. Stessa famiglia di animazione: i due layoutId="activeRing" preesistenti
+# piu' il morph del contenitore devono condividere gli stessi identici
+# parametri di molla — l'asserzione deve fallire sia se il morph si allontana
+# dalla famiglia sia se sparisce del tutto.
+spring_type_count="$(grep -c 'type: "spring",' components/Navbar.tsx)"
+spring_stiffness_count="$(grep -c 'stiffness: 500,' components/Navbar.tsx)"
+spring_damping_count="$(grep -c 'damping: 40,' components/Navbar.tsx)"
+if [[ "${spring_type_count}" -ne 3 || "${spring_stiffness_count}" -ne 3 || "${spring_damping_count}" -ne 3 ]]; then
+  fail "D-04: attesi esattamente 3 blocchi transition={{ type: \"spring\", stiffness: 500, damping: 40 }} in components/Navbar.tsx (i due activeRing piu' il morph del contenitore) — trovati type=${spring_type_count} stiffness=${spring_stiffness_count} damping=${spring_damping_count}"
+fi
+echo "ok  D-04: tre blocchi di transizione a molla con parametri identici (i due activeRing piu' il morph del contenitore data-navbar-searchbar)"
+
+# 4. Nessun secondo layoutId sulla barra: il morph usa `layout`, non un
+# layoutId nuovo che condividerebbe l'animazione con l'anello invece che
+# animare la forma del contenitore. Commenti filtrati prima di contare
+# (stesso strip_comments usato sopra per D-07/D-08).
+layoutid_count="$(strip_comments components/Navbar.tsx | grep -c 'layoutId=')"
+[[ "${layoutid_count}" -eq 2 ]] \
+  || fail "D-04: attesi esattamente 2 layoutId in components/Navbar.tsx (solo l'anello activeRing), trovati ${layoutid_count} — il morph deve usare layout, non un secondo layoutId"
+activering_count="$(strip_comments components/Navbar.tsx | grep -c 'layoutId="activeRing"')"
+[[ "${activering_count}" -eq 2 ]] \
+  || fail "D-04: i 2 layoutId in components/Navbar.tsx non sono entrambi \"activeRing\""
+echo "ok  D-04: esattamente due layoutId in components/Navbar.tsx, entrambi activeRing — il morph del contenitore usa layout, non un secondo layoutId"
+
+# 5. Il marcatore dell'ancora sopravvive: e' il legame che regge il passaggio
+# con un solo click fra Dove e Quando (onInteractOutside in
+# DesktopSearchDropdown.tsx), e sparirebbe in silenzio con una riscrittura
+# del contenitore.
+grep -q 'data-navbar-searchbar' components/Navbar.tsx \
+  || fail "D-04/D-05: components/Navbar.tsx non dichiara piu' data-navbar-searchbar"
+grep -q 'data-navbar-searchbar' components/navbar/DesktopSearchDropdown.tsx \
+  || fail "D-04/D-05: components/navbar/DesktopSearchDropdown.tsx non cerca piu' data-navbar-searchbar in onInteractOutside"
+echo "ok  D-04/D-05: il marcatore data-navbar-searchbar e' ancora presente in Navbar.tsx e cercato da DesktopSearchDropdown.tsx"
+
+echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17)"
