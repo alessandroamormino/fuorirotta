@@ -21,6 +21,12 @@
 #   D-08  regola di propagazione unica per mobile e desktop: clearMobile
 #         chiama la stessa resetFilters() di clear(), l'asimmetria D-16 di
 #         Fase 9 e' chiusa.
+#   D-09/D-10 (Fase 17)  un solo montaggio di ThemeToggle in tutto il
+#         prodotto reso a utente, dentro components/Navbar.tsx; il logo e'
+#         in flusso (niente piu' absolute left-4). Sigla condivisa con le
+#         D-09/D-10 della Fase 9 sopra (fasi diverse, decisioni diverse:
+#         qui e' posizione del toggle/logo, li' era chiamata unica
+#         dell'hook).
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -227,4 +233,51 @@ if ! strip_comments "${tmp_bad}" | grep -qE '\buseState<SearchFilters>'; then
 fi
 echo "ok  D-07: l'asserzione 1 e' dimostrata capace di fallire su un useState<SearchFilters> reintrodotto"
 
-echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08)"
+# --- D-09/D-10 (Fase 17): un solo montaggio del toggle, logo in flusso -------
+#
+# D-09  il toggle tema ha una sola posizione dichiarata, dentro la barra —
+#       nessun secondo montaggio flottante (app/layout.tsx) ne' nell'overlay
+#       mobile (MobileSearchOverlay.tsx).
+# D-10  il logo esce dal posizionamento assoluto ed entra nel flusso della
+#       riga a tre fratelli flex.
+
+# 1. Un solo montaggio reso a utente, e deve stare in components/Navbar.tsx.
+# app/dev/ (vetrina dei componenti) e' escluso di proposito: non e' prodotto.
+theme_toggle_all="$(grep -rn '<ThemeToggle' app components --include='*.tsx' || true)"
+theme_toggle_prod="$(printf '%s\n' "${theme_toggle_all}" | grep -v '^app/dev/' || true)"
+theme_toggle_prod_count="$(printf '%s\n' "${theme_toggle_prod}" | grep -c '<ThemeToggle' || true)"
+[[ "${theme_toggle_prod_count}" -eq 1 ]] \
+  || fail "D-09: trovati ${theme_toggle_prod_count} montaggi di <ThemeToggle fuori da app/dev/ (atteso esattamente 1)"
+printf '%s\n' "${theme_toggle_prod}" | grep -q '^components/Navbar\.tsx:' \
+  || fail "D-09: l'unico montaggio di ThemeToggle non e' in components/Navbar.tsx"
+echo "ok  D-09: un solo montaggio di ThemeToggle reso a utente, in components/Navbar.tsx"
+
+# 2. Nome accessibile che dichiara l'azione, non lo stato — entrambi i temi.
+grep -q 'Passa al tema scuro' components/ui/ThemeToggle.tsx \
+  || fail "D-09: components/ui/ThemeToggle.tsx non dichiara piu' l'aria-label 'Passa al tema scuro'"
+grep -q 'Passa al tema chiaro' components/ui/ThemeToggle.tsx \
+  || fail "D-09: components/ui/ThemeToggle.tsx non dichiara piu' l'aria-label 'Passa al tema chiaro'"
+echo "ok  D-09: il toggle dichiara un aria-label che nomina l'azione in entrambi i temi"
+
+# 3. Logo in flusso: niente piu' absolute, la riga dichiara il contratto.
+# Commenti filtrati prima di contare (una riga che nomina absolute left-4 in
+# un commento di spiegazione non deve far fallire il gate).
+if strip_comments components/Navbar.tsx | grep -q 'absolute left-4'; then
+  fail "D-10: components/Navbar.tsx contiene ancora il posizionamento assoluto del logo (absolute left-4)"
+fi
+strip_comments components/Navbar.tsx | grep -q 'flex-none' \
+  || fail "D-10: components/Navbar.tsx non dichiara piu' flex-none (logo/toggle)"
+strip_comments components/Navbar.tsx | grep -q 'flex-1 min-w-0' \
+  || fail "D-10: components/Navbar.tsx non dichiara piu' flex-1 min-w-0 (zona di ricerca)"
+echo "ok  D-10: il logo e' in flusso (nessun absolute left-4), la riga dichiara flex-none/flex-1 min-w-0"
+
+# 4. Nessun ritorno del montaggio flottante o dell'overlay (righe non commento).
+if strip_comments app/layout.tsx | grep -q 'ThemeToggle'; then
+  fail "D-09: app/layout.tsx importa ancora ThemeToggle — il montaggio flottante non deve tornare"
+fi
+if strip_comments components/navbar/MobileSearchOverlay.tsx | grep -q 'ThemeToggle'; then
+  fail "D-09: components/navbar/MobileSearchOverlay.tsx importa ancora ThemeToggle — il secondo montaggio non deve tornare"
+fi
+echo "ok  D-09: app/layout.tsx e components/navbar/MobileSearchOverlay.tsx non importano piu' ThemeToggle"
+
+echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17)"
