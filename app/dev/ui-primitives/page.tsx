@@ -228,10 +228,10 @@ export default function UIPrimitivesPage() {
 				{/* ThemeToggle */}
 				<Section
 					title="ThemeToggle"
-					description="Istanza reale montata qui — light/dark si invertono sul posto (oltre all'istanza fissa globale in alto a destra)."
+					description="Istanza reale montata qui — light/dark si invertono sul posto. Unico montaggio nel prodotto reso a utente e' quello nella Navbar (D-09); questa e' solo la vetrina."
 				>
 					<Instance label="istanza inline">
-						<div className="relative h-14 w-14 border border-border rounded-lg">
+						<div className="relative h-14 w-14 flex items-center justify-center border border-border rounded-lg">
 							<ThemeToggle />
 						</div>
 					</Instance>

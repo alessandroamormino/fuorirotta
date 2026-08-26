@@ -280,4 +280,19 @@ if strip_comments components/navbar/MobileSearchOverlay.tsx | grep -q 'ThemeTogg
 fi
 echo "ok  D-09: app/layout.tsx e components/navbar/MobileSearchOverlay.tsx non importano piu' ThemeToggle"
 
+# 5. Il DEFAULT del componente non deve mai produrre un toggle "fixed":
+# altrimenti un <ThemeToggle /> nudo (come la vetrina /dev/ui-primitives)
+# farebbe rinascere la variante flottante che D-09 ha rimosso, senza che il
+# conteggio dell'asserzione 1 se ne accorga (il montaggio resterebbe unico,
+# solo con l'aspetto sbagliato). Isola il blocco `className ?? ...` e
+# filtra i commenti prima di cercare "fixed", perche' il commento che spiega
+# la regola nomina la parola legittimamente.
+default_classname_block="$(sed -n '/className ??/,/^\t\t\t}/p' components/ui/ThemeToggle.tsx | grep -vE '^[[:space:]]*(//|\*|/\*)')"
+[[ -n "${default_classname_block}" ]] \
+  || fail "D-09: non trovo piu' il blocco del default className in components/ui/ThemeToggle.tsx — il gate non puo' verificarlo"
+if echo "${default_classname_block}" | grep -qE '\bfixed\b'; then
+  fail "D-09: il default className di components/ui/ThemeToggle.tsx torna a dichiarare 'fixed' — un <ThemeToggle /> nudo fluttuerebbe di nuovo"
+fi
+echo "ok  D-09: il default di ThemeToggle non e' mai 'fixed' — un montaggio nudo resta in flusso"
+
 echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17)"

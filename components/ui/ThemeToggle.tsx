@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
 
 /**
- * `className` permette di montarlo dentro un contenitore invece che flottante.
- * Serve perche' su mobile la posizione fissa non ha un angolo libero: in alto
- * copriva la searchbar, in basso la paginazione. Nel Navbar viene montato come
- * quarta icona del pannello di ricerca, dove non puo' coprire nulla.
+ * D-09 (Fase 17): un solo toggle in tutto il prodotto, in flusso dentro la
+ * Navbar — nessuna variante flottante (`position: fixed`) resta raggiungibile,
+ * nemmeno come fallback di default. `className` personalizza la resa (la
+ * Navbar passa la propria), ma un montaggio senza className (es. la
+ * vetrina `/dev/ui-primitives`) deve comunque restare in flusso nel proprio
+ * contenitore, mai fluttuare fuori da esso.
  */
 export default function ThemeToggle({ className }: { className?: string }) {
 	const [isDark, setIsDark] = useState(false);
@@ -36,9 +38,9 @@ export default function ThemeToggle({ className }: { className?: string }) {
 			aria-label={isDark ? "Passa al tema chiaro" : "Passa al tema scuro"}
 			className={
 				className ??
-				// Default: flottante in alto a destra, ma solo da md in su.
-				// Su mobile lo monta il Navbar (vedi sopra).
-				"fixed top-4 right-4 z-[300] hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors"
+				// Default in flusso (D-09): stessa forma visiva del montaggio in
+				// barra, senza alcun posizionamento fixed/absolute.
+				"flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors"
 			}
 		>
 			{isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
