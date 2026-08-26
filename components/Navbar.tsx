@@ -137,6 +137,21 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 									<motion.div
 										data-navbar-searchbar
 										layout
+										// T-17-09 (trovato al checkpoint umano del Task 3): senza
+										// layoutDependency, framer-motion ricalcola il progetto di
+										// layout di questo contenitore a OGNI render di Navbar — cioe'
+										// anche quando si passa da "Dove" a "Quando" col pannello gia'
+										// aperto, dove la larghezza non cambia affatto. Quel lavoro
+										// competeva con lo scheduler condiviso di framer-motion per lo
+										// stesso frame in cui l'AnimatePresence mode="wait" di
+										// DesktopSearchDropdown deve completare l'exit di "Dove" per
+										// montare "Quando" — e la faceva restare bloccata sul
+										// contenuto vecchio a tempo indeterminato (il pannello si
+										// riancorava correttamente, il contenuto no). Legando la
+										// verifica di layout a desktopCollapsed, il ricalcolo avviene
+										// SOLO quando la barra deve davvero cambiare forma (A<->B),
+										// non ad ogni cambio di campo dentro B/C/D.
+										layoutDependency={desktopCollapsed}
 										transition={{
 											type: "spring",
 											stiffness: 500,
