@@ -53,6 +53,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const [clusterGeoJSON, setClusterGeoJSON] = useState<any>(null);
 
 	const [searchFilters, setSearchFilters] = useState<SearchFilters>({ location: "", dateFrom: null, dateTo: null, radius: undefined });
+	// D-07: fonte unica dei filtri applicati (searchFilters, invariato) e dei
+	// filtri in redazione (draftFilters, nuovo) — la Navbar riceve/scrive solo
+	// il secondo; handleSearch scrive entrambi cosi' il redatto non resta mai
+	// indietro rispetto all'applicato dopo un submit o un reset. Non
+	// persistito: gli effect di scrittura in sessionStorage restano agganciati
+	// a searchFilters.
+	const [draftFilters, setDraftFilters] = useState<SearchFilters>({ location: "", dateFrom: null, dateTo: null, radius: undefined });
 	const [userLocation, setUserLocation] = useState<{
 		lat: number;
 		lng: number;
@@ -202,6 +209,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						typeof parsed.comuneIstatCode === "string" ? parsed.comuneIstatCode : undefined,
 				};
 				setSearchFilters(activeFilters);
+				setDraftFilters(activeFilters);
 			} catch { /* ignore */ }
 		}
 
@@ -421,6 +429,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 	const handleSearch = (filters: SearchFilters) => {
 		setSearchFilters(filters);
+		setDraftFilters(filters);
 	};
 
 	// Idempotente: riselezionare la chip attiva (incluso "Tutte" mentre "Tutte"
@@ -444,9 +453,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	return (
 		<div className="min-h-screen bg-accent/5">
 			<Navbar
+				filters={draftFilters}
+				onFiltersChange={setDraftFilters}
 				onSearch={handleSearch}
 				onOpenMap={() => setIsMapExpanded(true)}
-				restoredFilters={searchFilters}
 			/>
 
 			<main

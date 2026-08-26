@@ -20,18 +20,17 @@ import type { SearchFilters } from "@/lib/types";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
 
 interface NavbarProps {
+	// D-07: Navbar e' un componente controllato — riceve i filtri come valore
+	// e li restituisce via callback, senza possederne una copia.
+	filters: SearchFilters;
+	onFiltersChange: (filters: SearchFilters) => void;
 	onSearch: (filters: SearchFilters) => void;
 	onOpenMap?: () => void;
-	// Difetto B (checkpoint Task 5, 11-05-PLAN.md): i filtri ripristinati da
-	// sessionStorage vivono in HomeClient.searchFilters e non hanno mai
-	// raggiunto la Navbar. Opzionale perche' ogni altro consumatore di questo
-	// componente resta invariato senza passarlo.
-	restoredFilters?: SearchFilters;
 }
 
-export default function Navbar({ onSearch, onOpenMap, restoredFilters }: NavbarProps) {
+export default function Navbar({ filters: controlledFilters, onFiltersChange, onSearch, onOpenMap }: NavbarProps) {
 	const { filters, setFilters, search, radius, panels, destinations } =
-		useNavbarSearch({ onSearch, restoredFilters });
+		useNavbarSearch({ filters: controlledFilters, onFiltersChange, onSearch });
 	const { activeField, setActiveField, setMobileDestExpanded, setMobileWhenOpen } =
 		panels;
 	const hasActiveFilters = search.hasActiveFilters;

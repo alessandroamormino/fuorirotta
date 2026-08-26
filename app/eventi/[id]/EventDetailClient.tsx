@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
-import { Event } from "@/lib/types";
+import { Event, SearchFilters } from "@/lib/types";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
@@ -20,12 +20,6 @@ const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	),
 });
 
-interface SearchFilters {
-	location: string;
-	dateFrom: Date | null;
-	dateTo: Date | null;
-}
-
 interface EventDetailClientProps {
 	initialEvent?: Event | null;
 }
@@ -36,6 +30,13 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
 	const [loading, setLoading] = useState(!initialEvent);
 	const [showMapModal, setShowMapModal] = useState<{ lat: number; lng: number } | null>(null);
+	// D-07: qui la Navbar serve solo ad avviare una nuova ricerca che porta a
+	// "/" — draft locale, mai letto altrove in questo file.
+	const [draftFilters, setDraftFilters] = useState<SearchFilters>({
+		location: "",
+		dateFrom: null,
+		dateTo: null,
+	});
 
 	useEffect(() => {
 		// Se abbiamo già i dati dal server (SSR), non richiedere
@@ -94,7 +95,11 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-muted">
-				<Navbar onSearch={handleSearch} />
+				<Navbar
+					filters={draftFilters}
+					onFiltersChange={setDraftFilters}
+					onSearch={handleSearch}
+				/>
 				<div className="fixed top-28 left-0 right-0 bottom-0 flex items-center justify-center">
 					<div className="text-center">
 						<div className="w-16 h-16 border-4 border-accent border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
@@ -108,7 +113,11 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	if (!event) {
 		return (
 			<div className="min-h-screen bg-muted">
-				<Navbar onSearch={handleSearch} />
+				<Navbar
+					filters={draftFilters}
+					onFiltersChange={setDraftFilters}
+					onSearch={handleSearch}
+				/>
 				<div className="fixed top-28 left-0 right-0 bottom-0 flex items-center justify-center">
 					<div className="text-center">
 						<div className="w-20 h-20 bg-muted-strong rounded-full flex items-center justify-center mx-auto mb-4">
@@ -135,7 +144,11 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	return (
 		<div className="min-h-screen bg-muted">
 			{/* Navbar */}
-			<Navbar onSearch={handleSearch} />
+			<Navbar
+				filters={draftFilters}
+				onFiltersChange={setDraftFilters}
+				onSearch={handleSearch}
+			/>
 
 			{/* Main Content */}
 			<main className="fixed top-28 left-0 right-0 bottom-0 overflow-y-auto scrollbar-thin">

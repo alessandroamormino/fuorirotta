@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { SearchFilters } from "@/lib/types";
 import {
 	SUGGESTED_DESTINATIONS,
@@ -8,13 +9,12 @@ import {
 
 type ActiveField = "where" | "when" | "mobile_search" | null;
 
+// D-07: i filtri sono posseduti dal genitore (HomeClient.draftFilters);
+// l'hook li riceve come valore piu' callback invece di crearli con useState.
 interface UseNavbarSearchArgs {
+	filters: SearchFilters;
+	onFiltersChange: (filters: SearchFilters) => void;
 	onSearch: (filters: SearchFilters) => void;
-	// Difetto B (checkpoint Task 5, 11-05-PLAN.md): valore proveniente da
-	// HomeClient.searchFilters, che si aggiorna sia al ripristino post-mount
-	// da sessionStorage sia a ogni submit fatto da questa stessa Navbar (eco
-	// del proprio invio, innocuo). Sincronizzato una sola volta, vedi sotto.
-	restoredFilters?: SearchFilters;
 }
 
 const capitalizeFirstLetter = (str: string) => {
@@ -47,18 +47,30 @@ const getIconForDestination = (iconType: string) => {
 // D-10). Il markup resta diviso per superficie (mobile/desktop); qui vive
 // solo la logica condivisa. Restituisce pochi oggetti coerenti, non 14
 // valori sciolti (RESEARCH.md Pitfall 5).
-export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchArgs) {
+export function useNavbarSearch({ filters, onFiltersChange, onSearch }: UseNavbarSearchArgs) {
 	const [activeField, setActiveField] = useState<ActiveField>(null);
-	const [filters, setFilters] = useState<SearchFilters>({
-		location: "",
-		dateFrom: null,
-		dateTo: null,
-	});
+
+	// D-07: shim di una riga sopra onFiltersChange — conserva la firma
+	// Dispatch<SetStateAction<SearchFilters>> che i call site interni usano
+	// (valore o forma funzionale); nessun handler la chiama due volte nello
+	// stesso tick, quindi risolvere la forma funzionale sul `filters` del
+	// render corrente e' sempre corretto.
+	const setFilters: Dispatch<SetStateAction<SearchFilters>> = (value) => {
+		onFiltersChange(
+			typeof value === "function"
+				? (value as (prev: SearchFilters) => SearchFilters)(filters)
+				: value,
+		);
+	};
 
 	// D-11: searchInput/mobileSearchInput erano due stati paralleli, mutuamente
-	// esclusivi per breakpoint. Unificati in uno solo: nessuna differenza
-	// osservabile, perche' desktop e mobile non sono mai visibili insieme.
-	const [searchInput, setSearchInputState] = useState("");
+	// esclusivi per breakpoint, poi unificati in un solo stato autonomo. D-07
+	// lo deriva invece che possederlo: vale sempre filters.location, con
+	// l'unica eccezione di applyCustomMobile (sotto), che vuole l'etichetta
+	// nel filtro ma l'input vuoto — inputOverride cattura solo quella
+	// deviazione (null = "segui filters.location").
+	const [inputOverride, setInputOverride] = useState<string | null>(null);
+	const searchInput = inputOverride ?? filters.location;
 	const [showRadiusSelector, setShowRadiusSelector] = useState(false);
 	const [selectedRadius, setSelectedRadius] = useState<number | null>(null);
 	// D-11: customRadius (30) e mobileCustomRadius (20) unificati in un solo
@@ -67,35 +79,6 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 	// dell'intero piano (vedi SUMMARY e checkpoint del Task 3).
 	const [customRadius, setCustomRadius] = useState(20);
 	const [isNearbySearch, setIsNearbySearch] = useState(false);
-
-	// Difetto B (checkpoint Task 5, 11-05-PLAN.md): searchFilters e' ripristinato
-	// da sessionStorage in un effect POST-mount di HomeClient, quindi al primo
-	// render restoredFilters arriva ancora vuoto — un valore "iniziale" passato
-	// come prop non basterebbe. Sincronizzato durante il render (non in un
-	// effect: setState sincrono in un effect innesca render a cascata,
-	// react-hooks/set-state-in-effect), col pattern "adjust state on prop
-	// change" della doc React — confronto con l'ultimo riferimento visto,
-	// aggiornato solo quando cambia davvero. Applicato una sola volta, quando
-	// arriva un valore non vuoto: dopo quel giro l'oggetto restoredFilters
-	// cambia comunque di riferimento a ogni submit fatto da questa stessa
-	// Navbar (search.submit chiama onSearch, che risale a HomeClient e
-	// ridiscende qui identico), la guardia lo ignora percio' non calpesta mai
-	// quello che l'utente sta digitando in un campo aperto.
-	const [prevRestoredFilters, setPrevRestoredFilters] = useState(restoredFilters);
-	const [hasSyncedRestored, setHasSyncedRestored] = useState(false);
-	if (restoredFilters !== prevRestoredFilters) {
-		setPrevRestoredFilters(restoredFilters);
-		const hasRestored =
-			restoredFilters &&
-			(restoredFilters.location || restoredFilters.dateFrom || restoredFilters.dateTo);
-		if (hasRestored && !hasSyncedRestored) {
-			setHasSyncedRestored(true);
-			setFilters(restoredFilters);
-			setSearchInputState(restoredFilters.location || "");
-			setSelectedRadius(restoredFilters.radius ?? null);
-			setIsNearbySearch(Boolean(restoredFilters.radius));
-		}
-	}
 
 	// Mobile overlay state — resta per superficie, non ha equivalente desktop.
 	const [mobileDestExpanded, setMobileDestExpanded] = useState(false);
@@ -148,7 +131,7 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 			resetFilters();
 			return;
 		}
-		setSearchInputState(capitalized);
+		setInputOverride(null);
 		setFilters((f) => ({
 			...f,
 			location: capitalized,
@@ -188,7 +171,7 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 			dateTo: null,
 			radius: undefined,
 		});
-		setSearchInputState("");
+		setInputOverride(null);
 		setSelectedRadius(null);
 		setIsNearbySearch(false);
 		onSearch({ location: "", dateFrom: null, dateTo: null, radius: undefined });
@@ -213,7 +196,7 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 			dateTo: null,
 			radius: undefined,
 		});
-		setSearchInputState("");
+		setInputOverride(null);
 		setSelectedRadius(null);
 		setIsNearbySearch(false);
 		setMobileDestExpanded(false);
@@ -227,7 +210,7 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 	// e serve un tocco separato su "Conferma" per applicare (applyCustomMobile).
 	const applyPreset = (value: number, label: string) => {
 		setSelectedRadius(value);
-		setSearchInputState(`Nelle vicinanze (${label})`);
+		setInputOverride(null);
 		setFilters((f) => ({
 			...f,
 			location: `Nelle vicinanze (${label})`,
@@ -253,7 +236,7 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 	// comportamento da uniformare.
 	const applyCustomDesktop = () => {
 		setSelectedRadius(customRadius);
-		setSearchInputState(`Nelle vicinanze (${customRadius} km)`);
+		setInputOverride(null);
 		setFilters((f) => ({
 			...f,
 			location: `Nelle vicinanze (${customRadius} km)`,
@@ -273,7 +256,7 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 		// searchbar. Lasciandola qui, riaprire "Dove?" mostrava i risultati di
 		// ricerca per una stringa senza senso invece delle destinazioni
 		// suggerite, e per cambiare filtro bisognava cancellare la frase a mano.
-		setSearchInputState("");
+		setInputOverride("");
 		setFilters((f) => ({
 			...f,
 			location: label,
@@ -301,7 +284,7 @@ export function useNavbarSearch({ onSearch, restoredFilters }: UseNavbarSearchAr
 		comuneId?: number;
 		comuneIstatCode?: string;
 	}) => {
-		setSearchInputState(opts.name);
+		setInputOverride(null);
 		setFilters((f) => ({
 			...f,
 			location: opts.name,
