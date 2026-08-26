@@ -5,7 +5,7 @@
 // useNavbarSearch, che possiede lo stato dei filtri (D-12).
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Search, X } from "lucide-react";
 import { it } from "date-fns/locale";
 import { format } from "date-fns";
@@ -13,7 +13,7 @@ import Link from "next/link";
 import Image from "next/image";
 import DestinationField from "@/components/navbar/DestinationField";
 import MobileSearchOverlay from "@/components/navbar/MobileSearchOverlay";
-import MobileSearchbarTrigger from "@/components/navbar/MobileSearchbarTrigger";
+import SearchbarTrigger from "@/components/navbar/SearchbarTrigger";
 import DesktopSearchDropdown from "@/components/navbar/DesktopSearchDropdown";
 import * as Popover from "@/components/ui/Popover";
 import ThemeToggle from "@/components/ui/ThemeToggle";
@@ -39,6 +39,20 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 	// Il dropdown desktop e' aperto per ogni activeField tranne il caso
 	// mobile_search (che apre invece l'overlay fullscreen sopra) e null.
 	const dropdownOpen = activeField !== null && activeField !== "mobile_search";
+
+	// Stato A della macchina a stati (17-UI-SPEC.md): la barra desktop e'
+	// collassata in pillola solo quando nessun filtro e' attivo E il pannello
+	// e' chiuso — un solo predicato derivato da due booleani gia' esistenti,
+	// non un nuovo stato che potrebbe oscillare per conto proprio (T-17-07).
+	const desktopCollapsed = !hasActiveFilters && !dropdownOpen;
+
+	// Larghezza del contenitore accoppiata a desktopCollapsed: piena quando
+	// espanso, auto e centrata (tetto max-w-md) quando collassato — solo da
+	// `sm` in su, perche' sotto `sm` la barra resta a piena larghezza come
+	// oggi (il mobile non cambia, 17-UI-SPEC.md "Transizione A ↔ B").
+	const searchbarWidthClass = desktopCollapsed
+		? "w-full sm:w-auto sm:max-w-md sm:mx-auto"
+		: "w-full";
 
 	// D-19 (corretta il 2026-08-20, dopo la regressione di 7852a38): il
 	// campo Dove desktop vive in questa barra collassata, il contenitore
@@ -114,13 +128,26 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 									{/* data-navbar-searchbar: marcatore letto da onInteractOutside
 									    in DesktopSearchDropdown. La barra non conta come "fuori",
 									    cosi' passare da "Dove" a "Quando" cambia campo con un solo
-									    click e senza smontare il pannello. */}
-									<div
+									    click e senza smontare il pannello. `layout` + la stessa
+									    transizione a molla del ring dell'anello attivo qui sotto
+									    anima il morph pillola/barra (D-04, 17-UI-SPEC.md
+									    "Transizione A e B") — non un secondo identificativo di
+									    layout condiviso, che animerebbe fra l'anello e la barra
+									    invece che la forma. */}
+									<motion.div
 										data-navbar-searchbar
-										className="w-full flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 rounded-full shadow-lg hover:shadow-xl transition-all px-2 relative"
+										layout
+										transition={{
+											type: "spring",
+											stiffness: 500,
+											damping: 40,
+										}}
+										className={`flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 rounded-full shadow-lg hover:shadow-xl transition-all px-2 relative ${searchbarWidthClass}`}
 									>
-										{/* Mobile: searchbar */}
-										<MobileSearchbarTrigger
+										{/* Mobile: searchbar — sempre montata, invariata (il mobile
+										    non fa parte della macchina a stati A/B/C/D desktop). */}
+										<SearchbarTrigger
+											className="sm:hidden flex-1 min-w-0"
 											hasActiveFilters={hasActiveFilters}
 											location={filters.location}
 											dateFrom={filters.dateFrom}
@@ -133,121 +160,159 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 											onClear={search.clear}
 										/>
 
-										{/* Desktop: Where Field */}
-										<div className="hidden sm:block flex-1 relative">
-											<div
-												onClick={() => setActiveField("where")}
-												className="relative px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
-											>
-												<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
-													Dove
-												</label>
-												<DestinationField
-													placeholder="Cerca destinazioni"
-													value={search.input}
-													onValueChange={search.setInput}
-													onSelect={(comune) => {
-														destinations.selectComune(comune);
-														setActiveField("when");
-													}}
-													className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-muted-foreground-faint ${
-														radius.isNearby
-															? "text-foreground cursor-not-allowed font-medium"
-															: "text-foreground-secondary"
-													}`}
-													onFocus={() => setActiveField("where")}
-													readOnly={radius.isNearby}
-													// D-19 (corretta il 2026-08-20): la lista arriva nel
-													// pannello unificato di DesktopSearchDropdown via
-													// createPortal, non in un popover proprio.
-													resultsContainer={whereResultsContainer}
-													onResultsChange={setWhereResultsCount}
-												/>
-												{search.input && (
-													<button
-														type="button"
-														aria-label="Svuota il campo destinazione"
-														onClick={(e) => {
-															// stopPropagation: il div genitore ha un onClick che
-															// riapre il pannello "Dove", che riaprirebbe subito
-															// cio' che questo bottone ha appena chiuso.
-															e.stopPropagation();
-															search.setInput("");
-														}}
-														className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
-													>
-														<X className="w-3.5 h-3.5 text-muted-foreground" />
-													</button>
-												)}
-											</div>
-											{activeField === "where" && (
+										{/* Desktop: pillola (stato A) oppure barra a due campi
+										    (stati B/C/D) — un solo cross-fade di opacity fra i due,
+										    nessuno slide/scale aggiuntivo (17-UI-SPEC.md). */}
+										<AnimatePresence initial={false}>
+											{desktopCollapsed ? (
 												<motion.div
-													layoutId="activeRing"
-													className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
-													transition={{
-														type: "spring",
-														stiffness: 500,
-														damping: 40,
-													}}
-												/>
-											)}
-										</div>
-
-										<div className="hidden sm:block w-px h-8 bg-surface/30" />
-
-										{/* Desktop: When Field */}
-										<div className="hidden sm:block flex-1 relative">
-											<div
-												onClick={() => setActiveField("when")}
-												className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
-											>
-												<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
-													Date
-												</label>
-												<div className="text-xs sm:text-sm text-muted-foreground-faint truncate">
-													{filters.dateFrom && filters.dateTo
-														? `${format(filters.dateFrom, "d MMM", { locale: it })} - ${format(filters.dateTo, "d MMM", { locale: it })}`
-														: "Aggiungi date"}
-												</div>
-											</div>
-											{activeField === "when" && (
-												<motion.div
-													layoutId="activeRing"
-													className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
-													transition={{
-														type: "spring",
-														stiffness: 500,
-														damping: 40,
-													}}
-												/>
-											)}
-										</div>
-
-										{/* Desktop: Clear & Search */}
-										<div className="hidden sm:flex items-center gap-2 pr-2 pl-3">
-											{hasActiveFilters && (
-												<motion.button
-													initial={{ opacity: 0, scale: 0.8 }}
-													animate={{ opacity: 1, scale: 1 }}
-													exit={{ opacity: 0, scale: 0.8 }}
-													whileHover={{ scale: 1.05 }}
-													whileTap={{ scale: 0.95 }}
-													onClick={search.clear}
-													className="px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted-strong rounded-full transition-colors"
+													key="pill"
+													initial={{ opacity: 0 }}
+													animate={{ opacity: 1 }}
+													exit={{ opacity: 0 }}
+													transition={{ duration: 0.15 }}
+													className="hidden sm:flex flex-1 items-center justify-center min-w-0"
 												>
-													Cancella
-												</motion.button>
+													{/* Stato A: hasActiveFilters e' falso per definizione
+													    (desktopCollapsed lo richiede), quindi questo
+													    montaggio rende sempre il ramo "senza filtri". */}
+													<SearchbarTrigger
+														className="w-full"
+														hasActiveFilters={hasActiveFilters}
+														location={filters.location}
+														dateFrom={filters.dateFrom}
+														dateTo={filters.dateTo}
+														onOpen={() => setActiveField("where")}
+														onClear={search.clear}
+													/>
+												</motion.div>
+											) : (
+												<motion.div
+													key="bar"
+													initial={{ opacity: 0 }}
+													animate={{ opacity: 1 }}
+													exit={{ opacity: 0 }}
+													transition={{ duration: 0.15 }}
+													className="hidden sm:flex flex-1 items-center min-w-0"
+												>
+													{/* Desktop: Where Field */}
+													<div className="hidden sm:block flex-1 relative">
+														<div
+															onClick={() => setActiveField("where")}
+															className="relative px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
+														>
+															<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
+																Dove
+															</label>
+															<DestinationField
+																placeholder="Cerca destinazioni"
+																value={search.input}
+																onValueChange={search.setInput}
+																onSelect={(comune) => {
+																	destinations.selectComune(comune);
+																	setActiveField("when");
+																}}
+																className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-muted-foreground-faint ${
+																	radius.isNearby
+																		? "text-foreground cursor-not-allowed font-medium"
+																		: "text-foreground-secondary"
+																}`}
+																onFocus={() => setActiveField("where")}
+																readOnly={radius.isNearby}
+																// D-19 (corretta il 2026-08-20): la lista arriva nel
+																// pannello unificato di DesktopSearchDropdown via
+																// createPortal, non in un popover proprio.
+																resultsContainer={whereResultsContainer}
+																onResultsChange={setWhereResultsCount}
+															/>
+															{search.input && (
+																<button
+																	type="button"
+																	aria-label="Svuota il campo destinazione"
+																	onClick={(e) => {
+																		// stopPropagation: il div genitore ha un onClick che
+																		// riapre il pannello "Dove", che riaprirebbe subito
+																		// cio' che questo bottone ha appena chiuso.
+																		e.stopPropagation();
+																		search.setInput("");
+																	}}
+																	className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full hover:bg-muted-strong flex items-center justify-center transition-colors"
+																>
+																	<X className="w-3.5 h-3.5 text-muted-foreground" />
+																</button>
+															)}
+														</div>
+														{activeField === "where" && (
+															<motion.div
+																layoutId="activeRing"
+																className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
+																transition={{
+																	type: "spring",
+																	stiffness: 500,
+																	damping: 40,
+																}}
+															/>
+														)}
+													</div>
+
+													<div className="hidden sm:block w-px h-8 bg-surface/30" />
+
+													{/* Desktop: When Field */}
+													<div className="hidden sm:block flex-1 relative">
+														<div
+															onClick={() => setActiveField("when")}
+															className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
+														>
+															<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
+																Date
+															</label>
+															<div className="text-xs sm:text-sm text-muted-foreground-faint truncate">
+																{filters.dateFrom && filters.dateTo
+																	? `${format(filters.dateFrom, "d MMM", { locale: it })} - ${format(filters.dateTo, "d MMM", { locale: it })}`
+																	: "Aggiungi date"}
+															</div>
+														</div>
+														{activeField === "when" && (
+															<motion.div
+																layoutId="activeRing"
+																className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
+																transition={{
+																	type: "spring",
+																	stiffness: 500,
+																	damping: 40,
+																}}
+															/>
+														)}
+													</div>
+
+													{/* Desktop: Clear & Search */}
+													<div className="hidden sm:flex items-center gap-2 pr-2 pl-3">
+														{hasActiveFilters && (
+															<motion.button
+																initial={{ opacity: 0, scale: 0.8 }}
+																animate={{ opacity: 1, scale: 1 }}
+																exit={{ opacity: 0, scale: 0.8 }}
+																whileHover={{ scale: 1.05 }}
+																whileTap={{ scale: 0.95 }}
+																onClick={search.clear}
+																className="px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted-strong rounded-full transition-colors"
+															>
+																Cancella
+															</motion.button>
+														)}
+														<motion.button
+															whileHover={{ scale: 1.05 }}
+															whileTap={{ scale: 0.95 }}
+															onClick={search.submit}
+															className="w-12 h-12 bg-primary hover:bg-primary-hover rounded-full flex items-center justify-center transition-colors"
+														>
+															<Search className="w-5 h-5 text-primary-foreground" />
+														</motion.button>
+													</div>
+												</motion.div>
 											)}
-											<motion.button
-												whileHover={{ scale: 1.05 }}
-												whileTap={{ scale: 0.95 }}
-												onClick={search.submit}
-												className="w-12 h-12 bg-primary hover:bg-primary-hover rounded-full flex items-center justify-center transition-colors"
-											>
-												<Search className="w-5 h-5 text-primary-foreground" />
-											</motion.button>
-										</div>
-									</div>
+										</AnimatePresence>
+									</motion.div>
 								</Popover.Anchor>
 
 								<DesktopSearchDropdown

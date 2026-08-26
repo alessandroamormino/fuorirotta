@@ -6,30 +6,37 @@ import { Search, ChevronLeft } from "lucide-react";
 import { it } from "date-fns/locale";
 import { format } from "date-fns";
 
-interface MobileSearchbarTriggerProps {
+interface SearchbarTriggerProps {
 	hasActiveFilters: boolean;
 	location: string;
 	dateFrom: Date | null;
 	dateTo: Date | null;
 	onOpen: () => void;
 	onClear: () => void;
+	className?: string;
 }
 
-// Pillola della searchbar mobile (breakpoint < sm), spostata verbatim da
-// Navbar.tsx (D-09) per restare sotto le 250 righe della shell: "Inizia la
-// ricerca" quando non ci sono filtri, altrimenti freccia indietro + riepilogo
-// filtri. Apre sempre l'overlay fullscreen (MobileSearchOverlay), mai il
-// dropdown desktop — activeField "mobile_search" e' l'unico che li discrimina.
-export default function MobileSearchbarTrigger({
+// Pillola condivisa fra mobile e desktop (D-05, Fase 17): "Inizia la ricerca"
+// quando non ci sono filtri, altrimenti freccia indietro + riepilogo filtri.
+// Nata mobile-only (spostata verbatim da Navbar.tsx, D-09 di Fase 9) e ora
+// promossa — non riscritta — a unica implementazione della forma collassata,
+// montata due volte da Navbar.tsx: una per superficie. Ogni chiamante decide
+// a quale breakpoint mostrarsi tramite `className` (il default preserva il
+// comportamento di oggi, mobile-only), e cosa succede all'apertura tramite
+// `onOpen` — sul mobile apre l'overlay fullscreen (MobileSearchOverlay),
+// sul desktop apre il pannello ancorato (DesktopSearchDropdown); questo
+// componente non lo sa e non gli importa.
+export default function SearchbarTrigger({
 	hasActiveFilters,
 	location,
 	dateFrom,
 	dateTo,
 	onOpen,
 	onClear,
-}: MobileSearchbarTriggerProps) {
+	className,
+}: SearchbarTriggerProps) {
 	return (
-		<div className="sm:hidden flex-1 min-w-0">
+		<div className={className ?? "sm:hidden flex-1 min-w-0"}>
 			{!hasActiveFilters ? (
 				/* Nessun filtro: "Inizia la ricerca" */
 				<div
