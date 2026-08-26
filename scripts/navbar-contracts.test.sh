@@ -14,6 +14,13 @@
 #   D-09/D-10  lo stato non si duplica fuori dalla shell: l'hook condiviso
 #         e' chiamato una volta sola, dalla shell, e nessuno dei cinque
 #         componenti di superficie lo richiama per conto proprio.
+#   D-07  fonte unica in app/HomeClient.tsx: la Navbar e' un componente
+#         controllato (filters + onFiltersChange), senza copia interna dei
+#         filtri e senza il rattoppo restoredFilters di Fase 11; il
+#         ripristino da sessionStorage gira prima del primo paint.
+#   D-08  regola di propagazione unica per mobile e desktop: clearMobile
+#         chiama la stessa resetFilters() di clear(), l'asimmetria D-16 di
+#         Fase 9 e' chiusa.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -124,4 +131,100 @@ for f in "${surface_files[@]}"; do
 done
 echo "ok  D-09/D-10: nessuno dei ${#surface_files[@]} componenti di superficie richiama l'hook per conto proprio"
 
-echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10)"
+# --- D-07/D-08: fonte unica dei filtri e regola unica di propagazione --------
+#
+# Sola lettura del filesystem, nessun server ne' database: il contratto
+# dichiarato in testa a questo file (D-14) vale anche per le asserzioni
+# aggiunte dalla Fase 17.
+
+# Filtra i commenti prima di contare — un'annotazione che spiega la rimozione
+# (es. "restoredFilters e' sparita da qui") e' legittima e non deve far
+# fallire il gate.
+strip_comments() {
+  grep -vE '^[[:space:]]*(//|\*|/\*)' "$1"
+}
+
+# 1. Nessuna copia dei filtri fuori da HomeClient.
+for f in "lib/hooks/useNavbarSearch.ts" "components/Navbar.tsx"; do
+  if strip_comments "${f}" | grep -qE '\buseState<SearchFilters>'; then
+    fail "D-07: ${f} dichiara ancora un useState<SearchFilters> — la copia dei filtri non e' stata rimossa"
+  fi
+  if strip_comments "${f}" | grep -q 'restoredFilters'; then
+    fail "D-07: ${f} nomina ancora restoredFilters (la prop di ponte di Fase 11) fuori da un commento"
+  fi
+done
+echo "ok  D-07: nessuna copia dei filtri (useState<SearchFilters> o restoredFilters) fuori da HomeClient"
+
+# 2. L'hook riceve i filtri invece di crearli, e Navbar li passa alla chiamata.
+grep -qE '\bfilters:[[:space:]]*SearchFilters' lib/hooks/useNavbarSearch.ts \
+  || fail "D-07: lib/hooks/useNavbarSearch.ts non dichiara filters come argomento"
+grep -qE '\bonFiltersChange:' lib/hooks/useNavbarSearch.ts \
+  || fail "D-07: lib/hooks/useNavbarSearch.ts non dichiara onFiltersChange come argomento"
+grep -qE 'useNavbarSearch\(\{[^}]*filters' components/Navbar.tsx \
+  || fail "D-07: components/Navbar.tsx non passa filters alla chiamata di useNavbarSearch"
+grep -qE 'useNavbarSearch\(\{[^}]*onFiltersChange' components/Navbar.tsx \
+  || fail "D-07: components/Navbar.tsx non passa onFiltersChange alla chiamata di useNavbarSearch"
+echo "ok  D-07: l'hook dichiara filters/onFiltersChange e Navbar li passa alla chiamata"
+
+# 3. Un solo proprietario: HomeClient dichiara draftFilters, lo passa alla
+# Navbar come filters, e setDraftFilters compare nel blocco di ripristino da
+# sessionStorage (non solo altrove nel file, es. handleSearch).
+grep -qE '\bdraftFilters\b' app/HomeClient.tsx \
+  || fail "D-07: app/HomeClient.tsx non dichiara draftFilters"
+grep -qE 'filters=\{draftFilters\}' app/HomeClient.tsx \
+  || fail "D-07: app/HomeClient.tsx non passa draftFilters alla Navbar come filters"
+grep -A 20 'JSON.parse(savedFilters)' app/HomeClient.tsx | grep -q 'setDraftFilters' \
+  || fail "D-07: app/HomeClient.tsx non chiama setDraftFilters nel blocco di ripristino da sessionStorage"
+echo "ok  D-07: HomeClient.tsx e' l'unico proprietario — draftFilters passato alla Navbar, setDraftFilters nel ripristino"
+
+# 4. Le guardie di tipo sul ripristino sono ancora al loro posto (T-17-01).
+# Conta le occorrenze attese, non la sola presenza.
+number_guards="$(grep -cE 'typeof parsed\.[a-zA-Z]+ === "number"' app/HomeClient.tsx)"
+[[ "${number_guards}" -eq 2 ]] \
+  || fail "T-17-01: attese 2 guardie typeof ... === \"number\" (radius, comuneId) in app/HomeClient.tsx, trovate ${number_guards}"
+string_guards="$(grep -cE 'typeof parsed\.[a-zA-Z]+ === "string"' app/HomeClient.tsx)"
+[[ "${string_guards}" -eq 1 ]] \
+  || fail "T-17-01: attesa 1 guardia typeof ... === \"string\" (comuneIstatCode) in app/HomeClient.tsx, trovate ${string_guards}"
+grep -qE 'Number\.isInteger\(parsedPage\)' app/HomeClient.tsx \
+  || fail "T-17-01: la guardia Number.isInteger su currentPage e' sparita da app/HomeClient.tsx"
+echo "ok  T-17-01: le guardie di tipo sul ripristino (radius/comuneId/comuneIstatCode/currentPage) sono ancora al loro posto"
+
+# 5. D-08, regola unica: clearMobile chiama resetFilters, senza un proprio
+# azzeramento duplicato. Verificato sull'intervallo di righe della funzione,
+# non sull'intero file.
+clearmobile_body="$(sed -n '/const clearMobile = () => {/,/^\t};$/p' lib/hooks/useNavbarSearch.ts)"
+[[ -n "${clearmobile_body}" ]] \
+  || fail "D-08: clearMobile non trovata in lib/hooks/useNavbarSearch.ts"
+echo "${clearmobile_body}" | grep -q 'resetFilters()' \
+  || fail "D-08: clearMobile non chiama piu' resetFilters()"
+if echo "${clearmobile_body}" | grep -q 'setFilters({'; then
+  fail "D-08: clearMobile ha ancora un proprio setFilters({ di azzeramento — l'asimmetria D-16 non e' chiusa"
+fi
+echo "ok  D-08: clearMobile chiama resetFilters(), nessun azzeramento duplicato nel suo corpo"
+
+# 6. Il ripristino gira prima del paint: useIsomorphicLayoutEffect dichiarata
+# e usata esattamente una volta.
+declared="$(grep -cE 'const useIsomorphicLayoutEffect' app/HomeClient.tsx)"
+[[ "${declared}" -eq 1 ]] \
+  || fail "D-07: app/HomeClient.tsx non dichiara useIsomorphicLayoutEffect esattamente una volta (trovate ${declared})"
+invocations="$(grep -cE 'useIsomorphicLayoutEffect\(' app/HomeClient.tsx)"
+[[ "${invocations}" -eq 1 ]] \
+  || fail "D-07: useIsomorphicLayoutEffect usata ${invocations} volte in app/HomeClient.tsx, attesa esattamente 1"
+echo "ok  D-07: useIsomorphicLayoutEffect e' dichiarata e usata esattamente una volta"
+
+# Prova di non-vacuita': la stessa asserzione 1 deve rilevare una violazione
+# reintrodotta ad arte. Senza questo passo un gate mai visto fallire non e'
+# un gate.
+tmp_bad="${tmp_dir}/useNavbarSearch.bad.ts"
+{
+  echo 'export function useNavbarSearch() {'
+  echo '  const [filters, setFilters] = useState<SearchFilters>({ location: "" });'
+  echo '  return { filters, setFilters };'
+  echo '}'
+} > "${tmp_bad}"
+if ! strip_comments "${tmp_bad}" | grep -qE '\buseState<SearchFilters>'; then
+  fail "D-07: la prova di non-vacuita' non rileva un useState<SearchFilters> reintrodotto — asserzione 1 vacua"
+fi
+echo "ok  D-07: l'asserzione 1 e' dimostrata capace di fallire su un useState<SearchFilters> reintrodotto"
+
+echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08)"
