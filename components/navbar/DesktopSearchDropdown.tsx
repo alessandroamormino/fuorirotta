@@ -179,7 +179,19 @@ export default function DesktopSearchDropdown({
 										key="where"
 										initial={{ opacity: 0, x: -20 }}
 										animate={{ opacity: 1, x: 0 }}
-										exit={{ opacity: 0, x: -20 }}
+										// Nessun `exit`: preesistente da Fase 9 (adozione Popover,
+										// non introdotto da questo piano — components/navbar/
+										// DesktopSearchDropdown.tsx e' rimasto byte-identico su
+										// tutta la Fase 17), l'AnimatePresence mode="wait" del
+										// genitore restava in attesa per sempre del completamento
+										// dell'exit di questo blocco (mai confermato, il pannello
+										// annidato preset/filtered e' il candidato piu' probabile)
+										// e il passaggio Dove->Quando restava bloccato sul
+										// contenuto di Dove nonostante activeField fosse gia'
+										// "when". Senza `exit`, framer-motion non registra alcuna
+										// animazione di uscita per questo figlio e lo rimuove alla
+										// prossima renderizzazione invece di aspettarla in eterno
+										// (D-06: un solo click, il pannello resta montato).
 										transition={{ duration: 0.2 }}
 										className="p-4 sm:p-8"
 									>
@@ -308,7 +320,9 @@ export default function DesktopSearchDropdown({
 										key="when"
 										initial={{ opacity: 0, x: 20 }}
 										animate={{ opacity: 1, x: 0 }}
-										exit={{ opacity: 0, x: 20 }}
+										// Nessun `exit`, stesso motivo del blocco "where" sopra —
+										// trattamento simmetrico per il percorso di ritorno
+										// Quando->Dove.
 										transition={{ duration: 0.2 }}
 										className="p-4 sm:p-8"
 									>
