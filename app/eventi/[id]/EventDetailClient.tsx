@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
@@ -37,6 +37,12 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		dateFrom: null,
 		dateTo: null,
 	});
+	// D-11 (Fase 17, piano 04): stessa inerzia sul <main> di HomeClient.tsx —
+	// solo sul ramo di resa principale, gli altri due non hanno <main>.
+	const [navPanelOpen, setNavPanelOpen] = useState(false);
+	const handlePanelOpenChange = useCallback((open: boolean) => {
+		setNavPanelOpen(open);
+	}, []);
 
 	useEffect(() => {
 		// Se abbiamo già i dati dal server (SSR), non richiedere
@@ -148,10 +154,16 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 				filters={draftFilters}
 				onFiltersChange={setDraftFilters}
 				onSearch={handleSearch}
+				onPanelOpenChange={handlePanelOpenChange}
 			/>
 
 			{/* Main Content */}
-			<main className="fixed top-28 left-0 right-0 bottom-0 overflow-y-auto scrollbar-thin">
+			<main
+				className="fixed top-28 left-0 right-0 bottom-0 overflow-y-auto scrollbar-thin"
+				// D-11: fuori portata da Tab e dal puntatore finche' il
+				// pannello desktop resta aperto (T-17-09).
+				inert={navPanelOpen}
+			>
 				<div className="container mx-auto px-4 max-w-7xl">
 					{/* Back Button */}
 					<motion.button

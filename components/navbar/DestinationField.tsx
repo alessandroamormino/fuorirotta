@@ -3,6 +3,7 @@
 // debounce, fetch e AbortController per scartare risposte fuori ordine (D-12).
 
 import { useEffect, useId, useRef, useState } from "react";
+import type { Ref } from "react";
 import { createPortal } from "react-dom";
 
 interface ComuneResult {
@@ -42,6 +43,10 @@ interface DestinationFieldProps {
 	// qui (RESEARCH.md Pitfall 3/4: valore sincrono, debounce solo sulla
 	// rete, race guard sull'AbortController).
 	onResultsChange?: (count: number) => void;
+	// D-11 (Fase 17, piano 04): il genitore desktop mette qui il focus
+	// quando il pannello si apre su "where" (Navbar.tsx). React 19 accetta
+	// `ref` come prop normale sui componenti a funzione, nessun forwardRef.
+	ref?: Ref<HTMLInputElement>;
 }
 
 // Foglia client dell'autocomplete comuni (D-03, D-04, D-05): l'input e lo
@@ -59,6 +64,7 @@ export default function DestinationField({
 	autoFocus,
 	resultsContainer,
 	onResultsChange,
+	ref,
 }: DestinationFieldProps) {
 	// WR-07: era una costante di modulo condivisa fra le due istanze montate
 	// simultaneamente quando l'overlay mobile e' aperto (quella desktop vive in
@@ -76,7 +82,6 @@ export default function DestinationField({
 	// campo che l'utente sta usando davvero, non a ogni istanza montata che
 	// condivide il testo.
 	const [hasFocus, setHasFocus] = useState(false);
-	const inputRef = useRef<HTMLInputElement>(null);
 	// Selezionare un comune scrive il suo nome in `value`, che riaccende
 	// questo effect e rifarebbe il fetch per un testo che l'utente non ha
 	// digitato: richiesta sprecata, e la lista tornerebbe piena mentre il
@@ -168,7 +173,7 @@ export default function DestinationField({
 	return (
 		<>
 			<input
-				ref={inputRef}
+				ref={ref}
 				type="text"
 				placeholder={placeholder}
 				value={value}

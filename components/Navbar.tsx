@@ -4,7 +4,7 @@
 // framer-motion (motion.div/motion.button); chiama inoltre l'hook condiviso
 // useNavbarSearch, che possiede lo stato dei filtri (D-12).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X } from "lucide-react";
 import { it } from "date-fns/locale";
@@ -27,9 +27,20 @@ interface NavbarProps {
 	onFiltersChange: (filters: SearchFilters) => void;
 	onSearch: (filters: SearchFilters) => void;
 	onOpenMap?: () => void;
+	// D-11 (Fase 17, piano 04): segnala al genitore quando il pannello
+	// DESKTOP (non l'overlay mobile, che ha gia' il proprio trap Radix)
+	// passa da aperto a chiuso o viceversa, cosi' il genitore puo' rendere
+	// inerte il resto della pagina finche' resta aperto (T-17-09).
+	onPanelOpenChange?: (open: boolean) => void;
 }
 
-export default function Navbar({ filters: controlledFilters, onFiltersChange, onSearch, onOpenMap }: NavbarProps) {
+export default function Navbar({
+	filters: controlledFilters,
+	onFiltersChange,
+	onSearch,
+	onOpenMap,
+	onPanelOpenChange,
+}: NavbarProps) {
 	const { filters, setFilters, search, radius, panels, destinations } =
 		useNavbarSearch({ filters: controlledFilters, onFiltersChange, onSearch });
 	const { activeField, setActiveField, setMobileDestExpanded, setMobileWhenOpen } =
@@ -65,6 +76,73 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 	const [whereResultsContainer, setWhereResultsContainer] =
 		useState<HTMLDivElement | null>(null);
 	const [whereResultsCount, setWhereResultsCount] = useState(0);
+
+	// D-11 (Fase 17, piano 04): confinamento del focus/puntatore e ritorno
+	// del focus alla chiusura. Il pannello copre "barra + pannello", non
+	// solo il pannello (il campo Dove vive nella barra, il dropdown e'
+	// portalato sul body): per questo si rende inerte cio' che sta fuori
+	// (onPanelOpenChange -> HomeClient/EventDetailClient) invece di cercare
+	// un focus trap che li comprenda entrambi (Popover.Root modal valutata
+	// e scartata, vedi 17-04-PLAN.md).
+	const whereInputRef = useRef<HTMLInputElement>(null);
+	const whenFieldRef = useRef<HTMLDivElement>(null);
+	const pillButtonRef = useRef<HTMLButtonElement>(null);
+	// activeField torna a null non appena il pannello si chiude: per sapere
+	// se restituire il focus a "Dove" o "Quando" bisogna ricordare l'ultimo
+	// valore non nullo PRIMA che sparisca.
+	const lastActiveFieldRef = useRef<"where" | "when" | null>(null);
+	// Distingue "il pannello era aperto e si e' appena chiuso" da "la pagina
+	// si e' appena caricata": senza, il primo render ruberebbe il focus alla
+	// pillola.
+	const wasOpenRef = useRef(false);
+
+	// Segnala al genitore lo stato del pannello desktop, con cleanup che
+	// segnala `false` allo smontaggio (T-17-09): un pannello che resta
+	// "aperto" oltre lo smontaggio lascerebbe la pagina inerte per sempre.
+	useEffect(() => {
+		onPanelOpenChange?.(dropdownOpen);
+		return () => {
+			onPanelOpenChange?.(false);
+		};
+	}, [dropdownOpen, onPanelOpenChange]);
+
+	useEffect(() => {
+		if (activeField === "where" || activeField === "when") {
+			lastActiveFieldRef.current = activeField;
+		}
+	}, [activeField]);
+
+	// Focus iniziale sul campo Dove quando il pannello si apre su "where"
+	// (pillola cliccata, o click diretto sul campo Dove). Non tocca il
+	// focus quando si apre su "Quando": il click lo gestisce gia' da solo,
+	// e spostarlo su Dove sarebbe proprio il difetto che D-11 vuole evitare.
+	useEffect(() => {
+		if (activeField === "where") {
+			whereInputRef.current?.focus();
+		}
+	}, [activeField]);
+
+	// Alla chiusura del pannello (Escape, click fuori, submit, Cancella) il
+	// focus torna alla pillola (stato A, D-01) o al campo che era attivo
+	// (stato C) — mai al `body` (D-03, D-11).
+	useEffect(() => {
+		if (dropdownOpen) {
+			wasOpenRef.current = true;
+			return;
+		}
+		if (!wasOpenRef.current) return;
+		wasOpenRef.current = false;
+
+		if (hasActiveFilters) {
+			if (lastActiveFieldRef.current === "when") {
+				whenFieldRef.current?.focus();
+			} else {
+				whereInputRef.current?.focus();
+			}
+		} else {
+			pillButtonRef.current?.focus();
+		}
+	}, [dropdownOpen, hasActiveFilters]);
 
 	return (
 		<>
@@ -177,6 +255,7 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 													    (desktopCollapsed lo richiede), quindi questo
 													    montaggio rende sempre il ramo "senza filtri". */}
 													<SearchbarTrigger
+														ref={pillButtonRef}
 														className="w-full"
 														hasActiveFilters={hasActiveFilters}
 														location={filters.location}
@@ -205,6 +284,7 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 																Dove
 															</label>
 															<DestinationField
+																ref={whereInputRef}
 																placeholder="Cerca destinazioni"
 																value={search.input}
 																onValueChange={search.setInput}
@@ -260,8 +340,14 @@ export default function Navbar({ filters: controlledFilters, onFiltersChange, on
 													{/* Desktop: When Field */}
 													<div className="hidden sm:block flex-1 relative">
 														<div
+															ref={whenFieldRef}
+															// D-11: -1 lo rende raggiungibile solo via .focus()
+															// programmatico (ritorno del focus da Escape), non
+															// aggiunge una nuova tappa a Tab — l'ordine di
+															// tabulazione esistente non cambia.
+															tabIndex={-1}
 															onClick={() => setActiveField("when")}
-															className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
+															className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50 outline-none focus-visible:ring-2 focus-visible:ring-ring"
 														>
 															<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 																Date

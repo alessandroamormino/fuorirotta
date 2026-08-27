@@ -1,6 +1,7 @@
 "use client";
 // gestori onClick e whileTap di framer-motion (D-12).
 
+import type { Ref } from "react";
 import { motion } from "framer-motion";
 import { Search, ChevronLeft } from "lucide-react";
 import { it } from "date-fns/locale";
@@ -14,6 +15,11 @@ interface SearchbarTriggerProps {
 	onOpen: () => void;
 	onClear: () => void;
 	className?: string;
+	// D-11 (Fase 17, piano 04): ref sul bottone "Inizia la ricerca" della
+	// pillola desktop, per restituire il focus quando il pannello si chiude
+	// senza filtri attivi (stato A). React 19 accetta `ref` come prop
+	// normale sui componenti a funzione, nessun forwardRef da scrivere.
+	ref?: Ref<HTMLButtonElement>;
 }
 
 // Pillola condivisa fra mobile e desktop (D-05, Fase 17): "Inizia la ricerca"
@@ -34,6 +40,7 @@ export default function SearchbarTrigger({
 	onOpen,
 	onClear,
 	className,
+	ref,
 }: SearchbarTriggerProps) {
 	return (
 		<div className={className ?? "sm:hidden flex-1 min-w-0"}>
@@ -43,7 +50,10 @@ export default function SearchbarTrigger({
 					onClick={onOpen}
 					className="px-4 py-4 rounded-full cursor-pointer transition-all hover:bg-surface/50"
 				>
-					<button className="flex items-center gap-2 w-full justify-center text-sm font-semibold text-foreground-secondary cursor-pointer">
+					<button
+						ref={ref}
+						className="flex items-center gap-2 w-full justify-center text-sm font-semibold text-foreground-secondary cursor-pointer"
+					>
 						<Search className="w-4 h-4" />
 						<span>Inizia la ricerca</span>
 					</button>

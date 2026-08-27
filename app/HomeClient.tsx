@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -84,6 +84,18 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const effectiveClusterGeoJSON = hasActiveFilters ? null : clusterGeoJSON;
 
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
+
+	// D-11 (Fase 17, piano 04): il pannello desktop copre "barra + pannello"
+	// (il dropdown e' portalato sul body, fuori da <main>), quindi il
+	// confinamento del focus/puntatore si ottiene rendendo inerte <main>
+	// invece di un focus trap che non potrebbe comprendere entrambi.
+	// useCallback: identita' stabile, altrimenti l'effect in Navbar.tsx che
+	// dipende da questa callback ripartirebbe a ogni render di HomeClient
+	// (ogni tasto premuto in draftFilters).
+	const [navPanelOpen, setNavPanelOpen] = useState(false);
+	const handlePanelOpenChange = useCallback((open: boolean) => {
+		setNavPanelOpen(open);
+	}, []);
 
 	const [showTopBlur, setShowTopBlur] = useState(false);
 	const [showBottomBlur, setShowBottomBlur] = useState(false);
@@ -473,11 +485,15 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				onFiltersChange={setDraftFilters}
 				onSearch={handleSearch}
 				onOpenMap={() => setIsMapExpanded(true)}
+				onPanelOpenChange={handlePanelOpenChange}
 			/>
 
 			<main
 				className="fixed left-0 right-0 bottom-0 overflow-hidden"
 				style={{ top: navHeight }}
+				// D-11: fuori portata da Tab e dal puntatore finche' il
+				// pannello desktop resta aperto (T-17-09).
+				inert={navPanelOpen}
 			>
 				<div className="container mx-auto px-4 py-4 h-full flex flex-col gap-3">
 					<CategoryFilterBar
