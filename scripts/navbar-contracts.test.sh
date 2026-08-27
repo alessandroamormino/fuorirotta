@@ -32,6 +32,11 @@
 #         montato due volte, nessuna terza copia), e il morph pillola/barra
 #         usa la stessa famiglia di animazione a molla dei due
 #         layoutId="activeRing" gia' presenti — non un secondo layoutId.
+#   D-03/D-11 (Fase 17, piano 04)  nessun gate puo' osservare dove va il
+#         focus: queste asserzioni verificano che i MECCANISMI del
+#         confinamento (inert su <main>, onPanelOpenChange) e del contratto
+#         mobile (Dialog.ContentUnstyled+asChild, autoFocus) esistano, e che
+#         il listener manuale su document rimosso da T-09-13 non torni.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -370,4 +375,72 @@ grep -q 'data-navbar-searchbar' components/navbar/DesktopSearchDropdown.tsx \
   || fail "D-04/D-05: components/navbar/DesktopSearchDropdown.tsx non cerca piu' data-navbar-searchbar in onInteractOutside"
 echo "ok  D-04/D-05: il marcatore data-navbar-searchbar e' ancora presente in Navbar.tsx e cercato da DesktopSearchDropdown.tsx"
 
-echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17)"
+# --- D-03/D-11 (Fase 17, piano 04): confinamento e ritorno del focus --------
+#
+# Nessun gate puo' osservare dove va il focus a runtime: queste asserzioni
+# verificano che i MECCANISMI esistano. Il comportamento (dove va il focus,
+# se il trap tiene) e' coperto dal checkpoint umano del Task 3, non da qui.
+
+# 1. Overlay mobile: Dialog.ContentUnstyled+asChild e autoFocus sul campo
+#    Dove sono ancora al loro posto — le due righe da cui dipende l'intero
+#    contratto mobile (D-13 di Fase 9), verificato non riscritto qui.
+grep -q 'Dialog.ContentUnstyled' components/navbar/MobileSearchOverlay.tsx \
+  || fail "D-11: components/navbar/MobileSearchOverlay.tsx non usa piu' Dialog.ContentUnstyled"
+grep -q 'asChild' components/navbar/MobileSearchOverlay.tsx \
+  || fail "D-11: components/navbar/MobileSearchOverlay.tsx non passa piu' asChild al contenuto del Dialog"
+grep -q 'autoFocus' components/navbar/MobileSearchOverlay.tsx \
+  || fail "D-11: components/navbar/MobileSearchOverlay.tsx non passa piu' autoFocus al campo Dove"
+echo "ok  D-11: l'overlay mobile mantiene Dialog.ContentUnstyled+asChild e autoFocus sul campo Dove"
+
+# 2. Il dropdown desktop continua a prevenire onOpenAutoFocus di Radix: se
+#    sparisse, Radix sposterebbe il focus dentro il dropdown invece di
+#    lasciarlo sul campo Dove nella barra — D-11 violata in silenzio.
+grep -qE 'onOpenAutoFocus=\{\(e\) => e\.preventDefault\(\)\}' components/navbar/DesktopSearchDropdown.tsx \
+  || fail "D-11: components/navbar/DesktopSearchDropdown.tsx non previene piu' onOpenAutoFocus — Radix sposterebbe il focus dentro il dropdown"
+echo "ok  D-11: DesktopSearchDropdown.tsx previene ancora onOpenAutoFocus"
+
+# 3. Il confinamento e' cablato end-to-end: la Navbar dichiara e invoca
+#    onPanelOpenChange, i due <main> applicano inert.
+onpanel_count="$(grep -c 'onPanelOpenChange' components/Navbar.tsx)"
+[[ "${onpanel_count}" -ge 2 ]] \
+  || fail "D-11: components/Navbar.tsx nomina onPanelOpenChange ${onpanel_count} volta/e (attese almeno 2: dichiarazione in NavbarProps + invocazione nell'effect)"
+grep -q 'inert={' app/HomeClient.tsx \
+  || fail "D-11: app/HomeClient.tsx non applica piu' inert al proprio <main>"
+grep -q 'inert={' "app/eventi/[id]/EventDetailClient.tsx" \
+  || fail "D-11: app/eventi/[id]/EventDetailClient.tsx non applica piu' inert al proprio <main>"
+echo "ok  D-11: onPanelOpenChange e' cablata dalla Navbar ai due <main> (HomeClient, EventDetailClient)"
+
+# 4. Nessun listener manuale di dismissione e' tornato — la regressione piu'
+#    plausibile di questo piano, esattamente cio' che T-09-13 aveva rimosso.
+for f in "components/Navbar.tsx" "lib/hooks/useNavbarSearch.ts"; do
+  if strip_comments "${f}" | grep -q 'document.addEventListener'; then
+    fail "T-09-13: ${f} reintroduce un document.addEventListener manuale — la chiusura per click esterno deve restare di Radix"
+  fi
+done
+echo "ok  T-09-13: nessun document.addEventListener manuale in components/Navbar.tsx o lib/hooks/useNavbarSearch.ts"
+
+# Prova di non-vacuita' (richiesta dall'acceptance criteria, su questa o
+# sull'asserzione 2): un file fittizio con la regressione deve essere
+# rilevato dalla stessa ricerca usata sopra.
+tmp_bad_listener="${tmp_dir}/BadNavbarSearch.ts"
+{
+  echo 'export function useNavbarSearch() {'
+  echo '  document.addEventListener("click", () => {});'
+  echo '}'
+} > "${tmp_bad_listener}"
+if ! strip_comments "${tmp_bad_listener}" | grep -q 'document.addEventListener'; then
+  fail "T-09-13: la prova di non-vacuita' non rileva un document.addEventListener reintrodotto — asserzione 4 vacua"
+fi
+echo "ok  T-09-13: l'asserzione 4 e' dimostrata capace di fallire su un document.addEventListener reintrodotto"
+
+# 5. Le primitive restano thin wrapper Radix, non riscritte in questa fase:
+#    entrambe importano ancora il rispettivo pacchetto @radix-ui, non
+#    reimplementano trap/Escape/focus a mano (17-04-PLAN.md: "le primitive
+#    si usano, non si toccano").
+grep -q '@radix-ui/react-dialog' components/ui/Dialog.tsx \
+  || fail "D-11: components/ui/Dialog.tsx non importa piu' @radix-ui/react-dialog — non e' piu' un thin wrapper"
+grep -q '@radix-ui/react-popover' components/ui/Popover.tsx \
+  || fail "D-11: components/ui/Popover.tsx non importa piu' @radix-ui/react-popover — non e' piu' un thin wrapper"
+echo "ok  D-11: components/ui/Dialog.tsx e components/ui/Popover.tsx restano thin wrapper Radix (non riscritti in questa fase)"
+
+echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17, D-03/D-11 Fase 17)"
