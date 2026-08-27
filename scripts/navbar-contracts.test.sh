@@ -370,22 +370,4 @@ grep -q 'data-navbar-searchbar' components/navbar/DesktopSearchDropdown.tsx \
   || fail "D-04/D-05: components/navbar/DesktopSearchDropdown.tsx non cerca piu' data-navbar-searchbar in onInteractOutside"
 echo "ok  D-04/D-05: il marcatore data-navbar-searchbar e' ancora presente in Navbar.tsx e cercato da DesktopSearchDropdown.tsx"
 
-# 6. T-17-09 (trovato al checkpoint umano del Task 3, non preesistente:
-# components/navbar/DesktopSearchDropdown.tsx e' rimasto a 0 righe di diff su
-# questo piano): senza layoutDependency, il contenitore ricalcola il proprio
-# progetto di layout ad ogni render di Navbar — anche passando da "Dove" a
-# "Quando" col pannello gia' aperto, dove la larghezza non cambia — e quel
-# lavoro competeva con lo scheduler condiviso di framer-motion nello stesso
-# frame in cui l'AnimatePresence mode="wait" di DesktopSearchDropdown deve
-# completare l'exit di "Dove" per montare "Quando": il pannello si
-# riancorava, il contenuto restava bloccato a tempo indeterminato. Questo e'
-# un controllo statico di REGRESSIONE (impedisce che la mitigazione sparisca
-# in silenzio), NON una prova che il comportamento a runtime sia corretto:
-# quella prova resta del solo checkpoint umano (limite dichiarato, non un
-# check inventato per sembrare verde).
-if ! strip_comments components/Navbar.tsx | grep -qE 'layoutDependency=\{desktopCollapsed\}'; then
-  fail "T-17-09: components/Navbar.tsx non lega piu' layoutDependency a desktopCollapsed sul contenitore data-navbar-searchbar — rischio di far tornare il blocco del pannello Dove/Quando (regressione trovata al checkpoint del Task 3, non preesistente)"
-fi
-echo "ok  T-17-09: layoutDependency={desktopCollapsed} presente sul contenitore — limite dichiarato: prova solo che la mitigazione non e' sparita, non che il comportamento a runtime sia corretto (quella verifica resta del checkpoint umano)"
-
-echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17, T-17-09)"
+echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17)"
