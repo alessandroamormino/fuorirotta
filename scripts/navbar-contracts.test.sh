@@ -342,16 +342,27 @@ searchbar_mount_count="$(grep -c '<SearchbarTrigger' components/Navbar.tsx)"
 echo "ok  D-05: SearchbarTrigger e' l'unica implementazione, montata due volte (mobile + desktop) in components/Navbar.tsx"
 
 # 3. Stessa famiglia di animazione: i due layoutId="activeRing" preesistenti
-# piu' il morph del contenitore devono condividere gli stessi identici
-# parametri di molla — l'asserzione deve fallire sia se il morph si allontana
-# dalla famiglia sia se sparisce del tutto.
+# piu' il morph del contenitore condividono type e stiffness.
+#
+# Lo smorzamento si e' separato il 2026-08-28, deviazione da D-04 approvata
+# dall'utente: con massa 1 lo smorzamento critico e' 2*sqrt(500) ~ 44.7, quindi
+# damping 40 e' sotto-smorzato e supera il bersaglio. Sui due anelli l'overshoot
+# e' una traslazione orizzontale breve e resta desiderabile; sul morph cambia
+# anche l'altezza (nav 86->100px, misurato) e lo stesso rimbalzo diventa un
+# cenno verticale. Da qui 2 molle a damping 40 e 1 a damping 45.
 spring_type_count="$(grep -c 'type: "spring",' components/Navbar.tsx)"
 spring_stiffness_count="$(grep -c 'stiffness: 500,' components/Navbar.tsx)"
-spring_damping_count="$(grep -c 'damping: 40,' components/Navbar.tsx)"
-if [[ "${spring_type_count}" -ne 3 || "${spring_stiffness_count}" -ne 3 || "${spring_damping_count}" -ne 3 ]]; then
-  fail "D-04: attesi esattamente 3 blocchi transition={{ type: \"spring\", stiffness: 500, damping: 40 }} in components/Navbar.tsx (i due activeRing piu' il morph del contenitore) — trovati type=${spring_type_count} stiffness=${spring_stiffness_count} damping=${spring_damping_count}"
+spring_damping40_count="$(grep -c 'damping: 40,' components/Navbar.tsx)"
+spring_damping45_count="$(grep -c 'damping: 45,' components/Navbar.tsx)"
+if [[ "${spring_type_count}" -ne 3 || "${spring_stiffness_count}" -ne 3 ]]; then
+  fail "D-04: attesi 3 blocchi a molla con type/stiffness identici in components/Navbar.tsx (i due activeRing piu' il morph) — trovati type=${spring_type_count} stiffness=${spring_stiffness_count}"
 fi
-echo "ok  D-04: tre blocchi di transizione a molla con parametri identici (i due activeRing piu' il morph del contenitore data-navbar-searchbar)"
+if [[ "${spring_damping40_count}" -ne 2 || "${spring_damping45_count}" -ne 1 ]]; then
+  fail "D-04: atteso damping 40 sui due activeRing e 45 sul solo morph del contenitore — trovati damping40=${spring_damping40_count} damping45=${spring_damping45_count}. Sotto 44.7 la molla e' sotto-smorzata: riportare il morph a 40 fa tornare il rimbalzo verticale"
+fi
+awk '/data-navbar-searchbar/,/^$/' components/Navbar.tsx | grep -q 'damping: 45,' \
+  || fail "D-04: il damping 45 non e' quello del contenitore [data-navbar-searchbar] — la molla critica deve stare sul morph, non su un anello"
+echo "ok  D-04: molle nella stessa famiglia (type/stiffness identici), damping 40 sui due activeRing e 45 critico sul morph del contenitore"
 
 # 4. Nessun secondo layoutId sulla barra: il morph usa `layout`, non un
 # layoutId nuovo che condividerebbe l'animazione con l'anello invece che
@@ -442,5 +453,40 @@ grep -q '@radix-ui/react-dialog' components/ui/Dialog.tsx \
 grep -q '@radix-ui/react-popover' components/ui/Popover.tsx \
   || fail "D-11: components/ui/Popover.tsx non importa piu' @radix-ui/react-popover — non e' piu' un thin wrapper"
 echo "ok  D-11: components/ui/Dialog.tsx e components/ui/Popover.tsx restano thin wrapper Radix (non riscritti in questa fase)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# D-04 (lag del morph, misurato il 2026-08-28) — nessuna transizione CSS sulle
+# proprieta' che framer-motion `layout` guida a ogni frame.
+#
+# Misura che ha motivato l'asserzione (letta dal vivo, non dedotta dal sorgente):
+# l'elemento [data-navbar-searchbar] aveva transition-property "all" a 0.15s,
+# mentre il layoutId="activeRing" — che l'utente indica come fluido — ha
+# transition-duration 0s. Con "all" il CSS re-interpola transform e width, cioe'
+# proprio cio' che `layout` riscrive ogni frame, e anima width una seconda volta
+# in parallelo alla scale di framer.
+#
+# ${searchbarWidthClass} identifica univocamente la className di quell'elemento.
+searchbar_class_line=$(grep -n 'searchbarWidthClass}`}' components/Navbar.tsx || true)
+[[ -n "${searchbar_class_line}" ]] \
+  || fail "D-04: non trovo piu' la className di [data-navbar-searchbar] in components/Navbar.tsx — il gate non puo' verificarla"
+if grep -q 'transition-all.*searchbarWidthClass}`}' components/Navbar.tsx; then
+  fail "D-04: la barra che porta \`layout\` e' tornata a transition-all — il CSS re-interpola transform/width a ogni frame di framer-motion e il morph torna a scattare"
+fi
+grep -q 'transition-\[.*\].*searchbarWidthClass}`}' components/Navbar.tsx \
+  || fail "D-04: la className di [data-navbar-searchbar] non dichiara piu' un elenco esplicito transition-[...] — serve a escludere transform e width"
+echo "ok  D-04: [data-navbar-searchbar] transiziona in CSS solo un elenco esplicito di proprieta', mai transform/width"
+
+# Prova di non-vacuita': lo stesso confronto deve segnalare un transition-all
+# rimesso sulla riga della className.
+tmp_bad_transition="${tmp_dir}/BadNavbarTransition.tsx"
+{
+  echo 'export const A = () => ('
+  echo '  <motion.div layout className={`flex items-center transition-all px-2 ${searchbarWidthClass}`} />'
+  echo ');'
+} > "${tmp_bad_transition}"
+if ! grep -q 'transition-all.*searchbarWidthClass}`}' "${tmp_bad_transition}"; then
+  fail "D-04: la prova di non-vacuita' non rileva un transition-all rimesso sulla barra — asserzione vacua"
+fi
+echo "ok  D-04: l'asserzione e' dimostrata capace di fallire su un transition-all rimesso"
 
 echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17, D-03/D-11 Fase 17)"

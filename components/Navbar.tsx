@@ -211,16 +211,43 @@ export default function Navbar({
 									    anima il morph pillola/barra (D-04, 17-UI-SPEC.md
 									    "Transizione A e B") — non un secondo identificativo di
 									    layout condiviso, che animerebbe fra l'anello e la barra
-									    invece che la forma. */}
+									    invece che la forma.
+
+									    NON rimettere `transition-all` qui (lag misurato il
+									    2026-08-28): con `transition-property: all` a 150ms il CSS
+									    re-interpola anche `transform` e `width`, cioe' proprio le
+									    proprieta' che `layout` riscrive a ogni frame — il browser
+									    insegue un bersaglio gia' spostato, e `width` viene animata
+									    due volte (CSS + scale di framer). L'anello attivo qui sotto
+									    e' fluido proprio perche' ha transition-duration 0s.
+									    L'elenco esplicito tiene il fade di hover/tema e lascia
+									    transform e width alla sola framer-motion. */}
 									<motion.div
 										data-navbar-searchbar
 										layout
+										// damping 45, non 40 come i due activeRing: deviazione
+										// deliberata da D-04 approvata dall'utente il 2026-08-28.
+										// Con massa 1 lo smorzamento critico e' 2*sqrt(500) ~ 44.7:
+										// a 40 la molla e' sotto-smorzata e supera il bersaglio.
+										// Sull'anello l'overshoot e' una traslazione orizzontale
+										// breve e legge come vivacita'; qui il morph cambia anche
+										// l'altezza (52->66px di contenuto, nav 86->100px) e lo
+										// stesso rimbalzo diventa un cenno verticale della barra.
+										// Stessa famiglia (stesso type, stessa stiffness), solo
+										// portata a critica.
 										transition={{
 											type: "spring",
 											stiffness: 500,
-											damping: 40,
+											damping: 45,
 										}}
-										className={`flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 rounded-full shadow-lg hover:shadow-xl transition-all px-2 relative ${searchbarWidthClass}`}
+										// borderRadius inline, non la classe rounded-full: durante il morph
+										// il contenitore e' scalato in modo non uniforme (misurato:
+										// 0.583 in X e 0.794 in Y al primo frame), e un raggio
+										// dichiarato in CSS viene deformato in calotte ellittiche.
+										// framer corregge il raggio frame per frame solo se e' lui a
+										// controllarlo come stile inline.
+										style={{ borderRadius: 9999 }}
+										className={`flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 shadow-lg hover:shadow-xl transition-[color,background-color,border-color,box-shadow] px-2 relative ${searchbarWidthClass}`}
 									>
 										{/* Mobile: searchbar — sempre montata, invariata (il mobile
 										    non fa parte della macchina a stati A/B/C/D desktop). */}
@@ -241,15 +268,45 @@ export default function Navbar({
 										{/* Desktop: pillola (stato A) oppure barra a due campi
 										    (stati B/C/D) — un solo cross-fade di opacity fra i due,
 										    nessuno slide/scale aggiuntivo (17-UI-SPEC.md). */}
+										{/* Cella unica condivisa: pillola e barra si
+										    sovrappongono invece di essere due voci flex che si
+										    dividono lo spazio. Da fratelli flex entrambi `flex-1`
+										    il cross-fade dello spec (17-UI-SPEC.md:85, solo
+										    opacity) non era realizzabile — durante i 150ms di
+										    sovrapposizione i due si spartivano la larghezza
+										    (misurato: pillola 430px + barra 375px in un
+										    contenitore da 448), cosi' la barra nasceva stretta e
+										    si distendeva, e la pillola restava visibile a fianco
+										    invece che sotto. */}
+										{/* min-h: pillola e barra hanno altezze intrinseche diverse
+										    (52px contro 66px, misurate), e senza un'altezza comune il
+										    morph muove anche in verticale — la nav passava da 86 a
+										    100px crescendo verso il basso a ogni apertura. Fissata al
+										    valore del ramo piu' alto (la barra: etichetta + valore su
+										    due righe con py-3), cosi' il morph resta di sola larghezza.
+										    Se cambia il padding o la scala tipografica dei campi, questo
+										    numero va rimisurato insieme a loro.
+										    Deviazione approvata dall'utente il 2026-08-28: la pillola a
+										    riposo e' piu' alta di 14px rispetto allo stato A approvato
+										    in UAT. */}
+										<div className="hidden sm:grid sm:min-h-[66px] flex-1 min-w-0">
 										<AnimatePresence initial={false}>
 											{desktopCollapsed ? (
 												<motion.div
 													key="pill"
+													// Correzione di scala: il contenitore anima la
+													// larghezza con una scaleX, che schiaccerebbe il
+													// contenuto per poi distenderlo. Marcare il figlio
+													// con `layout` fa applicare a framer la scala
+													// inversa a ogni frame. Isolata solo ora: finche' i
+													// due rami erano fratelli flex che si dividevano lo
+													// spazio, l'artefatto dominante era quello.
+													layout
 													initial={{ opacity: 0 }}
 													animate={{ opacity: 1 }}
 													exit={{ opacity: 0 }}
 													transition={{ duration: 0.15 }}
-													className="hidden sm:flex flex-1 items-center justify-center min-w-0"
+													className="[grid-area:1/1] flex items-center justify-center min-w-0"
 												>
 													{/* Stato A: hasActiveFilters e' falso per definizione
 													    (desktopCollapsed lo richiede), quindi questo
@@ -268,11 +325,13 @@ export default function Navbar({
 											) : (
 												<motion.div
 													key="bar"
+													// Stessa correzione di scala del ramo "pill".
+													layout
 													initial={{ opacity: 0 }}
 													animate={{ opacity: 1 }}
 													exit={{ opacity: 0 }}
 													transition={{ duration: 0.15 }}
-													className="hidden sm:flex flex-1 items-center min-w-0"
+													className="[grid-area:1/1] flex items-center min-w-0"
 												>
 													{/* Desktop: Where Field */}
 													<div className="hidden sm:block flex-1 relative">
@@ -398,6 +457,7 @@ export default function Navbar({
 												</motion.div>
 											)}
 										</AnimatePresence>
+										</div>
 									</motion.div>
 								</Popover.Anchor>
 
