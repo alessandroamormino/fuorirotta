@@ -8,6 +8,7 @@
  * self-check vive separato in lib/categories/taxonomy.selfcheck.ts.
  */
 import { getSourceById, SOURCE_REGISTRY } from '../scrapers/registry'
+import { decodeHtmlEntities } from '../utils'
 
 // I 7 nomi canonici, in ordine di volume misurato (D-01). 'Altro' e' sempre
 // l'ultimo per posizione dichiarata, non per conteggio (orderCategories sotto
@@ -50,7 +51,15 @@ export function canonicalizeCategory(
   source: string,
   rawCategory: string | null | undefined
 ): CanonicalCategory {
-  const trimmed = rawCategory?.trim()
+  // Le entita' HTML vanno sciolte PRIMA del lookup: in-lombardia restituisce
+  // lo stesso nome a volte codificato e a volte no, quindi 'Food &amp; Wine'
+  // mancava la voce 'Food & Wine' della mappa e cadeva in Altro. Misurato su
+  // produzione il 2026-08-29: 196 eventi su 11.746 in categoria sbagliata
+  // (143 'Active &amp; Green' + 53 'Food &amp; Wine'), con 430 eventi gia'
+  // correttamente in 'Food & Wine' a dimostrare l'incoerenza della sorgente.
+  // Corretto qui e non nello scraper: e' il seam unico da cui passano tutte
+  // le sorgenti, quindi vale anche per quelle future.
+  const trimmed = rawCategory ? decodeHtmlEntities(rawCategory).trim() : undefined
   if (!trimmed) {
     // Caso (a) CAT-04: assente/vuoto/solo spazi. Non e' un segnale di deriva,
     // e' l'assenza stessa del dato — nessun warning.

@@ -33,6 +33,11 @@ const verifiedPairs: [string, string, CanonicalCategory][] = [
   ['in-lombardia', 'Food & Wine', 'Food & Wine'],
   ['in-lombardia', 'Sport', 'Sport e outdoor'],
   ['in-lombardia', 'Active & Green', 'Sport e outdoor'],
+  // Varianti con entita' HTML non decodificata: in-lombardia emette lo stesso
+  // nome in entrambe le forme. Prima del fix del 2026-08-29 queste cadevano in
+  // 'Altro' — 196 eventi su 11.746 misurati su produzione.
+  ['in-lombardia', 'Food &amp; Wine', 'Food & Wine'],
+  ['in-lombardia', 'Active &amp; Green', 'Sport e outdoor'],
   ['in-lombardia', 'Montagne', 'Sport e outdoor'],
   ['in-lombardia', 'Cicloturismo', 'Sport e outdoor'],
   ['in-lombardia', 'Parchi', 'Sport e outdoor'],
