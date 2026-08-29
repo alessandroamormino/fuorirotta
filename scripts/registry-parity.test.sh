@@ -51,6 +51,22 @@ for f in "${required_files[@]}"; do
 done
 echo "ok  tutte le sei fixture, baseline.json e baseline-cheerio.json esistono e non sono vuoti"
 
+# --- 1b. Nessuna credenziale di terzi dentro le fixture ---------------------
+#
+# Le fixture sono HTML catturato dai siti sorgente, quindi possono contenere
+# chiavi altrui: inlombardia-detail.html conteneva la chiave Google Maps di
+# in-lombardia.it dentro un <script src>, che il secret scanning di GitHub ha
+# segnalato dopo il push del 2026-08-29. Non era una credenziale del progetto
+# (qui si usa Mapbox) e le chiavi JS di Google sono pubbliche per costruzione,
+# ma ripubblicare quella di un terzo e' scortese e tiene acceso l'alert.
+# Sostituita con un segnaposto; il parsing non ne risente (confronta campi
+# estratti, non tag script). Questa asserzione impedisce che una ricattura
+# futura la reintroduca in silenzio.
+if grep -rqE 'AIza[0-9A-Za-z_-]{35}' "${fixtures_dir}"; then
+  fail "Una fixture contiene una chiave API Google (AIza...) catturata dal sito sorgente — va sostituita con un segnaposto prima del commit"
+fi
+echo "ok  nessuna chiave API Google di terzi dentro le fixture"
+
 # --- 2. Il confronto sul codice attuale deve passare ------------------------------------
 
 if ! (cd "${repo_root}" && npx tsx scripts/parity.ts --compare); then
