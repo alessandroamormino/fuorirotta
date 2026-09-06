@@ -8,9 +8,13 @@ import { Event, SearchFilters } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
 import CategoryFilterBar from "@/components/CategoryFilterBar";
+import ViewSwitch, { VIEW_SWITCH_TAB_ID, VIEW_SWITCH_PANEL_ID, type MobileView } from "@/components/ViewSwitch";
 import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
-import { ChevronLeft, ChevronRight, Filter, Loader2, Map, X } from "lucide-react";
+import { Check, Loader2, Map, Search, X } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
+import { calculateDistanceKm } from "@/lib/territorial/distance";
+import { MOTION_FAST } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 // Il blocco di ripristino da sessionStorage (sotto, useIsomorphicLayoutEffect)
 // deve girare PRIMA del primo paint: useLayoutEffect farebbe questo su
@@ -39,6 +43,11 @@ interface HomeClientProps {
 
 export default function HomeClient({ initialEvents, initialTotal }: HomeClientProps) {
 	const LIMIT = 12;
+	// T-12-12/WR-03: tetto al conteggio ripristinato da sessionStorage (vedi
+	// il blocco di ripristino sotto) — senza, un valore manomesso diventa un
+	// `limit` arbitrariamente grande verso /api/events. 25 pagine (300
+	// eventi) e' generoso per una sessione di scorrimento reale.
+	const MAX_LOADED_COUNT = LIMIT * 25;
 	const router = useRouter();
 	const { getCachedEvents, setCachedEvents } = useEventCache();
 
@@ -85,6 +94,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 	const [isMapExpanded, setIsMapExpanded] = useState(false);
 
+	// D-08: lista e mappa sono due viste alla pari sotto xl, scambiate da
+	// ViewSwitch — persistita in sessionStorage con lo stesso trattamento
+	// gia' riservato a selectedCategory (T-11-11/T-12-13 sotto).
+	const [mobileView, setMobileView] = useState<MobileView>("list");
+
 	// D-11 (Fase 17, piano 04): il pannello desktop copre "barra + pannello"
 	// (il dropdown e' portalato sul body, fuori da <main>), quindi il
 	// confinamento del focus/puntatore si ottiene rendendo inerte <main>
@@ -116,8 +130,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		return () => ro.disconnect();
 	}, []);
 
-	const [currentPage, setCurrentPage] = useState<number>(1);
+	// D-07: "quanti caricati", non "quale pagina" — sostituisce currentPage.
+	// Inizializzato alla lunghezza dei risultati SSR, cosi' il piede della
+	// lista sa gia' da dove ripartire anche prima del primo fetch client.
+	const [loadedCount, setLoadedCount] = useState<number>(initialEvents.length);
 	const [total, setTotal] = useState(initialTotal);
+	// loading copre il fetch di RIMPIAZZO (spinner a tutta pagina); loadingMore
+	// copre l'ACCODAMENTO ("carica altri") — due stati distinti perche' un
+	// accodamento non deve far sparire la lista gia' visibile sotto uno
+	// spinner centrale.
+	const [loadingMore, setLoadingMore] = useState(false);
 
 	// WR-04: due chip cliccati in rapida sequenza lanciano due fetch
 	// concorrenti; senza un identificatore di generazione, l'ULTIMA risposta
@@ -135,8 +157,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 	useEffect(() => {
 		if (!hydratedRef.current) return;
-		sessionStorage.setItem("currentPage", currentPage.toString());
-	}, [currentPage]);
+		sessionStorage.setItem("loadedCount", loadedCount.toString());
+	}, [loadedCount]);
 
 	useEffect(() => {
 		if (!hydratedRef.current) return;
@@ -147,6 +169,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		if (!hydratedRef.current) return;
 		sessionStorage.setItem("selectedCategory", selectedCategory);
 	}, [selectedCategory]);
+
+	useEffect(() => {
+		if (!hydratedRef.current) return;
+		sessionStorage.setItem("mobileView", mobileView);
+	}, [mobileView]);
 
 	useEffect(() => {
 		if (navigator.geolocation) {
@@ -207,15 +234,23 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// il flag scriverebbero comunque i default prima che questo blocco legga.
 	useIsomorphicLayoutEffect(() => {
 		// Read sessionStorage after hydration to avoid SSR mismatch
-		const savedPage = sessionStorage.getItem("currentPage");
+		const savedLoadedCount = sessionStorage.getItem("loadedCount");
 		const savedFilters = sessionStorage.getItem("searchFilters");
-		// T-11-05-01: ora che la persistenza funziona davvero, un valore
-		// manomesso in sessionStorage raggiungerebbe fetchEvents(page) e quindi
-		// l'offset inviato a /api/events. Accettato solo se e' un intero >= 1,
-		// altrimenti resta il default 1.
-		const parsedPage = savedPage ? parseInt(savedPage, 10) : NaN;
-		const page = Number.isInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
-		if (page !== 1) setCurrentPage(page);
+		// T-12-12/WR-03: stessa guardia che T-11-05-01 applicava a currentPage,
+		// piu' il tetto che T-11-05-01 non aveva ancora (il modello era
+		// "pagina", non "conteggio"): un valore manomesso in sessionStorage
+		// raggiungerebbe il `limit` della richiesta di ripristino sotto.
+		const parsedLoadedCount = savedLoadedCount ? parseInt(savedLoadedCount, 10) : NaN;
+		const restoredCount =
+			Number.isInteger(parsedLoadedCount) && parsedLoadedCount >= 1
+				? Math.min(parsedLoadedCount, MAX_LOADED_COUNT)
+				: null;
+		// Un conteggio ripristinato oltre una singola pagina non e' coperto ne'
+		// dalla cache ne' dagli initialEvents SSR (entrambi contengono solo la
+		// prima pagina): serve una richiesta dedicata piu' sotto
+		// (limit=restoredCount, offset=0) per non perdere la posizione (D-07).
+		const needsRestoreFetch = restoredCount !== null && restoredCount > LIMIT;
+		if (restoredCount !== null && !needsRestoreFetch) setLoadedCount(restoredCount);
 
 		let activeFilters = searchFilters;
 		if (savedFilters) {
@@ -255,6 +290,14 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			setSelectedCategory(activeCategory);
 		}
 
+		// D-08/T-12-13: stesso trattamento gia' riservato alla categoria
+		// (T-11-11) — un valore fuori dai due ammessi viene scartato, non
+		// applicato, mai propagato oltre questo blocco.
+		const savedMobileView = sessionStorage.getItem("mobileView");
+		if (savedMobileView === "list" || savedMobileView === "map") {
+			setMobileView(savedMobileView);
+		}
+
 		// Da qui in poi il ripristino e' completo: gli effect di persistenza
 		// possono tornare a scrivere. Questo punto e' l'unico attraversato in
 		// ogni caso — il ramo `cached` piu' sotto contiene un `return`
@@ -263,12 +306,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 		const queryKey = generateQueryKey(activeFilters, activeCategory);
 		const cached = getCachedEvents(queryKey);
+		const restoreOptions = needsRestoreFetch
+			? { mode: "replace" as const, limit: restoredCount as number }
+			: undefined;
 
 		if (cached) {
 			setEvents(cached.events);
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
-			if (page > 1) fetchEvents(page, activeFilters);
+			if (!needsRestoreFetch) setLoadedCount(cached.events.length);
+			if (needsRestoreFetch) fetchEvents(activeFilters, restoreOptions);
 			return;
 		}
 
@@ -284,12 +331,12 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				total: initialTotal,
 				query: queryKey,
 			});
-			if (page > 1) fetchEvents(page, activeFilters);
+			if (needsRestoreFetch) fetchEvents(activeFilters, restoreOptions);
 		} else {
 			// WR-06: activeFilters esplicito, non il default searchFilters della
 			// closure — setSearchFilters(activeFilters) sopra non e' ancora
 			// visibile qui, stesso giro di funzione.
-			fetchEvents(page, activeFilters);
+			fetchEvents(activeFilters, restoreOptions);
 		}
 	}, []);
 
@@ -309,10 +356,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			setMapEvents(cached.mapEvents || cached.events);
 			setTotal(cached.total);
 			setLoading(false);
-			setCurrentPage(1);
+			setLoadedCount(cached.events.length);
 		} else {
 			setLoading(true);
 			setEvents([]);
+			setLoadedCount(0);
 			// Gap 1 di 11-VERIFICATION.md: azzerare qui i pin della mappa li
 			// svuota per 50-75ms prima che i dati nuovi arrivino (misurato in
 			// Chrome), a ogni cambio categoria con cache miss. mapEvents resta
@@ -321,32 +369,49 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			// risultati svuota comunque la mappa, perche' quella scrittura
 			// arriva da un array vuoto ricevuto dal server, non da un azzeramento
 			// anticipato qui.
-			fetchEvents(1);
+			fetchEvents(searchFilters);
 		}
 	}, [searchFilters, selectedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// WR-06: filters (default = searchFilters) invece di leggere searchFilters
 	// dalla closure. Il mount effect sotto chiama setSearchFilters(activeFilters)
-	// e poi fetchEvents(page) nello stesso giro: setState non e' sincrono, quindi
+	// e poi fetchEvents(...) nello stesso giro: setState non e' sincrono, quindi
 	// quella chiamata catturava ancora lo stato iniziale vuoto, non
 	// activeFilters — al reload con filtri salvati in sessionStorage e una
 	// useEventCache fredda, l'app interrogava eventi non filtrati. Nota
 	// corretta in 11-05 (Difetto B): a questo punto della history la Navbar
 	// NON mostrava ancora i filtri ripristinati — restava sui default vuoti
 	// finche' l'utente non toccava un campo, perche' searchFilters non
-	// raggiungeva mai useNavbarSearch. Le altre call site (bottoni di
-	// paginazione, l'effect [searchFilters]) restano corrette lasciando il
-	// default, perche' li' il render e' gia' allineato allo stato corrente.
-	const fetchEvents = async (page: number, filters: SearchFilters = searchFilters) => {
+	// raggiungeva mai useNavbarSearch. Le altre call site (il "carica altri",
+	// l'effect [searchFilters]) restano corrette lasciando il default, perche'
+	// li' il render e' gia' allineato allo stato corrente.
+	//
+	// D-07: fetchEvents non prende piu' un numero di pagina. `mode: "replace"`
+	// (default) sostituisce la lista — primo caricamento, cambio filtri,
+	// ripristino dopo il dettaglio; `mode: "append"` la accoda ("carica
+	// altri"), partendo da `loadedCount` se non viene passato un offset
+	// esplicito. key_links del piano: mapEvents non e' mai paginato dalla
+	// rotta (torna sempre l'insieme COMPLETO per i filtri correnti), quindi
+	// viene riscritto a ogni chiamata indipendentemente dal mode.
+	const fetchEvents = async (
+		filters: SearchFilters = searchFilters,
+		options: { mode?: "replace" | "append"; limit?: number; offset?: number } = {}
+	) => {
+		const mode = options.mode ?? "replace";
+		const limit = options.limit ?? LIMIT;
+		const offset = options.offset ?? (mode === "append" ? loadedCount : 0);
+
 		const requestId = ++requestIdRef.current;
 		if (process.env.APP_DEBUG === "true") {
-			console.log(`[Fetch] Page ${page}`);
+			console.log(`[Fetch] mode=${mode} limit=${limit} offset=${offset}`);
 		}
-		setLoading(true);
-		setCurrentPage(page);
+		if (mode === "append") {
+			setLoadingMore(true);
+		} else {
+			setLoading(true);
+		}
 		try {
 			const params = new URLSearchParams();
-			params.append("page", page.toString());
 
 			const isNearbySearch = filters.location?.startsWith("Nelle vicinanze");
 			if (filters.location && !isNearbySearch) {
@@ -390,8 +455,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				}
 			}
 
-			const offset = (page - 1) * LIMIT;
-			params.append("limit", LIMIT.toString());
+			params.append("limit", limit.toString());
 			params.append("offset", offset.toString());
 
 			const response = await fetch(`/api/events?${params}`);
@@ -401,11 +465,14 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			if (requestId !== requestIdRef.current) return;
 
 			if (!response.ok) {
-				// WR-01: stessa politica del catch sotto — lista vuota, totale
-				// azzerato, mappa invariata (conserva l'ultima risposta valida).
-				setEvents([]);
-				setTotal(0);
-				setLoading(false);
+				// WR-01: lista vuota, totale azzerato, mappa invariata — SOLO per
+				// un rimpiazzo. Un accodamento fallito non deve svuotare quanto
+				// gia' mostrato (T-12-14): si arrende e basta, il finally sotto
+				// spegne lo spinner del piede.
+				if (mode !== "append") {
+					setEvents([]);
+					setTotal(0);
+				}
 				return;
 			}
 
@@ -415,9 +482,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 			if (data.error || !data.events) {
 				// WR-01: vedi commento sopra, stessa politica.
-				setEvents([]);
-				setTotal(0);
-				setLoading(false);
+				if (mode !== "append") {
+					setEvents([]);
+					setTotal(0);
+				}
 				return;
 			}
 
@@ -425,11 +493,23 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			const newMapEvents = data.mapEvents || newEvents;
 			const newTotal = data.total || 0;
 
-			setEvents(newEvents);
+			if (mode === "append") {
+				setEvents((prev) => [...prev, ...newEvents]);
+				setLoadedCount((prev) => prev + newEvents.length);
+			} else {
+				setEvents(newEvents);
+				setLoadedCount(newEvents.length);
+			}
+			// mapEvents non e' paginato (key_links del piano): la rotta lo
+			// restituisce sempre completo per i filtri correnti, a prescindere
+			// da quanti eventi la lista ha accodato finora.
 			setMapEvents(newMapEvents);
 			setTotal(newTotal);
 
-			if (page === 1) {
+			// Cache solo la forma canonica di "prima pagina" (stesso criterio
+			// di `page === 1` di prima): un accodamento o un ripristino a
+			// limit piu' grande non la sovrascrivono con uno stato parziale.
+			if (mode === "replace" && offset === 0 && limit === LIMIT) {
 				const queryKey = generateQueryKey(filters, selectedCategory);
 				setCachedEvents(queryKey, {
 					events: newEvents,
@@ -443,16 +523,39 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			if (process.env.APP_DEBUG === "true") {
 				console.error("[fetchEvents] Error:", error);
 			}
-			setEvents([]);
 			// WR-01: politica unificata sui tre rami di errore di fetchEvents
 			// (eccezione qui, risposta non-ok e corpo malformato/segnalato sopra):
 			// la lista si svuota, il totale va a 0, la mappa NON viene toccata e
 			// conserva l'ultima risposta valida — e' il comportamento che
-			// 11-UI-SPEC.md (error/map-view) dichiara.
-			setTotal(0);
+			// 11-UI-SPEC.md (error/map-view) dichiara. Solo per un rimpiazzo,
+			// stesso ragionamento del ramo !response.ok sopra.
+			if (mode !== "append") {
+				setEvents([]);
+				setTotal(0);
+			}
 		} finally {
-			if (requestId === requestIdRef.current) setLoading(false);
+			if (requestId === requestIdRef.current) {
+				if (mode === "append") setLoadingMore(false);
+				else setLoading(false);
+			}
 		}
+	};
+
+	// D-07: guardia unica per il piede della lista — "richiesta in corso" e
+	// "lista esaurita" (T-12-14), condivisa dal bottone e dall'IntersectionObserver
+	// sotto, cosi' due trigger ravvicinati non accodano due volte lo stesso lotto.
+	const loadMore = () => {
+		if (loadingMore || loadedCount >= total) return;
+		fetchEvents(searchFilters, { mode: "append" });
+	};
+
+	// D-07: azione dello stato vuoto — allarga il raggio a 200km e rilancia
+	// la ricerca riusando l'effect [searchFilters, selectedCategory] gia'
+	// esistente, invece di duplicarne la logica di fetch qui.
+	const handleWidenRadius = () => {
+		const widened: SearchFilters = { ...searchFilters, radius: 200 };
+		setSearchFilters(widened);
+		setDraftFilters(widened);
 	};
 
 	const handleSearch = (filters: SearchFilters) => {
@@ -478,13 +581,55 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		handleScroll();
 	}, [events]);
 
+	// D-07: bersaglio unico dell'IntersectionObserver e bottone reale (un solo
+	// nodo, non un sentinel separato — 12-RESEARCH.md Pattern 3).
+	const footRef = useRef<HTMLButtonElement | null>(null);
+
+	// Nessun array di dipendenze: il callback deve sempre chiudere sulla
+	// loadMore piu' fresca, e la guardia sotto (T-12-14) copre sia "lista
+	// esaurita" sia "richiesta in corso" — quando una delle due e' vera
+	// l'observer si disconnette (cleanup) invece di continuare a osservare
+	// un piede che non deve piu' innescare nulla. Il cambio filtri passa
+	// comunque da un nuovo render, quindi l'observer si ricrea da solo.
+	useEffect(() => {
+		if (loadingMore || loading || events.length === 0 || loadedCount >= total) return;
+		const node = footRef.current;
+		if (!node) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) loadMore();
+			},
+			{ rootMargin: "240px" }
+		);
+		observer.observe(node);
+		return () => observer.disconnect();
+	});
+
+	// D-02 (12-UI-SPEC.md "Card evento"): calcolata dal chiamante, non da
+	// EventCard — assente quando la posizione utente o le coordinate risolte
+	// dell'evento mancano, cosi' il kicker omette il segmento invece di
+	// mostrare uno zero (stesso contratto della prop distanceKm di 12-02).
+	const distanceKmFor = (event: Event): number | undefined => {
+		if (!userLocation) return undefined;
+		if (event.resolvedLatitude == null || event.resolvedLongitude == null) return undefined;
+		return calculateDistanceKm(
+			userLocation.lat,
+			userLocation.lng,
+			event.resolvedLatitude,
+			event.resolvedLongitude
+		);
+	};
+
+	// D-07: "l'ambito corrente (la destinazione se impostata, altrimenti
+	// l'etichetta di default)" — intestazione della lista, Task 2.
+	const listScopeLabel = searchFilters.location || "In tutta la Lombardia";
+
 	return (
 		<div className="min-h-screen bg-accent/5">
 			<Navbar
 				filters={draftFilters}
 				onFiltersChange={setDraftFilters}
 				onSearch={handleSearch}
-				onOpenMap={() => setIsMapExpanded(true)}
 				onPanelOpenChange={handlePanelOpenChange}
 			/>
 
@@ -501,8 +646,26 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						selected={selectedCategory}
 						onSelect={handleCategorySelect}
 					/>
+
+					{/* D-08: terza riga del guscio fisso, solo sotto xl — a xl e oltre
+					    lista e mappa sono gia' visibili insieme, l'interruttore non serve. */}
+					<div className="xl:hidden">
+						<ViewSwitch value={mobileView} onChange={setMobileView} />
+					</div>
+
 					<div className="flex-1 min-h-0 flex gap-6">
-					<div className="flex-1 min-w-0 flex flex-col min-h-0">
+					<div
+						id={VIEW_SWITCH_PANEL_ID.list}
+						role="tabpanel"
+						aria-labelledby={VIEW_SWITCH_TAB_ID.list}
+						className={cn(
+							"flex-1 min-w-0 flex-col min-h-0",
+							// D-08: sotto xl le due viste sono alla pari, non impilate —
+							// quando la mappa e' quella attiva la colonna lista smette di
+							// occupare spazio invece di restare sotto di essa.
+							mobileView === "map" ? "hidden xl:flex" : "flex"
+						)}
+					>
 						<div className="flex-1 min-h-0 pb-4 relative">
 							<div
 								ref={scrollContainerRef}
@@ -523,137 +686,118 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												<p className="text-muted-foreground">Caricamento eventi...</p>
 											</div>
 										</motion.div>
-									) : events.length === 0 ? (
-										<motion.div
-											key="empty"
-											initial={{ opacity: 0, y: 20 }}
-											animate={{ opacity: 1, y: 0 }}
-											exit={{ opacity: 0, y: -20 }}
-											className="text-center py-20"
-										>
-											<div className="w-20 h-20 bg-muted-strong rounded-full flex items-center justify-center mx-auto mb-4">
-												<Filter className="w-10 h-10 text-muted-foreground-faint" />
-											</div>
-											<h3 className="text-xl font-bold text-foreground mb-2">
-												Nessun evento trovato
-											</h3>
-											<p className="text-muted-foreground">
-												Prova a modificare i filtri di ricerca
-											</p>
-										</motion.div>
 									) : (
-										<div
-											key="events"
-											className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-2 sm:gap-4 md:gap-4 lg:gap-2 xl:gap-4"
+										<motion.div
+											key="content"
+											initial={{ opacity: 0 }}
+											animate={{ opacity: 1 }}
+											exit={{ opacity: 0 }}
 										>
-											{events.map((event, index) => (
-												<div
-													key={`${event.source}-${event.id}`}
-													className="event-card-item"
-													style={{ animationDelay: `${index * 0.05}s` }}
-												>
-													<EventCard event={event} />
+											{/* Task 2: intestazione della lista — sostituisce il
+											    conteggio che viveva in fondo, nella riga di
+											    paginazione. */}
+											<div className="mb-2 flex items-baseline justify-between gap-3">
+												<span className="font-display text-lg font-semibold tracking-[-0.015em] text-foreground">
+													{total} {total === 1 ? "evento" : "eventi"}
+												</span>
+												<span className="text-xs text-muted-foreground">{listScopeLabel}</span>
+											</div>
+
+											{events.length === 0 ? (
+												<div className="py-16 text-center">
+													<div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-surface text-muted-foreground">
+														<Search className="h-6 w-6" aria-hidden="true" />
+													</div>
+													<h3 className="mb-1 font-display text-lg font-semibold tracking-[-0.015em] text-foreground">
+														Nessun evento qui intorno
+													</h3>
+													<p className="mx-auto mb-5 max-w-xs text-sm text-muted-foreground">
+														Allarga il raggio o cambia periodo: in Lombardia c&apos;è quasi
+														sempre qualcosa a un&apos;ora di distanza.
+													</p>
+													{userLocation && searchFilters.radius ? (
+														<button
+															type="button"
+															onClick={handleWidenRadius}
+															className="text-sm font-medium text-foreground underline underline-offset-4"
+														>
+															Allarga a 200 km
+														</button>
+													) : null}
 												</div>
-											))}
-										</div>
+											) : (
+												<>
+													<div className="flex flex-col gap-5 xl:grid xl:grid-cols-3 xl:gap-4">
+														{events.map((event, index) => (
+															<div
+																key={`${event.source}-${event.id}`}
+																className="event-card-item"
+																style={{ animationDelay: `${index * (MOTION_FAST / 3)}s` }}
+															>
+																<EventCard event={event} distanceKm={distanceKmFor(event)} />
+															</div>
+														))}
+													</div>
+
+													{/* Task 3: "carica altri" — un solo nodo, bottone
+													    reale e bersaglio dell'IntersectionObserver. */}
+													<div className="flex flex-col items-center gap-2 py-6">
+														{loadedCount >= total ? (
+															<span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+																<Check className="h-4 w-4" aria-hidden="true" />
+																Hai visto tutti i {total} eventi
+															</span>
+														) : (
+															<>
+																<button
+																	ref={footRef}
+																	type="button"
+																	onClick={loadMore}
+																	disabled={loadingMore}
+																	className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-pill bg-surface text-base font-medium text-foreground"
+																	style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
+																>
+																	{loadingMore ? (
+																		<>
+																			<Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+																			Carico…
+																		</>
+																	) : (
+																		`Carica altri ${Math.min(LIMIT, total - loadedCount)} eventi`
+																	)}
+																</button>
+																<span className="text-xs text-muted-foreground tabular-nums">
+																	{loadedCount} di {total}
+																</span>
+															</>
+														)}
+													</div>
+												</>
+											)}
+										</motion.div>
 									)}
 								</AnimatePresence>
 							</div>
 						</div>
-
-						{!loading && events.length > 0 && (
-							<div className="flex-shrink-0 py-2 sm:py-4">
-								<div className="flex justify-between items-center gap-2 sm:gap-4">
-									<p className="text-muted-foreground text-xs sm:text-sm font-medium">
-										{total}
-										<span className="hidden lg:inline">{total === 1 ? " Evento totale" : " Eventi totali"}</span>
-									</p>
-									<div className="bg-surface border border-accent/30 rounded-full flex items-center gap-1 sm:gap-2 px-2 py-2">
-										{(() => {
-											const totalPages = Math.ceil(total / LIMIT);
-											if (totalPages <= 1) return null;
-
-											const buildPages = (edge: number): (number | string)[] => {
-												const pages: (number | string)[] = [];
-												if (totalPages <= edge * 2 + 3) {
-													for (let i = 1; i <= totalPages; i++) pages.push(i);
-												} else {
-													for (let i = 1; i <= edge; i++) pages.push(i);
-													if (currentPage > edge + 1) pages.push('...');
-													if (currentPage > edge && currentPage < totalPages - edge + 1) pages.push(currentPage);
-													if (currentPage < totalPages - edge) pages.push('...');
-													for (let i = totalPages - edge + 1; i <= totalPages; i++) pages.push(i);
-												}
-												return pages;
-											};
-
-											const renderPages = (pages: (number | string)[], size: 'sm' | 'md') =>
-												pages.map((page, idx) => {
-													if (page === '...') {
-														return (
-															<span key={`ellipsis-${idx}`} className={size === 'sm' ? "px-1 text-muted-foreground-faint text-xs" : "px-1 text-muted-foreground-faint text-sm"}>
-																...
-															</span>
-														);
-													}
-													const pageNum = page as number;
-													const base = size === 'sm'
-														? "w-7 h-7 flex items-center justify-center rounded-full font-medium text-xs"
-														: "w-9 h-9 flex items-center justify-center rounded-full font-medium text-sm";
-													return (
-														<button
-															key={pageNum}
-															onClick={() => fetchEvents(pageNum)}
-															className={pageNum === currentPage ? `${base} bg-primary text-primary-foreground` : `${base} border border-border bg-surface text-foreground-secondary hover:bg-muted`}
-														>
-															{pageNum}
-														</button>
-													);
-												});
-
-											const prevBtn = (size: 'sm' | 'md') => (
-												<button
-													onClick={() => fetchEvents(currentPage - 1)}
-													disabled={currentPage === 1}
-													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-border bg-surface text-foreground-secondary hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface`}
-												>
-													<ChevronLeft className={size === 'sm' ? "w-4 h-4" : "w-5 h-5"} />
-												</button>
-											);
-
-											const nextBtn = (size: 'sm' | 'md') => (
-												<button
-													onClick={() => fetchEvents(currentPage + 1)}
-													disabled={currentPage === totalPages}
-													className={`${size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'} flex items-center justify-center rounded-full border border-border bg-surface text-foreground-secondary hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface`}
-												>
-													<ChevronRight className={size === 'sm' ? "w-4 h-4" : "w-5 h-5"} />
-												</button>
-											);
-
-											return (
-												<>
-													<div className="flex sm:hidden items-center gap-1">
-														{prevBtn('sm')}
-														{renderPages(buildPages(2), 'sm')}
-														{nextBtn('sm')}
-													</div>
-													<div className="hidden sm:flex items-center gap-2">
-														{prevBtn('md')}
-														{renderPages(buildPages(3), 'md')}
-														{nextBtn('md')}
-													</div>
-												</>
-											);
-										})()}
-									</div>
-									<p className="text-muted-foreground text-xs sm:text-sm font-medium">
-										{events.length + ' / ' + LIMIT}
-									</p>
-								</div>
-							</div>
-						)}
 					</div>
+
+					{/* D-08: vista mappa mobile — peer della lista, non un overlay.
+					    Stesse prop del pannello desktop, mapId proprio. */}
+					{mobileView === "map" && (
+						<div
+							id={VIEW_SWITCH_PANEL_ID.map}
+							role="tabpanel"
+							aria-labelledby={VIEW_SWITCH_TAB_ID.map}
+							className="flex-1 min-w-0 xl:hidden"
+						>
+							<EventsMap
+								events={mapEvents}
+								initialGeoJSON={effectiveClusterGeoJSON}
+								mapId="map-mobile"
+								userLocation={userLocation}
+							/>
+						</div>
+					)}
 
 					<div className="hidden xl:block w-[50%] max-w-4xl flex-shrink-0">
 						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-accent/30 relative group">
@@ -684,7 +828,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						initial={{ opacity: 0 }}
 						animate={{ opacity: 1 }}
 						exit={{ opacity: 0 }}
-						transition={{ duration: 0.15 }}
+						transition={{ duration: MOTION_FAST }}
 						className="fixed inset-0 z-[100]"
 					>
 						<div
@@ -714,28 +858,6 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 										userLocation={userLocation}
 									/>
 								</div>
-							</div>
-						</div>
-
-						<div className="xl:hidden absolute inset-0">
-							<EventsMap
-								events={mapEvents}
-								initialGeoJSON={effectiveClusterGeoJSON}
-								mapId="map-fullscreen-mobile"
-								userLocation={userLocation}
-							/>
-							<div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-5 pb-4 pointer-events-none" style={{ paddingTop: "max(env(safe-area-inset-top), 16px)" }}>
-								<div className="bg-surface/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow pointer-events-auto">
-									<span className="text-sm font-semibold text-foreground">
-										{mapEvents.length} {mapEvents.length === 1 ? "evento" : "eventi"}
-									</span>
-								</div>
-								<button
-									onClick={() => setIsMapExpanded(false)}
-									className="w-11 h-11 rounded-full bg-surface/90 backdrop-blur-md shadow flex items-center justify-center pointer-events-auto mr-14"
-								>
-									<X className="w-5 h-5 text-foreground-secondary" />
-								</button>
 							</div>
 						</div>
 					</motion.div>
