@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import NextLink from "next/link";
 import dynamic from "next/dynamic";
-import { motion } from "framer-motion";
 import { Event, SearchFilters } from "@/lib/types";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
-import { Calendar, MapPin, ExternalLink, Tag, ArrowLeft, Phone } from "lucide-react";
-import { decodeHtmlEntities, htmlToPlainText } from "@/lib/utils";
+import StatusBadge from "@/components/StatusBadge";
+import CategoryPlaceholder from "@/components/CategoryPlaceholder";
+import { eventStatus } from "@/lib/eventStatus";
+import { Calendar, MapPin, ExternalLink, ArrowLeft, Phone } from "lucide-react";
+import { cn, decodeHtmlEntities, htmlToPlainText } from "@/lib/utils";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -24,12 +27,54 @@ interface EventDetailClientProps {
 	initialEvent?: Event | null;
 }
 
+/**
+ * Barra superiore mobile (D-14): freccia indietro sempre visibile, titolo
+ * che compare solo dopo che l'H1 e' uscito dallo schermo (mai lo stesso
+ * testo due volte a schermo). Guardia desktop: montata solo sotto `sm`,
+ * la Navbar di ricerca resta il guscio superiore a `sm` e oltre.
+ */
+function MobileDetailBar({ title, scrolled, onBack }: { title: string; scrolled: boolean; onBack: () => void }) {
+	return (
+		<header
+			className={cn(
+				"fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b px-4 py-2 transition-colors sm:hidden",
+				scrolled ? "border-border-soft" : "border-transparent"
+			)}
+			style={{
+				background: "color-mix(in srgb, var(--background) 82%, transparent)",
+				backdropFilter: "saturate(180%) blur(20px)",
+				WebkitBackdropFilter: "saturate(180%) blur(20px)",
+				paddingTop: "max(env(safe-area-inset-top), 8px)",
+			}}
+		>
+			<button
+				type="button"
+				onClick={onBack}
+				aria-label="Torna ai risultati"
+				className="flex h-11 w-11 flex-none items-center justify-center rounded-full text-foreground"
+			>
+				<ArrowLeft className="h-5 w-5" />
+			</button>
+			<span
+				className={cn(
+					"min-w-0 flex-1 truncate font-display text-base font-semibold text-foreground transition-opacity",
+					scrolled ? "opacity-100" : "opacity-0"
+				)}
+			>
+				{title}
+			</span>
+		</header>
+	);
+}
+
 export default function EventDetailClient({ initialEvent }: EventDetailClientProps) {
 	const params = useParams();
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
 	const [loading, setLoading] = useState(!initialEvent);
 	const [showMapModal, setShowMapModal] = useState<{ lat: number; lng: number } | null>(null);
+	const [heroLoaded, setHeroLoaded] = useState(false);
+	const [barScrolled, setBarScrolled] = useState(false);
 	// D-07: qui la Navbar serve solo ad avviare una nuova ricerca che porta a
 	// "/" — draft locale, mai letto altrove in questo file.
 	const [draftFilters, setDraftFilters] = useState<SearchFilters>({
@@ -43,6 +88,9 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const handlePanelOpenChange = useCallback((open: boolean) => {
 		setNavPanelOpen(open);
 	}, []);
+
+	const scrollRef = useRef<HTMLElement>(null);
+	const h1Ref = useRef<HTMLHeadingElement>(null);
 
 	useEffect(() => {
 		// Se abbiamo già i dati dal server (SSR), non richiedere
@@ -58,16 +106,34 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 				const data = await response.json();
 				setEvent(data);
 			} else {
+				// Nessun rimando automatico: lo stato "Evento non trovato" e'
+				// un ramo raggiungibile, non una tappa di passaggio verso "/".
 				console.error("Event not found");
-				router.push("/");
 			}
 		} catch (error) {
 			console.error("Error fetching event:", error);
-			router.push("/");
 		} finally {
 			setLoading(false);
 		}
 	};
+
+	useEffect(() => {
+		setHeroLoaded(false);
+	}, [event?.id]);
+
+	// Titolo in barra solo dopo che l'H1 e' uscito dalla vista (mai lo
+	// stesso testo due volte a schermo) — IntersectionObserver, non un
+	// listener di scroll che girerebbe a ogni pixel.
+	useEffect(() => {
+		if (!event || !h1Ref.current) return;
+		const h1 = h1Ref.current;
+		const observer = new IntersectionObserver(
+			([entry]) => setBarScrolled(!entry.isIntersecting),
+			{ root: scrollRef.current, threshold: 0 }
+		);
+		observer.observe(h1);
+		return () => observer.disconnect();
+	}, [event]);
 
 	const handleSearch = (filters: SearchFilters) => {
 		const searchParams = new URLSearchParams();
@@ -98,17 +164,25 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
 	}
 
+	const desktopNavbar = (
+		<div className="hidden sm:block">
+			<Navbar
+				filters={draftFilters}
+				onFiltersChange={setDraftFilters}
+				onSearch={handleSearch}
+				onPanelOpenChange={handlePanelOpenChange}
+			/>
+		</div>
+	);
+
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-muted">
-				<Navbar
-					filters={draftFilters}
-					onFiltersChange={setDraftFilters}
-					onSearch={handleSearch}
-				/>
-				<div className="fixed top-28 left-0 right-0 bottom-0 flex items-center justify-center">
+				{desktopNavbar}
+				<MobileDetailBar title="" scrolled={false} onBack={() => router.back()} />
+				<div className="fixed inset-x-0 bottom-0 top-16 flex items-center justify-center sm:top-28">
 					<div className="text-center">
-						<div className="w-16 h-16 border-4 border-accent border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+						<div className="w-16 h-16 border-4 border-border border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
 						<p className="text-muted-foreground">Caricamento evento...</p>
 					</div>
 				</div>
@@ -119,133 +193,105 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	if (!event) {
 		return (
 			<div className="min-h-screen bg-muted">
-				<Navbar
-					filters={draftFilters}
-					onFiltersChange={setDraftFilters}
-					onSearch={handleSearch}
-				/>
-				<div className="fixed top-28 left-0 right-0 bottom-0 flex items-center justify-center">
-					<div className="text-center">
-						<div className="w-20 h-20 bg-muted-strong rounded-full flex items-center justify-center mx-auto mb-4">
-							<Calendar className="w-10 h-10 text-muted-foreground-faint" />
-						</div>
-						<h3 className="text-xl font-bold text-foreground mb-2">
+				{desktopNavbar}
+				<MobileDetailBar title="" scrolled={false} onBack={() => router.back()} />
+				<div className="fixed inset-x-0 bottom-0 top-16 overflow-y-auto sm:top-28">
+					<div className="mx-auto max-w-7xl px-8 py-12 text-center">
+						<h1
+							className="mb-2 font-display text-lg font-semibold text-foreground"
+							style={{ letterSpacing: "var(--tracking-display)" }}
+						>
 							Evento non trovato
-						</h3>
-						<p className="text-muted-foreground mb-6">
-							L'evento che stai cercando non esiste o è stato rimosso
+						</h1>
+						<p className="mb-5 text-sm text-muted-foreground">
+							Il link potrebbe essere scaduto o l&apos;evento è stato rimosso dalla fonte.
 						</p>
-						<button
-							onClick={() => router.push("/")}
-							className="px-6 py-3 bg-primary text-primary-foreground rounded-full font-semibold hover:shadow-lg transition-shadow"
+						<NextLink
+							href="/"
+							className="inline-flex items-center justify-center rounded-pill bg-primary px-6 py-3 font-semibold text-primary-foreground"
 						>
 							Torna agli eventi
-						</button>
+						</NextLink>
 					</div>
 				</div>
 			</div>
 		);
 	}
 
+	const status = eventStatus(event.dateStart, event.dateEnd);
+
 	return (
 		<div className="min-h-screen bg-muted">
-			{/* Navbar */}
-			<Navbar
-				filters={draftFilters}
-				onFiltersChange={setDraftFilters}
-				onSearch={handleSearch}
-				onPanelOpenChange={handlePanelOpenChange}
+			{desktopNavbar}
+			<MobileDetailBar
+				title={decodeHtmlEntities(event.title)}
+				scrolled={barScrolled}
+				onBack={() => router.back()}
 			/>
 
 			{/* Main Content */}
+			{/* D-11: fuori portata da Tab e dal puntatore finche' il pannello
+			    desktop resta aperto (T-17-09). */}
 			<main
-				className="fixed top-28 left-0 right-0 bottom-0 overflow-y-auto scrollbar-thin"
-				// D-11: fuori portata da Tab e dal puntatore finche' il
-				// pannello desktop resta aperto (T-17-09).
+				ref={scrollRef}
+				className="fixed inset-x-0 bottom-0 top-16 overflow-y-auto scrollbar-thin sm:top-28"
 				inert={navPanelOpen}
 			>
-				<div className="container mx-auto px-4 max-w-7xl">
-					{/* Back Button */}
-					<motion.button
-						onClick={() => router.back()}
-						initial={{ opacity: 0, x: -20 }}
-						animate={{ opacity: 1, x: 0 }}
-						className="w-12 h-12 bg-surface rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors border-2 border-accent/30 mb-4 mt-4"
-						whileHover={{ scale: 1.05 }}
-						whileTap={{ scale: 0.95 }}
+				{/* Hero: inquadratura piena (criterio 12) — nessun ritaglio, solo
+				    l'asse verticale e' vincolato. Il matting su --surface per le
+				    foto verticali e' intenzionale. */}
+				{event.imageUrl ? (
+					<div
+						className={cn(
+							"grid w-full place-items-center border-b border-border-soft bg-surface",
+							!heroLoaded && "aspect-[3/2]"
+						)}
 					>
-						<ArrowLeft className="w-5 h-5 text-primary" />
-					</motion.button>
-				</div>
+						<img
+							src={event.imageUrl}
+							alt={decodeHtmlEntities(event.title)}
+							loading="eager"
+							decoding="async"
+							onLoad={() => setHeroLoaded(true)}
+							className="block w-full h-auto object-contain"
+							style={{ maxHeight: "46dvh" }}
+						/>
+					</div>
+				) : (
+					<div className="border-b border-border-soft">
+						<CategoryPlaceholder category={event.category ?? "Altro"} className="rounded-none" />
+					</div>
+				)}
 
-				<div className="container mx-auto px-4 pb-8 md:pb-16 max-w-7xl">
-					{/* Hero Image */}
-					{event.imageUrl ? (
-						<motion.div
-							initial={{ opacity: 0, y: 20 }}
-							animate={{ opacity: 1, y: 0 }}
-							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-accent/30"
-						>
-							<img
-								src={event.imageUrl}
-								alt={event.title}
-								className="w-full h-full object-cover"
-								loading="eager"
-								decoding="async"
-							/>
-						</motion.div>
-					) : (
-						<motion.div
-							initial={{ opacity: 0, y: 20 }}
-							animate={{ opacity: 1, y: 0 }}
-							className="w-full h-[400px] md:h-[500px] rounded-3xl overflow-hidden mb-8 shadow-2xl border-2 border-accent/30 bg-muted flex items-center justify-center"
-						>
-							<div className="flex flex-col items-center gap-6">
-								<div className="w-32 h-32 rounded-full bg-primary/10 flex items-center justify-center">
-									<Calendar className="w-16 h-16 text-primary" />
-								</div>
-								<span className="text-2xl font-semibold text-primary/60">
-									Evento
-								</span>
-							</div>
-						</motion.div>
-					)}
+				<div className="container mx-auto px-4 pb-8 md:pb-16 max-w-7xl pt-5">
+					<div className="mb-3 flex flex-wrap items-center gap-2">
+						<StatusBadge label={status.label} tone={status.tone} variant="pill" />
+						{event.category && (
+							<span
+								className="rounded-pill bg-surface px-[10px] py-[5px] text-xs text-foreground-secondary"
+								style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
+							>
+								{event.category}
+							</span>
+						)}
+					</div>
 
 					{/* Content Grid */}
 					<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 						{/* Left Column - Main Info */}
 						<div className="lg:col-span-2 space-y-6">
-							{/* Category Badge */}
-							{event.category && (
-								<motion.div
-									initial={{ opacity: 0, x: -20 }}
-									animate={{ opacity: 1, x: 0 }}
-									transition={{ delay: 0.1 }}
-								>
-									<span className="inline-flex items-center gap-2 px-4 py-2 bg-accent-tint text-primary rounded-full text-sm font-semibold border-2 border-accent/30">
-										<Tag className="w-4 h-4" />
-										{event.category}
-									</span>
-								</motion.div>
-							)}
-
 							{/* Title */}
-							<motion.h1
-								initial={{ opacity: 0, x: -20 }}
-								animate={{ opacity: 1, x: 0 }}
-								transition={{ delay: 0.2 }}
-								className="text-4xl md:text-5xl font-bold text-foreground leading-tight"
+							<h1
+								ref={h1Ref}
+								id="detail-title"
+								className="text-balance font-display text-xl font-semibold leading-tight text-foreground"
+								style={{ letterSpacing: "var(--tracking-display)" }}
 							>
 								{decodeHtmlEntities(event.title)}
-							</motion.h1>
+							</h1>
 
 							{/* Info Cards */}
-							<motion.div
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ delay: 0.3 }}
-								className="grid grid-cols-1 md:grid-cols-2 gap-4"
-							>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								{/* Date Card */}
 								<div className="bg-surface rounded-2xl p-6 shadow-lg border-2 border-accent/20 hover:border-primary/50 transition-all">
 									<div className="flex items-start gap-4">
@@ -313,28 +359,24 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										</div>
 									</div>
 								)}
-							</motion.div>
+							</div>
 
 							{/* Description */}
 							{event.description && (
-								<motion.div
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ delay: 0.4 }}
-									className="bg-surface rounded-2xl p-6 md:p-8 shadow-lg border-2 border-accent/20"
-								>
+								<div className="bg-surface rounded-2xl p-6 md:p-8 shadow-lg border-2 border-accent/20">
 									<h2 className="text-2xl font-bold text-foreground mb-4">
 										Descrizione
 									</h2>
-									{/* Reso come testo, non come HTML: le descrizioni sono testo puro
-								    (solosagre e inlombardia strippano i tag alla fonte, opendata
-								    restituisce il campo grezzo dell'API). dangerouslySetInnerHTML
-								    qui era solo una via d'ingresso XSS da contenuto scrapato — T-07-09. */}
-								<div className="text-foreground-secondary leading-relaxed prose prose-sm max-w-none whitespace-pre-line">
+									{/* Reso come testo, non come markup arbitrario: le descrizioni
+									    sono testo puro (solosagre e inlombardia strippano i tag
+									    alla fonte, opendata restituisce il campo grezzo dell'API).
+									    Il sink HTML rimosso in acd78f0 non rientra qui: era una via
+									    d'ingresso XSS da contenuto scrapato — T-07-09. */}
+									<div className="text-foreground-secondary leading-relaxed prose prose-sm max-w-none whitespace-pre-line">
 										{htmlToPlainText(event.description)}
 									</div>
 									<p className="text-xs text-muted-foreground-subtle">Fonte: {event.source}</p>
-								</motion.div>
+								</div>
 							)}
 						</div>
 
@@ -343,12 +385,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 							<div className="space-y-6 sticky top-4">
 								{/* Map */}
 								{event.latitude && event.longitude && (
-									<motion.div
-										initial={{ opacity: 0, x: 20 }}
-										animate={{ opacity: 1, x: 0 }}
-										transition={{ delay: 0.5 }}
-										className="bg-surface rounded-2xl p-4 shadow-lg border-2 border-accent/20"
-									>
+									<div className="bg-surface rounded-2xl p-4 shadow-lg border-2 border-accent/20">
 										<h3 className="text-lg font-bold text-foreground mb-4">
 											Dove si trova
 										</h3>
@@ -362,26 +399,20 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 											Naviga
 											<ExternalLink className="w-5 h-5" />
 										</button>
-									</motion.div>
+									</div>
 								)}
 
 								{/* External Link */}
 								{event.sourceUrl && (
-									<motion.div
-										initial={{ opacity: 0, x: 20 }}
-										animate={{ opacity: 1, x: 0 }}
-										transition={{ delay: 0.6 }}
+									<a
+										href={event.sourceUrl ?? undefined}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-accent-tint text-primary font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all"
 									>
-										<a
-											href={event.sourceUrl ?? undefined}
-											target="_blank"
-											rel="noopener noreferrer"
-											className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-accent-tint text-primary font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all"
-										>
-											Visita sito ufficiale
-											<ExternalLink className="w-5 h-5" />
-										</a>
-									</motion.div>
+										Visita sito ufficiale
+										<ExternalLink className="w-5 h-5" />
+									</a>
 								)}
 							</div>
 						</div>
