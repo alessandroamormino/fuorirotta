@@ -36,6 +36,7 @@ import {
 	type SuggestedDestination,
 } from "@/lib/destinations";
 import type { SearchFilters } from "@/lib/types";
+import { MOTION_BASE } from "@/lib/motion";
 
 type ActiveField = "where" | "when" | null;
 
@@ -164,7 +165,7 @@ export default function DesktopSearchDropdown({
 							exit={{ opacity: 0, y: -10 }}
 							transition={{
 								layout: { type: "spring", damping: 30, stiffness: 400 },
-								opacity: { duration: 0.2 },
+								opacity: { duration: MOTION_BASE },
 							}}
 							className={`bg-surface/95 backdrop-blur-md rounded-3xl shadow-2xl border border-surface/30 overflow-hidden absolute top-0 ${
 								activeField === "where"
@@ -192,7 +193,7 @@ export default function DesktopSearchDropdown({
 										// animazione di uscita per questo figlio e lo rimuove alla
 										// prossima renderizzazione invece di aspettarla in eterno
 										// (D-06: un solo click, il pannello resta montato).
-										transition={{ duration: 0.2 }}
+										transition={{ duration: MOTION_BASE }}
 										className="p-4 sm:p-8"
 									>
 										{/* D-19 (corretta il 2026-08-20, dopo la regressione di
@@ -214,7 +215,7 @@ export default function DesktopSearchDropdown({
 													initial={{ opacity: 0, x: -20 }}
 													animate={{ opacity: 1, x: 0 }}
 													exit={{ opacity: 0, x: -20 }}
-													transition={{ duration: 0.2 }}
+													transition={{ duration: MOTION_BASE }}
 												>
 													<h3 className="text-xs sm:text-sm font-semibold text-foreground mb-4 sm:mb-6">
 														Destinazioni suggerite
@@ -257,7 +258,7 @@ export default function DesktopSearchDropdown({
 													initial={{ opacity: 0, x: 20 }}
 													animate={{ opacity: 1, x: 0 }}
 													exit={{ opacity: 0, x: 20 }}
-													transition={{ duration: 0.2 }}
+													transition={{ duration: MOTION_BASE }}
 												>
 													<h3 className="text-xs sm:text-sm font-semibold text-foreground mb-4 sm:mb-6">
 														Risultati
@@ -323,7 +324,7 @@ export default function DesktopSearchDropdown({
 										// Nessun `exit`, stesso motivo del blocco "where" sopra —
 										// trattamento simmetrico per il percorso di ritorno
 										// Quando->Dove.
-										transition={{ duration: 0.2 }}
+										transition={{ duration: MOTION_BASE }}
 										className="p-4 sm:p-8"
 									>
 										<DateRangeField

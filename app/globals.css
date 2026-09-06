@@ -2,38 +2,110 @@
 @plugin "@tailwindcss/typography";
 
 :root {
+  /* Neutri (D-01b) — famiglia fredda del prototipo mobile adottato.
+     foreground-strong collassa su foreground e muted-foreground-faint
+     collassa su muted-foreground-subtle: il prototipo ha 4 soli livelli
+     di grigio testo (fg/fg-2/muted/meta), non 5 — non e' un errore di
+     trascrizione, chiude il criterio di successo 1 (grigi ravvicinati
+     disomogenei lasciati dalla Fase 7). */
   --background: #ffffff;
-  --surface: #ffffff;
-  --muted: #f9fafb;
-  --muted-strong: #f3f4f6;
-  --foreground: #111827;
-  --foreground-strong: #1f2937;
-  --foreground-secondary: #374151;
-  --muted-foreground: #4b5563;
-  --muted-foreground-subtle: #6b7280;
-  --muted-foreground-faint: #9ca3af;
-  --disabled-foreground: #d1d5db;
-  --border: #e5e7eb;
-  --primary: #006d77;
-  --primary-hover: #00565e;
+  --surface: #f5f5f7;
+  --muted: #fbfbfd;
+  --muted-strong: #e8e8ed;
+  --foreground: #1d1d1f;
+  --foreground-strong: #1d1d1f;
+  --foreground-secondary: #424245;
+  --muted-foreground: #6e6e73;
+  /* ECCEZIONE DICHIARATA (D-21): questa coppia non raggiunge 4.5:1 su
+     nessuno dei quattro sfondi reali (misurato: 3.62/3.33 chiaro,
+     4.14/3.32 scuro). Deroga consapevole dell'utente, presa al gate del
+     2026-09-05 dopo aver visto il numero: il mock resta intatto.
+     Mitigazione vincolante, non facoltativa: questo token non deve mai
+     essere l'UNICO veicolo di un'informazione necessaria (data, comune,
+     stato vivono su --foreground/--foreground-secondary, che passano AA
+     con margine). Non "correggere" questo valore: la correzione
+     disponibile (#707075/#848489) e' stata vista e scartata. */
+  --muted-foreground-subtle: #86868b;
+  --muted-foreground-faint: #86868b;
+  --disabled-foreground: #d2d2d7;
+  --border: #d2d2d7;
+  --border-soft: #e8e8ed;
+
+  /* Colori funzionali (D-01b) — accento blu, non piu' teal. */
+  --primary: #0071e3;
+  --primary-hover: #0077ed;
+  --primary-active: #0066cc;
   --primary-foreground: #ffffff;
-  --accent: #83c5be;
-  --accent-tint: #edf6f9;
-  --ring: #83c5be;
+  /* Compatibilita' controllata, per una sola wave: accent e accent-tint
+     non sono piu' colori propri, sono alias. Restano finche' i piani
+     12-04/12-05/12-06 non finiscono di riscrivere i loro consumatori
+     (app/eventi/[id]/EventDetailClient.tsx, components/ui/Badge.tsx,
+     components/EventsMap.tsx); scripts/visual-restyle.test.sh (VR-06) e'
+     gia' rosso su di loro finche' non spariscono del tutto. */
+  --accent: var(--primary);
+  --accent-tint: var(--surface);
+  --ring: #0071e3;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --user-location: #3b82f6;
 
-  --r-sm: 8px;
-  --r-md: 10px;
-  --r-lg: 12px;
-  --r-xl: 16px;
-  --r-card: 15px;
-  --r-full: 9999px;
+  --success: #16a34a;
+  --warn: #eab308;
 
-  --sh-sm: 0 2px 8px rgba(0, 109, 119, 0.3);
-  --sh-md: 0 4px 12px rgba(0, 109, 119, 0.4);
-  --sh-xl: 0 10px 40px rgba(0, 0, 0, 0.15);
+  /* Palette dei pin per categoria (D-10, rifatta su base blu). Nomi
+     semantici, non una scala numerica (Fase 7, D-05). Invariata fra i
+     due temi salvo category-food, unica con variante scura dedicata.
+     category-altro non e' un colore nuovo: e' l'alias di muted-foreground
+     (var --muted-foreground), in entrambi i temi. */
+  --category-sagre: #cc6600;
+  --category-musica: #af52de;
+  --category-arte: #e64980;
+  --category-fiere: #6e7a1f;
+  --category-sport: #128c9e;
+  --category-food: #8e3b46;
+  --category-altro: var(--muted-foreground);
+
+  /* Raggi (D-17, chiude il debito --r-* della Fase 7): 4 misure, non 6.
+     rounded-full di Tailwind resta un'utility statica a 9999px, non
+     tocca --radius-pill (RESEARCH.md, Pitfall 3). */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 980px;
+
+  /* Ombre (D-17): 2 sole, non 3 tinte di teal. */
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 12px 32px rgba(0, 0, 0, 0.08);
+
+  /* Tipografia (D-03b) — stack di SISTEMA: nessun @font-face, nessun
+     self-hosting, nessun webfont (licenza Apple). Su Apple rende SF Pro,
+     altrove cade sul fallback. */
+  --font-display:
+    "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-body:
+    "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 17px;
+  --text-lg: 21px;
+  --text-xl: 28px;
+  --leading-body: 1.47;
+  --leading-tight: 1.05;
+  --tracking-display: -0.015em;
+
+  /* Movimento (D-16, criterio di successo 8) — vocabolario unico: due
+     durate e una curva, sollevate dal prototipo adottato. Gemello
+     TypeScript in lib/motion.ts per framer-motion (che non legge le
+     custom property CSS). Le molle (morph desktop, foglio mobile) restano
+     fuori: non hanno una durata, i loro parametri sono gia' misurati a
+     schermo caso per caso. */
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
 }
 
 @theme inline {
@@ -49,8 +121,10 @@
   --color-muted-foreground-faint: var(--muted-foreground-faint);
   --color-disabled-foreground: var(--disabled-foreground);
   --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-accent-tint: var(--accent-tint);
@@ -58,50 +132,103 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-user-location: var(--user-location);
-  --radius-card: var(--r-card);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-success: var(--success);
+  /* --radius-* e' il namespace esatto che Tailwind v4 usa per generare
+     rounded-* (RESEARCH.md, sezione Radii). Stesso nome fra il token
+     grezzo sopra e l'esposizione qui: e' il "come se stesso" gia' usato
+     per --font-display sotto, non un self-reference accidentale — Tailwind
+     legge questo blocco come metadata di generazione, non come CSS
+     ridichiarato due volte. */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
 }
 
 .dark {
-  --background: #0b1210;
-  --surface: #132420;
-  --muted: #101c19;
-  --muted-strong: #1c2f2b;
-  --foreground: #f3f6f5;
-  --foreground-strong: #d9e4e1;
-  --foreground-secondary: #c3d2ce;
-  --muted-foreground: #a9bdb9;
-  --muted-foreground-subtle: #8aa39e;
-  --muted-foreground-faint: #7d9793;
-  --disabled-foreground: #4f6864;
-  --border: #4a7268;
-  --primary: #6cc4ba;
-  --primary-hover: #82d0c6;
-  --primary-foreground: #0b1210;
-  --accent: #83c5be;
-  --accent-tint: #16302b;
-  --ring: #83c5be;
-  --destructive: #f87171;
-  --destructive-foreground: #0b1210;
+  --background: #000000;
+  --surface: #1d1d1f;
+  --muted: #272729;
+  --muted-strong: #2a2a2c;
+  --foreground: #f5f5f7;
+  --foreground-strong: #f5f5f7;
+  --foreground-secondary: #d2d2d7;
+  /* Inversione voluta rispetto al chiaro (12-UI-SPEC.md, "Neutrali —
+     scuro"): in scuro muted-foreground (#86868b) e' PIU' CHIARO di
+     muted-foreground-subtle (#6e6e73), l'opposto del tema chiaro. Non e'
+     un mapping parallelo ingenuo: e' la coppia scambiata del prototipo,
+     preservata cosi' com'e'. */
+  --muted-foreground: #86868b;
+  --muted-foreground-subtle: #6e6e73;
+  --muted-foreground-faint: #6e6e73;
+  --disabled-foreground: #424245;
+  --border: #424245;
+  --border-soft: #2a2a2c;
+
+  --primary: #2997ff;
+  --primary-hover: #47a6ff;
+  --primary-active: #66b5ff;
+  --primary-foreground: #000000;
+  --accent: var(--primary);
+  --accent-tint: var(--surface);
+  --ring: #2997ff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
   --user-location: #3b82f6;
 
-  --r-sm: 8px;
-  --r-md: 10px;
-  --r-lg: 12px;
-  --r-xl: 16px;
-  --r-card: 15px;
-  --r-full: 9999px;
+  --success: #16a34a;
+  --warn: #eab308;
 
-  --sh-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
-  --sh-md: 0 4px 12px rgba(0, 0, 0, 0.6);
-  --sh-xl: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --category-sagre: #cc6600;
+  --category-musica: #af52de;
+  --category-arte: #e64980;
+  --category-fiere: #6e7a1f;
+  --category-sport: #128c9e;
+  /* Unica categoria con variante scura dedicata: la tinta chiara da sola
+     cade sotto 3:1 su nero (2.86:1). */
+  --category-food: #c1586a;
+  --category-altro: var(--muted-foreground);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 980px;
+
+  /* elev-raised e' un valore DIVERSO per tema, non lo stesso rgba su
+     sfondo diverso: in scuro serve l'anello di 1px in piu' per staccare
+     dal nero puro. */
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px #2a2a2c, 0 12px 32px rgba(0, 0, 0, 0.6);
+
+  --font-display:
+    "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-body:
+    "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 17px;
+  --text-lg: 21px;
+  --text-xl: 28px;
+  --leading-body: 1.47;
+  --leading-tight: 1.05;
+  --tracking-display: -0.015em;
+
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
 }
 
 /* Mobile touch optimizations */
@@ -119,7 +246,7 @@ button, a {
 /* Card animations - only on desktop */
 @media (pointer: fine) {
   .event-card-item {
-    animation: fadeInUp 0.3s ease-out forwards;
+    animation: fadeInUp var(--motion-base) var(--ease-standard) forwards;
     opacity: 0;
   }
 }
@@ -163,12 +290,12 @@ html {
 
 .scrollbar-thin::-webkit-scrollbar-track {
   background: var(--muted-strong);
-  border-radius: var(--r-md);
+  border-radius: var(--radius-md);
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: var(--accent);
-  border-radius: var(--r-md);
+  border-radius: var(--radius-md);
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
@@ -215,18 +342,18 @@ input[type="range"].slider::-webkit-slider-thumb {
   border-radius: 50%;
   /* Il pallino sta sopra la parte di traccia riempita di --primary: il token
      "cio' che si legge sopra il primary" e' esattamente questo. Bianco in
-     chiaro (come richiesto in UAT), scuro in tema scuro — dove un pallino
-     bianco sul teal chiaro avrebbe poco contrasto. */
+     chiaro (come richiesto in UAT), nero in tema scuro — dove un pallino
+     bianco sull'accento chiaro avrebbe poco contrasto. */
   background: var(--primary-foreground);
   border: 1px solid var(--border);
   cursor: pointer;
-  box-shadow: var(--sh-sm);
-  transition: all 0.2s;
+  box-shadow: var(--elev-ring);
+  transition: all var(--motion-fast) var(--ease-standard);
 }
 
 input[type="range"].slider::-webkit-slider-thumb:hover {
   transform: scale(1.1);
-  box-shadow: var(--sh-md);
+  box-shadow: var(--elev-raised);
 }
 
 input[type="range"].slider::-moz-range-thumb {
@@ -236,20 +363,20 @@ input[type="range"].slider::-moz-range-thumb {
   background: var(--primary-foreground);
   cursor: pointer;
   border: 1px solid var(--border);
-  box-shadow: var(--sh-sm);
-  transition: all 0.2s;
+  box-shadow: var(--elev-ring);
+  transition: all var(--motion-fast) var(--ease-standard);
 }
 
 input[type="range"].slider::-moz-range-thumb:hover {
   transform: scale(1.1);
-  box-shadow: var(--sh-md);
+  box-shadow: var(--elev-raised);
 }
 
 /* Custom Mapbox Popup */
 .mapboxgl-popup-content {
-  border-radius: var(--r-xl) !important;
+  border-radius: var(--radius-lg) !important;
   padding: 0 !important;
-  box-shadow: var(--sh-xl) !important;
+  box-shadow: var(--elev-raised) !important;
   /* Senza questo resta il bianco di default di Mapbox, mentre il contenuto del
      popup usa --foreground: in tema scuro diventa testo chiaro su fondo bianco. */
   background: var(--surface) !important;
@@ -274,9 +401,9 @@ input[type="range"].slider::-moz-range-thumb:hover {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  transition: all 0.2s !important;
+  transition: all var(--motion-fast) var(--ease-standard) !important;
   z-index: 1000 !important;
-  box-shadow: var(--sh-md) !important;
+  box-shadow: var(--elev-raised) !important;
   padding: 0 !important;
 }
 

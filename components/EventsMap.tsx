@@ -374,8 +374,8 @@ export default function EventsMap({
 						<div>
 							${
 								safeImageUrl
-									? `<img src="${safeImageUrl}" alt="${safeTitle}" style="width: 100%; height: 120px; object-fit: cover; border-radius: var(--r-lg); margin-bottom: 12px;" />`
-									: `<div style="width: 100%; height: 120px; background: ${colors.muted}; border-radius: var(--r-lg); margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
+									? `<img src="${safeImageUrl}" alt="${safeTitle}" style="width: 100%; height: 120px; object-fit: cover; border-radius: var(--radius-lg); margin-bottom: 12px;" />`
+									: `<div style="width: 100%; height: 120px; background: ${colors.muted}; border-radius: var(--radius-lg); margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
 										<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${colors.primary}" stroke-width="2">
 											<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
 											<line x1="16" y1="2" x2="16" y2="6"></line>
@@ -395,12 +395,12 @@ export default function EventsMap({
 							</p>
 							${
 								safeCategory
-									? `<span style="display: inline-block; padding: 4px 10px; background: ${colors.accentTint}; color: ${colors.primary}; border-radius: var(--r-lg); font-size: 11px; font-weight: 600; margin-bottom: 12px;">${safeCategory}</span>`
+									? `<span style="display: inline-block; padding: 4px 10px; background: ${colors.accentTint}; color: ${colors.primary}; border-radius: var(--radius-lg); font-size: 11px; font-weight: 600; margin-bottom: 12px;">${safeCategory}</span>`
 									: ""
 							}
 							<a
 								href="/eventi/${safeId}"
-								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: ${colors.primary}; color: ${colors.primaryForeground}; font-weight: 600; border-radius: var(--r-xl); text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: ${CTA_SHADOW};"
+								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: ${colors.primary}; color: ${colors.primaryForeground}; font-weight: 600; border-radius: var(--radius-lg); text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: ${CTA_SHADOW};"
 								onmouseover="this.style.boxShadow='${CTA_SHADOW_HOVER}'"
 								onmouseout="this.style.boxShadow='${CTA_SHADOW}'"
 							>

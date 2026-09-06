@@ -5,6 +5,7 @@
 
 import { motion } from "framer-motion";
 import { RADIUS_OPTIONS } from "@/lib/destinations";
+import { MOTION_BASE } from "@/lib/motion";
 
 interface DesktopRadiusPanelProps {
 	value: number;
@@ -33,7 +34,7 @@ export default function DesktopRadiusPanel({
 			initial={{ opacity: 0, x: -20 }}
 			animate={{ opacity: 1, x: 0 }}
 			exit={{ opacity: 0, x: -20 }}
-			transition={{ duration: 0.2 }}
+			transition={{ duration: MOTION_BASE }}
 			className="p-4 sm:p-8"
 		>
 			<div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">

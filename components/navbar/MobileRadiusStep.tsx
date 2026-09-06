@@ -6,6 +6,7 @@
 import { motion } from "framer-motion";
 import { ChevronLeft } from "lucide-react";
 import { RADIUS_OPTIONS } from "@/lib/destinations";
+import { MOTION_BASE } from "@/lib/motion";
 
 interface MobileRadiusStepProps {
 	value: number;
@@ -32,7 +33,7 @@ export default function MobileRadiusStep({
 			initial={{ opacity: 0, x: 16 }}
 			animate={{ opacity: 1, x: 0 }}
 			exit={{ opacity: 0, x: 16 }}
-			transition={{ duration: 0.2 }}
+			transition={{ duration: MOTION_BASE }}
 		>
 			{/* Header con back */}
 			<div className="flex items-center gap-3 mb-6">
