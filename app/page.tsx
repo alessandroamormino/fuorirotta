@@ -19,6 +19,8 @@ export default async function Home() {
 			where: { dateStart: { gte: now }, canonicalEventId: null },
 			orderBy: { dateStart: "asc" },
 			take: 12,
+			// include comune (T-12-04): solo name/provinceCode, mai la riga intera.
+			include: { comune: { select: { name: true, provinceCode: true } } },
 		}),
 		prisma.event.count({
 			where: { dateStart: { gte: now }, canonicalEventId: null },
@@ -36,8 +38,11 @@ export default async function Home() {
 			orderBy: { id: "asc" },
 		});
 		const membersByCanonical = groupMembersByCanonical(members);
-		composedEvents = rawEvents.map((e) =>
-			composeEvent(e, membersByCanonical.get(e.id) ?? [])
+		// `comune` non e' un COMPOSABLE_FIELDS: composeEvent lo lascia sempre
+		// invariato dalla riga canonica (spread interno), lo stesso pattern di
+		// cast di withComposedFields in app/api/events/route.ts.
+		composedEvents = rawEvents.map(
+			(e) => composeEvent(e, membersByCanonical.get(e.id) ?? []) as typeof e
 		);
 	}
 

@@ -1,55 +1,68 @@
 "use client";
 
 import { Event } from "@/lib/types";
-import { format } from "date-fns";
-import { it } from "date-fns/locale";
+import { eventStatus, formatEventRange } from "@/lib/eventStatus";
 import Link from "next/link";
-import { Calendar } from "lucide-react";
 import { decodeHtmlEntities } from "@/lib/utils";
+import StatusBadge from "@/components/StatusBadge";
+import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 
 interface EventCardProps {
 	event: Event;
+	/** Calcolata dal chiamante (posizione utente nota). Assente -> il segmento "N km" non compare. */
+	distanceKm?: number;
 }
 
-export default function EventCard({ event }: EventCardProps) {
-	return (
-		<Link href={`/eventi/${event.id}`} className="group cursor-pointer">
-			<div className="flex flex-col rounded-card h-full items-stretch p-2 bg-surface border border-primary/10 hover:border-primary/50 transition-all duration-300">
-				{/* Image */}
-				<div className="relative w-full aspect-16/9 mb-1 sm:mb-3 overflow-hidden rounded-md sm:rounded-xl group-hover:border-primary/50 transition-all duration-300group-hover:shadow-md">
-					{event.imageUrl ? (
-						<img
-							src={event.imageUrl}
-							alt={event.title}
-							className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-						/>
-					) : (
-						<div className="w-full h-full flex items-center justify-center bg-muted">
-							<div className="flex flex-col items-center gap-1 sm:gap-3">
-								<div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
-									<Calendar className="w-3 h-3 sm:w-6 sm:h-6 text-primary" />
-								</div>
-								<span className="text-[10px] sm:text-xs font-medium text-primary/60">
-									Evento
-								</span>
-							</div>
-						</div>
-					)}
-				</div>
+/**
+ * Card evento sulla forma del prototipo mobile adottato (.planning/sketches/
+ * 003-mobile-redesign/, .card/.card-media/.card-status/.card-body). Bucket 3
+ * (12-UI-SPEC.md): componente unico per ogni breakpoint, il desktop lo
+ * eredita non appena esiste — nessuna variante `sm:`/`md:` che biforchi la
+ * resa.
+ */
+export default function EventCard({ event, distanceKm }: EventCardProps) {
+	const status = eventStatus(event.dateStart, event.dateEnd);
+	const title = decodeHtmlEntities(
+		event.title.toLowerCase().charAt(0).toUpperCase() + event.title.toLowerCase().slice(1)
+	);
+	const comune = event.comune;
 
-				{/* Info */}
-				<div className="flex flex-col gap-0.5">
-					<h1 className="text-[16px] sm:text-md font-semibold text-foreground line-clamp-2 leading-tight">
-						{decodeHtmlEntities(event.title.toLowerCase().charAt(0).toUpperCase() + event.title.toLowerCase().slice(1))}
-					</h1>
-					<div className="flex items-center gap-1">
-						<span className="text-[10px] sm:text-sm text-muted-foreground line-clamp-1">{event.locationName || "Lombardia"}</span>
-						<span> - </span>
-						<span className="text-[10px] sm:text-sm text-primary font-medium" suppressHydrationWarning>
-							{format(new Date(event.dateStart), "dd MMM", { locale: it })}
-						</span>
-					</div>
-				</div>
+	return (
+		<Link href={`/eventi/${event.id}`} className="group block">
+			<div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg bg-surface shadow-[var(--elev-ring)]">
+				{event.imageUrl ? (
+					<img
+						src={event.imageUrl}
+						alt={event.title}
+						className="h-full w-full object-cover group-hover:scale-[1.03]"
+						style={{ transition: "transform var(--motion-base) var(--ease-standard)" }}
+					/>
+				) : (
+					<CategoryPlaceholder category={event.category ?? "Altro"} className="rounded-lg" />
+				)}
+				<StatusBadge label={status.label} tone={status.tone} variant="card" className="absolute left-3 top-3" />
+			</div>
+
+			<div className="px-1 pt-3">
+				<p className="mb-0.5 flex items-center gap-1.5 text-xs text-muted-foreground-subtle">
+					<span>{event.category}</span>
+					{distanceKm != null && (
+						<>
+							<span className="text-border">·</span>
+							<span>{Math.round(distanceKm)} km</span>
+						</>
+					)}
+				</p>
+				<h3 className="m-0 line-clamp-2 font-display text-base leading-tight font-semibold tracking-[-0.01em] text-balance text-foreground">
+					{title}
+				</h3>
+				<p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+					<strong className="font-medium text-foreground-secondary">
+						{comune ? `${comune.name} (${comune.provinceCode})` : event.locationName || "Lombardia"}
+					</strong>
+					<span className="text-border">·</span>
+					<span>{formatEventRange(event.dateStart, event.dateEnd)}</span>
+				</p>
 			</div>
 		</Link>
 	);

@@ -10,6 +10,11 @@ export type Event = Omit<
   longitude: number | null
   resolvedLatitude: number | null
   resolvedLongitude: number | null
+  // Fase 12 (card evento, meta "Comune (PR)"): presente solo quando la riga e'
+  // agganciata a comuneId/istatCode via include Prisma (app/api/events/route.ts,
+  // app/page.tsx). ~1/3 delle righe non ha comuneId (862/2652, Fase 6) e la
+  // relazione arriva null: la card cade su locationName, non su un buco.
+  comune?: { name: string; provinceCode: string } | null
 }
 
 // Filtri di ricerca della Navbar (D-01). comuneId e comuneIstatCode

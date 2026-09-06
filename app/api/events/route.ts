@@ -214,9 +214,12 @@ export async function GET(request: NextRequest) {
 			const radiusKm = parseFloat(radius);
 
 			// Fetch tutti gli eventi che matchano i criteri base (senza paginazione)
+			// include comune (T-12-04): solo name/provinceCode, mai la riga intera
+			// (coordinate del centroide, codici regione, timestamp non servono al client).
 			const allEvents = await prisma.event.findMany({
 				where,
 				orderBy: { dateStart: "asc" },
+				include: { comune: { select: { name: true, provinceCode: true } } },
 			});
 
 			// Filtra per raggio sul punto RISOLTO, lo stesso che legge la mappa
@@ -274,11 +277,13 @@ export async function GET(request: NextRequest) {
 			}));
 		} else {
 			// Senza filtro raggio: query normale con paginazione DB
+			// include comune (T-12-04): solo name/provinceCode, mai la riga intera.
 			const pageEvents = await prisma.event.findMany({
 				where,
 				orderBy: { dateStart: "asc" },
 				take: limit,
 				skip: offset,
+				include: { comune: { select: { name: true, provinceCode: true } } },
 			});
 			// DEDUP-04: compone solo la pagina corrente, una query aggiuntiva sui
 			// soli membri dei gruppi di questa pagina (niente N+1).
