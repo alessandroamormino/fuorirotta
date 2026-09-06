@@ -10,8 +10,9 @@ import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
-import { eventStatus } from "@/lib/eventStatus";
-import { Calendar, MapPin, ExternalLink, ArrowLeft, Phone } from "lucide-react";
+import { eventStatus, formatEventRange } from "@/lib/eventStatus";
+import { calculateDistanceKm } from "@/lib/territorial/distance";
+import { Calendar, MapPin, Phone, Compass, Link as LinkIcon, ArrowLeft } from "lucide-react";
 import { cn, decodeHtmlEntities, htmlToPlainText } from "@/lib/utils";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
@@ -25,6 +26,27 @@ const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 
 interface EventDetailClientProps {
 	initialEvent?: Event | null;
+}
+
+/**
+ * Una riga della lista raggruppata (D-14): icona in cerchio, etichetta,
+ * valore. Il filetto fra righe usa `last:border-b-0` invece di calcolare
+ * "e' l'ultima riga visibile" a mano — le righe sono condizionali (Telefono
+ * nullo, Distanza senza permesso, ecc.), quindi la posizione dell'ultimo
+ * filetto e' decisa dal DOM, non da un indice.
+ */
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+	return (
+		<div className="flex items-start gap-3 border-b border-border-soft p-4 last:border-b-0">
+			<span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full bg-background text-foreground-secondary">
+				{icon}
+			</span>
+			<div className="min-w-0 text-sm leading-snug">
+				<span className="mb-px block text-xs text-muted-foreground">{label}</span>
+				<span className="block font-medium text-foreground">{value}</span>
+			</div>
+		</div>
+	);
 }
 
 /**
@@ -72,9 +94,9 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
 	const [loading, setLoading] = useState(!initialEvent);
-	const [showMapModal, setShowMapModal] = useState<{ lat: number; lng: number } | null>(null);
 	const [heroLoaded, setHeroLoaded] = useState(false);
 	const [barScrolled, setBarScrolled] = useState(false);
+	const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 	// D-07: qui la Navbar serve solo ad avviare una nuova ricerca che porta a
 	// "/" — draft locale, mai letto altrove in questo file.
 	const [draftFilters, setDraftFilters] = useState<SearchFilters>({
@@ -135,6 +157,22 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		return () => observer.disconnect();
 	}, [event]);
 
+	// Riga Distanza: stesso blocco navigator.geolocation gia' in uso in
+	// app/HomeClient.tsx, stesso trattamento silenzioso del rifiuto.
+	useEffect(() => {
+		if (!navigator.geolocation) return;
+		navigator.geolocation.getCurrentPosition(
+			(position) => {
+				setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+			},
+			(error) => {
+				if (process.env.APP_DEBUG === "true") {
+					console.log("Geolocation not enabled:", error);
+				}
+			}
+		);
+	}, []);
+
 	const handleSearch = (filters: SearchFilters) => {
 		const searchParams = new URLSearchParams();
 		if (filters.location) searchParams.append("location", filters.location);
@@ -144,25 +182,6 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 
 		router.push(`/?${searchParams.toString()}`);
 	};
-
-	const handleNavigation = (lat: number | null, lng: number | null) => {
-		if (lat == null || lng == null) return;
-
-		const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-		const isAndroid = /Android/i.test(navigator.userAgent);
-
-		if (isAndroid) {
-			window.location.href = `https://maps.google.com/maps?daddr=${lat},${lng}`;
-			return;
-		}
-
-		if (isIOS) {
-			setShowMapModal({ lat, lng });
-			return;
-		}
-
-		window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
-	}
 
 	const desktopNavbar = (
 		<div className="hidden sm:block">
@@ -219,6 +238,14 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	}
 
 	const status = eventStatus(event.dateStart, event.dateEnd);
+	const isMultiDay =
+		event.dateEnd != null &&
+		new Date(event.dateEnd).toDateString() !== new Date(event.dateStart).toDateString();
+	const hasCoords = event.latitude != null && event.longitude != null;
+	const distanceKm =
+		userLocation && event.resolvedLatitude != null && event.resolvedLongitude != null
+			? calculateDistanceKm(userLocation.lat, userLocation.lng, event.resolvedLatitude, event.resolvedLongitude)
+			: null;
 
 	return (
 		<div className="min-h-screen bg-muted">
@@ -276,185 +303,130 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						)}
 					</div>
 
-					{/* Content Grid */}
-					<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-						{/* Left Column - Main Info */}
-						<div className="lg:col-span-2 space-y-6">
-							{/* Title */}
-							<h1
-								ref={h1Ref}
-								id="detail-title"
-								className="text-balance font-display text-xl font-semibold leading-tight text-foreground"
+					<h1
+						ref={h1Ref}
+						id="detail-title"
+						className="mb-4 text-balance font-display text-xl font-semibold leading-tight text-foreground"
+						style={{ letterSpacing: "var(--tracking-display)" }}
+					>
+						{decodeHtmlEntities(event.title)}
+					</h1>
+
+					{/* Lista raggruppata (D-14): un contenitore, righe separate da
+					    filetti — sostituisce le quattro card in griglia. Ogni riga
+					    tranne "Quando" e' condizionale. */}
+					<div className="mb-6 overflow-hidden rounded-lg bg-surface">
+						<InfoRow
+							icon={<Calendar className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+							label="Quando"
+							value={
+								isMultiDay
+									? formatEventRange(event.dateStart, event.dateEnd)
+									: format(new Date(event.dateStart), "EEEE dd MMMM yyyy", { locale: it })
+							}
+						/>
+
+						{event.locationName && (
+							<InfoRow
+								icon={<MapPin className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+								label="Dove"
+								value={
+									<>
+										{decodeHtmlEntities(event.locationName)}
+										{event.address && (
+											<span className="block font-normal text-muted-foreground">{event.address}</span>
+										)}
+									</>
+								}
+							/>
+						)}
+
+						{event.phone && (
+							<InfoRow
+								icon={<Phone className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+								label="Telefono"
+								value={
+									<a href={`tel:${event.phone}`} className="font-medium text-primary hover:underline">
+										{event.phone}
+									</a>
+								}
+							/>
+						)}
+
+						{distanceKm != null && (
+							<InfoRow
+								icon={<Compass className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+								label="Distanza"
+								value={`${Math.round(distanceKm)} km da qui`}
+							/>
+						)}
+
+						{event.sourceUrl && (
+							<InfoRow
+								icon={<LinkIcon className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+								label="Fonte"
+								value={
+									<>
+										<a
+											href={event.sourceUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="font-medium text-primary hover:underline"
+										>
+											{event.source}
+										</a>
+										<span className="block font-normal text-muted-foreground">
+											Fuorirotta raccoglie l&apos;evento dalla fonte, non lo organizza.
+										</span>
+									</>
+								}
+							/>
+						)}
+					</div>
+
+					{event.description && (
+						<>
+							<h2
+								className="mb-2 font-display text-lg font-semibold leading-tight text-foreground"
 								style={{ letterSpacing: "var(--tracking-display)" }}
 							>
-								{decodeHtmlEntities(event.title)}
-							</h1>
+								Cosa aspettarsi
+							</h2>
+							{/* Reso come testo, non come markup arbitrario: le descrizioni sono
+							    testo puro (solosagre e inlombardia strippano i tag alla fonte,
+							    opendata restituisce il campo grezzo dell'API). Il sink HTML
+							    rimosso in acd78f0 non rientra qui: era una via d'ingresso XSS
+							    da contenuto scrapato — T-07-09. */}
+							<p className="mb-6 whitespace-pre-line text-base leading-relaxed text-foreground-secondary">
+								{htmlToPlainText(event.description)}
+							</p>
+						</>
+					)}
 
-							{/* Info Cards */}
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-								{/* Date Card */}
-								<div className="bg-surface rounded-2xl p-6 shadow-lg border-2 border-accent/20 hover:border-primary/50 transition-all">
-									<div className="flex items-start gap-4">
-										<div className="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center flex-shrink-0">
-											<Calendar className="w-6 h-6 text-primary" />
-										</div>
-										<div>
-											<h3 className="font-semibold text-foreground mb-1">Data</h3>
-											<p className="text-sm text-muted-foreground">
-												{format(
-													new Date(event.dateStart),
-													"EEEE dd MMMM yyyy",
-													{ locale: it }
-												)}
-											</p>
-											{event.dateEnd && (
-												<p className="text-xs text-muted-foreground-subtle mt-1">
-													Fino al{" "}
-													{format(new Date(event.dateEnd), "dd MMMM yyyy", {
-														locale: it,
-													})}
-												</p>
-											)}
-										</div>
-									</div>
-								</div>
-
-								{/* Location Card */}
-								{event.locationName && (
-									<div className="bg-surface rounded-2xl p-6 shadow-lg border-2 border-accent/20 hover:border-primary/50 transition-all">
-										<div className="flex items-start gap-4">
-											<div className="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center flex-shrink-0">
-												<MapPin className="w-6 h-6 text-primary" />
-											</div>
-											<div>
-												<h3 className="font-semibold text-foreground mb-1">
-													{decodeHtmlEntities(event.locationName)}
-												</h3>
-												{event.address && (
-													<p className="text-sm text-muted-foreground">
-														{event.address}
-													</p>
-												)}
-											</div>
-										</div>
-									</div>
-								)}
-
-								{/* Phone Card */}
-								{event.phone && (
-									<div className="bg-surface rounded-2xl p-6 shadow-lg border-2 border-accent/20 hover:border-primary/50 transition-all">
-										<div className="flex items-start gap-4">
-											<div className="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center flex-shrink-0">
-												<Phone className="w-6 h-6 text-primary" />
-											</div>
-											<div>
-												<h3 className="font-semibold text-foreground mb-1">Telefono</h3>
-												<a
-													href={`tel:${event.phone}`}
-													className="text-sm text-primary hover:underline"
-												>
-													{event.phone}
-												</a>
-											</div>
-										</div>
-									</div>
-								)}
+					{hasCoords && (
+						<>
+							<h2
+								className="mb-2 font-display text-lg font-semibold leading-tight text-foreground"
+								style={{ letterSpacing: "var(--tracking-display)" }}
+							>
+								Dove si trova
+							</h2>
+							<div
+								className="mb-3 h-[220px] overflow-hidden rounded-lg bg-surface"
+								style={{ boxShadow: "var(--elev-ring)" }}
+							>
+								<EventsMap events={[event]} disablePopups={true} />
 							</div>
+						</>
+					)}
 
-							{/* Description */}
-							{event.description && (
-								<div className="bg-surface rounded-2xl p-6 md:p-8 shadow-lg border-2 border-accent/20">
-									<h2 className="text-2xl font-bold text-foreground mb-4">
-										Descrizione
-									</h2>
-									{/* Reso come testo, non come markup arbitrario: le descrizioni
-									    sono testo puro (solosagre e inlombardia strippano i tag
-									    alla fonte, opendata restituisce il campo grezzo dell'API).
-									    Il sink HTML rimosso in acd78f0 non rientra qui: era una via
-									    d'ingresso XSS da contenuto scrapato — T-07-09. */}
-									<div className="text-foreground-secondary leading-relaxed prose prose-sm max-w-none whitespace-pre-line">
-										{htmlToPlainText(event.description)}
-									</div>
-									<p className="text-xs text-muted-foreground-subtle">Fonte: {event.source}</p>
-								</div>
-							)}
-						</div>
-
-						{/* Right Column - Map & Actions */}
-						<div className="lg:col-span-1">
-							<div className="space-y-6 sticky top-4">
-								{/* Map */}
-								{event.latitude && event.longitude && (
-									<div className="bg-surface rounded-2xl p-4 shadow-lg border-2 border-accent/20">
-										<h3 className="text-lg font-bold text-foreground mb-4">
-											Dove si trova
-										</h3>
-										<div className="h-[300px] rounded-xl overflow-hidden border-2 border-accent/30">
-											<EventsMap events={[event]} disablePopups={true} />
-										</div>
-										<button
-											className="flex items-center justify-center gap-2 w-full px-6 py-2 mt-4 bg-primary text-primary-foreground font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
-											onClick={() => handleNavigation(event.latitude, event.longitude)}
-										>
-											Naviga
-											<ExternalLink className="w-5 h-5" />
-										</button>
-									</div>
-								)}
-
-								{/* External Link */}
-								{event.sourceUrl && (
-									<a
-										href={event.sourceUrl ?? undefined}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-accent-tint text-primary font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all"
-									>
-										Visita sito ufficiale
-										<ExternalLink className="w-5 h-5" />
-									</a>
-								)}
-							</div>
-						</div>
-					</div>
+					{event.imageUrl && (
+						<p className="mb-12 border-t border-border-soft pt-4 text-xs leading-relaxed text-muted-foreground">
+							Foto: {event.source}
+						</p>
+					)}
 				</div>
 			</main>
-
-			{showMapModal && (
-				<div
-					className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
-					onClick={() => setShowMapModal(null)}
-				>
-					<div
-						className="w-full max-w-sm bg-surface rounded-t-2xl p-6 pb-10 shadow-xl"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<p className="text-center text-muted-foreground-subtle text-sm mb-4">Apri con</p>
-						<div className="flex flex-col gap-3">
-							<a
-								href={`comgooglemaps://?daddr=${showMapModal.lat},${showMapModal.lng}&directionsmode=driving`}
-								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-xl"
-								onClick={() => setShowMapModal(null)}
-							>
-								Google Maps
-							</a>
-							<a
-								href={`https://maps.apple.com/?daddr=${showMapModal.lat},${showMapModal.lng}`}
-								className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-muted-strong text-foreground-strong font-semibold rounded-xl"
-								onClick={() => setShowMapModal(null)}
-							>
-								Apple Maps
-							</a>
-							<button
-								className="text-muted-foreground-faint text-sm mt-1"
-								onClick={() => setShowMapModal(null)}
-							>
-								Annulla
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
 		</div>
 	);
 }
