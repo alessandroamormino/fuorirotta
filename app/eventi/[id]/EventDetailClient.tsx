@@ -4,15 +4,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import NextLink from "next/link";
 import dynamic from "next/dynamic";
+import { motion, AnimatePresence } from "framer-motion";
 import { Event, SearchFilters } from "@/lib/types";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
+import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import { eventStatus, formatEventRange } from "@/lib/eventStatus";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
-import { Calendar, MapPin, Phone, Compass, Link as LinkIcon, ArrowLeft } from "lucide-react";
+import {
+	Calendar,
+	MapPin,
+	Phone,
+	Compass,
+	Link as LinkIcon,
+	Navigation,
+	ArrowLeft,
+	X,
+} from "lucide-react";
 import { cn, decodeHtmlEntities, htmlToPlainText } from "@/lib/utils";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
@@ -96,6 +107,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const [loading, setLoading] = useState(!initialEvent);
 	const [heroLoaded, setHeroLoaded] = useState(false);
 	const [barScrolled, setBarScrolled] = useState(false);
+	const [navSheetOpen, setNavSheetOpen] = useState(false);
 	const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 	// D-07: qui la Navbar serve solo ad avviare una nuova ricerca che porta a
 	// "/" — draft locale, mai letto altrove in questo file.
@@ -183,6 +195,27 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		router.push(`/?${searchParams.toString()}`);
 	};
 
+	// I tre rami restano quelli di oggi (Android diretto, iOS foglio, desktop
+	// nuova scheda) — cambia solo il contenitore del foglio iOS (Task 3).
+	const handleNavigation = (lat: number | null, lng: number | null) => {
+		if (lat == null || lng == null) return;
+
+		const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+		const isAndroid = /Android/i.test(navigator.userAgent);
+
+		if (isAndroid) {
+			window.location.href = `https://maps.google.com/maps?daddr=${lat},${lng}`;
+			return;
+		}
+
+		if (isIOS) {
+			setNavSheetOpen(true);
+			return;
+		}
+
+		window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+	}
+
 	const desktopNavbar = (
 		<div className="hidden sm:block">
 			<Navbar
@@ -227,7 +260,8 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						</p>
 						<NextLink
 							href="/"
-							className="inline-flex items-center justify-center rounded-pill bg-primary px-6 py-3 font-semibold text-primary-foreground"
+							className="inline-flex min-h-12 items-center justify-center rounded-pill bg-surface px-5 font-medium text-foreground"
+							style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
 						>
 							Torna agli eventi
 						</NextLink>
@@ -290,7 +324,12 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 					</div>
 				)}
 
-				<div className="container mx-auto px-4 pb-8 md:pb-16 max-w-7xl pt-5">
+				<div
+					className={cn(
+						"container mx-auto px-4 max-w-7xl pt-5",
+						hasCoords ? "pb-24 md:pb-24" : "pb-8 md:pb-16"
+					)}
+				>
 					<div className="mb-3 flex flex-wrap items-center gap-2">
 						<StatusBadge label={status.label} tone={status.tone} variant="pill" />
 						{event.category && (
@@ -427,6 +466,96 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 					)}
 				</div>
 			</main>
+
+			{/* Barra d'azione fissa: una sola azione primaria per questa
+			    schermata — il link alla fonte vive gia' nella lista sopra. */}
+			{hasCoords && (
+				<div
+					className="fixed inset-x-0 bottom-0 z-30 border-t border-border-soft px-4 pt-3"
+					style={{
+						background: "color-mix(in srgb, var(--background) 92%, transparent)",
+						backdropFilter: "saturate(180%) blur(20px)",
+						WebkitBackdropFilter: "saturate(180%) blur(20px)",
+						paddingBottom: "max(env(safe-area-inset-bottom), 12px)",
+					}}
+				>
+					<button
+						type="button"
+						onClick={() => handleNavigation(event.latitude, event.longitude)}
+						className="flex h-12 w-full items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-primary-foreground"
+					>
+						<Navigation className="h-[18px] w-[18px]" />
+						Naviga
+					</button>
+				</div>
+			)}
+
+			{/* Foglio "Apri con" (iOS): Dialog.Root Radix, non un overlay scritto
+			    a mano — arrivano gratis focus trap, Escape e ritorno del focus. */}
+			<Dialog.Root open={navSheetOpen} onOpenChange={setNavSheetOpen}>
+				<Dialog.Portal forceMount>
+					<AnimatePresence>
+						{navSheetOpen && (
+							<>
+								<Dialog.Overlay />
+								<Dialog.ContentUnstyled asChild>
+									<motion.div
+										initial={{ y: "100%" }}
+										animate={{ y: 0 }}
+										exit={{ y: "100%" }}
+										transition={{ type: "spring", damping: 32, stiffness: 380 }}
+										className="fixed inset-x-0 bottom-0 z-[200] rounded-t-lg bg-surface p-5"
+										style={{
+											boxShadow: "var(--elev-raised)",
+											paddingBottom: "max(env(safe-area-inset-bottom), 20px)",
+										}}
+									>
+										<div aria-hidden="true" className="mx-auto mb-3 h-1 w-9 rounded-full bg-border" />
+										<div className="mb-4 flex items-center justify-between">
+											<Dialog.Title className="text-sm font-semibold text-muted-foreground">
+												Apri con
+											</Dialog.Title>
+											<Dialog.Close asChild>
+												<button
+													type="button"
+													aria-label="Chiudi"
+													className="flex h-11 w-11 items-center justify-center rounded-full text-foreground-secondary"
+												>
+													<X className="h-5 w-5" />
+												</button>
+											</Dialog.Close>
+										</div>
+										<div className="flex flex-col gap-3">
+											<Dialog.Close asChild>
+												<a
+													href={`https://www.google.com/maps/dir/?api=1&destination=${event.latitude},${event.longitude}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="flex min-h-12 w-full items-center justify-center rounded-pill bg-surface px-5 font-medium text-foreground"
+													style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
+												>
+													Google Maps
+												</a>
+											</Dialog.Close>
+											<Dialog.Close asChild>
+												<a
+													href={`https://maps.apple.com/?daddr=${event.latitude},${event.longitude}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="flex min-h-12 w-full items-center justify-center rounded-pill bg-surface px-5 font-medium text-foreground"
+													style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
+												>
+													Apple Maps
+												</a>
+											</Dialog.Close>
+										</div>
+									</motion.div>
+								</Dialog.ContentUnstyled>
+							</>
+						)}
+					</AnimatePresence>
+				</Dialog.Portal>
+			</Dialog.Root>
 		</div>
 	);
 }
