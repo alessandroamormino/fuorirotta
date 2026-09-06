@@ -387,38 +387,7 @@ input[type="range"].slider::-moz-range-thumb:hover {
   border-top-color: var(--surface) !important;
 }
 
-.custom-popup-close {
-  position: absolute !important;
-  top: 8px !important;
-  right: 8px !important;
-  width: 28px !important;
-  height: 28px !important;
-  border-radius: 50% !important;
-  background-color: var(--primary) !important;
-  color: var(--primary-foreground) !important;
-  border: none !important;
-  cursor: pointer !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  transition: all var(--motion-fast) var(--ease-standard) !important;
-  z-index: 1000 !important;
-  box-shadow: var(--elev-raised) !important;
-  padding: 0 !important;
-}
-
-.custom-popup-close:hover {
-  background-color: var(--primary-hover) !important;
-  transform: scale(1.05) !important;
-}
-
-.custom-popup-close:active {
-  transform: scale(0.95) !important;
-}
-
-.custom-popup-close svg {
-  width: 16px !important;
-  height: 16px !important;
-  display: block !important;
-  margin: auto !important;
-}
+/* Il vecchio bottone di chiusura appeso al DOM del popup a mano sparisce
+   con D-11: MapPopupCard.tsx porta ora un vero <button aria-label="Chiudi">
+   dentro l'albero React del popup, e il popup Mapbox resta configurato con
+   closeButton: false. */

@@ -3,9 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { Event } from "@/lib/types";
-import { format } from "date-fns";
-import { it } from "date-fns/locale";
+import { CATEGORY_VISUALS, type CategoryVisual } from "@/lib/categories/visuals";
+import { FALLBACK_CATEGORY, type CanonicalCategory } from "@/lib/categories/taxonomy";
+import { calculateDistanceKm } from "@/lib/territorial/distance";
+import MapPopupCard, { type MapPopupEvent } from "@/components/map/MapPopupCard";
+
+export interface MapViewportChange {
+	/** Id delle feature non raggruppate renderizzate nell'inquadratura corrente. */
+	ids: number[];
+	center: { lat: number; lng: number };
+	/** Distanza centro -> angolo nord-est dei bounds correnti. */
+	radiusKm: number;
+}
 
 interface EventsMapProps {
 	events: Event[];
@@ -14,55 +26,122 @@ interface EventsMapProps {
 	mapId?: string;
 	disablePopups?: boolean;
 	userLocation?: { lat: number; lng: number } | null;
+	/** Contratto per il legame bidirezionale lista<->mappa (12-06). */
+	selectedEventId?: number | null;
+	onEventSelect?: (id: number | null) => void;
+	onViewportChange?: (change: MapViewportChange) => void;
 }
 
-const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/streets-v12";
+const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/light-v11";
 const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
+
+// Diametro coerente col pin 34px del prototipo (raggio ~ meta').
+const PIN_CIRCLE_RADIUS = 15;
+const PIN_HALO_RADIUS = 23;
+const PIN_HALO_OPACITY = 0.22;
+// Dimensione sorgente dell'SVG rasterizzato per addImage; l'icona resa a
+// schermo scende a CATEGORY_ICON_TARGET_PX via icon-size.
+const CATEGORY_ICON_SOURCE_PX = 24;
+const CATEGORY_ICON_TARGET_PX = 17;
 
 const EMPTY_GEOJSON: GeoJSON.FeatureCollection = {
 	type: "FeatureCollection",
 	features: [],
 };
 
-// Calcolati una volta: usano var(--primary) direttamente, quindi seguono il tema
-// via cascata CSS senza bisogno di essere ri-derivati a ogni apertura di popup.
-const CTA_SHADOW = "0 4px 12px color-mix(in srgb, var(--primary) 20%, transparent)";
-const CTA_SHADOW_HOVER = "0 6px 16px color-mix(in srgb, var(--primary) 30%, transparent)";
-
-// Mitigazione T-07-11: i campi evento interpolati nel popup HTML arrivano dagli
-// scraper e vanno resi inerti prima di entrare nel template string.
-function escapeHtml(text: string): string {
-	return String(text)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
-}
-
 // Unica lettura dei token a runtime: chiamata dentro addEventLayers (invocata
 // dall'handler "load"/"style.load", mai a livello di modulo o al solo mount).
 function readThemeColors() {
 	const style = getComputedStyle(document.documentElement);
 	const get = (name: string) => style.getPropertyValue(name).trim();
+
+	const categoryColors: Record<string, string> = {};
+	(Object.values(CATEGORY_VISUALS) as CategoryVisual[]).forEach((visual) => {
+		categoryColors[visual.token] = get(visual.token);
+	});
+
 	return {
-		accent: get("--accent"),
 		primary: get("--primary"),
-		primaryHover: get("--primary-hover"),
 		surface: get("--surface"),
 		primaryForeground: get("--primary-foreground"),
 		foreground: get("--foreground"),
-		mutedForeground: get("--muted-foreground"),
-		accentTint: get("--accent-tint"),
-		muted: get("--muted"),
-		userLocation: get("--user-location"),
+		background: get("--background"),
+		categoryColors,
 	};
 }
 
-// Aggiunge solo source "events" + i tre layer, coi colori letti a runtime.
-// Non registra gestori di eventi (map.on): quelli sopravvivono a setStyle()
-// e vengono registrati una sola volta altrove (handlersRegisteredRef).
-function addEventLayers(map: mapboxgl.Map, geojsonData: GeoJSON.FeatureCollection) {
+type ThemeColors = ReturnType<typeof readThemeColors>;
+
+function categoryIconImageId(token: string): string {
+	return `category-icon${token}`;
+}
+
+// Un'espressione "match" sulla proprieta' "category" gia' presente nel
+// GeoJSON, con Altro come ramo di default: nessuna informazione passa dal
+// solo colore (D-10), la mappa colore/icona e' l'unica fonte (nessuna lista
+// locale da tenere allineata a lib/categories/visuals.ts).
+function buildCategoryColorMatch(colors: ThemeColors): unknown[] {
+	const expr: unknown[] = ["match", ["get", "category"]];
+	(Object.entries(CATEGORY_VISUALS) as [CanonicalCategory, CategoryVisual][]).forEach(([name, visual]) => {
+		if (name === FALLBACK_CATEGORY) return;
+		expr.push(name, colors.categoryColors[visual.token]);
+	});
+	expr.push(colors.categoryColors[CATEGORY_VISUALS[FALLBACK_CATEGORY].token]);
+	return expr;
+}
+
+function buildIconImageMatch(): unknown[] {
+	const expr: unknown[] = ["match", ["get", "category"]];
+	(Object.entries(CATEGORY_VISUALS) as [CanonicalCategory, CategoryVisual][]).forEach(([name, visual]) => {
+		if (name === FALLBACK_CATEGORY) return;
+		expr.push(name, categoryIconImageId(visual.token));
+	});
+	expr.push(categoryIconImageId(CATEGORY_VISUALS[FALLBACK_CATEGORY].token));
+	return expr;
+}
+
+// Il pin selezionato sovrascrive il colore di categoria con --primary pieno
+// (ramo "case" in testa): un ramo che non matcha mai quando non c'e'
+// selezione, cosi' l'espressione degrada all'esatto match per categoria.
+function buildCircleColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
+	const categoryMatch = buildCategoryColorMatch(colors);
+	if (selectedEventId == null) return categoryMatch;
+	return ["case", ["==", ["get", "id"], selectedEventId], colors.primary, categoryMatch];
+}
+
+// Registra le 7 icone di categoria come immagini SDF (una volta per ciclo di
+// style: addImage/hasImage guardano lo stato dello style corrente, che
+// setStyle() azzera insieme ai layer). SDF = Mapbox ricolora via icon-color
+// invece di richiedere sette immagini gia' colorate: zero esadecimali nel
+// sorgente (check:tokens li rifiuterebbe comunque).
+function registerCategoryIcons(map: mapboxgl.Map) {
+	(Object.values(CATEGORY_VISUALS) as CategoryVisual[]).forEach(({ token, Icon }) => {
+		const imageId = categoryIconImageId(token);
+		if (map.hasImage(imageId)) return;
+
+		const svgMarkup = renderToStaticMarkup(
+			<Icon width={CATEGORY_ICON_SOURCE_PX} height={CATEGORY_ICON_SOURCE_PX} color="black" strokeWidth={2.4} />
+		);
+		const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+
+		map.loadImage(dataUrl, (error, image) => {
+			if (error || !image) return;
+			if (!map.hasImage(imageId)) {
+				map.addImage(imageId, image, { sdf: true });
+			}
+		});
+	});
+}
+
+// Aggiunge source "events" + i layer (cluster, pin, alone di selezione,
+// icone di categoria), coi colori letti a runtime. Non registra gestori di
+// eventi (map.on): quelli sopravvivono a setStyle() e vengono registrati una
+// sola volta altrove (handlersRegisteredRef).
+function addEventLayers(
+	map: mapboxgl.Map,
+	geojsonData: GeoJSON.FeatureCollection,
+	selectedEventId: number | null | undefined
+) {
 	const colors = readThemeColors();
 
 	map.addSource("events", {
@@ -73,31 +152,20 @@ function addEventLayers(map: mapboxgl.Map, geojsonData: GeoJSON.FeatureCollectio
 		clusterRadius: 50,
 	});
 
-	// Layer per i cluster
+	registerCategoryIcons(map);
+
+	// Layer per i cluster. D-13: solo l'aspetto del prototipo (cerchio su
+	// --foreground, testo su --background, anello di distacco dal fondo) —
+	// non piu' un colore diverso per fascia di conteggio, solo il raggio varia.
 	map.addLayer({
 		id: "clusters",
 		type: "circle",
 		source: "events",
 		filter: ["has", "point_count"],
 		paint: {
-			"circle-color": [
-				"step",
-				["get", "point_count"],
-				colors.accent, // 1-10 eventi
-				10,
-				colors.primary, // 10-30 eventi
-				30,
-				colors.primaryHover, // 30+ eventi
-			],
-			"circle-radius": [
-				"step",
-				["get", "point_count"],
-				20, // < 10
-				10,
-				30, // 10-30
-				30,
-				40, // 30+
-			],
+			"circle-color": colors.foreground,
+			"circle-opacity": 0.92,
+			"circle-radius": ["step", ["get", "point_count"], 20, 10, 30, 30, 40],
 			"circle-stroke-width": 3,
 			"circle-stroke-color": colors.surface,
 		},
@@ -115,21 +183,56 @@ function addEventLayers(map: mapboxgl.Map, geojsonData: GeoJSON.FeatureCollectio
 			"text-size": 14,
 		},
 		paint: {
-			"text-color": colors.primaryForeground,
+			"text-color": colors.background,
 		},
 	});
 
-	// Layer per i singoli punti
+	// Alone di selezione (D-04/prototipo): sotto il pin, invisibile finche'
+	// nessun id combacia col filtro. setFilter() lo riattiva/spegne senza
+	// ricostruire il layer (effect dipendente da selectedEventId sotto).
+	map.addLayer({
+		id: "unclustered-point-halo",
+		type: "circle",
+		source: "events",
+		filter: ["==", ["get", "id"], selectedEventId ?? -1],
+		paint: {
+			"circle-radius": PIN_HALO_RADIUS,
+			"circle-color": colors.primary,
+			"circle-opacity": PIN_HALO_OPACITY,
+		},
+	});
+
+	// Layer per i singoli punti: colore + icona per categoria (D-10), il
+	// selezionato passa a --primary pieno (buildCircleColorExpression).
 	map.addLayer({
 		id: "unclustered-point",
 		type: "circle",
 		source: "events",
 		filter: ["!", ["has", "point_count"]],
 		paint: {
-			"circle-color": colors.primary,
-			"circle-radius": 8,
+			"circle-color": buildCircleColorExpression(colors, selectedEventId) as never,
+			"circle-radius": PIN_CIRCLE_RADIUS,
 			"circle-stroke-width": 2,
 			"circle-stroke-color": colors.surface,
+		},
+	});
+
+	// Icona di categoria sopra il pin (D-10): stesso filtro, senza point_count.
+	map.addLayer({
+		id: "unclustered-point-icon",
+		type: "symbol",
+		source: "events",
+		filter: ["!", ["has", "point_count"]],
+		layout: {
+			"icon-image": buildIconImageMatch() as never,
+			"icon-size": CATEGORY_ICON_TARGET_PX / CATEGORY_ICON_SOURCE_PX,
+			"icon-allow-overlap": true,
+			"icon-ignore-placement": true,
+		},
+		paint: {
+			// Token del testo su pin pieno: leggibile sia sul colore di
+			// categoria sia sul --primary del pin selezionato.
+			"icon-color": colors.primaryForeground,
 		},
 	});
 }
@@ -140,16 +243,41 @@ export default function EventsMap({
 	onEventClick,
 	disablePopups = false,
 	userLocation,
+	selectedEventId = null,
+	onEventSelect,
+	onViewportChange,
 }: EventsMapProps) {
 	const mapContainerRef = useRef<HTMLDivElement>(null);
 	const mapRef = useRef<mapboxgl.Map | null>(null);
 	const popupRef = useRef<mapboxgl.Popup | null>(null);
+	const popupRootRef = useRef<Root | null>(null);
 	const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
-	const eventsWithCoordsRef = useRef<Array<{event: Event; coords: {lat: number; lng: number}}>>([]);
+	const eventsWithCoordsRef = useRef<Array<{ event: Event; coords: { lat: number; lng: number } }>>([]);
 	const layersInitializedRef = useRef(false);
 	const handlersRegisteredRef = useRef(false);
 	const lastGeoJSONRef = useRef<GeoJSON.FeatureCollection | null>(null);
+	const selectedEventIdRef = useRef<number | null>(selectedEventId);
+	// Refs per i callback opzionali del contratto 12-06: i gestori Mapbox si
+	// registrano una sola volta (handlersRegisteredRef), quindi un callback
+	// letto per closure resterebbe quello della prima registrazione. Le ref
+	// si aggiornano a ogni render, cosi' l'handler legge sempre l'ultimo.
+	const onEventClickRef = useRef(onEventClick);
+	const onEventSelectRef = useRef(onEventSelect);
+	const onViewportChangeRef = useRef(onViewportChange);
 	const [isThemeTransitioning, setIsThemeTransitioning] = useState(false);
+
+	useEffect(() => {
+		onEventClickRef.current = onEventClick;
+	}, [onEventClick]);
+	useEffect(() => {
+		onEventSelectRef.current = onEventSelect;
+	}, [onEventSelect]);
+	useEffect(() => {
+		onViewportChangeRef.current = onViewportChange;
+	}, [onViewportChange]);
+	useEffect(() => {
+		selectedEventIdRef.current = selectedEventId;
+	}, [selectedEventId]);
 
 	useEffect(() => {
 		if (!mapContainerRef.current) return;
@@ -180,6 +308,8 @@ export default function EventsMap({
 		});
 
 		return () => {
+			popupRootRef.current?.unmount();
+			popupRootRef.current = null;
 			mapRef.current?.remove();
 			mapRef.current = null;
 		};
@@ -195,12 +325,12 @@ export default function EventsMap({
 			const isDark = document.documentElement.classList.contains("dark");
 			setIsThemeTransitioning(true);
 			map.setStyle(isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT);
-			// Dopo setStyle() source e layer non esistono più (comportamento
-			// documentato di Mapbox GL, non un difetto del progetto).
+			// Dopo setStyle() source, layer e immagini non esistono più
+			// (comportamento documentato di Mapbox GL, non un difetto del progetto).
 			layersInitializedRef.current = false;
 
 			map.once("style.load", () => {
-				addEventLayers(map, lastGeoJSONRef.current ?? EMPTY_GEOJSON);
+				addEventLayers(map, lastGeoJSONRef.current ?? EMPTY_GEOJSON, selectedEventIdRef.current);
 				layersInitializedRef.current = true;
 				setIsThemeTransitioning(false);
 			});
@@ -217,7 +347,12 @@ export default function EventsMap({
 		const updateMarkers = () => {
 			if (!mapRef.current) return;
 
-			// Chiudi popup esistenti
+			// Chiudi popup esistenti — root React incluso, altrimenti resta
+			// collegato a un nodo DOM staccato a ogni aggiornamento eventi.
+			if (popupRootRef.current) {
+				popupRootRef.current.unmount();
+				popupRootRef.current = null;
+			}
 			if (popupRef.current) {
 				popupRef.current.remove();
 				popupRef.current = null;
@@ -271,6 +406,7 @@ export default function EventsMap({
 							title: item.event.title,
 							description: item.event.description || "",
 							dateStart: item.event.dateStart,
+							dateEnd: item.event.dateEnd || "",
 							locationName: item.event.locationName || "",
 							category: item.event.category || "",
 							imageUrl: item.event.imageUrl || "",
@@ -291,7 +427,7 @@ export default function EventsMap({
 				(mapRef.current.getSource("events") as mapboxgl.GeoJSONSource).setData(geojsonData);
 			} else {
 				// Prima inizializzazione: aggiungi source + layers
-				addEventLayers(mapRef.current, geojsonData);
+				addEventLayers(mapRef.current, geojsonData, selectedEventIdRef.current);
 				layersInitializedRef.current = true;
 			}
 
@@ -331,135 +467,97 @@ export default function EventsMap({
 					const handleMarkerClick = (
 						e: mapboxgl.MapLayerMouseEvent | mapboxgl.MapLayerTouchEvent
 					) => {
-						if (!mapRef.current || !e.features?.[0] || !e.features[0].properties)
-							return;
+						if (!mapRef.current || !e.features?.length) return;
 
-						// Chiudi eventuali popup esistenti
+						// D-18: TUTTE le feature coincidenti, non solo la prima.
+						// Deduplica per id (sopra una certa densita' Mapbox puo'
+						// restituire la stessa feature piu' volte a cavallo di piu'
+						// tile) e ordina per dateStart crescente.
+						const seenIds = new Set<number>();
+						const popupEvents: MapPopupEvent[] = [];
+						// Coordinate di tutte le feature coincidenti per definizione
+						// (D-18): presa dalla prima feature incontrata nel ciclo,
+						// senza indicizzare l'array esplicitamente per indice.
+						let coordinates: [number, number] | null = null;
+						for (const feature of e.features) {
+							if (coordinates === null) {
+								coordinates = (feature.geometry as GeoJSON.Point).coordinates.slice() as [
+									number,
+									number,
+								];
+							}
+							const props = feature.properties;
+							if (!props || props.id == null) continue;
+							const id = Number(props.id);
+							if (seenIds.has(id)) continue;
+							seenIds.add(id);
+							popupEvents.push({
+								id,
+								title: props.title ?? "",
+								category: props.category || "",
+								imageUrl: props.imageUrl || "",
+								locationName: props.locationName || "",
+								dateStart: props.dateStart,
+								dateEnd: props.dateEnd || undefined,
+							});
+						}
+						if (popupEvents.length === 0 || coordinates === null) return;
+						popupEvents.sort(
+							(a, b) => new Date(a.dateStart).getTime() - new Date(b.dateStart).getTime()
+						);
+
+						// Smonta SEMPRE il root precedente prima di crearne uno nuovo:
+						// altrimenti ogni click su un marker diverso lascia un root
+						// React montato su un nodo ormai staccato dal DOM (leak
+						// silenzioso, nessun errore a schermo — Pitfall 2 di
+						// 12-RESEARCH.md).
+						popupRootRef.current?.unmount();
+						popupRootRef.current = null;
 						if (popupRef.current) {
 							popupRef.current.remove();
 							popupRef.current = null;
 						}
 
-						const coordinates = (
-							e.features[0].geometry as GeoJSON.Point
-						).coordinates.slice() as [number, number];
-						const props = e.features[0].properties;
-
-						// Ora ogni feature ha solo 1 evento
-						const event = {
-							id: props.id,
-							title: props.title,
-							description: props.description || "",
-							dateStart: props.dateStart,
-							locationName: props.locationName || "",
-							category: props.category || "",
-							imageUrl: props.imageUrl || "",
-						};
-
-						// Colori letti prima di costruire il template: le classi Tailwind
-						// non arrivano dentro l'HTML di un popup Mapbox.
-						const colors = readThemeColors();
-
-						// Escaping (mitigazione T-07-11): i campi evento arrivano dagli
-						// scraper, senza escaping un titolo con markup verrebbe eseguito nel popup.
-						const safeTitle = escapeHtml(event.title);
-						const safeLocationName = event.locationName ? escapeHtml(event.locationName) : "";
-						const safeCategory = event.category ? escapeHtml(event.category) : "";
-						const safeImageUrl = event.imageUrl ? escapeHtml(event.imageUrl) : "";
-						const safeId = escapeHtml(String(event.id));
-
-						// Popup in stile card per singolo evento
-						const popupContent = `
-					<div style="width: 280px; font-family: system-ui, -apple-system, sans-serif; padding: 16px; position: relative;">
-						<div>
-							${
-								safeImageUrl
-									? `<img src="${safeImageUrl}" alt="${safeTitle}" style="width: 100%; height: 120px; object-fit: cover; border-radius: var(--radius-lg); margin-bottom: 12px;" />`
-									: `<div style="width: 100%; height: 120px; background: ${colors.muted}; border-radius: var(--radius-lg); margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
-										<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${colors.primary}" stroke-width="2">
-											<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-											<line x1="16" y1="2" x2="16" y2="6"></line>
-											<line x1="8" y1="2" x2="8" y2="6"></line>
-											<line x1="3" y1="10" x2="21" y2="10"></line>
-										</svg>
-									</div>`
-							}
-							<h3 style="font-weight: 600; font-size: 14px; color: ${colors.foreground}; margin: 0 0 6px 0; line-height: 1.3;">${safeTitle}</h3>
-							${
-								safeLocationName
-									? `<p style="font-size: 12px; color: ${colors.foreground}; margin: 0 0 4px 0; font-weight: 500;">${safeLocationName}</p>`
-									: ""
-							}
-							<p style="font-size: 12px; color: ${colors.mutedForeground}; margin: 0 0 6px 0;">
-								${format(new Date(event.dateStart), "dd MMM", { locale: it })}
-							</p>
-							${
-								safeCategory
-									? `<span style="display: inline-block; padding: 4px 10px; background: ${colors.accentTint}; color: ${colors.primary}; border-radius: var(--radius-lg); font-size: 11px; font-weight: 600; margin-bottom: 12px;">${safeCategory}</span>`
-									: ""
-							}
-							<a
-								href="/eventi/${safeId}"
-								style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: ${colors.primary}; color: ${colors.primaryForeground}; font-weight: 600; border-radius: var(--radius-lg); text-decoration: none; font-size: 13px; margin-top: 12px; transition: all 0.2s; box-shadow: ${CTA_SHADOW};"
-								onmouseover="this.style.boxShadow='${CTA_SHADOW_HOVER}'"
-								onmouseout="this.style.boxShadow='${CTA_SHADOW}'"
-							>
-								Vedi dettagli
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<path d="M5 12h14M12 5l7 7-7 7"/>
-								</svg>
-							</a>
-						</div>
-					</div>
-				`;
+						const container = document.createElement("div");
+						const root = createRoot(container);
+						popupRootRef.current = root;
 
 						const popup = new mapboxgl.Popup({
 							closeButton: false,
 							closeOnClick: true,
 							maxWidth: "280px",
-							className: "custom-popup",
-						})
-							.setLngLat(coordinates)
-							.setHTML(popupContent)
-							.addTo(mapRef.current);
+						}).setLngLat(coordinates);
 
-						// Salva il riferimento al popup corrente
+						// root.render() SINCRONO, PRIMA di passare il container a
+						// Mapbox: invertire l'ordine riproduce il popup vuoto al
+						// primo click documentato nell'issue mapbox-gl-js n. 12653.
+						root.render(<MapPopupCard events={popupEvents} onClose={() => popup.remove()} />);
+
+						popup.setDOMContent(container).addTo(mapRef.current);
 						popupRef.current = popup;
 
-						// Aggiungi bottone chiudi custom con icona X
-						const popupElement = popup.getElement();
-						if (popupElement) {
-							const closeButton = document.createElement("button");
-							closeButton.className = "custom-popup-close";
-							closeButton.innerHTML = `
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-							<line x1="18" y1="6" x2="6" y2="18"></line>
-							<line x1="6" y1="6" x2="18" y2="18"></line>
-						</svg>
-					`;
-							const closePopup = (e: MouseEvent | TouchEvent) => {
-								e.preventDefault();
-								e.stopPropagation();
-								popup.remove();
+						// Percorso di smontaggio quando l'utente clicca altrove sulla
+						// mappa: nessuno dei rami sopra viene attraversato in quel caso.
+						popup.on("close", () => {
+							popupRootRef.current?.unmount();
+							popupRootRef.current = null;
+							if (popupRef.current === popup) {
 								popupRef.current = null;
-							};
-							closeButton.addEventListener("click", closePopup as EventListener);
-							closeButton.addEventListener("touchend", closePopup as EventListener);
-							const content = popupElement.querySelector(
-								".mapboxgl-popup-content"
-							) as HTMLElement;
-							if (content) {
-								content.style.position = "relative";
-								content.appendChild(closeButton);
 							}
+						});
+
+						if (onEventSelectRef.current) {
+							onEventSelectRef.current(popupEvents[0].id);
 						}
 
-						// Se c'è callback, chiamalo - usa eventsWithCoordsRef per i dati più recenti
-						if (onEventClick) {
+						// Callback esistente: continua a ricevere il primo evento
+						// dell'elenco ordinato, i chiamanti attuali non cambiano
+						// comportamento. La selezione fine passa da onEventSelect.
+						if (onEventClickRef.current) {
 							const eventWithCoords = eventsWithCoordsRef.current.find(
-								(item) => item.event.id === event.id
+								(item) => item.event.id === popupEvents[0].id
 							);
-							if (eventWithCoords) onEventClick(eventWithCoords.event);
+							if (eventWithCoords) onEventClickRef.current(eventWithCoords.event);
 						}
 					};
 
@@ -485,6 +583,35 @@ export default function EventsMap({
 						if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
 					});
 				}
+
+				// Conteggio "eventi in vista" + centro/raggio dell'inquadratura
+				// (12-06): stesso innesco moveend, una callback sola perche' le tre
+				// cose condividono origine e momento.
+				mapRef.current.on("moveend", () => {
+					const map = mapRef.current;
+					if (!map || !onViewportChangeRef.current) return;
+					if (!map.getLayer("unclustered-point")) return;
+
+					const rendered = map.queryRenderedFeatures({ layers: ["unclustered-point"] });
+					const idSet = new Set<number>();
+					rendered.forEach((feature) => {
+						const id = feature.properties?.id;
+						if (typeof id === "number") idSet.add(id);
+						else if (id != null) idSet.add(Number(id));
+					});
+
+					const center = map.getCenter();
+					const bounds = map.getBounds();
+					if (!bounds) return;
+					const northEast = bounds.getNorthEast();
+					const radiusKm = calculateDistanceKm(center.lat, center.lng, northEast.lat, northEast.lng);
+
+					onViewportChangeRef.current({
+						ids: Array.from(idSet),
+						center: { lat: center.lat, lng: center.lng },
+						radiusKm,
+					});
+				});
 
 				// Marca i gestori come registrati: mai riportato a false, sopravvivono a setStyle()
 				handlersRegisteredRef.current = true;
@@ -520,7 +647,27 @@ export default function EventsMap({
 		return () => {
 			mapRef.current?.off("idle", updateMarkers);
 		};
-	}, [events, initialGeoJSON, onEventClick, disablePopups]);
+	}, [events, initialGeoJSON, disablePopups]);
+
+	// Aggiorna il pin selezionato: --primary pieno + alone, senza aspettare il
+	// prossimo giro di updateMarkers. Nessun feature-state: l'espressione
+	// "case" letta a ogni set basta e non richiede di sincronizzare stato per
+	// feature.
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !layersInitializedRef.current) return;
+		if (!map.getLayer("unclustered-point")) return;
+
+		const colors = readThemeColors();
+		map.setPaintProperty(
+			"unclustered-point",
+			"circle-color",
+			buildCircleColorExpression(colors, selectedEventId) as never
+		);
+		if (map.getLayer("unclustered-point-halo")) {
+			map.setFilter("unclustered-point-halo", ["==", ["get", "id"], selectedEventId ?? -1]);
+		}
+	}, [selectedEventId]);
 
 	// Gestisci marker della posizione dell'utente
 	useEffect(() => {
