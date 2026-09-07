@@ -1,20 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { formatEventRange } from "@/lib/eventStatus";
-import { decodeHtmlEntities } from "@/lib/utils";
-import CategoryPlaceholder from "@/components/CategoryPlaceholder";
+import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 
 /** Un evento gia' normalizzato dalle properties della feature Mapbox. */
-export interface MapPopupEvent {
-	id: number;
-	title: string;
-	category: string;
-	imageUrl: string;
-	locationName: string;
-	dateStart: string;
-	dateEnd?: string;
-}
+export type MapPopupEvent = MiniEventCardData;
 
 interface MapPopupCardProps {
 	/** Gia' ordinato per dateStart crescente dal chiamante (D-18). */
@@ -69,36 +58,7 @@ export default function MapPopupCard({ events, onClose }: MapPopupCardProps) {
 
 			<div className="flex flex-col gap-2">
 				{events.map((ev) => (
-					<Link
-						key={ev.id}
-						href={`/eventi/${ev.id}`}
-						className="flex gap-3 rounded-md p-1 hover:bg-surface"
-					>
-						<div className="relative h-[62px] w-[62px] shrink-0 overflow-hidden rounded-sm bg-surface">
-							{ev.imageUrl ? (
-								// Mitigazione T-12-06: imageUrl resta un src, mai un href.
-								<img
-									src={ev.imageUrl}
-									alt={decodeHtmlEntities(ev.title)}
-									className="h-full w-full object-cover"
-								/>
-							) : (
-								<CategoryPlaceholder category={ev.category || "Altro"} className="absolute inset-0 h-full w-full" />
-							)}
-						</div>
-						<div className="flex min-w-0 flex-col justify-center">
-							<p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">
-								{decodeHtmlEntities(ev.title)}
-							</p>
-							{/* D-21 vincolante: la meta porta comune+data su foreground-secondary,
-							    mai sul grigio debole in deroga WCAG — nessuna informazione qui
-							    vive solo su --muted-foreground-subtle. */}
-							<p className="mt-0.5 truncate text-xs text-foreground-secondary">
-								{ev.locationName ? `${decodeHtmlEntities(ev.locationName)} · ` : ""}
-								{formatEventRange(ev.dateStart, ev.dateEnd)}
-							</p>
-						</div>
-					</Link>
+					<MiniEventCard key={ev.id} event={ev} className="hover:bg-surface" />
 				))}
 			</div>
 		</div>

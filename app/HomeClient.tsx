@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,11 +9,13 @@ import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
 import CategoryFilterBar from "@/components/CategoryFilterBar";
 import ViewSwitch, { VIEW_SWITCH_TAB_ID, VIEW_SWITCH_PANEL_ID, type MobileView } from "@/components/ViewSwitch";
+import MapEventsRail from "@/components/map/MapEventsRail";
+import type { MapViewportChange } from "@/components/EventsMap";
 import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
-import { Check, Loader2, Map, Search, X } from "lucide-react";
+import { Check, Loader2, Map, RefreshCw, Search, X } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
-import { MOTION_FAST } from "@/lib/motion";
+import { EASE_STANDARD, MOTION_BASE, MOTION_FAST } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 // Il blocco di ripristino da sessionStorage (sotto, useIsomorphicLayoutEffect)
@@ -24,6 +26,21 @@ import { cn } from "@/lib/utils";
 // costante sceglie l'uno o l'altro in base a dove gira — solo quel blocco la
 // usa, gli altri effect del file restano passivi.
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+// T-12-21: il raggio di "Cerca in quest'area" nasce dalla mappa (uno zoom
+// estremo produrrebbe un'inquadratura di ampiezza continentale) ma finisce
+// comunque in un parametro di query pubblico verso /api/events — troncato
+// qui, una sola volta, nel punto in cui il valore entra in areaSearch (non
+// alla costruzione dei parametri di fetchEvents, o un secondo chiamante lo
+// aggirerebbe). 200km e' lo stesso tetto gia' usato altrove nel prodotto
+// (azione "Allarga a 200 km" dello stato vuoto).
+const MAX_AREA_RADIUS_KM = 200;
+
+// Task 3: soglia minima di spostamento del centro rispetto all'ultima
+// ricerca sull'area prima che la pillola "Cerca in quest'area" compaia — un
+// movimento di pochi metri (assestamento del gesto di pan) non e' una nuova
+// area.
+const AREA_PILL_THRESHOLD_KM = 0.5;
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -82,13 +99,22 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		lat: number;
 		lng: number;
 	} | null>(null);
-	// Il termine categoria e' qui apposta: senza, effectiveClusterGeoJSON sotto
-	// continuerebbe a servire la cache cluster precalcolata (non filtrata per
-	// categoria) mentre la lista e' gia' filtrata — due risposte diverse sullo
-	// stesso schermo (11-UI-SPEC.md, Interaction contract).
+	// Task 3 (D-12/"Cerca in quest'area"): centro+raggio di una ricerca
+	// sull'inquadratura corrente. Tenuto FUORI da searchFilters/draftFilters
+	// di proposito: quelli sono i filtri dell'utente, persistiti e mostrati
+	// dalla pillola di ricerca — un'area ci finirebbe dentro annuncerebbe una
+	// destinazione che l'utente non ha scelto e sposterebbe il conteggio del
+	// badge da sola. Non persistito in sessionStorage: e' legato a
+	// un'inquadratura, non a una preferenza.
+	const [areaSearch, setAreaSearch] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
+
+	// Il termine categoria e areaSearch sono qui apposta: senza, effectiveClusterGeoJSON
+	// sotto continuerebbe a servire la cache cluster precalcolata (non filtrata)
+	// mentre la lista e' gia' filtrata — due risposte diverse sullo stesso
+	// schermo (11-UI-SPEC.md, Interaction contract; key_links del piano 12-06).
 	const hasActiveFilters = !!(
 		searchFilters.location || searchFilters.dateFrom || searchFilters.dateTo || searchFilters.radius ||
-		(selectedCategory && selectedCategory !== "all")
+		(selectedCategory && selectedCategory !== "all") || areaSearch
 	);
 	const effectiveClusterGeoJSON = hasActiveFilters ? null : clusterGeoJSON;
 
@@ -98,6 +124,49 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// ViewSwitch — persistita in sessionStorage con lo stesso trattamento
 	// gia' riservato a selectedCategory (T-11-11/T-12-13 sotto).
 	const [mobileView, setMobileView] = useState<MobileView>("list");
+
+	// D-12: fonte unica del legame bidirezionale lista<->mappa, condivisa fra
+	// EventsMap (ogni istanza, mobile e desktop) e le card. Non duplicare
+	// dentro la mappa o dentro il carosello.
+	const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
+	const handleEventSelect = useCallback((id: number | null) => {
+		setSelectedEventId(id);
+	}, []);
+
+	// Task 1/3: ultima inquadratura riportata da onViewportChange (solo
+	// istanza mobile — il foglio inferiore e la pillola d'area sono
+	// composizione mobile, D-20). ids/centro/raggio, mai ricalcolati qui.
+	const [mapViewport, setMapViewport] = useState<MapViewportChange | null>(null);
+	// Origine dell'ultima ricerca sull'area (o della prima inquadratura nota):
+	// la pillola compare solo quando il centro corrente se ne allontana oltre
+	// AREA_PILL_THRESHOLD_KM, non ad ogni pixel di trascinamento.
+	const [lastSearchOrigin, setLastSearchOrigin] = useState<{ lat: number; lng: number } | null>(null);
+	const [areaSearchLoading, setAreaSearchLoading] = useState(false);
+	const handleViewportChange = useCallback((change: MapViewportChange) => {
+		setMapViewport(change);
+		setLastSearchOrigin((prev) => prev ?? change.center);
+	}, []);
+
+	// T-12-16: la risoluzione degli id in vista su mapEvents e' memoizzata
+	// sull'array di id (e su mapEvents) — senza, un movimento continuo della
+	// mappa o un qualunque re-render di HomeClient (es. un tasto premuto nel
+	// campo Dove) rigenererebbe l'intero elenco del carosello da zero.
+	const viewportEvents = useMemo(() => {
+		if (!mapViewport) return [];
+		const idSet = new Set(mapViewport.ids);
+		return mapEvents.filter((event) => idSet.has(event.id));
+	}, [mapViewport, mapEvents]);
+
+	const showAreaPill =
+		mobileView === "map" &&
+		mapViewport != null &&
+		lastSearchOrigin != null &&
+		calculateDistanceKm(
+			mapViewport.center.lat,
+			mapViewport.center.lng,
+			lastSearchOrigin.lat,
+			lastSearchOrigin.lng
+		) > AREA_PILL_THRESHOLD_KM;
 
 	// D-11 (Fase 17, piano 04): il pannello desktop copre "barra + pannello"
 	// (il dropdown e' portalato sul body, fuori da <main>), quindi il
@@ -173,6 +242,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	useEffect(() => {
 		if (!hydratedRef.current) return;
 		sessionStorage.setItem("mobileView", mobileView);
+	}, [mobileView]);
+
+	// Task 3: anche il ritorno alla vista lista azzera la ricerca sull'area,
+	// cosi' la lista non resta silenziosamente ristretta a un'area che non e'
+	// piu' a schermo. hydratedRef esclude il giro di ripristino iniziale.
+	useEffect(() => {
+		if (!hydratedRef.current) return;
+		if (mobileView !== "list" || !areaSearch) return;
+		setAreaSearch(null);
+		setLastSearchOrigin(null);
+		setLoadedCount(0);
+		fetchEvents(searchFilters, { mode: "replace" }, null);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [mobileView]);
 
 	useEffect(() => {
@@ -348,6 +430,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			return;
 		}
 
+		// Task 3: un cambio filtri/categoria e' il segnale che l'utente e'
+		// tornato a comandare lui — azzera la ricerca sull'area. `null`
+		// esplicito passato a fetchEvents sotto (non la closure areaSearch,
+		// ancora vecchia in questo stesso giro): vedi commento su fetchEvents.
+		setAreaSearch(null);
+		setLastSearchOrigin(null);
+
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
 
@@ -369,7 +458,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			// risultati svuota comunque la mappa, perche' quella scrittura
 			// arriva da un array vuoto ricevuto dal server, non da un azzeramento
 			// anticipato qui.
-			fetchEvents(searchFilters);
+			fetchEvents(searchFilters, {}, null);
 		}
 	}, [searchFilters, selectedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -393,9 +482,18 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// esplicito. key_links del piano: mapEvents non e' mai paginato dalla
 	// rotta (torna sempre l'insieme COMPLETO per i filtri correnti), quindi
 	// viene riscritto a ogni chiamata indipendentemente dal mode.
+	//
+	// Task 3: `area` di default legge lo stato areaSearch corrente (stesso
+	// pattern di `filters = searchFilters`), ma i chiamanti che devono
+	// azzerare l'area (cambio filtri/categoria, ritorno alla vista lista) lo
+	// passano esplicitamente a `null` — leggere la closure qui basterebbe per
+	// il valore MA non per il momento: setAreaSearch(null) e' asincrono, e la
+	// stessa chiamata di fetchEvents nello stesso giro vedrebbe ancora il
+	// valore vecchio senza un override esplicito.
 	const fetchEvents = async (
 		filters: SearchFilters = searchFilters,
-		options: { mode?: "replace" | "append"; limit?: number; offset?: number } = {}
+		options: { mode?: "replace" | "append"; limit?: number; offset?: number } = {},
+		area: { lat: number; lng: number; radiusKm: number } | null = areaSearch
 	) => {
 		const mode = options.mode ?? "replace";
 		const limit = options.limit ?? LIMIT;
@@ -447,7 +545,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				params.append("dateTo", formatLocalDate(filters.dateFrom));
 			}
 
-			if (userLocation) {
+			// Task 3: centro+raggio dell'area inquadrata prendono il posto di
+			// userLocation/filters.radius quando una ricerca sull'area e' in
+			// corso — alternativa sui due valori, non un secondo percorso di
+			// rete. /api/events non guadagna un parametro nuovo: lat/lng/radius
+			// sono gia' pubblici, li usa gia' "nelle vicinanze" dalla Fase 9.
+			if (area) {
+				params.append("lat", area.lat.toString());
+				params.append("lng", area.lng.toString());
+				params.append("radius", area.radiusKm.toString());
+			} else if (userLocation) {
 				params.append("lat", userLocation.lat.toString());
 				params.append("lng", userLocation.lng.toString());
 				if (filters.radius) {
@@ -563,6 +670,25 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		setDraftFilters(filters);
 	};
 
+	// Task 3: la pillola "Cerca in quest'area" cerca davvero — rifa' la
+	// richiesta sul centro e sul raggio dell'inquadratura corrente
+	// (onViewportChange), riusando lat/lng/radius gia' pubblici di
+	// /api/events (lo stesso percorso di "nelle vicinanze"). T-12-21: il
+	// raggio e' troncato qui, un'unica volta, prima di entrare in areaSearch.
+	const handleAreaSearch = () => {
+		if (!mapViewport || areaSearchLoading) return;
+		const area = {
+			lat: mapViewport.center.lat,
+			lng: mapViewport.center.lng,
+			radiusKm: Math.min(mapViewport.radiusKm, MAX_AREA_RADIUS_KM),
+		};
+		setAreaSearch(area);
+		setLastSearchOrigin(area);
+		setLoadedCount(0);
+		setAreaSearchLoading(true);
+		fetchEvents(searchFilters, { mode: "replace" }, area).finally(() => setAreaSearchLoading(false));
+	};
+
 	// Idempotente: riselezionare la chip attiva (incluso "Tutte" mentre "Tutte"
 	// e' attiva) non deve scrivere stato ne' innescare un refetch (T-11-12).
 	const handleCategorySelect = (value: string) => {
@@ -624,8 +750,23 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// l'etichetta di default)" — intestazione della lista, Task 2.
 	const listScopeLabel = searchFilters.location || "In tutta la Lombardia";
 
+	// Verso pin -> lista (D-12, caso desktop dove lista e mappa convivono):
+	// scorrimento via scrollIntoView sull'elemento, mai un offset calcolato a
+	// mano, rispettando prefers-reduced-motion. Se l'evento selezionato non
+	// e' fra quelli caricati il querySelector non trova nulla e la funzione
+	// esce: il pin resta comunque evidenziato, nessun caricamento a inseguimento.
+	useEffect(() => {
+		if (selectedEventId == null || !scrollContainerRef.current) return;
+		const node = scrollContainerRef.current.querySelector<HTMLElement>(
+			`[data-event-id="${selectedEventId}"]`
+		);
+		if (!node) return;
+		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		node.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "nearest" });
+	}, [selectedEventId]);
+
 	return (
-		<div className="min-h-screen bg-accent/5">
+		<div className="min-h-screen bg-primary/5">
 			<Navbar
 				filters={draftFilters}
 				onFiltersChange={setDraftFilters}
@@ -731,10 +872,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 														{events.map((event, index) => (
 															<div
 																key={`${event.source}-${event.id}`}
+																data-event-id={event.id}
 																className="event-card-item"
 																style={{ animationDelay: `${index * (MOTION_FAST / 3)}s` }}
 															>
-																<EventCard event={event} distanceKm={distanceKmFor(event)} />
+																<EventCard
+																	event={event}
+																	distanceKm={distanceKmFor(event)}
+																	highlighted={event.id === selectedEventId}
+																	onHoverStart={() => setSelectedEventId(event.id)}
+																	onHoverEnd={() =>
+																		setSelectedEventId((prev) => (prev === event.id ? null : prev))
+																	}
+																/>
 															</div>
 														))}
 													</div>
@@ -782,30 +932,69 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					</div>
 
 					{/* D-08: vista mappa mobile — peer della lista, non un overlay.
-					    Stesse prop del pannello desktop, mapId proprio. */}
+					    Stesse prop del pannello desktop, mapId proprio, piu' il
+					    contratto di selezione/viewport (D-12, Task 3). */}
 					{mobileView === "map" && (
 						<div
 							id={VIEW_SWITCH_PANEL_ID.map}
 							role="tabpanel"
 							aria-labelledby={VIEW_SWITCH_TAB_ID.map}
-							className="flex-1 min-w-0 xl:hidden"
+							className="relative flex-1 min-w-0 xl:hidden"
 						>
 							<EventsMap
 								events={mapEvents}
 								initialGeoJSON={effectiveClusterGeoJSON}
 								mapId="map-mobile"
 								userLocation={userLocation}
+								selectedEventId={selectedEventId}
+								onEventSelect={handleEventSelect}
+								onViewportChange={handleViewportChange}
 							/>
+
+							{/* Task 3: "Cerca in quest'area" — bottone reale, tolto
+							    dall'ordine di tabulazione quando nascosto (AnimatePresence
+							    smonta il nodo, non lo rende invisibile). */}
+							<AnimatePresence>
+								{showAreaPill && (
+									<motion.button
+										type="button"
+										onClick={handleAreaSearch}
+										disabled={areaSearchLoading}
+										initial={{ opacity: 0, x: "-50%", y: -8 }}
+										animate={{ opacity: 1, x: "-50%", y: 0 }}
+										exit={{ opacity: 0, x: "-50%", y: -8 }}
+										transition={{ duration: MOTION_BASE, ease: EASE_STANDARD }}
+										className="absolute left-1/2 top-3 z-10 inline-flex h-[38px] items-center gap-1.5 rounded-pill px-4 text-sm font-medium text-foreground"
+										style={{
+											background: "color-mix(in srgb, var(--background) 92%, transparent)",
+											backdropFilter: "saturate(180%) blur(20px)",
+											WebkitBackdropFilter: "saturate(180%) blur(20px)",
+											boxShadow: "0 0 0 1px var(--border-soft), 0 4px 16px rgba(0, 0, 0, 0.16)",
+										}}
+									>
+										{areaSearchLoading ? (
+											<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+										) : (
+											<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+										)}
+										{"Cerca in quest'area"}
+									</motion.button>
+								)}
+							</AnimatePresence>
+
+							<MapEventsRail events={viewportEvents} selectedEventId={selectedEventId} />
 						</div>
 					)}
 
 					<div className="hidden xl:block w-[50%] max-w-4xl flex-shrink-0">
-						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-accent/30 relative group">
+						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-primary/30 relative group">
 							<EventsMap
 								events={mapEvents}
 								initialGeoJSON={effectiveClusterGeoJSON}
 								mapId="map-sidebar"
 								userLocation={userLocation}
+								selectedEventId={selectedEventId}
+								onEventSelect={handleEventSelect}
 							/>
 							<motion.button
 								onClick={() => setIsMapExpanded(true)}
@@ -856,6 +1045,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 										initialGeoJSON={effectiveClusterGeoJSON}
 										mapId="map-fullscreen-desktop"
 										userLocation={userLocation}
+										selectedEventId={selectedEventId}
+										onEventSelect={handleEventSelect}
 									/>
 								</div>
 							</div>

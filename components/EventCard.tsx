@@ -3,7 +3,7 @@
 import { Event } from "@/lib/types";
 import { eventStatus, formatEventRange } from "@/lib/eventStatus";
 import Link from "next/link";
-import { decodeHtmlEntities } from "@/lib/utils";
+import { decodeHtmlEntities, cn } from "@/lib/utils";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 
@@ -11,6 +11,15 @@ interface EventCardProps {
 	event: Event;
 	/** Calcolata dal chiamante (posizione utente nota). Assente -> il segmento "N km" non compare. */
 	distanceKm?: number;
+	/** D-12: legame bidirezionale lista<->mappa — anello quando il pin corrispondente e' selezionato. */
+	highlighted?: boolean;
+	/**
+	 * D-12, verso card -> pin: solo puntatore fine (mouse). Il tocco naviga al
+	 * dettaglio come oggi — l'evidenziazione da tap sulla card in lista
+	 * cambierebbe il gesto principale di una superficie gia' approvata.
+	 */
+	onHoverStart?: () => void;
+	onHoverEnd?: () => void;
 }
 
 /**
@@ -20,16 +29,33 @@ interface EventCardProps {
  * eredita non appena esiste — nessuna variante `sm:`/`md:` che biforchi la
  * resa.
  */
-export default function EventCard({ event, distanceKm }: EventCardProps) {
+export default function EventCard({ event, distanceKm, highlighted, onHoverStart, onHoverEnd }: EventCardProps) {
 	const status = eventStatus(event.dateStart, event.dateEnd);
 	const title = decodeHtmlEntities(
 		event.title.toLowerCase().charAt(0).toUpperCase() + event.title.toLowerCase().slice(1)
 	);
 	const comune = event.comune;
 
+	const handlePointerEnter = (e: React.PointerEvent) => {
+		if (e.pointerType === "mouse") onHoverStart?.();
+	};
+	const handlePointerLeave = (e: React.PointerEvent) => {
+		if (e.pointerType === "mouse") onHoverEnd?.();
+	};
+
 	return (
-		<Link href={`/eventi/${event.id}`} className="group block">
-			<div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg bg-surface shadow-[var(--elev-ring)]">
+		<Link
+			href={`/eventi/${event.id}`}
+			className="group block"
+			onPointerEnter={handlePointerEnter}
+			onPointerLeave={handlePointerLeave}
+		>
+			<div
+				className={cn(
+					"relative aspect-[3/2] w-full overflow-hidden rounded-lg bg-surface",
+					highlighted ? "shadow-[0_0_0_2px_var(--primary)]" : "shadow-[var(--elev-ring)]"
+				)}
+			>
 				{event.imageUrl ? (
 					<img
 						src={event.imageUrl}
