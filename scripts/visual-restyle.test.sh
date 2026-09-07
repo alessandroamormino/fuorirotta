@@ -21,6 +21,8 @@
 #   VR-03 (12-03) — popup Mapbox come componenti React, D-18.
 #   VR-04 (12-05) — "carica altri", vista mappa mobile a comparsa rimossa.
 #   VR-05 (12-07) — pillola a due righe + bottom sheet (D-19).
+#   VR-08 (piano desktop) — paginazione numerata a 7 caselle e composizione
+#         desktop a tre stati (D-23).
 #   VR-06 (sweep finale, 12-06/12-07) — nessun residuo dei due alias di
 #         compatibilita' teal introdotti dal Task 1 di questo piano.
 #   VR-07 (12-01/12-04/12-05/12-07) — armonizzazione del movimento (D-16):
@@ -201,16 +203,21 @@ fi
 vr04_ok=1
 home_client="app/HomeClient.tsx"
 if [[ -f "${home_client}" ]]; then
-  grep -qE '\b(const|function)\s+buildPages\b' "${home_client}" \
-    && { echo "  - ${home_client} dichiara ancora buildPages (paginazione numerica)"; vr04_ok=0; }
-  grep -qE '\b(const|function)\s+renderPages\b' "${home_client}" \
-    && { echo "  - ${home_client} dichiara ancora renderPages (paginazione numerica)"; vr04_ok=0; }
+  # D-23 (2026-09-07): D-07 e' partizionata per superficie. Il divieto di
+  # buildPages/renderPages e' stato RIMOSSO da qui, non indebolito: su desktop
+  # una finestra di pagine e' ora il contratto (§4 dell'handoff desktop), e un
+  # grep non sa distinguere il breakpoint. Cio' che VR-04 protegge davvero — il
+  # "carica altri" mobile — resta asserito sotto. La paginazione desktop ha la
+  # sua sezione, VR-08.
+  #
+  # Anche l'asserzione su map-fullscreen-desktop e' uscita: proteggeva il ramo
+  # desktop finche' D-20 rinviava la composizione desktop. Il mock desktop ora
+  # esiste e la sostituisce con l'interruttore a tre stati, quindi quella
+  # asserzione difenderebbe una verita' scaduta.
   grep -q 'map-fullscreen-mobile' "${home_client}" \
     && { echo "  - ${home_client} monta ancora il ramo mobile dell'overlay mappa a comparsa"; vr04_ok=0; }
-  grep -q 'map-fullscreen-desktop' "${home_client}" \
-    || { echo "  - ${home_client} non monta piu' il ramo desktop (map-fullscreen-desktop) — la composizione desktop e' fuori scope, non va rimosso"; vr04_ok=0; }
   grep -q 'IntersectionObserver' "${home_client}" \
-    || { echo "  - ${home_client} non usa IntersectionObserver (atteso per \"carica altri\")"; vr04_ok=0; }
+    || { echo "  - ${home_client} non usa IntersectionObserver (atteso per \"carica altri\" mobile)"; vr04_ok=0; }
 else
   echo "  - ${home_client} non esiste"
   vr04_ok=0
@@ -223,6 +230,32 @@ else
 fi
 
 # ==============================================================================
+# ==============================================================================
+# VR-08 (desktop, D-23) — paginazione numerata e composizione a tre stati
+# ==============================================================================
+
+vr08_ok=1
+home_client_d="app/HomeClient.tsx"
+if [[ -f "${home_client_d}" ]]; then
+  grep -qE '\b(const|function)\s+buildPageWindow\b' "${home_client_d}" \
+    || { echo "  - ${home_client_d} non dichiara buildPageWindow (finestra a 7 caselle, D-23)"; vr08_ok=0; }
+  grep -q 'MAX_PAGE_SLOTS' "${home_client_d}" \
+    || { echo "  - ${home_client_d} non dichiara MAX_PAGE_SLOTS (il tetto di 7 caselle che manca alla produzione)"; vr08_ok=0; }
+  grep -q "data-view" "${home_client_d}" \
+    || { echo "  - ${home_client_d} non usa data-view (interruttore desktop a tre stati)"; vr08_ok=0; }
+  grep -q 'Espandi mappa' "${home_client_d}" \
+    && { echo "  - ${home_client_d} espone ancora \"Espandi mappa\": a desktop l'ingrandimento lo fa l'interruttore"; vr08_ok=0; }
+else
+  echo "  - ${home_client_d} non esiste"
+  vr08_ok=0
+fi
+
+if [[ "${vr08_ok}" -eq 1 ]]; then
+  section_pass "VR-08" "paginazione numerata desktop e composizione a tre stati (D-23)"
+else
+  section_red_expected "VR-08" "paginazione numerata / composizione desktop (D-23)" "piano desktop"
+fi
+
 # VR-05 (12-07) — pillola a due righe + bottom sheet, D-19
 # ==============================================================================
 
