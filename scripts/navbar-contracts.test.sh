@@ -201,9 +201,12 @@ number_guards="$(grep -cE 'typeof parsed\.[a-zA-Z]+ === "number"' app/HomeClient
 string_guards="$(grep -cE 'typeof parsed\.[a-zA-Z]+ === "string"' app/HomeClient.tsx)"
 [[ "${string_guards}" -eq 1 ]] \
   || fail "T-17-01: attesa 1 guardia typeof ... === \"string\" (comuneIstatCode) in app/HomeClient.tsx, trovate ${string_guards}"
-grep -qE 'Number\.isInteger\(parsedPage\)' app/HomeClient.tsx \
-  || fail "T-17-01: la guardia Number.isInteger su currentPage e' sparita da app/HomeClient.tsx"
-echo "ok  T-17-01: le guardie di tipo sul ripristino (radius/comuneId/comuneIstatCode/currentPage) sono ancora al loro posto"
+# D-07 (12-05): currentPage e' stato sostituito da loadedCount (paginazione
+# numerica -> "carica altri", 12-05-SUMMARY.md) con lo stesso trattamento di
+# validazione — la guardia Number.isInteger sopravvive, solo rinominata.
+grep -qE 'Number\.isInteger\(parsedLoadedCount\)' app/HomeClient.tsx \
+  || fail "T-17-01: la guardia Number.isInteger su loadedCount e' sparita da app/HomeClient.tsx"
+echo "ok  T-17-01: le guardie di tipo sul ripristino (radius/comuneId/comuneIstatCode/loadedCount) sono ancora al loro posto"
 
 # 5. D-08, regola unica: clearMobile chiama resetFilters, senza un proprio
 # azzeramento duplicato. Verificato sull'intervallo di righe della funzione,

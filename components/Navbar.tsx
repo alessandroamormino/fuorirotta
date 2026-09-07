@@ -166,7 +166,7 @@ export default function Navbar({
 				className="fixed top-2 left-0 right-0 z-50 px-4 py-4"
 			>
 				<div className="container mx-auto">
-					<div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+					<div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-4 lg:gap-6">
 						{/* Logo — in flusso (D-10): non piu' absolute, fratello flex-none
 						    della zona di ricerca e del toggle. */}
 						<div className="flex-none">
@@ -185,7 +185,10 @@ export default function Navbar({
 										loading="eager"
 										priority
 									/>
-									<span className="hidden xl:block text-2xl font-bold text-primary">
+									{/* D-19 (piano 07): il wordmark, prima visibile solo da xl,
+									    diventa visibile anche sotto sm (topbar del prototipo) —
+									    invariato fra sm e xl. */}
+									<span className="block sm:hidden xl:block text-2xl font-bold text-primary">
 										Fuorirotta
 									</span>
 								</motion.div>
@@ -193,8 +196,13 @@ export default function Navbar({
 						</div>
 
 						{/* Search Bar — flex-1 min-w-0 (D-10): cede spazio per prima,
-						    non invade quello del logo/toggle a larghezze intermedie. */}
-						<div className="flex-1 min-w-0 flex justify-center">
+						    non invade quello del logo/toggle a larghezze intermedie.
+						    D-19 (piano 07): l'intero contenitore (Popover + morph a
+						    molla) e' nascosto sotto sm — la pillola mobile ha ora la
+						    propria chrome in un blocco fratello piu' sotto, invece di
+						    ereditarla da qui. Sopra sm il markup e il comportamento
+						    non cambiano. */}
+						<div className="hidden sm:flex sm:flex-1 sm:min-w-0 sm:justify-center">
 						<div className="w-full max-w-3xl relative">
 							<Popover.Root
 								open={dropdownOpen}
@@ -249,22 +257,6 @@ export default function Navbar({
 										style={{ borderRadius: 9999 }}
 										className={`flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 shadow-lg hover:shadow-xl transition-[color,background-color,border-color,box-shadow] px-2 relative ${searchbarWidthClass}`}
 									>
-										{/* Mobile: searchbar — sempre montata, invariata (il mobile
-										    non fa parte della macchina a stati A/B/C/D desktop). */}
-										<SearchbarTrigger
-											className="sm:hidden flex-1 min-w-0"
-											hasActiveFilters={hasActiveFilters}
-											location={filters.location}
-											dateFrom={filters.dateFrom}
-											dateTo={filters.dateTo}
-											onOpen={() => {
-												setMobileDestExpanded(false);
-												setMobileWhenOpen(false);
-												setActiveField("mobile_search");
-											}}
-											onClear={search.clear}
-										/>
-
 										{/* Desktop: pillola (stato A) oppure barra a due campi
 										    (stati B/C/D) — un solo cross-fade di opacity fra i due,
 										    nessuno slide/scale aggiuntivo (17-UI-SPEC.md). */}
@@ -312,6 +304,7 @@ export default function Navbar({
 													    (desktopCollapsed lo richiede), quindi questo
 													    montaggio rende sempre il ramo "senza filtri". */}
 													<SearchbarTrigger
+														variant="desktop"
 														ref={pillButtonRef}
 														className="w-full"
 														hasActiveFilters={hasActiveFilters}
@@ -479,6 +472,29 @@ export default function Navbar({
 								/>
 							</Popover.Root>
 						</div>
+						</div>
+
+						{/* Riga 2 mobile: pillola di ricerca a due righe con badge, a
+						    piena larghezza (D-19, piano 07). order-3 la manda in fondo
+						    fra i fratelli visibili sotto sm (dopo logo e toggle, che
+						    restano order 0), e w-full la forza a capo su una riga
+						    propria dentro il contenitore flex-wrap. Nascosta a sm+, dove
+						    la zona di ricerca desktop sopra prende il suo posto. */}
+						<div className="order-3 w-full sm:hidden">
+							<SearchbarTrigger
+								variant="mobile"
+								hasActiveFilters={hasActiveFilters}
+								location={filters.location}
+								dateFrom={filters.dateFrom}
+								dateTo={filters.dateTo}
+								radius={filters.radius}
+								onOpen={() => {
+									setMobileDestExpanded(false);
+									setMobileWhenOpen(false);
+									setActiveField("mobile_search");
+								}}
+								onClear={search.clear}
+							/>
 						</div>
 
 						{/* Toggle tema — un solo montaggio in tutto il prodotto reso a
