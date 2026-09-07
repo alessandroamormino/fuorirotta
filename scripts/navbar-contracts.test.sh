@@ -492,4 +492,73 @@ if ! grep -q 'transition-all.*searchbarWidthClass}`}' "${tmp_bad_transition}"; t
 fi
 echo "ok  D-04: l'asserzione e' dimostrata capace di fallire su un transition-all rimesso"
 
-echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17, D-03/D-11 Fase 17)"
+# ─────────────────────────────────────────────────────────────────────────────
+# D-19 (Fase 12, piano 07) — pillola a due righe con badge, foglio ancorato al
+# fondo. Nessun gate puo' osservare la molla o il focus a schermo (checkpoint
+# umano del Task 3): queste asserzioni verificano solo i MECCANISMI statici.
+
+mobile_overlay="components/navbar/MobileSearchOverlay.tsx"
+searchbar_trigger="components/navbar/SearchbarTrigger.tsx"
+
+# 1. Il foglio non e' piu' ancorato a tutti e quattro i lati (era `inset-0`
+#    nell'overlay fullscreen): resta ancorato solo al fondo. Commenti
+#    filtrati prima di cercare — il commento D-13 in testa al file nomina
+#    `.inset-0` a scopo di documentazione (conflitto di specificita' di
+#    Dialog.Content, non il contenitore del foglio) ed e' legittimo.
+if strip_comments "${mobile_overlay}" | grep -q 'inset-0'; then
+  fail "D-19: ${mobile_overlay} e' ancora ancorato a tutto schermo (inset-0) — atteso un foglio ancorato al fondo"
+fi
+grep -qE 'left-0[[:space:]]+right-0' "${mobile_overlay}" \
+  || fail "D-19: ${mobile_overlay} non dichiara left-0/right-0 sul contenitore del foglio"
+echo "ok  D-19: ${mobile_overlay} non e' piu' ancorato a tutto schermo — solo sinistra/destra/fondo"
+
+# 2. Altezza massima dichiarata (non fissa): il contenuto scrollabile non
+#    deve mai coprire l'intera safe-area superiore.
+grep -q 'max-h-\[90dvh\]' "${mobile_overlay}" \
+  || fail "D-19: ${mobile_overlay} non dichiara max-h-[90dvh] (contratto bottom sheet)"
+echo "ok  D-19: ${mobile_overlay} dichiara max-h-[90dvh]"
+
+# 3. Il focus trap resta quello di Radix Dialog — la correzione del
+#    2026-09-06 in 12-CONTEXT.md e' vincolante: nessun inert nuovo qui.
+grep -q 'Dialog.ContentUnstyled' "${mobile_overlay}" \
+  || fail "D-19: ${mobile_overlay} non usa piu' Dialog.ContentUnstyled — il focus trap del foglio deve restare Radix"
+grep -q 'asChild' "${mobile_overlay}" \
+  || fail "D-19: ${mobile_overlay} non passa piu' asChild al contenuto del Dialog"
+if strip_comments "${mobile_overlay}" | grep -qE '\binert\b'; then
+  fail "D-19: ${mobile_overlay} introduce inert — il bottom sheet resta un Dialog.Root, non va sostituito (12-CONTEXT.md, correzione 2026-09-06)"
+fi
+echo "ok  D-19: il foglio mantiene Dialog.ContentUnstyled+asChild, nessun inert nuovo introdotto"
+
+# 4. La variante mobile della pillola dichiara il badge del conteggio filtri.
+grep -qE 'variant:[[:space:]]*"mobile"' "${searchbar_trigger}" \
+  || fail "D-19: ${searchbar_trigger} non dichiara il tipo della variante mobile"
+grep -qiE 'filterCount' "${searchbar_trigger}" \
+  || fail "D-19: ${searchbar_trigger} non dichiara il badge del conteggio filtri (filterCount)"
+echo "ok  D-19: ${searchbar_trigger} dichiara la variante mobile con il badge del conteggio filtri"
+
+# 5. Il ramo desktop resta la sola cosa che il montaggio desktop puo' mai
+#    rendere: la GUARDIA DESKTOP di 12-UI-SPEC.md non deve introdurre badge o
+#    seconda riga sul ramo "desktop" del componente condiviso. L'ultimo
+#    `return (` del file e' il ramo desktop (il ramo mobile ritorna prima e
+#    dentro l'if, piu' in alto nel file).
+desktop_return_line="$(grep -n '^\treturn ($' "${searchbar_trigger}" | tail -1 | cut -d: -f1)"
+[[ -n "${desktop_return_line}" ]] \
+  || fail "D-19: non trovo piu' il return del ramo desktop in ${searchbar_trigger} — il gate non puo' verificarlo"
+desktop_branch="$(sed -n "${desktop_return_line},\$p" "${searchbar_trigger}")"
+if echo "${desktop_branch}" | grep -qiE 'filterCount'; then
+  fail "D-19: il ramo desktop di ${searchbar_trigger} sembra portare il badge del conteggio filtri — la GUARDIA DESKTOP lo vieta"
+fi
+echo "ok  D-19: nessun riferimento al badge nel ramo desktop di ${searchbar_trigger} — GUARDIA DESKTOP rispettata"
+
+# Prova di non-vacuita': un file fittizio con inset-0 residuo deve essere
+# rilevato dalla stessa ricerca usata sopra.
+tmp_bad_sheet="${tmp_dir}/BadMobileOverlay.tsx"
+{
+  echo 'export const A = () => <div className="fixed inset-0 max-h-[90dvh]" />;'
+} > "${tmp_bad_sheet}"
+if ! strip_comments "${tmp_bad_sheet}" | grep -q 'inset-0'; then
+  fail "D-19: la prova di non-vacuita' non rileva un inset-0 reintrodotto — asserzione 1 vacua"
+fi
+echo "ok  D-19: l'asserzione 1 e' dimostrata capace di fallire su un inset-0 reintrodotto"
+
+echo "PASS: contratti Navbar verificabili senza browser (D-06, D-12, D-09, D-10, D-07, D-08, D-09/D-10 Fase 17, D-01/D-02/D-04/D-05 Fase 17, D-03/D-11 Fase 17, D-19 Fase 12)"

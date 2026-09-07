@@ -19,6 +19,7 @@ import * as Popover from "@/components/ui/Popover";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import type { SearchFilters } from "@/lib/types";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
+import { MOTION_FAST } from "@/lib/motion";
 
 interface NavbarProps {
 	// D-07: Navbar e' un componente controllato — riceve i filtri come valore
@@ -26,7 +27,6 @@ interface NavbarProps {
 	filters: SearchFilters;
 	onFiltersChange: (filters: SearchFilters) => void;
 	onSearch: (filters: SearchFilters) => void;
-	onOpenMap?: () => void;
 	// D-11 (Fase 17, piano 04): segnala al genitore quando il pannello
 	// DESKTOP (non l'overlay mobile, che ha gia' il proprio trap Radix)
 	// passa da aperto a chiuso o viceversa, cosi' il genitore puo' rendere
@@ -38,7 +38,6 @@ export default function Navbar({
 	filters: controlledFilters,
 	onFiltersChange,
 	onSearch,
-	onOpenMap,
 	onPanelOpenChange,
 }: NavbarProps) {
 	const { filters, setFilters, search, radius, panels, destinations } =
@@ -157,7 +156,6 @@ export default function Navbar({
 				radius={radius}
 				panels={panels}
 				destinations={destinations}
-				onOpenMap={onOpenMap}
 			/>
 
 			{/* ── NAVBAR ── */}
@@ -297,7 +295,7 @@ export default function Navbar({
 													initial={{ opacity: 0 }}
 													animate={{ opacity: 1 }}
 													exit={{ opacity: 0 }}
-													transition={{ duration: 0.15 }}
+													transition={{ duration: MOTION_FAST }}
 													className="[grid-area:1/1] flex items-center justify-center min-w-0"
 												>
 													{/* Stato A: hasActiveFilters e' falso per definizione
@@ -323,7 +321,7 @@ export default function Navbar({
 													initial={{ opacity: 0 }}
 													animate={{ opacity: 1 }}
 													exit={{ opacity: 0 }}
-													transition={{ duration: 0.15 }}
+													transition={{ duration: MOTION_FAST }}
 													className="[grid-area:1/1] flex items-center min-w-0"
 												>
 													{/* Desktop: Where Field */}

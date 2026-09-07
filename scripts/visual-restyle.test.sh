@@ -52,6 +52,14 @@ section_red_expected() {
   overall_status=1
 }
 
+# Filtra i commenti prima di cercare un pattern — stesso helper di
+# scripts/navbar-contracts.test.sh: un commento che nomina una classe a scopo
+# di documentazione (es. il rationale D-13 su .inset-0/.p-0) e' legittimo e
+# non deve far fallire il gate.
+strip_comments() {
+  grep -vE '^[[:space:]]*(//|\*|/\*)' "$1"
+}
+
 # ==============================================================================
 # Prove di non-vacuita' — dimostrano che le asserzioni sotto sanno fallire,
 # prima di fidarsi del loro output sul repository vero. Stile
@@ -222,7 +230,7 @@ vr05_ok=1
 mobile_overlay="components/navbar/MobileSearchOverlay.tsx"
 searchbar_trigger="components/navbar/SearchbarTrigger.tsx"
 if [[ -f "${mobile_overlay}" ]]; then
-  grep -q 'inset-0' "${mobile_overlay}" \
+  strip_comments "${mobile_overlay}" | grep -q 'inset-0' \
     && { echo "  - ${mobile_overlay} e' ancora ancorato a tutto schermo (inset-0)"; vr05_ok=0; }
   grep -q 'max-h-\[90dvh\]' "${mobile_overlay}" \
     || { echo "  - ${mobile_overlay} non dichiara max-h-[90dvh] (contratto bottom sheet)"; vr05_ok=0; }
