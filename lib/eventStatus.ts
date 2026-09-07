@@ -91,7 +91,13 @@ export function eventStatus(
 // Self-check: `npx tsx lib/eventStatus.ts`. Nessun accesso al DOM/DB: il
 // modulo e' puro e il suo self-check deve restare eseguibile senza
 // container, stesso stile di lib/territorial/distance.ts.
-if (require.main === module) {
+//
+// La guardia su `typeof` non e' cerimonia: questo modulo e' importato da
+// componenti "use client" (EventCard, StatusBadge, MiniEventCard), e nel
+// bundle browser `module` non esiste — `require.main === module` da solo
+// esplode con "module is not defined" al momento della valutazione del
+// modulo, prima ancora che la pagina renda.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const at = (n: number, from = today) => {

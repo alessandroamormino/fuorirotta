@@ -305,7 +305,11 @@ export function resolveComune(input: ResolveInput, index: ComuneIndex): ResolveO
 
 // Self-check: `npx tsx lib/territorial/resolve.ts`.
 // Non un framework di test, solo un demo() con assert che fallisce rumorosamente.
-if (require.main === module) {
+// Guardia su `typeof`: questo modulo e' importato da componenti "use client",
+// e nel bundle browser `module` non esiste — `require.main === module` da solo
+// esplode con "module is not defined" alla valutazione del modulo, prima che la
+// pagina renda. Il self-check resta eseguibile con `npx tsx <file>`.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   const milano: ComuneRow = {
     id: 1,
     istatCode: '015146',

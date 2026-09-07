@@ -33,7 +33,11 @@ export function calculateDistanceKm(
 
 // Self-check: `npx tsx lib/territorial/distance.ts`.
 // Non un framework di test, solo un demo() con assert che fallisce rumorosamente.
-if (require.main === module) {
+// Guardia su `typeof`: questo modulo e' importato da componenti "use client",
+// e nel bundle browser `module` non esiste — `require.main === module` da solo
+// esplode con "module is not defined" alla valutazione del modulo, prima che la
+// pagina renda. Il self-check resta eseguibile con `npx tsx <file>`.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   console.assert(
     calculateDistanceKm(45.4642, 9.19, 45.4642, 9.19) === 0,
     'atteso 0 per due punti identici'
