@@ -47,7 +47,7 @@ export default function StatusBadge({ label, tone, variant = "card", className }
 				<i
 					aria-hidden="true"
 					className="block h-1.5 w-1.5 rounded-full"
-					style={{ background: tone === "live" ? "var(--success)" : "var(--primary)" }}
+					style={{ background: tone === "live" ? "var(--success)" : "var(--status-soon)" }}
 				/>
 			)}
 			{label}

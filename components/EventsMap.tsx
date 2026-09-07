@@ -14,6 +14,14 @@ import MapPopupCard, { type MapPopupEvent } from "@/components/map/MapPopupCard"
 export interface MapViewportChange {
 	/** Id delle feature non raggruppate renderizzate nell'inquadratura corrente. */
 	ids: number[];
+	/**
+	 * Eventi REALMENTE in vista: i pin singoli piu' quelli chiusi dentro i
+	 * cluster (`point_count`). Non coincide con `ids.length` — un cluster e'
+	 * una feature sola che ne rappresenta N, e a zoom basso e' tutto cluster.
+	 * Contare i soli `unclustered-point` dava "0 eventi in vista" su tutta la
+	 * Lombardia (difetto riportato dall'utente il 2026-09-07).
+	 */
+	totalInView: number;
 	center: { lat: number; lng: number };
 	/** Distanza centro -> angolo nord-est dei bounds correnti. */
 	radiusKm: number;
@@ -600,6 +608,19 @@ export default function EventsMap({
 						else if (id != null) idSet.add(Number(id));
 					});
 
+					// Il totale in vista somma i pin singoli e il point_count di ogni
+					// cluster renderizzato: a zoom basso i singoli sono ZERO e tutto il
+					// contenuto vive dentro i cluster. Il layer puo' non esistere (nessun
+					// cluster a zoom alto), quindi la query e' guardata.
+					let clusteredCount = 0;
+					if (map.getLayer("clusters")) {
+						map.queryRenderedFeatures({ layers: ["clusters"] }).forEach((feature) => {
+							const n = Number(feature.properties?.point_count ?? 0);
+							if (Number.isFinite(n)) clusteredCount += n;
+						});
+					}
+					const totalInView = idSet.size + clusteredCount;
+
 					const center = map.getCenter();
 					const bounds = map.getBounds();
 					if (!bounds) return;
@@ -608,6 +629,7 @@ export default function EventsMap({
 
 					onViewportChangeRef.current({
 						ids: Array.from(idSet),
+						totalInView,
 						center: { lat: center.lat, lng: center.lng },
 						radiusKm,
 					});

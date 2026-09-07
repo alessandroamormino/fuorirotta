@@ -32,10 +32,16 @@
   --border-soft: #e8e8ed;
 
   /* Colori funzionali (D-01b) — accento blu, non piu' teal. */
-  --primary: #0071e3;
-  --primary-hover: #0077ed;
-  --primary-active: #0066cc;
+  /* Azione primaria: NERA, non blu (decisione utente 2026-09-07, davanti al
+     prodotto vero). Diverge dal mock, che usa il blu #0071e3 come accento del
+     CTA: e' una scelta esplicita, non una svista. Il blu resta dove il mock lo
+     mostra davvero come segnale e non come azione — il pallino "Domani" del
+     badge (--status-soon) e l'anello di focus (--ring). */
+  --primary: #1d1d1f;
+  --primary-hover: #424245;
+  --primary-active: #000000;
   --primary-foreground: #ffffff;
+  --status-soon: #0071e3;
   --ring: #0071e3;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
@@ -118,6 +124,7 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
   --color-primary-foreground: var(--primary-foreground);
+  --color-status-soon: var(--status-soon);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
@@ -158,10 +165,11 @@
   --border: #424245;
   --border-soft: #2a2a2c;
 
-  --primary: #2997ff;
-  --primary-hover: #47a6ff;
-  --primary-active: #66b5ff;
+  --primary: #f5f5f7;
+  --primary-hover: #d2d2d7;
+  --primary-active: #ffffff;
   --primary-foreground: #000000;
+  --status-soon: #2997ff;
   --ring: #2997ff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;

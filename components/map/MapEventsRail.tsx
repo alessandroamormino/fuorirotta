@@ -8,6 +8,13 @@ import MiniEventCard from "@/components/map/MiniEventCard";
 interface MapEventsRailProps {
 	/** Eventi in vista, gia' risolti da HomeClient sugli id di onViewportChange (12-03). */
 	events: Event[];
+	/**
+	 * Eventi realmente inquadrati: pin singoli PIU' quelli chiusi nei cluster.
+	 * Diverso da `events.length`, che puo' contenere solo cio' che e' gia'
+	 * indirizzabile singolarmente. A zoom basso e' tutto cluster e
+	 * `events.length` vale 0 mentre qui ci sono migliaia di eventi.
+	 */
+	totalInView: number;
 	selectedEventId: number | null;
 }
 
@@ -22,7 +29,7 @@ interface MapEventsRailProps {
  * HomeClient sugli id che `onViewportChange` di EventsMap riporta — la
  * mappa e' l'unica che sa cosa sta davvero rendendo (key_links del piano).
  */
-export default function MapEventsRail({ events, selectedEventId }: MapEventsRailProps) {
+export default function MapEventsRail({ events, totalInView, selectedEventId }: MapEventsRailProps) {
 	const railRef = useRef<HTMLDivElement>(null);
 
 	// Verso pin -> carosello (D-12): porta in vista la mini-card selezionata
@@ -52,16 +59,25 @@ export default function MapEventsRail({ events, selectedEventId }: MapEventsRail
 				boxShadow: "0 -8px 30px rgba(0, 0, 0, 0.14)",
 			}}
 		>
-			<div className="pointer-events-auto flex items-center justify-between gap-3 px-4 pb-2 pt-1">
+			<div className="pointer-events-auto flex items-center justify-between gap-3 px-4 pb-2 pt-3">
 				<span className="text-sm font-semibold text-foreground">
-					{events.length} {events.length === 1 ? "evento" : "eventi"} in vista
+					{totalInView} {totalInView === 1 ? "evento" : "eventi"} in vista
 				</span>
-				<span className="text-xs text-muted-foreground">Tocca un pin</span>
+				<span className="text-xs text-muted-foreground">
+					{/* Il suggerimento dice la verita' su cosa fare ADESSO: se il
+					    carosello non copre tutto l'inquadrato, il gesto utile e'
+					    ingrandire, non toccare un pin che non c'e'. */}
+					{events.length < totalInView ? "Ingrandisci per vederli" : "Tocca un pin"}
+				</span>
 			</div>
 
-			{events.length === 0 ? (
+			{totalInView === 0 ? (
 				<p className="pointer-events-auto px-4 pb-5 text-sm text-muted-foreground">
 					{"Nessun evento in quest'area. Sposta la mappa o allarga il raggio."}
+				</p>
+			) : events.length === 0 ? (
+				<p className="pointer-events-auto px-4 pb-5 text-sm text-muted-foreground">
+					{"Ingrandisci per vedere i singoli eventi: qui sono tutti raggruppati."}
 				</p>
 			) : (
 				<div
@@ -69,7 +85,7 @@ export default function MapEventsRail({ events, selectedEventId }: MapEventsRail
 					className="pointer-events-auto flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				>
 					{events.map((event) => (
-						<div key={`${event.source}-${event.id}`} data-event-id={event.id} className="w-[264px] shrink-0 snap-center">
+						<div key={`${event.source}-${event.id}`} data-event-id={event.id} className={cn("shrink-0 snap-center", events.length === 1 ? "w-full" : "w-[264px]")}>
 							<MiniEventCard
 								event={{
 									id: event.id,

@@ -25,9 +25,14 @@ const ALL_VALUE = "all";
 
 // Stesso idioma di components/ui/Button.tsx: lookup a Record, nessun colore
 // scritto a mano (npm run check:tokens fallisce la build sugli esadecimali).
+// Forma del prototipo (.chip in mobile-eventi.html:110-133): il non
+// selezionato e' --surface con un anello INTERNO di --border-soft, non un
+// riempimento grigio piu' scuro; il selezionato e' --fg su --bg, MAI
+// l'accento — "l'accento resta scarso" (UI-SPEC, chip categoria).
 const chipVariantClasses: Record<"selected" | "unselected", string> = {
-	selected: "bg-primary text-primary-foreground font-semibold",
-	unselected: "bg-muted-strong text-foreground-secondary border border-border",
+	selected: "bg-foreground text-background font-semibold",
+	unselected:
+		"bg-surface text-foreground-secondary shadow-[inset_0_0_0_1px_var(--border-soft)] hover:bg-muted-strong hover:text-foreground",
 };
 
 export default function CategoryFilterBar({
@@ -139,7 +144,7 @@ export default function CategoryFilterBar({
 						tabIndex={focusedIndex === index ? 0 : -1}
 						onClick={() => onSelect(item.value)}
 						className={cn(
-							"h-10 px-4 rounded-full shrink-0 whitespace-nowrap inline-flex items-center gap-1 text-sm transition-colors",
+							"h-[34px] px-3 rounded-pill shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 text-sm transition-colors",
 							isSelected ? chipVariantClasses.selected : chipVariantClasses.unselected
 						)}
 					>

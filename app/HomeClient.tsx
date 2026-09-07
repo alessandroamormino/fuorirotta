@@ -766,7 +766,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	}, [selectedEventId]);
 
 	return (
-		<div className="min-h-screen bg-primary/5">
+		<div className="min-h-screen bg-background">
 			<Navbar
 				filters={draftFilters}
 				onFiltersChange={setDraftFilters}
@@ -982,7 +982,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								)}
 							</AnimatePresence>
 
-							<MapEventsRail events={viewportEvents} selectedEventId={selectedEventId} />
+							<MapEventsRail
+								events={viewportEvents}
+								totalInView={mapViewport?.totalInView ?? 0}
+								selectedEventId={selectedEventId}
+							/>
 						</div>
 					)}
 
