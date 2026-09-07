@@ -43,14 +43,16 @@ interface EventsMapProps {
 const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/light-v11";
 const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
 
-// Diametro coerente col pin 34px del prototipo (raggio ~ meta').
-const PIN_CIRCLE_RADIUS = 15;
-const PIN_HALO_RADIUS = 23;
+// Diametro coerente col pin del prototipo (raggio ~ meta'). Cresciuto con
+// D-22: caduto il colore di categoria, l'icona e' l'unico canale che
+// distingue una sagra da un concerto, e a 17px non si leggeva.
+const PIN_CIRCLE_RADIUS = 17;
+const PIN_HALO_RADIUS = 25;
 const PIN_HALO_OPACITY = 0.22;
 // Dimensione sorgente dell'SVG rasterizzato per addImage; l'icona resa a
 // schermo scende a CATEGORY_ICON_TARGET_PX via icon-size.
 const CATEGORY_ICON_SOURCE_PX = 24;
-const CATEGORY_ICON_TARGET_PX = 17;
+const CATEGORY_ICON_TARGET_PX = 21;
 
 const EMPTY_GEOJSON: GeoJSON.FeatureCollection = {
 	type: "FeatureCollection",
@@ -63,18 +65,12 @@ function readThemeColors() {
 	const style = getComputedStyle(document.documentElement);
 	const get = (name: string) => style.getPropertyValue(name).trim();
 
-	const categoryColors: Record<string, string> = {};
-	(Object.values(CATEGORY_VISUALS) as CategoryVisual[]).forEach((visual) => {
-		categoryColors[visual.token] = get(visual.token);
-	});
-
 	return {
 		primary: get("--primary"),
 		surface: get("--surface"),
 		primaryForeground: get("--primary-foreground"),
 		foreground: get("--foreground"),
 		background: get("--background"),
-		categoryColors,
 	};
 }
 
@@ -82,20 +78,6 @@ type ThemeColors = ReturnType<typeof readThemeColors>;
 
 function categoryIconImageId(token: string): string {
 	return `category-icon${token}`;
-}
-
-// Un'espressione "match" sulla proprieta' "category" gia' presente nel
-// GeoJSON, con Altro come ramo di default: nessuna informazione passa dal
-// solo colore (D-10), la mappa colore/icona e' l'unica fonte (nessuna lista
-// locale da tenere allineata a lib/categories/visuals.ts).
-function buildCategoryColorMatch(colors: ThemeColors): unknown[] {
-	const expr: unknown[] = ["match", ["get", "category"]];
-	(Object.entries(CATEGORY_VISUALS) as [CanonicalCategory, CategoryVisual][]).forEach(([name, visual]) => {
-		if (name === FALLBACK_CATEGORY) return;
-		expr.push(name, colors.categoryColors[visual.token]);
-	});
-	expr.push(colors.categoryColors[CATEGORY_VISUALS[FALLBACK_CATEGORY].token]);
-	return expr;
 }
 
 function buildIconImageMatch(): unknown[] {
@@ -111,10 +93,26 @@ function buildIconImageMatch(): unknown[] {
 // Il pin selezionato sovrascrive il colore di categoria con --primary pieno
 // (ramo "case" in testa): un ramo che non matcha mai quando non c'e'
 // selezione, cosi' l'espressione degrada all'esatto match per categoria.
+// D-22 (2026-09-07): i pin NON portano piu' un colore per categoria — sono
+// --foreground come i cluster, e la categoria la dice la sola icona. Il
+// selezionato si INVERTE (fondo --background, icona --foreground) invece di
+// passare a --primary: con --primary diventato nero, un pin selezionato nero
+// fra pin neri sarebbe indistinguibile.
 function buildCircleColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
-	const categoryMatch = buildCategoryColorMatch(colors);
-	if (selectedEventId == null) return categoryMatch;
-	return ["case", ["==", ["get", "id"], selectedEventId], colors.primary, categoryMatch];
+	if (selectedEventId == null) return colors.foreground;
+	return ["case", ["==", ["get", "id"], selectedEventId], colors.background, colors.foreground];
+}
+
+function buildIconColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
+	if (selectedEventId == null) return colors.background;
+	return ["case", ["==", ["get", "id"], selectedEventId], colors.foreground, colors.background];
+}
+
+function buildStrokeColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
+	// Il pin selezionato e' chiaro: un anello --surface lo farebbe sparire sul
+	// fondo mappa, quindi prende --foreground.
+	if (selectedEventId == null) return colors.surface;
+	return ["case", ["==", ["get", "id"], selectedEventId], colors.foreground, colors.surface];
 }
 
 // Registra le 7 icone di categoria come immagini SDF (una volta per ciclo di
@@ -205,13 +203,13 @@ function addEventLayers(
 		filter: ["==", ["get", "id"], selectedEventId ?? -1],
 		paint: {
 			"circle-radius": PIN_HALO_RADIUS,
-			"circle-color": colors.primary,
+			"circle-color": colors.foreground,
 			"circle-opacity": PIN_HALO_OPACITY,
 		},
 	});
 
-	// Layer per i singoli punti: colore + icona per categoria (D-10), il
-	// selezionato passa a --primary pieno (buildCircleColorExpression).
+	// Layer per i singoli punti: pin monocromo --foreground come i cluster
+	// (D-22), la categoria la porta la sola icona; il selezionato si inverte.
 	map.addLayer({
 		id: "unclustered-point",
 		type: "circle",
@@ -221,11 +219,11 @@ function addEventLayers(
 			"circle-color": buildCircleColorExpression(colors, selectedEventId) as never,
 			"circle-radius": PIN_CIRCLE_RADIUS,
 			"circle-stroke-width": 2,
-			"circle-stroke-color": colors.surface,
+			"circle-stroke-color": buildStrokeColorExpression(colors, selectedEventId) as never,
 		},
 	});
 
-	// Icona di categoria sopra il pin (D-10): stesso filtro, senza point_count.
+	// Icona di categoria sopra il pin: unico canale di categoria (D-22).
 	map.addLayer({
 		id: "unclustered-point-icon",
 		type: "symbol",
@@ -238,9 +236,11 @@ function addEventLayers(
 			"icon-ignore-placement": true,
 		},
 		paint: {
-			// Token del testo su pin pieno: leggibile sia sul colore di
-			// categoria sia sul --primary del pin selezionato.
-			"icon-color": colors.primaryForeground,
+			// L'icona inverte insieme al pin: --background sul pin pieno,
+			// --foreground sul selezionato. Non piu' --primary-foreground, che
+			// esiste per il BOTTONE primario e legava i pin a una scelta che
+			// non li riguarda.
+			"icon-color": buildIconColorExpression(colors, selectedEventId) as never,
 		},
 	});
 }
