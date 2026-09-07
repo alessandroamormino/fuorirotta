@@ -9,7 +9,7 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-	soft: "bg-accent-tint text-primary",
+	soft: "bg-surface text-primary",
 	solid: "bg-primary text-primary-foreground",
 };
 

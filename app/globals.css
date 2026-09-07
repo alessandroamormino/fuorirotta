@@ -36,14 +36,6 @@
   --primary-hover: #0077ed;
   --primary-active: #0066cc;
   --primary-foreground: #ffffff;
-  /* Compatibilita' controllata, per una sola wave: accent e accent-tint
-     non sono piu' colori propri, sono alias. Restano finche' i piani
-     12-04/12-05/12-06 non finiscono di riscrivere i loro consumatori
-     (app/eventi/[id]/EventDetailClient.tsx, components/ui/Badge.tsx,
-     components/EventsMap.tsx); scripts/visual-restyle.test.sh (VR-06) e'
-     gia' rosso su di loro finche' non spariscono del tutto. */
-  --accent: var(--primary);
-  --accent-tint: var(--surface);
   --ring: #0071e3;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
@@ -126,8 +118,6 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
   --color-primary-foreground: var(--primary-foreground);
-  --color-accent: var(--accent);
-  --color-accent-tint: var(--accent-tint);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
@@ -172,8 +162,6 @@
   --primary-hover: #47a6ff;
   --primary-active: #66b5ff;
   --primary-foreground: #000000;
-  --accent: var(--primary);
-  --accent-tint: var(--surface);
   --ring: #2997ff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
@@ -281,7 +269,7 @@ html {
 /* Custom Scrollbar */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--accent) var(--muted-strong);
+  scrollbar-color: var(--primary) var(--muted-strong);
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -294,7 +282,7 @@ html {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: var(--accent);
+  background: var(--primary);
   border-radius: var(--radius-md);
 }
 
