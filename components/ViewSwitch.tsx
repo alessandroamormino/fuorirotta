@@ -1,18 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Menu, Map as MapIcon } from "lucide-react";
+import { Menu, Map as MapIcon, Columns2 } from "lucide-react";
 
 export type MobileView = "list" | "map";
+// 12-08/D-3: sovrainsieme desktop dei due stati mobili — "split" e' il terzo
+// stato, raggiungibile solo dalla variante desktop dell'interruttore.
+export type ViewValue = "list" | "split" | "map";
 
-const TABS: { value: MobileView; label: string }[] = [
+const MOBILE_TABS: { value: MobileView; label: string }[] = [
 	{ value: "list", label: "Lista" },
 	{ value: "map", label: "Mappa" },
 ];
 
-/** Id condivisi fra ViewSwitch e le due viste che monta (aria-controls/aria-labelledby). */
-export const VIEW_SWITCH_TAB_ID: Record<MobileView, string> = {
+const DESKTOP_TABS: { value: ViewValue; label: string }[] = [
+	{ value: "list", label: "Lista" },
+	{ value: "split", label: "Lista e mappa" },
+	{ value: "map", label: "Mappa" },
+];
+
+/** Id condivisi fra ViewSwitch e le viste che monta (aria-controls/aria-labelledby). */
+export const VIEW_SWITCH_TAB_ID: Record<ViewValue, string> = {
 	list: "view-switch-tab-list",
+	split: "view-switch-tab-split",
 	map: "view-switch-tab-map",
 };
 export const VIEW_SWITCH_PANEL_ID: Record<MobileView, string> = {
@@ -20,17 +30,41 @@ export const VIEW_SWITCH_PANEL_ID: Record<MobileView, string> = {
 	map: "view-switch-panel-map",
 };
 
-interface ViewSwitchProps {
-	value: MobileView;
-	onChange: (view: MobileView) => void;
+// 12-08/D-3: i tre tab desktop non puntano a tre pannelli distinti (in
+// `split` due riquadri sono visibili insieme) — un solo id di regione,
+// condiviso dai tre, invece di tre VIEW_SWITCH_PANEL_ID che non avrebbero
+// senso per uno stato che mostra due riquadri contemporaneamente.
+export const DESKTOP_VIEW_REGION_ID = "desktop-view-region";
+
+interface ViewSwitchProps<V extends ViewValue> {
+	value: V;
+	onChange: (view: V) => void;
+	/** Default "mobile": due tab (Lista/Mappa). "desktop": tre tab, Columns2
+	 *  per il segmento centrale, 380px invece di piena larghezza. */
+	variant?: "mobile" | "desktop";
 }
 
 /**
- * Segmented control Lista/Mappa (D-08, 12-UI-SPEC.md "Barra superiore",
- * punto 3). Componente controllato: nessuno stato proprio salvo il fuoco
- * tastiera (roving tabIndex, stesso idioma di CategoryFilterBar.tsx).
+ * Segmented control Lista/Mappa (mobile) o Lista/Lista e mappa/Mappa
+ * (desktop, D-3) — stesso file, due configurazioni: l'idioma (tema letto dal
+ * DOM, roving tabIndex, resa del tab attivo) e' identico byte per byte fra
+ * le due varianti (12-UI-SPEC.md). Componente controllato: nessuno stato
+ * proprio salvo il fuoco tastiera (roving tabIndex, stesso idioma di
+ * CategoryFilterBar.tsx).
+ *
+ * Generico su `V` (default `MobileView`, il sottoinsieme): il ramo mobile
+ * continua a passare `MobileView`/`Dispatch<SetStateAction<MobileView>>`
+ * senza modifiche, il ramo desktop passa `ViewValue`. Il cast su TABS sotto
+ * e' l'unico punto non verificato dal compilatore — la corrispondenza fra
+ * `variant` e `V` e' responsabilita' del chiamante (mobile+MobileView,
+ * desktop+ViewValue, mai incrociati).
  */
-export default function ViewSwitch({ value, onChange }: ViewSwitchProps) {
+export default function ViewSwitch<V extends ViewValue = MobileView>({
+	value,
+	onChange,
+	variant = "mobile",
+}: ViewSwitchProps<V>) {
+	const TABS = (variant === "desktop" ? DESKTOP_TABS : MOBILE_TABS) as { value: V; label: string }[];
 	// Questo codebase non usa mai `dark:` di Tailwind (risolverebbe su
 	// prefers-color-scheme, non sulla classe .dark che l'utente sceglie a
 	// mano) — stesso pattern gia' in EventsMap.tsx/ThemeToggle.tsx per
@@ -48,7 +82,7 @@ export default function ViewSwitch({ value, onChange }: ViewSwitchProps) {
 		return () => window.removeEventListener("theme-change", handleThemeChange);
 	}, []);
 
-	const [focusedValue, setFocusedValue] = useState<MobileView>(value);
+	const [focusedValue, setFocusedValue] = useState<V>(value);
 	useEffect(() => {
 		setFocusedValue(value);
 	}, [value]);
@@ -86,22 +120,31 @@ export default function ViewSwitch({ value, onChange }: ViewSwitchProps) {
 		}
 	};
 
+	// 12-08/D-3: geometria per variante — desktop rende 3 colonne a 380px fisso,
+	// mobile 2 colonne a piena larghezza (invariato).
+	const gridClass = variant === "desktop" ? "grid-cols-3 w-[380px]" : "grid-cols-2";
+
 	return (
 		<div
 			role="tablist"
 			aria-label="Vista risultati"
-			className="grid grid-cols-2 gap-0.5 rounded-pill bg-surface p-0.5"
+			className={`grid ${gridClass} gap-0.5 rounded-pill bg-surface p-0.5`}
 			onKeyDown={handleKeyDown}
 		>
 			{TABS.map((tab, index) => {
 				const isSelected = tab.value === value;
-				const Icon = tab.value === "list" ? Menu : MapIcon;
+				const Icon = tab.value === "list" ? Menu : tab.value === "split" ? Columns2 : MapIcon;
 				// Sfondo del tab attivo: --background in chiaro, --border in
 				// scuro (non lo stesso valore rovesciato: --background scuro e'
 				// nero puro, invisibile come "pillola sollevata" su --surface
 				// scuro altrettanto vicino al nero — regola dichiarata dalla
 				// UI-SPEC, non un adattamento opzionale).
 				const activeBgClass = isDark ? "bg-border" : "bg-background";
+				// I tre tab desktop non hanno tre pannelli distinti (in `split`
+				// due riquadri sono visibili insieme): tutti e tre puntano alla
+				// stessa regione. I due tab mobili mantengono i propri pannelli.
+				const ariaControls =
+					variant === "desktop" ? DESKTOP_VIEW_REGION_ID : VIEW_SWITCH_PANEL_ID[tab.value as MobileView];
 				return (
 					<button
 						key={tab.value}
@@ -112,7 +155,7 @@ export default function ViewSwitch({ value, onChange }: ViewSwitchProps) {
 						role="tab"
 						id={VIEW_SWITCH_TAB_ID[tab.value]}
 						aria-selected={isSelected}
-						aria-controls={VIEW_SWITCH_PANEL_ID[tab.value]}
+						aria-controls={ariaControls}
 						tabIndex={focusedIndex === index ? 0 : -1}
 						onClick={() => onChange(tab.value)}
 						className={
