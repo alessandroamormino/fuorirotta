@@ -775,13 +775,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			/>
 
 			<main
-				className="fixed left-0 right-0 bottom-0 overflow-hidden"
+				className="fixed left-0 right-0 bottom-0 overflow-hidden lg:static lg:overflow-visible"
 				style={{ top: navHeight }}
 				// D-11: fuori portata da Tab e dal puntatore finche' il
 				// pannello desktop resta aperto (T-17-09).
 				inert={navPanelOpen}
 			>
-				<div className="container mx-auto px-4 py-4 h-full flex flex-col gap-3">
+				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] py-4 h-full lg:h-auto flex flex-col gap-3">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
@@ -811,7 +811,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							<div
 								ref={scrollContainerRef}
 								onScroll={handleScroll}
-								className="h-full overflow-y-auto xl:overflow-hidden"
+								className="h-full overflow-y-auto lg:h-auto lg:overflow-visible"
 							>
 								<AnimatePresence mode="wait">
 									{loading ? (

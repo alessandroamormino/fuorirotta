@@ -95,6 +95,26 @@ export default function Navbar({
 	// pillola.
 	const wasOpenRef = useRef(false);
 
+	// 12-08/D-2: pubblica l'altezza REALE della barra (le chip categoria vanno
+	// a capo e la cambiano) su --topbar-h, cosi' il riquadro mappa/dettaglio
+	// desktop puo' calcolare il proprio top/height sticky. offsetHeight, non
+	// getBoundingClientRect: la lezione della Fase 17 (31a335a) e' che
+	// getBoundingClientRect restituisce rettangoli contaminati dalle transform
+	// di framer, mentre offsetHeight le ignora. Stesso pattern del mock
+	// (desktop-eventi.html:249-251, syncTopbarHeight).
+	const navRef = useRef<HTMLElement>(null);
+	useEffect(() => {
+		const node = navRef.current;
+		if (!node) return;
+		const syncTopbarHeight = () => {
+			document.documentElement.style.setProperty("--topbar-h", node.offsetHeight + "px");
+		};
+		syncTopbarHeight();
+		const ro = new ResizeObserver(syncTopbarHeight);
+		ro.observe(node);
+		return () => ro.disconnect();
+	}, []);
+
 	// Segnala al genitore lo stato del pannello desktop, con cleanup che
 	// segnala `false` allo smontaggio (T-17-09): un pannello che resta
 	// "aperto" oltre lo smontaggio lascerebbe la pagina inerte per sempre.
@@ -161,13 +181,14 @@ export default function Navbar({
 			{/* ── NAVBAR ── */}
 			<nav
 				id="main-navbar"
-				className="fixed top-2 left-0 right-0 z-50 px-4 py-4"
+				ref={navRef}
+				className="fixed top-2 left-0 right-0 z-50 px-4 py-4 sm:px-[18px] lg:sticky lg:top-0 lg:z-[60] lg:px-[22px] lg:py-3 topbar-desktop"
 			>
-				<div className="container mx-auto">
-					<div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-4 lg:gap-6">
+				<div className="mx-auto w-full max-w-[1760px]">
+					<div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-4 lg:gap-6 lg:grid lg:grid-cols-[1fr_minmax(0,720px)_1fr] lg:items-center lg:gap-4">
 						{/* Logo — in flusso (D-10): non piu' absolute, fratello flex-none
 						    della zona di ricerca e del toggle. */}
-						<div className="flex-none">
+						<div className="flex-none lg:justify-self-start">
 							<Link href="/">
 								<motion.div
 									className="flex items-center space-x-3 cursor-pointer"
@@ -185,8 +206,11 @@ export default function Navbar({
 									/>
 									{/* D-19 (piano 07): il wordmark, prima visibile solo da xl,
 									    diventa visibile anche sotto sm (topbar del prototipo) —
-									    invariato fra sm e xl. */}
-									<span className="block sm:hidden xl:block text-2xl font-bold text-primary">
+									    invariato fra sm e xl. 12-08/D-2: la soglia desktop a cui
+									    ricompare non e' piu' xl (1280px) ma il breakpoint
+									    arbitrario 900px del mock — sotto, resta il solo logo
+									    icona. */}
+									<span className="block sm:hidden min-[900px]:block text-2xl font-bold text-primary">
 										Fuorirotta
 									</span>
 								</motion.div>
@@ -499,7 +523,7 @@ export default function Navbar({
 						    utente (D-09), sempre visibile in tutti e quattro gli stati
 						    e su entrambi i breakpoint. Stessa forma visiva del mount
 						    flottante rimosso, solo riposizionata (17-UI-SPEC.md). */}
-						<ThemeToggle className="flex-none flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors" />
+						<ThemeToggle className="flex-none lg:justify-self-end flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors" />
 					</div>
 				</div>
 			</nav>
