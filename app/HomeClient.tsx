@@ -8,11 +8,17 @@ import { Event, SearchFilters } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
 import CategoryFilterBar from "@/components/CategoryFilterBar";
-import ViewSwitch, { VIEW_SWITCH_TAB_ID, VIEW_SWITCH_PANEL_ID, type MobileView } from "@/components/ViewSwitch";
+import ViewSwitch, {
+	VIEW_SWITCH_TAB_ID,
+	VIEW_SWITCH_PANEL_ID,
+	DESKTOP_VIEW_REGION_ID,
+	type MobileView,
+	type ViewValue,
+} from "@/components/ViewSwitch";
 import MapEventsRail from "@/components/map/MapEventsRail";
 import type { MapViewportChange } from "@/components/EventsMap";
 import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
-import { Check, Loader2, Map, RefreshCw, Search, X } from "lucide-react";
+import { Check, Loader2, RefreshCw, Search } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { EASE_STANDARD, MOTION_BASE, MOTION_FAST } from "@/lib/motion";
@@ -118,12 +124,18 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	);
 	const effectiveClusterGeoJSON = hasActiveFilters ? null : clusterGeoJSON;
 
-	const [isMapExpanded, setIsMapExpanded] = useState(false);
-
-	// D-08: lista e mappa sono due viste alla pari sotto xl, scambiate da
+	// D-08: lista e mappa sono due viste alla pari sotto lg, scambiate da
 	// ViewSwitch — persistita in sessionStorage con lo stesso trattamento
 	// gia' riservato a selectedCategory (T-11-11/T-12-13 sotto).
 	const [mobileView, setMobileView] = useState<MobileView>("list");
+
+	// 12-08/D-3: macchina a stati distinta da mobileView (superfici mutuamente
+	// esclusive per larghezza, mai collassate in una sola variabile — il ramo
+	// mobile resta guidato da mobileView esattamente com'e'). "split" e' il
+	// default da 1024px in su: il vecchio stato dell'overlay di ingrandimento
+	// mappa e' rimosso per intero, a desktop l'ingrandimento a piena vista lo
+	// fa questo interruttore (stato "map"), D-3.
+	const [desktopView, setDesktopView] = useState<ViewValue>("split");
 
 	// D-12: fonte unica del legame bidirezionale lista<->mappa, condivisa fra
 	// EventsMap (ogni istanza, mobile e desktop) e le card. Non duplicare
@@ -243,6 +255,31 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		if (!hydratedRef.current) return;
 		sessionStorage.setItem("mobileView", mobileView);
 	}, [mobileView]);
+
+	// 12-08/D-3: stessa forma esatta di sessionStorage.setItem("mobileView", ...)
+	// sopra — copia alla lettera, non un secondo schema.
+	useEffect(() => {
+		if (!hydratedRef.current) return;
+		sessionStorage.setItem("desktopView", desktopView);
+	}, [desktopView]);
+
+	// 12-08/D-3: ripiegamento a "list" sotto 1024px — l'UNICO cambio di vista
+	// automatico. Una sola fonte per il confine (matchMedia, non la larghezza
+	// finestra letta a mano), la stessa media query che governa lg: in CSS. Riallargare
+	// la finestra non riporta la mappa addosso da sola: la scelta dell'utente
+	// resta sua in ogni altro caso.
+	useEffect(() => {
+		const mql = window.matchMedia("(min-width: 1024px)");
+		const applyFallback = (matches: boolean) => {
+			if (!matches) {
+				setDesktopView((prev) => (prev === "split" ? "list" : prev));
+			}
+		};
+		applyFallback(mql.matches);
+		const handleChange = (e: MediaQueryListEvent) => applyFallback(e.matches);
+		mql.addEventListener("change", handleChange);
+		return () => mql.removeEventListener("change", handleChange);
+	}, []);
 
 	// Task 3: anche il ritorno alla vista lista azzera la ricerca sull'area,
 	// cosi' la lista non resta silenziosamente ristretta a un'area che non e'
@@ -378,6 +415,15 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		const savedMobileView = sessionStorage.getItem("mobileView");
 		if (savedMobileView === "list" || savedMobileView === "map") {
 			setMobileView(savedMobileView);
+		}
+
+		// T-12-D1: stesso trattamento — un valore manomesso in sessionStorage
+		// non deve diventare uno stato di vista arbitrario. Validato contro
+		// l'elenco chiuso dei tre stati prima di applicarlo, altrimenti resta
+		// il default "split" gia' nello useState.
+		const savedDesktopView = sessionStorage.getItem("desktopView");
+		if (savedDesktopView === "list" || savedDesktopView === "split" || savedDesktopView === "map") {
+			setDesktopView(savedDesktopView);
 		}
 
 		// Da qui in poi il ripristino e' completo: gli effect di persistenza
@@ -788,23 +834,48 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						onSelect={handleCategorySelect}
 					/>
 
-					{/* D-08: terza riga del guscio fisso, solo sotto xl — a xl e oltre
-					    lista e mappa sono gia' visibili insieme, l'interruttore non serve. */}
-					<div className="xl:hidden">
+					{/* D-08: terza riga del guscio fisso, solo sotto lg — a lg e oltre
+					    lista e mappa sono gia' visibili insieme, l'interruttore mobile
+					    non serve (12-08: soglia spostata da xl a lg, D-3). */}
+					<div className="lg:hidden">
 						<ViewSwitch value={mobileView} onChange={setMobileView} />
 					</div>
 
-					<div className="flex-1 min-h-0 flex gap-6">
+					{/* 12-08/D-3: interruttore desktop a tre stati — margine superiore
+					    24px per staccarlo dal filetto della barra, altrimenti leggerebbe
+					    come una quarta riga della testata invece che come il primo
+					    comando del contenuto. */}
+					<div className="hidden lg:flex lg:justify-center lg:mt-6 lg:mb-4">
+						<ViewSwitch variant="desktop" value={desktopView} onChange={setDesktopView} />
+					</div>
+
+					<div
+						id={DESKTOP_VIEW_REGION_ID}
+						role="tabpanel"
+						aria-labelledby={VIEW_SWITCH_TAB_ID[desktopView]}
+						data-view={desktopView}
+						className={cn(
+							"group flex-1 min-h-0 flex gap-6",
+							"lg:grid lg:items-start lg:gap-8",
+							"lg:grid-cols-[minmax(0,1fr)_clamp(380px,40%,620px)]",
+							"lg:data-[view=list]:grid-cols-[minmax(0,1fr)]",
+							"lg:data-[view=map]:grid-cols-[minmax(0,1fr)]"
+						)}
+					>
 					<div
 						id={VIEW_SWITCH_PANEL_ID.list}
 						role="tabpanel"
 						aria-labelledby={VIEW_SWITCH_TAB_ID.list}
 						className={cn(
 							"flex-1 min-w-0 flex-col min-h-0",
-							// D-08: sotto xl le due viste sono alla pari, non impilate —
-							// quando la mappa e' quella attiva la colonna lista smette di
-							// occupare spazio invece di restare sotto di essa.
-							mobileView === "map" ? "hidden xl:flex" : "flex"
+							// D-08: sotto lg le due viste mobili sono alla pari, non
+							// impilate — quando la mappa e' quella attiva la colonna
+							// lista smette di occupare spazio invece di restare sotto.
+							mobileView === "map" ? "hidden lg:flex" : "flex",
+							// 12-08/D-3: a desktop il riquadro lista sparisce nello
+							// stato "map" dell'interruttore — legge data-view
+							// sull'antenato via l'idioma group di Tailwind.
+							"lg:group-data-[view=map]:hidden"
 						)}
 					>
 						<div className="flex-1 min-h-0 pb-4 relative">
@@ -868,7 +939,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												</div>
 											) : (
 												<>
-													<div className="flex flex-col gap-5 xl:grid xl:grid-cols-3 xl:gap-4">
+													<div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:gap-4">
 														{events.map((event, index) => (
 															<div
 																key={`${event.source}-${event.id}`}
@@ -939,7 +1010,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							id={VIEW_SWITCH_PANEL_ID.map}
 							role="tabpanel"
 							aria-labelledby={VIEW_SWITCH_TAB_ID.map}
-							className="relative flex-1 min-w-0 xl:hidden"
+							className="relative flex-1 min-w-0 lg:hidden"
 						>
 							<EventsMap
 								events={mapEvents}
@@ -990,8 +1061,25 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						</div>
 					)}
 
-					<div className="hidden xl:block w-[50%] max-w-4xl flex-shrink-0">
-						<div className="h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-primary/30 relative group">
+					{/* 12-08/D-5/D-6: riquadro mappa desktop — riscritto, non ritoccato.
+					    Senza larghezza propria: la traccia della griglia la fissa gia'
+					    a clamp(380px,40%,620px) (D-06, sostituisce la vecchia meta'
+					    finestra a tetto 4xl). l'overlay di ingrandimento della mappa
+					    e' stato rimosso, D-3 — a
+					    desktop l'ingrandimento a piena vista lo fa lo stato "map"
+					    dell'interruttore, non un bottone separato. Il cablaggio di
+					    onViewportChange e i comandi del riquadro sono del piano 12-09:
+					    non anticipati qui. */}
+					<div className="hidden lg:block lg:group-data-[view=list]:hidden">
+						<div
+							className="lg:sticky rounded-lg overflow-hidden relative"
+							style={{
+								top: "calc(var(--topbar-h, 92px) + 16px)",
+								height: "calc(100dvh - var(--topbar-h, 92px) - 32px)",
+								minHeight: "420px",
+								boxShadow: "var(--elev-ring)",
+							}}
+						>
 							<EventsMap
 								events={mapEvents}
 								initialGeoJSON={effectiveClusterGeoJSON}
@@ -1000,64 +1088,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								selectedEventId={selectedEventId}
 								onEventSelect={handleEventSelect}
 							/>
-							<motion.button
-								onClick={() => setIsMapExpanded(true)}
-								className="absolute bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-surface text-foreground rounded-full font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all opacity-0 group-hover:opacity-100 z-[1000]"
-								whileHover={{ scale: 1.05 }}
-								whileTap={{ scale: 0.95 }}
-							>
-								<Map className="w-4 h-4" />
-								Espandi mappa
-							</motion.button>
 						</div>
 					</div>
 					</div>
 				</div>
 			</main>
-
-			<AnimatePresence>
-				{isMapExpanded && (
-					<motion.div
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						exit={{ opacity: 0 }}
-						transition={{ duration: MOTION_FAST }}
-						className="fixed inset-0 z-[100]"
-					>
-						<div
-							className="hidden xl:block absolute inset-0 bg-black/50"
-							onClick={() => setIsMapExpanded(false)}
-						>
-							<div
-								className="absolute inset-4 bg-surface rounded-2xl overflow-hidden shadow-2xl"
-								onClick={(e) => e.stopPropagation()}
-							>
-								<div className="absolute top-0 left-0 right-0 z-10 bg-surface/95 backdrop-blur-lg border-b border-border px-6 py-4 flex items-center justify-between">
-									<h3 className="text-lg font-bold text-foreground">
-										Mappa eventi — {effectiveClusterGeoJSON ? effectiveClusterGeoJSON.features.length : mapEvents.length} eventi
-									</h3>
-									<button
-										onClick={() => setIsMapExpanded(false)}
-										className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-muted-strong transition-colors"
-									>
-										<X className="w-6 h-6 text-muted-foreground" />
-									</button>
-								</div>
-								<div className="absolute inset-0 pt-16">
-									<EventsMap
-										events={mapEvents}
-										initialGeoJSON={effectiveClusterGeoJSON}
-										mapId="map-fullscreen-desktop"
-										userLocation={userLocation}
-										selectedEventId={selectedEventId}
-										onEventSelect={handleEventSelect}
-									/>
-								</div>
-							</div>
-						</div>
-					</motion.div>
-				)}
-			</AnimatePresence>
 		</div>
 	);
 }
