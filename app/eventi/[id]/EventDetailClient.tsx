@@ -12,8 +12,10 @@ import Navbar from "@/components/Navbar";
 import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
+import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 import { eventStatus, formatEventRange } from "@/lib/eventStatus";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
+import { MOTION_FAST, EASE_STANDARD } from "@/lib/motion";
 import {
 	Calendar,
 	MapPin,
@@ -37,6 +39,17 @@ const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 
 interface EventDetailClientProps {
 	initialEvent?: Event | null;
+}
+
+/**
+ * Forma di una riga di `mapEvents` (app/api/events/route.ts) rilevante per
+ * "Nelle vicinanze" (Task 3, 12-10): i campi di `MiniEventCardData` piu' le
+ * coordinate risolte, che servono solo al calcolo della distanza lato client
+ * e non alla mini-card.
+ */
+interface NearbyApiEvent extends MiniEventCardData {
+	resolvedLatitude: number | null;
+	resolvedLongitude: number | null;
 }
 
 /**
@@ -113,6 +126,10 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	// prima dell'hydratazione col ripiego "falso" (ramo mobile), coerente con
 	// l'SSR dove window non esiste.
 	const [isDesktopSurface, setIsDesktopSurface] = useState(false);
+	// "Nelle vicinanze" (Task 3, 12-10): fino a 3 eventi reali, mai l'evento
+	// corrente. Ripiego vuoto — sotto 1 elemento la sezione non renderizza
+	// affatto (decisione utente 2026-09-08), nessuna copy di stato vuoto.
+	const [nearbyEvents, setNearbyEvents] = useState<MiniEventCardData[]>([]);
 	// D-07: qui la Navbar serve solo ad avviare una nuova ricerca che porta a
 	// "/" — draft locale, mai letto altrove in questo file.
 	const [draftFilters, setDraftFilters] = useState<SearchFilters>({
@@ -203,6 +220,62 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		return () => mq.removeEventListener("change", handleChange);
 	}, []);
 
+	// "Nelle vicinanze" (Task 3, 12-10): solo desktop (la sezione non esiste
+	// sulla superficie mobile, nessuna richiesta di rete sprecata) e solo con
+	// coordinate risolte — confronto su null, non sulla verita' del valore
+	// (0 e' una coordinata valida). Il raggio 25 e' un letterale di questo
+	// chiamante, non il tetto MAX_AREA_RADIUS_KM di app/HomeClient.tsx, che
+	// presidia un valore che nasce da un gesto utente sulla mappa e non ha
+	// giurisdizione qui.
+	useEffect(() => {
+		if (!event || !isDesktopSurface) return;
+		if (event.resolvedLatitude == null || event.resolvedLongitude == null) return;
+
+		const currentId = event.id;
+		const originLat = event.resolvedLatitude;
+		const originLng = event.resolvedLongitude;
+		const controller = new AbortController();
+
+		(async () => {
+			try {
+				const res = await fetch(
+					`/api/events?lat=${originLat}&lng=${originLng}&radius=25&limit=1`,
+					{ signal: controller.signal }
+				);
+				if (!res.ok) return;
+				const data: { mapEvents: NearbyApiEvent[] } = await res.json();
+				// Array.prototype.sort e' stabile per specifica, e l'ordine
+				// d'ingresso e' quello dell'API (dateStart crescente): a distanza
+				// uguale vince quindi la data, stesso principio con cui D-18
+				// ordina gli eventi a coordinate coincidenti — nessun criterio di
+				// spareggio scritto a mano.
+				const nearby = (data.mapEvents ?? [])
+					.filter(
+						(e) =>
+							e.id !== currentId && e.resolvedLatitude != null && e.resolvedLongitude != null
+					)
+					.map((e) => ({
+						event: e,
+						distance: calculateDistanceKm(
+							originLat,
+							originLng,
+							e.resolvedLatitude as number,
+							e.resolvedLongitude as number
+						),
+					}))
+					.sort((a, b) => a.distance - b.distance)
+					.slice(0, 3)
+					.map(({ event: e }) => e);
+				setNearbyEvents(nearby);
+			} catch {
+				// Sezione accessoria: un errore di rete non e' da mostrare, stesso
+				// trattamento silenzioso dell'effect di geolocalizzazione sopra.
+			}
+		})();
+
+		return () => controller.abort();
+	}, [event, isDesktopSurface]);
+
 	const handleSearch = (filters: SearchFilters) => {
 		const searchParams = new URLSearchParams();
 		if (filters.location) searchParams.append("location", filters.location);
@@ -213,10 +286,18 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		router.push(`/?${searchParams.toString()}`);
 	};
 
-	// I tre rami restano quelli di oggi (Android diretto, iOS foglio, desktop
-	// nuova scheda) — cambia solo il contenitore del foglio iOS (Task 3).
+	// I tre rami mobile restano quelli di oggi (Android diretto, iOS foglio,
+	// desktop nuova scheda) — invariati. A desktop (Task 3, 12-10) "Naviga"
+	// apre invece il modale "Apri con": senza questo ramo la geometria
+	// centrata sarebbe irraggiungibile da un utente reale, perche' il ramo
+	// esistente aprirebbe d'ufficio una scheda su un solo fornitore.
 	const handleNavigation = (lat: number | null, lng: number | null) => {
 		if (lat == null || lng == null) return;
+
+		if (isDesktopSurface) {
+			setNavSheetOpen(true);
+			return;
+		}
 
 		const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 		const isAndroid = /Android/i.test(navigator.userAgent);
@@ -594,8 +675,22 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 									</div>
 								</div>
 							)}
-							{/* Task 3 (12-10): "Nelle vicinanze" arriva qui, come secondo
-							    riquadro della colonna. */}
+							{/* "Nelle vicinanze" (Task 3, 12-10): sotto 1 evento la sezione
+							    non renderizza affatto — nessuna copy di stato vuoto, nessun
+							    riquadro morto (decisione utente 2026-09-08). Titolo invariato
+							    al plurale anche con un solo elemento. */}
+							{nearbyEvents.length >= 1 && (
+								<div className="overflow-hidden rounded-lg bg-surface p-4">
+									<h2 className="mb-3 font-display text-base font-semibold text-foreground">
+										Nelle vicinanze
+									</h2>
+									<div className="flex flex-col gap-1">
+										{nearbyEvents.map((nearby) => (
+											<MiniEventCard key={nearby.id} event={nearby} className="hover:bg-background" />
+										))}
+									</div>
+								</div>
+							)}
 						</aside>
 					</div>
 				</div>
@@ -636,18 +731,42 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 							<>
 								<Dialog.Overlay />
 								<Dialog.ContentUnstyled asChild>
+									{/* Due geometrie sullo stesso componente (D-8): sotto 1024px
+									    il foglio ancorato al fondo di sempre (molla su y); da
+									    1024px in su un piccolo modale centrato che anima la SOLA
+									    opacita' — qualunque trasformazione animata farebbe scrivere
+									    a framer un transform inline che cancella -translate-x-1/2/
+									    -translate-y-1/2, e il riquadro finirebbe con l'angolo al
+									    centro dello schermo invece del proprio centro. */}
 									<motion.div
-										initial={{ y: "100%" }}
-										animate={{ y: 0 }}
-										exit={{ y: "100%" }}
-										transition={{ type: "spring", damping: 32, stiffness: 380 }}
-										className="fixed inset-x-0 bottom-0 z-[200] rounded-t-lg bg-surface p-5"
-										style={{
-											boxShadow: "var(--elev-raised)",
-											paddingBottom: "max(env(safe-area-inset-bottom), 20px)",
-										}}
+										initial={isDesktopSurface ? { opacity: 0 } : { y: "100%" }}
+										animate={isDesktopSurface ? { opacity: 1 } : { y: 0 }}
+										exit={isDesktopSurface ? { opacity: 0 } : { y: "100%" }}
+										transition={
+											isDesktopSurface
+												? { duration: MOTION_FAST, ease: EASE_STANDARD }
+												: { type: "spring", damping: 32, stiffness: 380 }
+										}
+										className={cn(
+											"z-[200] bg-surface p-5",
+											isDesktopSurface
+												? "fixed left-1/2 top-1/2 w-[min(360px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-lg"
+												: "fixed inset-x-0 bottom-0 rounded-t-lg"
+										)}
+										style={
+											isDesktopSurface
+												? { boxShadow: "0 0 0 1px var(--border-soft), var(--elev-raised)" }
+												: {
+														boxShadow: "var(--elev-raised)",
+														paddingBottom: "max(env(safe-area-inset-bottom), 20px)",
+													}
+										}
 									>
-										<div aria-hidden="true" className="mx-auto mb-3 h-1 w-9 rounded-full bg-border" />
+										{/* Maniglia di trascinamento: affordance del foglio, senza
+										    senso su un modale centrato. */}
+										{!isDesktopSurface && (
+											<div aria-hidden="true" className="mx-auto mb-3 h-1 w-9 rounded-full bg-border" />
+										)}
 										<div className="mb-4 flex items-center justify-between">
 											<Dialog.Title className="text-sm font-semibold text-muted-foreground">
 												Apri con
