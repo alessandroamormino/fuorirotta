@@ -327,6 +327,10 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 				onFiltersChange={setDraftFilters}
 				onSearch={handleSearch}
 				onPanelOpenChange={handlePanelOpenChange}
+				// Estensione di scopo (decisione utente 2026-09-08): da 1024px in
+				// su la zona di ricerca si riveste da pillola "Torna ai risultati"
+				// — vedi components/Navbar.tsx per il seam completo.
+				searchBackHref="/"
 			/>
 		</div>
 	);

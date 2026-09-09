@@ -20,6 +20,7 @@ import ThemeToggle from "@/components/ui/ThemeToggle";
 import type { SearchFilters } from "@/lib/types";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
 import { MOTION_FAST } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 interface NavbarProps {
 	// D-07: Navbar e' un componente controllato — riceve i filtri come valore
@@ -32,6 +33,13 @@ interface NavbarProps {
 	// passa da aperto a chiuso o viceversa, cosi' il genitore puo' rendere
 	// inerte il resto della pagina finche' resta aperto (T-17-09).
 	onPanelOpenChange?: (open: boolean) => void;
+	// Estensione di scopo desktop (12-10, decisione utente 2026-09-08): sulla
+	// pagina di dettaglio evento, da 1024px in su, la zona di ricerca si
+	// riveste da un link-pillola "Torna ai risultati" invece della barra
+	// interattiva — la macchina a stati della Fase 17 resta montata invariata
+	// sotto 1024px e non viene mai ridisegnata, solo nascosta da 1024px in su
+	// quando questa prop e' passata. Assente (home): comportamento invariato.
+	searchBackHref?: string;
 }
 
 export default function Navbar({
@@ -39,6 +47,7 @@ export default function Navbar({
 	onFiltersChange,
 	onSearch,
 	onPanelOpenChange,
+	searchBackHref,
 }: NavbarProps) {
 	const { filters, setFilters, search, radius, panels, destinations } =
 		useNavbarSearch({ filters: controlledFilters, onFiltersChange, onSearch });
@@ -223,8 +232,15 @@ export default function Navbar({
 						    molla) e' nascosto sotto sm — la pillola mobile ha ora la
 						    propria chrome in un blocco fratello piu' sotto, invece di
 						    ereditarla da qui. Sopra sm il markup e il comportamento
-						    non cambiano. */}
-						<div className="hidden sm:flex sm:flex-1 sm:min-w-0 sm:justify-center">
+						    non cambiano. lg:hidden SOLO quando searchBackHref e'
+						    passata (12-10): sotto 1024px questa barra resta la macchina
+						    a stati della Fase 17, invariata anche sul dettaglio. */}
+						<div
+							className={cn(
+								"hidden sm:flex sm:flex-1 sm:min-w-0 sm:justify-center",
+								searchBackHref && "lg:hidden"
+							)}
+						>
 						<div className="w-full max-w-3xl relative">
 							<Popover.Root
 								open={dropdownOpen}
@@ -495,6 +511,32 @@ export default function Navbar({
 							</Popover.Root>
 						</div>
 						</div>
+
+						{/* Pillola "Torna ai risultati" (12-10, decisione utente
+						    2026-09-08): SOLO quando searchBackHref e' passata (pagina di
+						    dettaglio), SOLO da 1024px in su — riveste la stessa zona di
+						    ricerca con un link, senza toccare il markup della barra
+						    interattiva sopra (nascosta da lg:hidden quando questa pillola
+						    e' montata). Stesso aria-label del ritorno mobile
+						    (MobileDetailBar, "app/eventi/[id]/EventDetailClient.tsx") —
+						    le due superfici parlano con un'unica voce. */}
+						{searchBackHref && (
+							<div className="hidden lg:flex lg:flex-1 lg:min-w-0 lg:justify-center">
+								<Link
+									href={searchBackHref}
+									aria-label="Torna ai risultati"
+									className="flex h-[60px] w-full max-w-[420px] items-center gap-3 rounded-full bg-background pl-6 pr-3 shadow-[inset_0_0_0_1px_var(--border)] transition-shadow hover:shadow-[inset_0_0_0_1px_var(--border-soft)]"
+								>
+									<Search className="h-[18px] w-[18px] flex-none text-foreground-secondary" aria-hidden="true" />
+									<span className="min-w-0 flex-1 truncate text-base text-foreground-secondary">
+										Torna ai risultati
+									</span>
+									<span className="ml-auto flex h-11 w-11 flex-none items-center justify-center rounded-full bg-primary text-primary-foreground">
+										<Search className="h-[17px] w-[17px]" aria-hidden="true" />
+									</span>
+								</Link>
+							</div>
+						)}
 
 						{/* Riga 2 mobile: pillola di ricerca a due righe con badge, a
 						    piena larghezza (D-19, piano 07). order-3 la manda in fondo
