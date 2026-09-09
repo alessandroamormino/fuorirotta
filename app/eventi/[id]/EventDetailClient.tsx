@@ -643,9 +643,16 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						    ripiego 92px nel calc() e' quello del mock: se la variabile non
 						    fosse ancora scritta la colonna cade su una misura sensata. */}
 						<aside className="hidden lg:block lg:sticky" style={{ top: "calc(var(--topbar-h, 92px) + 24px)" }}>
-							{(hasCoords || sourceHref) && (
+							{/* T-12-10-checkpoint: "Vedi sulla fonte" rimossa dalla colonna
+							    (giudicata ridondante con la riga "Fonte" della lista
+							    raggruppata, decisione utente). L'unica azione rimasta,
+							    "Naviga", esiste solo con coordinate — quindi il box non
+							    ha piu' motivo di comparire senza hasCoords: senza,
+							    sourceHref da solo apriva un riquadro vuoto (evento 61501,
+							    Como, nessuna coordinata risolta). */}
+							{hasCoords && (
 								<div className="mb-5 overflow-hidden rounded-lg bg-surface">
-									{hasCoords && isDesktopSurface && (
+									{isDesktopSurface && (
 										<div className="h-[240px]">
 											<EventsMap events={[event]} disablePopups={true} />
 										</div>
@@ -653,29 +660,14 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 									<div className="flex flex-col gap-3 p-4">
 										{/* Azione primaria: "Naviga", stessa pelle della barra
 										    fissa mobile — stesso comando, due collocazioni. */}
-										{hasCoords && (
-											<button
-												type="button"
-												onClick={() => handleNavigation(event.latitude, event.longitude)}
-												className="flex h-12 w-full items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-primary-foreground"
-											>
-												<Navigation className="h-[18px] w-[18px]" />
-												Naviga
-											</button>
-										)}
-										{/* Azione secondaria: NON un secondo bottone pieno (D-8) —
-										    stesso link della riga "Fonte", stessa costante sourceHref. */}
-										{sourceHref && (
-											<a
-												href={sourceHref}
-												target="_blank"
-												rel="noopener noreferrer"
-												className="flex min-h-12 w-full items-center justify-center rounded-pill bg-surface px-5 font-medium text-foreground"
-												style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
-											>
-												Vedi sulla fonte
-											</a>
-										)}
+										<button
+											type="button"
+											onClick={() => handleNavigation(event.latitude, event.longitude)}
+											className="flex h-12 w-full items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-primary-foreground"
+										>
+											<Navigation className="h-[18px] w-[18px]" />
+											Naviga
+										</button>
 									</div>
 								</div>
 							)}
