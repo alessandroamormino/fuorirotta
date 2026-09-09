@@ -337,8 +337,37 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 						hasCoords ? "pb-24 md:pb-24 lg:pb-12" : "pb-8 md:pb-16"
 					)}
 				>
-					{/* Task 2 (12-10): le briciole di navigazione, desktop-only,
-					    arrivano qui — sopra la griglia. */}
+					{/* Briciole di navigazione (D-8), desktop-only: sotto 1024px la
+					    freccia di MobileDetailBar e' gia' l'affordance di ritorno, e
+					    due percorsi sovrapposti sarebbero uno di troppo. Colore
+					    text-muted-foreground (5,07:1, AA) — mai il grigio in deroga
+					    D-21, che vieta esattamente questo uso su un'informazione
+					    necessaria. */}
+					<nav
+						aria-label="Percorso"
+						className="hidden items-center gap-2 pb-4 pt-6 text-sm text-muted-foreground lg:flex"
+					>
+						<NextLink href="/" className="hover:text-foreground hover:underline">
+							Eventi
+						</NextLink>
+						{event.category && (
+							<>
+								<span aria-hidden="true">›</span>
+								<span>{event.category}</span>
+							</>
+						)}
+						{/* Terzo livello: comune dalla relazione Prisma (T-12-04), con
+						    ripiego su locationName. Se entrambi sono vuoti, niente terzo
+						    livello e niente separatore orfano. */}
+						{(event.comune?.name || event.locationName) && (
+							<>
+								<span aria-hidden="true">›</span>
+								<span aria-current="page" className="text-foreground-secondary">
+									{decodeHtmlEntities(event.comune?.name || event.locationName || "")}
+								</span>
+							</>
+						)}
+					</nav>
 
 					{/* Griglia desktop (D-8): tetto PROPRIO a 1200px, diverso dal
 					    max-w-7xl del contenitore di lettura (1280px) e dal tetto
@@ -358,14 +387,18 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										!heroLoaded && "aspect-[3/2]"
 									)}
 								>
+									{/* Tetto verticale in classe, non in style inline: uno style
+									    inline non e' scopabile per media query. Stesso principio
+									    (object-fit: contain, vincolo sul solo asse verticale,
+									    criterio di successo 12), valore diverso per superficie —
+									    non una seconda regola. */}
 									<img
 										src={event.imageUrl}
 										alt={decodeHtmlEntities(event.title)}
 										loading="eager"
 										decoding="async"
 										onLoad={() => setHeroLoaded(true)}
-										className="block w-full h-auto object-contain"
-										style={{ maxHeight: "46dvh" }}
+										className="block w-full h-auto object-contain max-h-[46dvh] lg:max-h-[62dvh]"
 									/>
 								</div>
 							) : (

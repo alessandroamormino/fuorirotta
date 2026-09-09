@@ -21,7 +21,14 @@ const BASE_URL = (
 // senza una seconda andata al database.
 const getEvent = cache(
 	async (id: number): Promise<{ event: PrismaEvent | null; members: PrismaEvent[] }> => {
-		const event = await prisma.event.findUnique({ where: { id } });
+		// include comune (T-12-04, D-8): solo name/provinceCode, mai la riga
+		// intera — stessa select ristretta di app/page.tsx. Senza questo
+		// include, event.comune e' undefined e la terza briciola di
+		// navigazione cadrebbe sul ripiego locationName in silenzio.
+		const event = await prisma.event.findUnique({
+			where: { id },
+			include: { comune: { select: { name: true, provinceCode: true } } },
+		});
 		if (!event || event.canonicalEventId !== null) {
 			return { event, members: [] };
 		}
