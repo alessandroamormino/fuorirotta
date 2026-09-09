@@ -38,6 +38,8 @@ interface EventsMapProps {
 	selectedEventId?: number | null;
 	onEventSelect?: (id: number | null) => void;
 	onViewportChange?: (change: MapViewportChange) => void;
+	/** Contatore che cambia a ogni richiesta di ricentraggio dal chiamante (12-09, D-5). */
+	recenterNonce?: number;
 }
 
 const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/light-v11";
@@ -256,6 +258,7 @@ export default function EventsMap({
 	selectedEventId = null,
 	onEventSelect,
 	onViewportChange,
+	recenterNonce,
 }: EventsMapProps) {
 	const mapContainerRef = useRef<HTMLDivElement>(null);
 	const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -773,6 +776,34 @@ export default function EventsMap({
 			}
 		};
 	}, [userLocation]);
+
+	// Comando "Centra sulla destinazione" del riquadro mappa desktop (12-09,
+	// D-5): recenterNonce e' un CONTATORE, non un valore letto per contenuto —
+	// due richieste consecutive sullo stesso centro devono comunque
+	// riportare la camera li', quindi la dipendenza e' il nonce, non le
+	// coordinate. Nessuna durata letterale: il default di Mapbox va bene
+	// (VR-07 fa fallire la fase su una durata scritta a mano).
+	useEffect(() => {
+		if (recenterNonce == null) return;
+		const map = mapRef.current;
+		if (!map) return;
+		if (userLocation) {
+			map.easeTo({ center: [userLocation.lng, userLocation.lat], zoom: 11 });
+			return;
+		}
+		// Nessun userLocation: ricalcola i bounds su tutti gli eventi con
+		// coordinate, stesso padding/maxZoom dell'adattamento automatico sopra
+		// (updateMarkers) — riuso della stessa politica di inquadratura, non
+		// una seconda.
+		const eventsWithCoords = eventsWithCoordsRef.current;
+		if (eventsWithCoords.length === 0) return;
+		const bounds = new mapboxgl.LngLatBounds();
+		eventsWithCoords.forEach((item) => {
+			bounds.extend([item.coords.lng, item.coords.lat]);
+		});
+		map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [recenterNonce]);
 
 	return (
 		<div className="relative w-full h-full">

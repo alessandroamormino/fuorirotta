@@ -18,7 +18,7 @@ import ViewSwitch, {
 import MapEventsRail from "@/components/map/MapEventsRail";
 import type { MapViewportChange } from "@/components/EventsMap";
 import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
-import { Check, Loader2, RefreshCw, Search } from "lucide-react";
+import { Check, Crosshair, Loader2, RefreshCw, Search } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { EASE_STANDARD, MOTION_BASE, MOTION_FAST } from "@/lib/motion";
@@ -169,8 +169,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		return mapEvents.filter((event) => idSet.has(event.id));
 	}, [mapViewport, mapEvents]);
 
+	// 12-09: il controllo "mobileView === 'map'" che viveva qui prima non
+	// serve piu' come guardia di visibilita' — solo l'istanza della
+	// superficie ATTIVA pubblica onViewportChange (isDesktopSurface sotto),
+	// quindi mapViewport si aggiorna solo quando il riquadro che lo mostra e'
+	// davvero a schermo. Il riquadro mobile e quello desktop leggono lo
+	// stesso valore, ciascuno gia' nel proprio ramo di rendering condizionale.
 	const showAreaPill =
-		mobileView === "map" &&
 		mapViewport != null &&
 		lastSearchOrigin != null &&
 		calculateDistanceKm(
@@ -263,23 +268,32 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		sessionStorage.setItem("desktopView", desktopView);
 	}, [desktopView]);
 
-	// 12-08/D-3: ripiegamento a "list" sotto 1024px — l'UNICO cambio di vista
-	// automatico. Una sola fonte per il confine (matchMedia, non la larghezza
-	// finestra letta a mano), la stessa media query che governa lg: in CSS. Riallargare
-	// la finestra non riporta la mappa addosso da sola: la scelta dell'utente
-	// resta sua in ogni altro caso.
+	// 12-09: superficie attiva, una sola fonte — estende lo STESSO effect che
+	// gia' registra questa media query (12-08, ripiegamento a "list" sotto
+	// 1024px), non un secondo listener: due ascoltatori sulla stessa query
+	// sarebbero due verita' che possono divergere. Il riquadro mappa desktop
+	// e' nascosto via CSS sotto 1024px, non smontato — la sua istanza di
+	// mappa esiste comunque, ha dimensione zero e pubblicherebbe
+	// un'inquadratura senza senso se non fosse esclusa qui.
+	const [isDesktopSurface, setIsDesktopSurface] = useState(false);
 	useEffect(() => {
 		const mql = window.matchMedia("(min-width: 1024px)");
 		const applyFallback = (matches: boolean) => {
 			if (!matches) {
 				setDesktopView((prev) => (prev === "split" ? "list" : prev));
 			}
+			setIsDesktopSurface(matches);
 		};
 		applyFallback(mql.matches);
 		const handleChange = (e: MediaQueryListEvent) => applyFallback(e.matches);
 		mql.addEventListener("change", handleChange);
 		return () => mql.removeEventListener("change", handleChange);
 	}, []);
+
+	// Task 2 (D-5): comando "Centra sulla destinazione" del riquadro mappa
+	// desktop — contatore locale, incrementato al click e passato a
+	// EventsMap come recenterNonce.
+	const [recenterNonce, setRecenterNonce] = useState(0);
 
 	// Task 3: anche il ritorno alla vista lista azzera la ricerca sull'area,
 	// cosi' la lista non resta silenziosamente ristretta a un'area che non e'
@@ -1030,7 +1044,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								userLocation={userLocation}
 								selectedEventId={selectedEventId}
 								onEventSelect={handleEventSelect}
-								onViewportChange={handleViewportChange}
+								onViewportChange={!isDesktopSurface ? handleViewportChange : undefined}
 							/>
 
 							{/* Task 3: "Cerca in quest'area" — bottone reale, tolto
@@ -1078,9 +1092,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					    finestra a tetto 4xl). l'overlay di ingrandimento della mappa
 					    e' stato rimosso, D-3 — a
 					    desktop l'ingrandimento a piena vista lo fa lo stato "map"
-					    dell'interruttore, non un bottone separato. Il cablaggio di
-					    onViewportChange e i comandi del riquadro sono del piano 12-09:
-					    non anticipati qui. */}
+					    dell'interruttore, non un bottone separato. 12-09: cablaggio
+					    di onViewportChange, pillola d'area e comando di ricentraggio. */}
 					<div className="hidden lg:block lg:group-data-[view=list]/view:hidden">
 						<div
 							className="lg:sticky rounded-lg overflow-hidden relative"
@@ -1098,7 +1111,60 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								userLocation={userLocation}
 								selectedEventId={selectedEventId}
 								onEventSelect={handleEventSelect}
+								onViewportChange={isDesktopSurface ? handleViewportChange : undefined}
+								recenterNonce={recenterNonce}
 							/>
+
+							{/* Task 2: "Cerca in quest'area", stesso showAreaPill/
+							    handleAreaSearch/areaSearchLoading del riquadro mobile —
+							    isDesktopSurface in piu' nella condizione di render, cosi'
+							    non compare in un riquadro invisibile sotto 1024px. */}
+							<AnimatePresence>
+								{showAreaPill && isDesktopSurface && (
+									<motion.button
+										type="button"
+										onClick={handleAreaSearch}
+										disabled={areaSearchLoading}
+										initial={{ opacity: 0, x: "-50%", y: -8 }}
+										animate={{ opacity: 1, x: "-50%", y: 0 }}
+										exit={{ opacity: 0, x: "-50%", y: -8 }}
+										transition={{ duration: MOTION_BASE, ease: EASE_STANDARD }}
+										className="absolute left-1/2 top-3 z-10 inline-flex h-[38px] items-center gap-1.5 rounded-pill px-4 text-sm font-medium text-foreground"
+										style={{
+											background: "color-mix(in srgb, var(--background) 92%, transparent)",
+											backdropFilter: "saturate(180%) blur(20px)",
+											WebkitBackdropFilter: "saturate(180%) blur(20px)",
+											boxShadow: "0 0 0 1px var(--border-soft), 0 4px 16px rgba(0, 0, 0, 0.16)",
+										}}
+									>
+										{areaSearchLoading ? (
+											<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+										) : (
+											<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+										)}
+										{"Cerca in quest'area"}
+									</motion.button>
+								)}
+							</AnimatePresence>
+
+							{/* Task 2 (D-5): "Centra sulla destinazione" — un solo
+							    comando, sempre visibile (mai in hover, D-5): chi naviga
+							    da tastiera o trackpad senza sorvolare la mappa non
+							    potrebbe altrimenti scoprirlo. */}
+							<button
+								type="button"
+								onClick={() => setRecenterNonce((n) => n + 1)}
+								aria-label="Centra sulla destinazione"
+								className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-pill text-foreground"
+								style={{
+									background: "color-mix(in srgb, var(--background) 92%, transparent)",
+									backdropFilter: "saturate(180%) blur(20px)",
+									WebkitBackdropFilter: "saturate(180%) blur(20px)",
+									boxShadow: "0 0 0 1px var(--border-soft), 0 2px 10px rgba(0, 0, 0, 0.12)",
+								}}
+							>
+								<Crosshair className="h-[18px] w-[18px]" aria-hidden="true" />
+							</button>
 						</div>
 					</div>
 					</div>
