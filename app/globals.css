@@ -388,15 +388,22 @@ input[type="range"].slider::-moz-range-thumb:hover {
    dentro l'albero React del popup, e il popup Mapbox resta configurato con
    closeButton: false. */
 
-/* Barra superiore desktop (12-08, D-2): sfondo smerigliato + filetto,
-   solo da 1024px in su. Non e' una utility Tailwind perche' il valore di
-   sfondo e' un color-mix() da scopare a un breakpoint — uno style inline
-   non e' scopabile per media query. Stesso pattern del mock
-   (assets/desktop.css, .topbar-d), nessun esadecimale: solo var()
-   gia' esistenti. */
+/* Barra superiore desktop (12-08, D-2; sfondo rimosso in 12-09 D-B, decisione
+   utente: "trasparente ma sfocata"), solo da 1024px in su. Non e' una utility
+   Tailwind perche' backdrop-filter/border-bottom restano scopati a un
+   breakpoint — uno style inline non e' scopabile per media query.
+   DIVERGENZA DICHIARATA DAL MOCK: assets/desktop.css prescrive un velo
+   bianco a bassa opacita' (color-mix(... 82%, transparent), 92% nel
+   prototipo) dietro la sfocatura. L'utente l'ha scartato ("non mi piace
+   quell'effetto bianco con alfa bassa che c'e' attorno, meglio
+   trasparente") a favore di background completamente trasparente — la
+   sfocatura (backdrop-filter) resta, e' cio' che tiene leggibile la pillola
+   di ricerca sopra una foto scura; senza di essa l'utente avrebbe scelto
+   "completamente trasparente" invece di questa via di mezzo. border-bottom
+   invariato. */
 @media (min-width: 1024px) {
   .topbar-desktop {
-    background: color-mix(in srgb, var(--background) 82%, transparent);
+    background: transparent;
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     border-bottom: 1px solid var(--border-soft);
