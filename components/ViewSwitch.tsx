@@ -41,7 +41,7 @@ interface ViewSwitchProps<V extends ViewValue> {
 	value: V;
 	onChange: (view: V) => void;
 	/** Default "mobile": due tab (Lista/Mappa). "desktop": tre tab, Columns2
-	 *  per il segmento centrale, 380px invece di piena larghezza. */
+	 *  per il segmento centrale, 440px invece di piena larghezza. */
 	variant?: "mobile" | "desktop";
 }
 
