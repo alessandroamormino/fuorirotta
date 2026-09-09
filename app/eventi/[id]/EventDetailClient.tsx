@@ -109,6 +109,10 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const [barScrolled, setBarScrolled] = useState(false);
 	const [navSheetOpen, setNavSheetOpen] = useState(false);
 	const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+	// D-8 (12-10): predicato a 1024px, popolato dall'effect piu' sotto — regge
+	// prima dell'hydratazione col ripiego "falso" (ramo mobile), coerente con
+	// l'SSR dove window non esiste.
+	const [isDesktopSurface, setIsDesktopSurface] = useState(false);
 	// D-07: qui la Navbar serve solo ad avviare una nuova ricerca che porta a
 	// "/" — draft locale, mai letto altrove in questo file.
 	const [draftFilters, setDraftFilters] = useState<SearchFilters>({
@@ -185,6 +189,20 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		);
 	}, []);
 
+	// D-8 (12-10): stesso predicato a 1024px che 12-09 usa in app/HomeClient.tsx
+	// — stessa stringa di media query, una sola verita' condivisa col CSS, mai
+	// una larghezza letta a mano. Dichiarato qui e non estratto in un hook
+	// condiviso: due call site non giustificano l'estrazione, che si fa quando
+	// compare il terzo. Decide quale delle due istanze di EventsMap (colonna
+	// laterale o blocco "Dove si trova") monta davvero: mai entrambe.
+	useEffect(() => {
+		const mq = window.matchMedia("(min-width: 1024px)");
+		setIsDesktopSurface(mq.matches);
+		const handleChange = (e: MediaQueryListEvent) => setIsDesktopSurface(e.matches);
+		mq.addEventListener("change", handleChange);
+		return () => mq.removeEventListener("change", handleChange);
+	}, []);
+
 	const handleSearch = (filters: SearchFilters) => {
 		const searchParams = new URLSearchParams();
 		if (filters.location) searchParams.append("location", filters.location);
@@ -216,8 +234,13 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
 	}
 
+	// D-8 (12-10): il wrapper passa da `hidden sm:block` a `hidden sm:contents`
+	// — un elemento sticky non esce mai dal proprio blocco contenitore, e un
+	// wrapper alto quanto la barra la lascerebbe scorrere via al primo pixel.
+	// Sotto 640px resta nascosto; sopra sparisce dall'albero delle scatole e
+	// <nav> diventa figlio diretto del guscio min-h-screen.
 	const desktopNavbar = (
-		<div className="hidden sm:block">
+		<div className="hidden sm:contents">
 			<Navbar
 				filters={draftFilters}
 				onFiltersChange={setDraftFilters}
@@ -280,6 +303,11 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 		userLocation && event.resolvedLatitude != null && event.resolvedLongitude != null
 			? calculateDistanceKm(userLocation.lat, userLocation.lng, event.resolvedLatitude, event.resolvedLongitude)
 			: null;
+	// T-12-D9: unico punto di controllo per un URL che nasce da contenuto
+	// scrapato e finisce in un href — alimenta sia la riga "Fonte" della lista
+	// raggruppata sia l'azione secondaria della colonna laterale desktop.
+	const sourceHref =
+		event.sourceUrl && /^https?:\/\//i.test(event.sourceUrl) ? event.sourceUrl : null;
 
 	return (
 		<div className="min-h-screen bg-muted">
@@ -295,183 +323,259 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 			    desktop resta aperto (T-17-09). */}
 			<main
 				ref={scrollRef}
-				className="fixed inset-x-0 bottom-0 top-16 overflow-y-auto scrollbar-thin sm:top-28"
+				// lg:static + lg:overflow-visible (D-8): un elemento static ignora
+				// top/left/right/bottom per definizione, quindi la sola aggiunta
+				// neutralizza gli offset fixed senza toccare il ramo mobile — il
+				// dettaglio a 1024px e oltre scorre come pagina, stesso trattamento
+				// che 12-08 ha dato al guscio della home.
+				className="fixed inset-x-0 bottom-0 top-16 overflow-y-auto scrollbar-thin sm:top-28 lg:static lg:overflow-visible"
 				inert={navPanelOpen}
 			>
-				{/* Hero: inquadratura piena (criterio 12) — nessun ritaglio, solo
-				    l'asse verticale e' vincolato. Il matting su --surface per le
-				    foto verticali e' intenzionale. */}
-				{event.imageUrl ? (
-					<div
-						className={cn(
-							"grid w-full place-items-center border-b border-border-soft bg-surface",
-							!heroLoaded && "aspect-[3/2]"
-						)}
-					>
-						<img
-							src={event.imageUrl}
-							alt={decodeHtmlEntities(event.title)}
-							loading="eager"
-							decoding="async"
-							onLoad={() => setHeroLoaded(true)}
-							className="block w-full h-auto object-contain"
-							style={{ maxHeight: "46dvh" }}
-						/>
-					</div>
-				) : (
-					<div className="border-b border-border-soft">
-						<CategoryPlaceholder category={event.category ?? "Altro"} className="rounded-none" />
-					</div>
-				)}
-
 				<div
 					className={cn(
-						"container mx-auto px-4 max-w-7xl pt-5",
-						hasCoords ? "pb-24 md:pb-24" : "pb-8 md:pb-16"
+						"container mx-auto px-4 max-w-7xl",
+						hasCoords ? "pb-24 md:pb-24 lg:pb-12" : "pb-8 md:pb-16"
 					)}
 				>
-					<div className="mb-3 flex flex-wrap items-center gap-2">
-						<StatusBadge label={status.label} tone={status.tone} variant="pill" />
-						{event.category && (
-							<span
-								className="rounded-pill bg-surface px-[10px] py-[5px] text-xs text-foreground-secondary"
-								style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
-							>
-								{event.category}
-							</span>
-						)}
-					</div>
+					{/* Task 2 (12-10): le briciole di navigazione, desktop-only,
+					    arrivano qui — sopra la griglia. */}
 
-					<h1
-						ref={h1Ref}
-						id="detail-title"
-						className="mb-4 text-balance font-display text-xl font-semibold leading-tight text-foreground"
-						style={{ letterSpacing: "var(--tracking-display)" }}
-					>
-						{decodeHtmlEntities(event.title)}
-					</h1>
+					{/* Griglia desktop (D-8): tetto PROPRIO a 1200px, diverso dal
+					    max-w-7xl del contenitore di lettura (1280px) e dal tetto
+					    1760px della lista — tre decisioni diverse, non consolidate. */}
+					<div className="lg:mx-auto lg:grid lg:max-w-[1200px] lg:items-start lg:gap-12 lg:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
+						<article className="min-w-0">
+							{/* Hero: inquadratura piena (criterio 12) — nessun ritaglio, solo
+							    l'asse verticale e' vincolato. Il matting su --surface per le
+							    foto verticali e' intenzionale. A 1024px e oltre l'hero vive
+							    dentro la colonna di testo (D-8): -mx-4/lg:mx-0 annulla il
+							    gutter px-4 del contenitore SOLO sotto 1024px. */}
+							{event.imageUrl ? (
+								<div
+									className={cn(
+										"grid w-full place-items-center border-b border-border-soft bg-surface",
+										"-mx-4 lg:mx-0 lg:mb-8 lg:overflow-hidden lg:rounded-lg lg:border-b-0 lg:shadow-[var(--elev-ring)]",
+										!heroLoaded && "aspect-[3/2]"
+									)}
+								>
+									<img
+										src={event.imageUrl}
+										alt={decodeHtmlEntities(event.title)}
+										loading="eager"
+										decoding="async"
+										onLoad={() => setHeroLoaded(true)}
+										className="block w-full h-auto object-contain"
+										style={{ maxHeight: "46dvh" }}
+									/>
+								</div>
+							) : (
+								<div className="border-b border-border-soft -mx-4 lg:mx-0 lg:mb-8 lg:overflow-hidden lg:rounded-lg lg:border-b-0 lg:shadow-[var(--elev-ring)]">
+									<CategoryPlaceholder category={event.category ?? "Altro"} className="rounded-none" />
+								</div>
+							)}
 
-					{/* Lista raggruppata (D-14): un contenitore, righe separate da
-					    filetti — sostituisce le quattro card in griglia. Ogni riga
-					    tranne "Quando" e' condizionale. */}
-					<div className="mb-6 overflow-hidden rounded-lg bg-surface">
-						<InfoRow
-							icon={<Calendar className="h-[17px] w-[17px]" strokeWidth={1.8} />}
-							label="Quando"
-							value={
-								isMultiDay
-									? formatEventRange(event.dateStart, event.dateEnd)
-									: format(new Date(event.dateStart), "EEEE dd MMMM yyyy", { locale: it })
-							}
-						/>
-
-						{event.locationName && (
-							<InfoRow
-								icon={<MapPin className="h-[17px] w-[17px]" strokeWidth={1.8} />}
-								label="Dove"
-								value={
-									<>
-										{decodeHtmlEntities(event.locationName)}
-										{event.address && (
-											<span className="block font-normal text-muted-foreground">{event.address}</span>
-										)}
-									</>
-								}
-							/>
-						)}
-
-						{event.phone && (
-							<InfoRow
-								icon={<Phone className="h-[17px] w-[17px]" strokeWidth={1.8} />}
-								label="Telefono"
-								value={
-									<a href={`tel:${event.phone}`} className="font-medium text-primary hover:underline">
-										{event.phone}
-									</a>
-								}
-							/>
-						)}
-
-						{distanceKm != null && (
-							<InfoRow
-								icon={<Compass className="h-[17px] w-[17px]" strokeWidth={1.8} />}
-								label="Distanza"
-								value={`${Math.round(distanceKm)} km da qui`}
-							/>
-						)}
-
-						{event.sourceUrl && (
-							<InfoRow
-								icon={<LinkIcon className="h-[17px] w-[17px]" strokeWidth={1.8} />}
-								label="Fonte"
-								value={
-									<>
-										<a
-											href={event.sourceUrl}
-											target="_blank"
-											rel="noopener noreferrer"
-											className="font-medium text-primary hover:underline"
+							{/* pt-5 tolto al contenitore esterno (D-8): a desktop il testo
+							    parte a filo dell'hero, sotto 1024px il ritmo verticale resta
+							    identico a prima. */}
+							<div className="pt-5 lg:pt-0">
+								<div className="mb-3 flex flex-wrap items-center gap-2">
+									<StatusBadge label={status.label} tone={status.tone} variant="pill" />
+									{event.category && (
+										<span
+											className="rounded-pill bg-surface px-[10px] py-[5px] text-xs text-foreground-secondary"
+											style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
 										>
-											{event.source}
-										</a>
-										<span className="block font-normal text-muted-foreground">
-											Fuorirotta raccoglie l&apos;evento dalla fonte, non lo organizza.
+											{event.category}
 										</span>
+									)}
+								</div>
+
+								<h1
+									ref={h1Ref}
+									id="detail-title"
+									className="mb-4 text-balance font-display text-xl font-semibold leading-tight text-foreground"
+									style={{ letterSpacing: "var(--tracking-display)" }}
+								>
+									{decodeHtmlEntities(event.title)}
+								</h1>
+
+								{/* Lista raggruppata (D-14): un contenitore, righe separate da
+								    filetti — sostituisce le quattro card in griglia. Ogni riga
+								    tranne "Quando" e' condizionale. */}
+								<div className="mb-6 overflow-hidden rounded-lg bg-surface">
+									<InfoRow
+										icon={<Calendar className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+										label="Quando"
+										value={
+											isMultiDay
+												? formatEventRange(event.dateStart, event.dateEnd)
+												: format(new Date(event.dateStart), "EEEE dd MMMM yyyy", { locale: it })
+										}
+									/>
+
+									{event.locationName && (
+										<InfoRow
+											icon={<MapPin className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+											label="Dove"
+											value={
+												<>
+													{decodeHtmlEntities(event.locationName)}
+													{event.address && (
+														<span className="block font-normal text-muted-foreground">{event.address}</span>
+													)}
+												</>
+											}
+										/>
+									)}
+
+									{event.phone && (
+										<InfoRow
+											icon={<Phone className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+											label="Telefono"
+											value={
+												<a href={`tel:${event.phone}`} className="font-medium text-primary hover:underline">
+													{event.phone}
+												</a>
+											}
+										/>
+									)}
+
+									{distanceKm != null && (
+										<InfoRow
+											icon={<Compass className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+											label="Distanza"
+											value={`${Math.round(distanceKm)} km da qui`}
+										/>
+									)}
+
+									{sourceHref && (
+										<InfoRow
+											icon={<LinkIcon className="h-[17px] w-[17px]" strokeWidth={1.8} />}
+											label="Fonte"
+											value={
+												<>
+													<a
+														href={sourceHref}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="font-medium text-primary hover:underline"
+													>
+														{event.source}
+													</a>
+													<span className="block font-normal text-muted-foreground">
+														Fuorirotta raccoglie l&apos;evento dalla fonte, non lo organizza.
+													</span>
+												</>
+											}
+										/>
+									)}
+								</div>
+
+								{event.description && (
+									<>
+										<h2
+											className="mb-2 font-display text-lg font-semibold leading-tight text-foreground"
+											style={{ letterSpacing: "var(--tracking-display)" }}
+										>
+											Cosa aspettarsi
+										</h2>
+										{/* Reso come testo, non come markup arbitrario: le descrizioni sono
+										    testo puro (solosagre e inlombardia strippano i tag alla fonte,
+										    opendata restituisce il campo grezzo dell'API). Il sink HTML
+										    rimosso in acd78f0 non rientra qui: era una via d'ingresso XSS
+										    da contenuto scrapato — T-07-09. */}
+										<p className="mb-6 whitespace-pre-line text-base leading-relaxed text-foreground-secondary">
+											{htmlToPlainText(event.description)}
+										</p>
 									</>
-								}
-							/>
-						)}
-					</div>
-
-					{event.description && (
-						<>
-							<h2
-								className="mb-2 font-display text-lg font-semibold leading-tight text-foreground"
-								style={{ letterSpacing: "var(--tracking-display)" }}
-							>
-								Cosa aspettarsi
-							</h2>
-							{/* Reso come testo, non come markup arbitrario: le descrizioni sono
-							    testo puro (solosagre e inlombardia strippano i tag alla fonte,
-							    opendata restituisce il campo grezzo dell'API). Il sink HTML
-							    rimosso in acd78f0 non rientra qui: era una via d'ingresso XSS
-							    da contenuto scrapato — T-07-09. */}
-							<p className="mb-6 whitespace-pre-line text-base leading-relaxed text-foreground-secondary">
-								{htmlToPlainText(event.description)}
-							</p>
-						</>
-					)}
-
-					{hasCoords && (
-						<>
-							<h2
-								className="mb-2 font-display text-lg font-semibold leading-tight text-foreground"
-								style={{ letterSpacing: "var(--tracking-display)" }}
-							>
-								Dove si trova
-							</h2>
-							<div
-								className="mb-3 h-[220px] overflow-hidden rounded-lg bg-surface"
-								style={{ boxShadow: "var(--elev-ring)" }}
-							>
-								<EventsMap events={[event]} disablePopups={true} />
+								)}
 							</div>
-						</>
-					)}
 
-					{event.imageUrl && (
-						<p className="mb-12 border-t border-border-soft pt-4 text-xs leading-relaxed text-muted-foreground">
-							Foto: {event.source}
-						</p>
-					)}
+							{/* Dove si trova: mappa mobile/tablet — a 1024px e oltre la
+							    STESSA istanza vive nella colonna laterale (isDesktopSurface),
+							    mai entrambe: due contesti Mapbox per un solo pin sarebbero
+							    uno spreco di rete e WebGL. lg:hidden e' un secondo strato di
+							    guardia CSS per il primo paint, prima che l'effect idrati. */}
+							{hasCoords && !isDesktopSurface && (
+								<>
+									<h2
+										className="mb-2 font-display text-lg font-semibold leading-tight text-foreground"
+										style={{ letterSpacing: "var(--tracking-display)" }}
+									>
+										Dove si trova
+									</h2>
+									<div
+										className="lg:hidden mb-3 h-[220px] overflow-hidden rounded-lg bg-surface"
+										style={{ boxShadow: "var(--elev-ring)" }}
+									>
+										<EventsMap events={[event]} disablePopups={true} />
+									</div>
+								</>
+							)}
+
+							{event.imageUrl && (
+								<p className="mb-12 border-t border-border-soft pt-4 text-xs leading-relaxed text-muted-foreground">
+									Foto: {event.source}
+								</p>
+							)}
+						</article>
+
+						{/* Colonna laterale (D-8): sticky su --topbar-h (pubblicata da
+						    components/Navbar.tsx, piano 12-08), statica sotto 1024px. Il
+						    ripiego 92px nel calc() e' quello del mock: se la variabile non
+						    fosse ancora scritta la colonna cade su una misura sensata. */}
+						<aside className="hidden lg:block lg:sticky" style={{ top: "calc(var(--topbar-h, 92px) + 24px)" }}>
+							{(hasCoords || sourceHref) && (
+								<div className="mb-5 overflow-hidden rounded-lg bg-surface">
+									{hasCoords && isDesktopSurface && (
+										<div className="h-[240px]">
+											<EventsMap events={[event]} disablePopups={true} />
+										</div>
+									)}
+									<div className="flex flex-col gap-3 p-4">
+										{/* Azione primaria: "Naviga", stessa pelle della barra
+										    fissa mobile — stesso comando, due collocazioni. */}
+										{hasCoords && (
+											<button
+												type="button"
+												onClick={() => handleNavigation(event.latitude, event.longitude)}
+												className="flex h-12 w-full items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-primary-foreground"
+											>
+												<Navigation className="h-[18px] w-[18px]" />
+												Naviga
+											</button>
+										)}
+										{/* Azione secondaria: NON un secondo bottone pieno (D-8) —
+										    stesso link della riga "Fonte", stessa costante sourceHref. */}
+										{sourceHref && (
+											<a
+												href={sourceHref}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="flex min-h-12 w-full items-center justify-center rounded-pill bg-surface px-5 font-medium text-foreground"
+												style={{ boxShadow: "inset 0 0 0 1px var(--border-soft)" }}
+											>
+												Vedi sulla fonte
+											</a>
+										)}
+									</div>
+								</div>
+							)}
+							{/* Task 3 (12-10): "Nelle vicinanze" arriva qui, come secondo
+							    riquadro della colonna. */}
+						</aside>
+					</div>
 				</div>
 			</main>
 
 			{/* Barra d'azione fissa: una sola azione primaria per questa
-			    schermata — il link alla fonte vive gia' nella lista sopra. */}
+			    schermata — il link alla fonte vive gia' nella lista sopra.
+			    lg:hidden (D-8): a 1024px e oltre "Naviga" vive solo nella
+			    colonna laterale sticky, e questo blocco non ha piu' motivo di
+			    coprire la larghezza intera dello schermo. */}
 			{hasCoords && (
 				<div
-					className="fixed inset-x-0 bottom-0 z-30 border-t border-border-soft px-4 pt-3"
+					className="fixed inset-x-0 bottom-0 z-30 border-t border-border-soft px-4 pt-3 lg:hidden"
 					style={{
 						background: "color-mix(in srgb, var(--background) 92%, transparent)",
 						backdropFilter: "saturate(180%) blur(20px)",
