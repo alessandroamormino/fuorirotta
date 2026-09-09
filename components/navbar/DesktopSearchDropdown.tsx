@@ -156,7 +156,32 @@ export default function DesktopSearchDropdown({
 					>
 						<div
 							style={{ width: "var(--radix-popover-trigger-width)" }}
-							className="relative"
+							// z-[200] (12-09, difetto A): ContentUnstyled non porta ALCUNA
+							// classe (vedi commento in cima al file) — nemmeno lo z-[200]
+							// che la Content stilizzata avrebbe portato. react-popper legge
+							// lo z-index CALCOLATO di questo nodo (e' lui il vero "content",
+							// fuso qui sopra da asChild) e lo ricopia sul wrapper
+							// `data-radix-popper-content-wrapper` che porta il
+							// position:absolute effettivo (node_modules/@radix-ui/
+							// react-popper/dist/index.mjs, PopperContent: `zIndex:
+							// contentZIndex` da `getComputedStyle(content).zIndex`). Senza
+							// una classe qui quel valore letto e' "auto": il wrapper resta
+							// position:absolute con z-index:auto, che NON forma un proprio
+							// stacking context (solo uno z-index non-auto lo fa per
+							// absolute/relative) — a differenza di un antenato fixed/sticky,
+							// un absolute con z:auto non e' garantito vincere contro
+							// contenuto non posizionato piu' sotto nella pagina (misurato: il
+							// pannello "Destinazioni suggerite" finiva sotto l'interruttore
+							// Lista/Mappa — HomeClient.tsx, ne' genitore ne' figlio di questo
+							// popover, fratelli sotto <body> una volta che il portale stacca
+							// questo nodo dal proprio antenato React). Stesso valore
+							// (z-[200]) gia' usato altrove per lo stesso scopo:
+							// components/ui/Popover.tsx (Content stilizzata),
+							// components/ui/Dialog.tsx, MobileSearchOverlay.tsx — non un
+							// nuovo token, lo stesso idioma "galleggia sopra tutto" gia'
+							// presente in questo file (la Content stilizzata) applicato dove
+							// ContentUnstyled l'aveva perso.
+							className="relative z-[200]"
 						>
 						<motion.div
 							layout
