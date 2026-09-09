@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Menu, Map as MapIcon, Columns2 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 
 export type MobileView = "list" | "map";
 // 12-08/D-3: sovrainsieme desktop dei due stati mobili — "split" e' il terzo
@@ -65,6 +66,19 @@ export default function ViewSwitch<V extends ViewValue = MobileView>({
 	variant = "mobile",
 }: ViewSwitchProps<V>) {
 	const TABS = (variant === "desktop" ? DESKTOP_TABS : MOBILE_TABS) as { value: V; label: string }[];
+	// UAT 12-08 #4: la pillola del tab attivo deve scivolare come il pannello
+	// Dove/Quando della navbar (DesktopSearchDropdown.tsx) — stesso
+	// meccanismo (`layoutId` + molla `damping:30, stiffness:400`), non
+	// un'invenzione nuova. Divergenza dichiarata dal mock: assets/desktop.css
+	// da' al tab attivo solo una transizione di background/color, nessuna
+	// animazione di elemento condiviso — aggiunta voluta dall'utente.
+	// useReducedMotion (framer-motion, dipendenza gia' installata) decide se
+	// montare la pillola come motion.span animato o come span statico —
+	// nessun `duration:` letterale scritto qui: VR-07 (D-16) vieta durate
+	// fuori da lib/motion.ts, e uno span statico e' comunque la resa piu'
+	// corretta per prefers-reduced-motion (nessuna animazione, non
+	// un'animazione istantanea).
+	const shouldReduceMotion = useReducedMotion();
 	// Questo codebase non usa mai `dark:` di Tailwind (risolverebbe su
 	// prefers-color-scheme, non sulla classe .dark che l'utente sceglie a
 	// mano) — stesso pattern gia' in EventsMap.tsx/ThemeToggle.tsx per
@@ -120,15 +134,23 @@ export default function ViewSwitch<V extends ViewValue = MobileView>({
 		}
 	};
 
-	// 12-08/D-3: geometria per variante — desktop rende 3 colonne a 380px fisso,
-	// mobile 2 colonne a piena larghezza (invariato).
-	const gridClass = variant === "desktop" ? "grid-cols-3 w-[380px]" : "grid-cols-2";
+	// 12-08/D-3: geometria per variante — mobile 2 colonne a piena larghezza
+	// (invariato). Desktop 3 colonne: UAT #7 ha segnalato padding interno e
+	// testo troppo vicino ai bordi alla larghezza 380px del mock — divergenza
+	// dichiarata dall'utente, non dal mock: 440px (invece di 380) e un
+	// padding/gap di container raddoppiato a 4px (invece di 2px) danno alla
+	// pillola "Lista e mappa" (l'etichetta lunga che rende il controllo
+	// affollato) lo spazio per il proprio padding orizzontale (`px-3`, i
+	// bottoni mobile restano senza).
+	const gridClass = variant === "desktop" ? "grid-cols-3 w-[440px]" : "grid-cols-2";
+	const containerPad = variant === "desktop" ? "gap-1 p-1" : "gap-0.5 p-0.5";
+	const buttonPad = variant === "desktop" ? "px-3" : "";
 
 	return (
 		<div
 			role="tablist"
 			aria-label="Vista risultati"
-			className={`grid ${gridClass} gap-0.5 rounded-pill bg-surface p-0.5`}
+			className={`grid ${gridClass} ${containerPad} rounded-pill bg-surface`}
 			onKeyDown={handleKeyDown}
 		>
 			{TABS.map((tab, index) => {
@@ -160,17 +182,34 @@ export default function ViewSwitch<V extends ViewValue = MobileView>({
 						onClick={() => onChange(tab.value)}
 						className={
 							isSelected
-								? `flex h-9 items-center justify-center gap-1.5 rounded-pill text-sm font-semibold text-foreground ${activeBgClass}`
-								: "flex h-9 items-center justify-center gap-1.5 rounded-pill text-sm text-foreground-secondary"
-						}
-						style={
-							isSelected && !isDark
-								? { boxShadow: "0 1px 3px rgba(0,0,0,0.1), 0 0 0 0.5px rgba(0,0,0,0.04)" }
-								: undefined
+								? `relative flex h-9 items-center justify-center gap-1.5 rounded-pill text-sm font-semibold text-foreground ${buttonPad}`
+								: `relative flex h-9 items-center justify-center gap-1.5 rounded-pill text-sm text-foreground-secondary ${buttonPad}`
 						}
 					>
-						<Icon className="h-4 w-4" aria-hidden="true" />
-						{tab.label}
+						{isSelected &&
+							(shouldReduceMotion ? (
+								<span
+									className={`absolute inset-0 rounded-pill ${activeBgClass}`}
+									style={
+										!isDark
+											? { boxShadow: "0 1px 3px rgba(0,0,0,0.1), 0 0 0 0.5px rgba(0,0,0,0.04)" }
+											: undefined
+									}
+								/>
+							) : (
+								<motion.span
+									layoutId={`view-switch-pill-${variant}`}
+									className={`absolute inset-0 rounded-pill ${activeBgClass}`}
+									style={
+										!isDark
+											? { boxShadow: "0 1px 3px rgba(0,0,0,0.1), 0 0 0 0.5px rgba(0,0,0,0.04)" }
+											: undefined
+									}
+									transition={{ type: "spring", damping: 30, stiffness: 400 }}
+								/>
+							))}
+						<Icon className="relative z-10 h-4 w-4" aria-hidden="true" />
+						<span className="relative z-10">{tab.label}</span>
 					</button>
 				);
 			})}
