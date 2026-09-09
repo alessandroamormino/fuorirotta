@@ -147,7 +147,7 @@ function addEventLayers(
 	map: mapboxgl.Map,
 	geojsonData: GeoJSON.FeatureCollection,
 	selectedEventId: number | null | undefined
-) {
+): ThemeColors {
 	const colors = readThemeColors();
 
 	map.addSource("events", {
@@ -243,6 +243,8 @@ function addEventLayers(
 			"icon-color": buildIconColorExpression(colors, selectedEventId) as never,
 		},
 	});
+
+	return colors;
 }
 
 export default function EventsMap({
@@ -265,6 +267,12 @@ export default function EventsMap({
 	const handlersRegisteredRef = useRef(false);
 	const lastGeoJSONRef = useRef<GeoJSON.FeatureCollection | null>(null);
 	const selectedEventIdRef = useRef<number | null>(selectedEventId);
+	// Colori letti da addEventLayers (mount + cambio tema): l'effetto pin
+	// selezionato sotto li rilegge da qui invece di richiamare
+	// getComputedStyle a ogni hover — quella lettura forza un reflow
+	// sincrono sul thread principale nella stessa finestra dei 220ms in cui
+	// la card sta animando la scala (12-08 UAT round 2, punto 1/5).
+	const themeColorsRef = useRef<ThemeColors | null>(null);
 	// Refs per i callback opzionali del contratto 12-06: i gestori Mapbox si
 	// registrano una sola volta (handlersRegisteredRef), quindi un callback
 	// letto per closure resterebbe quello della prima registrazione. Le ref
@@ -357,7 +365,11 @@ export default function EventsMap({
 			layersInitializedRef.current = false;
 
 			map.once("style.load", () => {
-				addEventLayers(map, lastGeoJSONRef.current ?? EMPTY_GEOJSON, selectedEventIdRef.current);
+				themeColorsRef.current = addEventLayers(
+					map,
+					lastGeoJSONRef.current ?? EMPTY_GEOJSON,
+					selectedEventIdRef.current
+				);
 				layersInitializedRef.current = true;
 				setIsThemeTransitioning(false);
 			});
@@ -454,7 +466,7 @@ export default function EventsMap({
 				(mapRef.current.getSource("events") as mapboxgl.GeoJSONSource).setData(geojsonData);
 			} else {
 				// Prima inizializzazione: aggiungi source + layers
-				addEventLayers(mapRef.current, geojsonData, selectedEventIdRef.current);
+				themeColorsRef.current = addEventLayers(mapRef.current, geojsonData, selectedEventIdRef.current);
 				layersInitializedRef.current = true;
 			}
 
@@ -699,7 +711,8 @@ export default function EventsMap({
 		if (!map || !layersInitializedRef.current) return;
 		if (!map.getLayer("unclustered-point")) return;
 
-		const colors = readThemeColors();
+		const colors = themeColorsRef.current;
+		if (!colors) return;
 		map.setPaintProperty(
 			"unclustered-point",
 			"circle-color",

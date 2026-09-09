@@ -60,7 +60,7 @@ export default function EventCard({ event, distanceKm, highlighted, onHoverStart
 					<img
 						src={event.imageUrl}
 						alt={event.title}
-						className="h-full w-full object-cover group-hover:scale-[1.03]"
+						className="h-full w-full object-cover [will-change:transform] group-hover:scale-[1.03]"
 						style={{ transition: "transform var(--motion-base) var(--ease-standard)" }}
 					/>
 				) : (
