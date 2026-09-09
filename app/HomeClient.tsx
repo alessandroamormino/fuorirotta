@@ -877,7 +877,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						role="tabpanel"
 						aria-labelledby={VIEW_SWITCH_TAB_ID.list}
 						className={cn(
-							"flex-1 min-w-0 flex-col min-h-0",
+							"list-pane flex-1 min-w-0 flex-col min-h-0",
 							// D-08: sotto lg le due viste mobili sono alla pari, non
 							// impilate — quando la mappa e' quella attiva la colonna
 							// lista smette di occupare spazio invece di restare sotto.
@@ -950,7 +950,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												</div>
 											) : (
 												<>
-													<div className="flex flex-col gap-5 lg:grid lg:grid-cols-3 lg:gap-4">
+													<div className="grid-cards">
 														{events.map((event, index) => (
 															<div
 																key={`${event.source}-${event.id}`}

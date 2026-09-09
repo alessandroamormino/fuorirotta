@@ -402,3 +402,45 @@ input[type="range"].slider::-moz-range-thumb:hover {
     border-bottom: 1px solid var(--border-soft);
   }
 }
+
+/* Griglia card a container query (12-09, D-4): il numero di colonne segue
+   la larghezza della COLONNA lista, non della finestra. Con le media query
+   di finestra la terza colonna in vista "split" non scatterebbe mai, perche'
+   li' la colonna lista e' molto piu' stretta della finestra intera. Nome del
+   container esplicito ("list"), non l'antenato piu' vicino: cosi' una
+   futura seconda container query nella pagina non puo' dirottare queste
+   quattro regole. Stessa forma del mock, assets/desktop.css. */
+.list-pane {
+  container-type: inline-size;
+  container-name: list;
+}
+.grid-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+@container list (min-width: 480px) {
+  .grid-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 20px;
+  }
+}
+/* La terza colonna scatta a 860, non prima: piu' in basso le card
+   scenderebbero sotto 260px, piu' strette che a due colonne su uno schermo
+   piu' piccolo — un salto all'indietro allargando la finestra. Non
+   abbassare questa soglia per arrotondare. */
+@container list (min-width: 860px) {
+  .grid-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container list (min-width: 1120px) {
+  .grid-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container list (min-width: 1450px) {
+  .grid-cards {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
