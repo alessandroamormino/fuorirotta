@@ -323,6 +323,25 @@ export default function EventsMap({
 		};
 	}, []);
 
+	// 12-08 UAT #3: mapbox-gl osserva solo il resize della FINESTRA
+	// (`trackResize`, default true) — non ha un ResizeObserver interno sul
+	// proprio container (verificato: assente nel bundle installato). Quando
+	// l'interruttore desktop passa a "map" la griglia CSS collassa a una
+	// colonna e il contenitore si allarga, ma senza questo osservatore il
+	// canvas mapbox resta ai pixel dell'ultimo `resize()` (quelli dello stato
+	// "split", ~40%) — la mappa non cambia dimensione benché il suo div lo
+	// faccia. Causa isolata separando i due livelli: il CSS del collasso a
+	// una colonna e' corretto e verificato nel foglio emesso, il canvas no.
+	useEffect(() => {
+		const container = mapContainerRef.current;
+		if (!container) return;
+		const observer = new ResizeObserver(() => {
+			mapRef.current?.resize();
+		});
+		observer.observe(container);
+		return () => observer.disconnect();
+	}, []);
+
 	// Reagisci al cambio tema: scambia lo style Mapbox e ri-aggiungi source/layer
 	// dentro style.load, mostrando un velo finché i marker non sono tornati.
 	useEffect(() => {
