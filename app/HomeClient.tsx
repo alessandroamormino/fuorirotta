@@ -855,7 +855,17 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						aria-labelledby={VIEW_SWITCH_TAB_ID[desktopView]}
 						data-view={desktopView}
 						className={cn(
-							"group flex-1 min-h-0 flex gap-6",
+							// UAT 12-08 #1/#5: `group` senza nome collideva col `group`
+							// (anch'esso senza nome) che EventCard.tsx mette sul proprio
+							// Link per `group-hover:scale-[1.03]` — :hover risale a
+							// QUALUNQUE antenato con classe .group, quindi ogni card
+							// dentro questa regione faceva scattare lo scale delle
+							// immagini di TUTTE le altre appena il mouse entrava nella
+							// regione. Isolato spostando questo contenitore su un group
+							// con nome (`group/view`), cosi' `group-data-[view=...]/view:`
+							// risale solo a QUESTO antenato e non collide piu' col group
+							// senza nome di EventCard.
+							"group/view flex-1 min-h-0 flex gap-6",
 							"lg:grid lg:items-start lg:gap-8",
 							"lg:grid-cols-[minmax(0,1fr)_clamp(380px,40%,620px)]",
 							"lg:data-[view=list]:grid-cols-[minmax(0,1fr)]",
@@ -874,8 +884,9 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							mobileView === "map" ? "hidden lg:flex" : "flex",
 							// 12-08/D-3: a desktop il riquadro lista sparisce nello
 							// stato "map" dell'interruttore — legge data-view
-							// sull'antenato via l'idioma group di Tailwind.
-							"lg:group-data-[view=map]:hidden"
+							// sull'antenato via l'idioma group con nome di Tailwind
+							// (group/view), non il group senza nome che EventCard usa.
+							"lg:group-data-[view=map]/view:hidden"
 						)}
 					>
 						<div className="flex-1 min-h-0 pb-4 relative">
@@ -1070,7 +1081,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					    dell'interruttore, non un bottone separato. Il cablaggio di
 					    onViewportChange e i comandi del riquadro sono del piano 12-09:
 					    non anticipati qui. */}
-					<div className="hidden lg:block lg:group-data-[view=list]:hidden">
+					<div className="hidden lg:block lg:group-data-[view=list]/view:hidden">
 						<div
 							className="lg:sticky rounded-lg overflow-hidden relative"
 							style={{
