@@ -1,22 +1,31 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CANONICAL_CATEGORIES, orderCategories } from "@/lib/categories/taxonomy";
+import { romeMidnightUTC, todayInRome } from "@/lib/dateWindow";
 
 export async function GET() {
 	try {
 		// DEDUP-01 + D-09: la faccetta non deve mai dichiarare piu' eventi di
 		// quanti la lista poi ne mostri. /api/events, chiamato senza dateFrom
-		// (il caso che questa faccetta accompagna), filtra sempre dateStart
-		// dall'inizio di oggi in poi — replicare esattamente la stessa soglia
-		// qui e' cio' che tiene le due risposte d'accordo (Rule 1: senza questo
-		// filtro il conteggio includeva anche eventi passati, sommando piu' del
-		// total che la lista di default mostra). Una sola query raggruppata
-		// sostituisce la vecchia forma N+1 (un findMany distinct + un count per
-		// valore).
-		const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
+		// (il caso che questa faccetta accompagna), usa oggi-a-Roma come inizio
+		// finestra E semantica di OVERLAP (bugfix 2026-09-10, lib/dateWindow.ts,
+		// app/api/events/route.ts): un evento conta se non e' ancora finito
+		// prima di oggi, non solo se INIZIA oggi. Replicare qui esattamente la
+		// stessa soglia e lo stesso OR su dateEnd e' cio' che tiene le due
+		// risposte d'accordo (Rule 1: senza, il conteggio non includerebbe gli
+		// eventi in corso che la lista di default ora mostra, o viceversa
+		// includerebbe piu' del total). Una sola query raggruppata sostituisce
+		// la vecchia forma N+1 (un findMany distinct + un count per valore).
+		const windowStart = romeMidnightUTC(todayInRome());
 		const grouped = await prisma.event.groupBy({
 			by: ["canonicalCategory"],
-			where: { canonicalEventId: null, dateStart: { gte: startOfToday } },
+			where: {
+				canonicalEventId: null,
+				OR: [
+					{ dateEnd: { gte: windowStart } },
+					{ AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
+				],
+			},
 			_count: true,
 		});
 

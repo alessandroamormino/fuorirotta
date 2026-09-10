@@ -12,6 +12,7 @@ import { Event } from "@/lib/types";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent, groupMembersByCanonical } from "@/lib/dedup/compose";
+import { romeMidnightUTC, todayInRome, nextDateStr } from "@/lib/dateWindow";
 
 // Helper per convertire Decimal in number
 
@@ -127,10 +128,9 @@ export async function GET(request: NextRequest) {
 		}
 
 		// QUERY DATABASE
-		// Se non c'è dateFrom, usa l'inizio di oggi (00:00:00) invece dell'ora attuale
-		const startDate = dateFrom
-			? new Date(dateFrom)
-			: new Date(new Date().setHours(0, 0, 0, 0));
+		// Se non c'è dateFrom, usa oggi a Roma (mai il fuso del server: todayInRome,
+		// non new Date().setHours(0,0,0,0) — bugfix 2026-09-10, lib/dateWindow.ts).
+		const windowStart = romeMidnightUTC(dateFrom || todayInRome());
 
 		// DEDUP-01: un evento presente in piu' sorgenti compare una volta sola.
 		// Va nel where di base (non in uno dei due rami raggio/non-raggio piu'
@@ -138,12 +138,21 @@ export async function GET(request: NextRequest) {
 		// erediterebbero il filtro solo uno dei due — esattamente il difetto che
 		// WR-01 ha gia' corretto in Fase 9 su questo stesso file per search/cities.
 		const where: any = {
-			dateStart: { gte: startDate },
 			canonicalEventId: null,
 		};
 
+		// Bugfix 2026-09-10 (defect 1a): limite superiore SEMIAPERTO — mezzanotte
+		// del giorno DOPO dateTo, non dateTo stesso. Con `lte: new Date(dateTo)`
+		// (mezzanotte UTC) "dal 10 al 10" si riduceva a un istante: qualunque
+		// evento del 10 (scritto a mezzanotte di ROMA, 1-2h prima in cifre UTC)
+		// cadeva fuori. Resta l'unica meta' del filtro data che usa l'indice
+		// idx_events_date_start (prisma/schema.prisma:74) — l'altra meta' (sotto,
+		// su dateEnd) non e' indicizzata: al volume attuale (~3.400 righe) non
+		// sembra rilevante, ma e' la prima cosa da guardare se la ricerca a
+		// finestra ampia rallenta. Nessuna migrazione aggiunta qui: e' un atto
+		// deliberato separato, non un effetto collaterale di un bugfix.
 		if (dateTo) {
-			where.dateStart.lte = new Date(dateTo);
+			where.dateStart = { lt: romeMidnightUTC(nextDateStr(dateTo)) };
 		}
 
 		// WR-01: search e il ramo comuneId/cities generano ciascuno il proprio
@@ -153,6 +162,25 @@ export async function GET(request: NextRequest) {
 		// nel proprio { OR: [...] } dentro where.AND, cosi' Prisma li combina
 		// con AND come previsto.
 		const andGroups: Prisma.EventWhereInput[] = [];
+
+		// Bugfix 2026-09-10 (defect 1b): semantica di OVERLAP, non piu' "eventi
+		// che INIZIANO nella finestra". Un evento e' nella finestra se e' gia'
+		// iniziato (limite sopra) e non e' ancora finito prima che la finestra
+		// cominci — COALESCE(dateEnd, dateStart) >= windowStart, scritto come OR
+		// esplicito perche' Prisma non ha COALESCE nei filtri e dateEnd e'
+		// nullable (prisma/schema.prisma:24). CONSEGUENZA DICHIARATA: la lista di
+		// DEFAULT (nessun dateFrom/dateTo, quindi windowStart = oggi) ora include
+		// anche eventi iniziati ieri e ancora in corso, che prima sparivano di
+		// colpo alla mezzanotte del loro dateStart. E' il comportamento voluto —
+		// un evento in corso e' disponibile — ma cambia cosa mostra la home e
+		// ogni conteggio con essa: app/api/categories/route.ts e' aggiornato
+		// nello stesso commit per restare d'accordo (vedi commento li').
+		andGroups.push({
+			OR: [
+				{ dateEnd: { gte: windowStart } },
+				{ AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
+			],
+		});
 
 		if (search) {
 			andGroups.push({
