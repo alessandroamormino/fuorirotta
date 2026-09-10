@@ -476,14 +476,19 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 									    inline non e' scopabile per media query. Stesso principio
 									    (object-fit: contain, vincolo sul solo asse verticale,
 									    criterio di successo 12), valore diverso per superficie —
-									    non una seconda regola. */}
+									    non una seconda regola. Tetto desktop abbassato a 50dvh
+									    (da 62dvh) su richiesta dell'utente in UAT 12-11 del
+									    2026-09-10: "immagine leggermente piu' piccola per farci
+									    stare piu' roba" — la pagina di dettaglio resta a scorrimento
+									    di pagina, non un riquadro interno (invariato). Mobile
+									    intatto a 46dvh. */}
 									<img
 										src={event.imageUrl}
 										alt={decodeHtmlEntities(event.title)}
 										loading="eager"
 										decoding="async"
 										onLoad={() => setHeroLoaded(true)}
-										className="block w-full h-auto object-contain max-h-[46dvh] lg:max-h-[62dvh]"
+										className="block w-full h-auto object-contain max-h-[46dvh] lg:max-h-[50dvh]"
 									/>
 								</div>
 							) : (
