@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X } from "lucide-react";
 import { it } from "date-fns/locale";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import Link from "next/link";
 import Image from "next/image";
 import DestinationField from "@/components/navbar/DestinationField";
@@ -479,8 +479,17 @@ export default function Navbar({
 																Date
 															</label>
 															<div className="text-xs sm:text-sm text-muted-foreground-faint truncate">
+																{/* Bugfix 2026-09-10 (defect 2, sito mancato dal cascade
+																	di 342583a): dateFrom === dateTo per un giorno
+																	singolo, senza !isSameDay qui il campo Date del
+																	navbar desktop mostrava "10 set - 10 set" invece
+																	di "10 set" — stesso guard di SearchbarTrigger.tsx
+																	e MobileSearchOverlay.tsx, mai un secondo
+																	formatter. */}
 																{filters.dateFrom && filters.dateTo
-																	? `${format(filters.dateFrom, "d MMM", { locale: it })} - ${format(filters.dateTo, "d MMM", { locale: it })}`
+																	? isSameDay(filters.dateFrom, filters.dateTo)
+																		? format(filters.dateFrom, "d MMM", { locale: it })
+																		: `${format(filters.dateFrom, "d MMM", { locale: it })} - ${format(filters.dateTo, "d MMM", { locale: it })}`
 																	: "Aggiungi date"}
 															</div>
 														</div>
