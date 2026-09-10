@@ -409,16 +409,24 @@ echo "ok  D-04/D-05: il marcatore data-navbar-searchbar e' ancora presente in Na
 # verificano che i MECCANISMI esistano. Il comportamento (dove va il focus,
 # se il trap tiene) e' coperto dal checkpoint umano del Task 3, non da qui.
 
-# 1. Overlay mobile: Dialog.ContentUnstyled+asChild e autoFocus sul campo
-#    Dove sono ancora al loro posto — le due righe da cui dipende l'intero
-#    contratto mobile (D-13 di Fase 9), verificato non riscritto qui.
+# 1. Overlay mobile: Dialog.ContentUnstyled+asChild sono ancora al loro
+#    posto (D-13 di Fase 9, non riscritto qui). Il BERSAGLIO del focus
+#    iniziale dentro il foglio e' cambiato — UAT produzione 2026-09-10
+#    (rilievo 2): l'autoFocus nativo sul campo Dove apriva la tastiera iOS
+#    appena il foglio si mostrava, revocato. Il trap ha comunque bisogno di
+#    un bersaglio (altrimenti il focus scappa su <body>): ora e'
+#    closeButtonRef, messo a fuoco esplicitamente in onOpenAutoFocus.
 grep -q 'Dialog.ContentUnstyled' components/navbar/MobileSearchOverlay.tsx \
   || fail "D-11: components/navbar/MobileSearchOverlay.tsx non usa piu' Dialog.ContentUnstyled"
 grep -q 'asChild' components/navbar/MobileSearchOverlay.tsx \
   || fail "D-11: components/navbar/MobileSearchOverlay.tsx non passa piu' asChild al contenuto del Dialog"
-grep -q 'autoFocus' components/navbar/MobileSearchOverlay.tsx \
-  || fail "D-11: components/navbar/MobileSearchOverlay.tsx non passa piu' autoFocus al campo Dove"
-echo "ok  D-11: l'overlay mobile mantiene Dialog.ContentUnstyled+asChild e autoFocus sul campo Dove"
+grep -q 'closeButtonRef' components/navbar/MobileSearchOverlay.tsx \
+  || fail "D-11: components/navbar/MobileSearchOverlay.tsx non porta piu' closeButtonRef — il foglio ha perso il bersaglio del focus iniziale"
+grep -qE 'closeButtonRef\.current\?\.focus\(\)' components/navbar/MobileSearchOverlay.tsx \
+  || fail "D-11: onOpenAutoFocus non mette piu' a fuoco closeButtonRef — il trap potrebbe cadere su <body>"
+grep -q 'autoFocus' components/navbar/DestinationField.tsx \
+  && fail "D-11: components/navbar/DestinationField.tsx porta ancora la prop autoFocus — regressione del rilievo 2 (tastiera iOS che si apre da sola)"
+echo "ok  D-11: l'overlay mobile mantiene Dialog.ContentUnstyled+asChild; il focus iniziale va su closeButtonRef, non piu' su un campo di testo"
 
 # 2. Il dropdown desktop continua a prevenire onOpenAutoFocus di Radix: se
 #    sparisse, Radix sposterebbe il focus dentro il dropdown invece di

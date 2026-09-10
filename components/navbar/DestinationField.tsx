@@ -22,10 +22,6 @@ interface DestinationFieldProps {
 	className?: string;
 	readOnly?: boolean;
 	onFocus?: () => void;
-	// Overlay mobile (09-04): l'input Dove originale portava autoFocus,
-	// perso se non inoltrato — nessun effetto sull'unico altro call site
-	// (desktop), che non lo passa.
-	autoFocus?: boolean;
 	// D-19 (corretta il 2026-08-20, dopo la regressione di 7852a38): la
 	// lista dei risultati non apre piu' un Popover proprio — verrebbe
 	// visualizzata come una seconda superficie di suggerimenti sopra
@@ -61,7 +57,6 @@ export default function DestinationField({
 	className,
 	readOnly,
 	onFocus,
-	autoFocus,
 	resultsContainer,
 	onResultsChange,
 	ref,
@@ -177,7 +172,6 @@ export default function DestinationField({
 				type="text"
 				placeholder={placeholder}
 				value={value}
-				autoFocus={autoFocus}
 				onChange={(e) => onValueChange(e.target.value)}
 				onFocus={() => {
 					setHasFocus(true);

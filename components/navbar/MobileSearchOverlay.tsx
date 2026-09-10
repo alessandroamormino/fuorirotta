@@ -30,7 +30,7 @@
  * e' gia' un `Dialog.Root`, non va sostituito con `inert`.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, ChevronDown, X } from "lucide-react";
 import { it } from "date-fns/locale";
@@ -129,6 +129,12 @@ export default function MobileSearchOverlay({
 		useState<HTMLDivElement | null>(null);
 	const [resultsCount, setResultsCount] = useState(0);
 
+	// UAT da telefono vero, produzione, 2026-09-10 (rilievo 2): il foglio non
+	// deve aprire la tastiera da solo. Il trap di Radix ha comunque bisogno di
+	// un bersaglio dentro il foglio (vedi onOpenAutoFocus sotto) — il bottone
+	// "Chiudi" lo fornisce senza essere un campo di testo.
+	const closeButtonRef = useRef<HTMLButtonElement>(null);
+
 	// Chiusura unica per X/scrim/Escape: azzera visibilita' e passo interno,
 	// cosi' riaprire il foglio riparte sempre dalla vista "Dove" espansa.
 	const closeOverlay = () => {
@@ -153,11 +159,19 @@ export default function MobileSearchOverlay({
 							<Dialog.Overlay />
 							<Dialog.ContentUnstyled
 								asChild
-								// Il focus iniziale resta all'input Dove, che porta gia'
-								// autoFocus: e' il comportamento registrato in baseline e
-								// va preservato. Il focus e' comunque dentro il foglio,
-								// quindi il trap di Radix funziona lo stesso.
-								onOpenAutoFocus={(e) => e.preventDefault()}
+								// REVOCA 2026-09-10 (UAT da telefono vero, produzione,
+								// rilievo 2): l'autoFocus sull'input Dove — "comportamento
+								// registrato in baseline" da Fase 9, riconfermato al
+								// checkpoint 12-07 — apriva la tastiera iOS appena il
+								// foglio si mostrava. L'utente lo ha ribaltato avendolo
+								// provato su un telefono vero. Il trap di Radix ha
+								// comunque bisogno di un bersaglio dentro il foglio:
+								// niente preventDefault, il focus nativo va sul bottone
+								// "Chiudi" (closeButtonRef), non piu' su un campo di testo.
+								onOpenAutoFocus={(e) => {
+									e.preventDefault();
+									closeButtonRef.current?.focus();
+								}}
 							>
 								<motion.div
 									key="mobile-sheet"
@@ -185,6 +199,7 @@ export default function MobileSearchOverlay({
 												Dove e quando
 											</Dialog.Title>
 											<motion.button
+												ref={closeButtonRef}
 												whileTap={{ scale: 0.9 }}
 												onClick={closeOverlay}
 												aria-label="Chiudi"
@@ -232,7 +247,6 @@ export default function MobileSearchOverlay({
 												<div className="flex items-center gap-3 border border-border rounded-xl px-4 py-3 mb-5">
 													<Search className="w-4 h-4 text-muted-foreground-faint flex-shrink-0" />
 													<DestinationField
-														autoFocus
 														placeholder="Cerca destinazioni"
 														value={search.input}
 														onValueChange={search.setInput}
