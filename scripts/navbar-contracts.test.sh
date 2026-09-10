@@ -333,20 +333,29 @@ echo "ok  D-09: il default di ThemeToggle non e' mai 'fixed' — un montaggio nu
 # D-05       SearchbarTrigger.tsx e' l'unico file, montato due volte da
 #            components/Navbar.tsx (una per superficie).
 
-# 1. Il copy della pillola compare esattamente una volta in components/: un
-# conteggio esatto, non una ricerca di assenza, e' cio' che rende
+# 1. Il copy della pillola compare un numero atteso di volte in components/:
+# un conteggio esatto, non una ricerca di assenza, e' cio' che rende
 # falsificabile "non e' una terza copia". Commenti filtrati prima di
 # contare — un commento che nomina il copy a scopo di documentazione (come
 # quello poco sopra in questo stesso file, o nel componente) e' legittimo e
 # non deve far fallire il gate.
+#
+# UAT produzione 2026-09-10 (rilievo 3): la soglia e' salita da 1 a 2. Prima
+# solo il ramo desktop senza filtri (SearchbarTrigger.tsx:116) usava questo
+# copy; ora anche il ramo mobile senza filtri lo usa (":92", sostituendo
+# "Ovunque" SOLO quando filterCount === 0), stesso stato UI reso da due rami
+# variant="desktop"/"mobile" dello STESSO componente — non e' una terza
+# implementazione, D-01/D-02/D-05 restano validi. Se il conteggio sale sopra
+# 2 senza un terzo stato "nessun filtro" legittimo, e' la regressione che
+# questo gate deve intercettare.
 pill_copy_count=0
 while IFS= read -r f; do
   file_count="$(strip_comments "${f}" | grep -c 'Inizia la ricerca' || true)"
   pill_copy_count=$((pill_copy_count + file_count))
 done < <(find components -name '*.tsx' | sort)
-[[ "${pill_copy_count}" -eq 1 ]] \
-  || fail "D-02/D-05: 'Inizia la ricerca' compare ${pill_copy_count} volte (fuori dai commenti) in components/*.tsx (atteso esattamente 1) — rischio di una seconda implementazione della pillola"
-echo "ok  D-02/D-05: il copy della pillola compare esattamente una volta (fuori dai commenti) in components/"
+[[ "${pill_copy_count}" -eq 2 ]] \
+  || fail "D-02/D-05: 'Inizia la ricerca' compare ${pill_copy_count} volte (fuori dai commenti) in components/*.tsx (attese esattamente 2: desktop + mobile, ramo senza filtri) — rischio di una terza implementazione della pillola"
+echo "ok  D-02/D-05: il copy della pillola compare esattamente due volte (fuori dai commenti, desktop + mobile) in components/"
 
 # 2. Il componente e' montato da entrambe le superfici, e la vecchia
 # implementazione mobile-only non esiste piu'.

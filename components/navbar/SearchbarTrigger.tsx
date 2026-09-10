@@ -84,7 +84,12 @@ export default function SearchbarTrigger({
 					/>
 					<span className="min-w-0 flex-1">
 						<span className="block truncate text-sm font-semibold text-foreground">
-							{location || "Ovunque"}
+							{/* UAT produzione 2026-09-10 (rilievo 3): la label CTA del
+							    desktop (ramo senza filtri, riga 116) solo nello stato senza
+							    NESSUN filtro — se dateFrom/dateTo/radius sono impostati ma
+							    manca solo la destinazione, "Ovunque" resta un riepilogo
+							    onesto dello slot posizione, non va sostituito. */}
+							{location || (filterCount === 0 ? "Inizia la ricerca" : "Ovunque")}
 						</span>
 						<span className="block truncate text-xs text-muted-foreground">
 							{rowTwo}
