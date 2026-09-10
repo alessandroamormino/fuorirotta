@@ -1136,7 +1136,24 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								// gia' legge scrollTop/scrollHeight da questo nodo, non da
 								// window: a mobile era gia' corretto, a desktop ora inizia
 								// a scattare davvero invece di restare inerte a scrollTop 0.
-								className="h-full overflow-y-auto"
+								//
+								// UAT 2026-09-10: overflow-y:auto rende questo il primo
+								// antenato che CLIPPA (su entrambi gli assi, non solo quello
+								// verticale — CSS non ha un overflow "solo y" quando l'altro
+								// asse resta visible, computa anch'esso ad auto) — l'anello di
+								// hover di EventCard (shadow, fino a 2px oltre il bordo della
+								// card) veniva tagliato sulla prima/ultima colonna e contro lo
+								// scrollbar. px-2 apre un margine di rispetto; -mx-2 lo
+								// compensa esattamente cosi' il bordo di clip (il bordo di
+								// padding) torna dov'era il bordo del box PRIMA di questa
+								// modifica — le card non si spostano ne' si restringono, il
+								// conteggio di colonne del @container qui sotto non e' toccato
+								// (query sulla larghezza di .list-pane, l'antenato, non su
+								// questo nodo: vedi app/globals.css). scrollbar-gutter:stable
+								// evita che lo spazio riservato allo scrollbar (quando appare o
+								// sparisce, es. tra uno stato di errore breve e una pagina piena)
+								// faccia oscillare questo stesso margine.
+								className="h-full overflow-y-auto px-2 -mx-2 [scrollbar-gutter:stable]"
 							>
 								<AnimatePresence mode="wait">
 									{loading ? (
