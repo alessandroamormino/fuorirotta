@@ -157,7 +157,21 @@ echo "ok  D-09/D-10: nessuno dei ${#surface_files[@]} componenti di superficie r
 # (es. "restoredFilters e' sparita da qui") e' legittima e non deve far
 # fallire il gate.
 strip_comments() {
-  grep -vE '^[[:space:]]*(//|\*|/\*)' "$1"
+  # I 13 consumatori a valle sono `grep -q`, che esce al PRIMO match e chiude la
+  # pipe: il grep qui sotto riceve allora SIGPIPE (stato 141) e `set -o pipefail`
+  # (riga 40) propaga quel 141 come esito dell'intero pipeline, anche quando il
+  # match c'e' stato eccome. E' una corsa fra produttore e consumatore, quindi il
+  # gate falliva in modo intermittente su codice corretto: misurato 7 fallimenti
+  # su 10 esecuzioni a parita' di albero di lavoro, sempre sulla stessa
+  # asserzione D-10. Isolato disattivando il solo `pipefail`: 10 verdi su 10.
+  # Un 141 qui e' il consumatore che ha finito presto, non un esito del gate.
+  # Ogni altro stato resta un esito e viene propagato.
+  local status
+  grep -vE '^[[:space:]]*(//|\*|/\*)' "$1" || {
+    status=$?
+    [ "$status" -eq 141 ] && return 0
+    return "$status"
+  }
 }
 
 # 1. Nessuna copia dei filtri fuori da HomeClient.
