@@ -157,7 +157,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// EventsMap (ogni istanza, mobile e desktop) e le card. Non duplicare
 	// dentro la mappa o dentro il carosello.
 	const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
+	// UAT 2026-09-10: selectedEventId ha due origini — un click sul pin (deve
+	// scorrere la lista fino alla card, Task 3) e un hover sulla card in
+	// lista (D-12, non deve scorrere: con lo scroller interno del guscio
+	// applicazione (432f2b7) una card tagliata a meta' faceva "scattare" la
+	// lista appena il mouse la sfiorava). Il valore stesso di selectedEventId
+	// non porta questa informazione (stesso id da entrambe le origini), serve
+	// quindi un ref scritto alla FONTE del cambiamento e letto dall'effect di
+	// scorrimento sotto. Un ref e non uno stato: leggerlo/scriverlo non deve
+	// ne' far ripartire handleEventSelect (dipendenze vuote, vedi sotto) ne'
+	// aggiungere un render.
+	const selectionOriginRef = useRef<"pin" | "hover">("hover");
 	const handleEventSelect = useCallback((id: number | null) => {
+		selectionOriginRef.current = "pin";
 		setSelectedEventId(id);
 	}, []);
 
@@ -988,6 +1000,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// prefers-reduced-motion.
 	useEffect(() => {
 		if (selectedEventId == null || !scrollContainerRef.current) return;
+		// UAT 2026-09-10: solo un click sul pin scorre la lista — un hover
+		// sulla card lo ha gia' fatto scattare in vista da solo, scorrerla di
+		// nuovo e' esattamente il difetto segnalato. Vedi selectionOriginRef.
+		if (selectionOriginRef.current !== "pin") return;
 
 		const alreadyOnPage = events.some((event) => event.id === selectedEventId);
 		if (isDesktopSurface && !alreadyOnPage) {
@@ -996,6 +1012,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				const targetPage = Math.floor(index / LIMIT) + 1;
 				if (targetPage !== currentPage) {
 					goToPage(targetPage, false);
+					// L'origine "pin" resta finche' il salto pagina non porta la
+					// card in vista: il prossimo giro di questo stesso effect
+					// (dopo che `events` si aggiorna col fetch della nuova
+					// pagina) deve ancora trovarla per completare lo scorrimento.
 					return;
 				}
 			}
@@ -1007,6 +1027,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		if (!node) return;
 		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 		node.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "nearest" });
+		// Consumata: un successivo cambio di uno degli altri dipendenti (es.
+		// mapEvents riscritto da un fetch non correlato) con lo stesso pin
+		// ancora selezionato non deve rifare lo scroll.
+		selectionOriginRef.current = "hover";
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedEventId, events, mapEvents, currentPage, isDesktopSurface]);
 
@@ -1184,7 +1208,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 																	event={event}
 																	distanceKm={distanceKmFor(event)}
 																	highlighted={event.id === selectedEventId}
-																	onHoverStart={() => setSelectedEventId(event.id)}
+																	onHoverStart={() => {
+																		selectionOriginRef.current = "hover";
+																		setSelectedEventId(event.id);
+																	}}
 																	onHoverEnd={() =>
 																		setSelectedEventId((prev) => (prev === event.id ? null : prev))
 																	}
