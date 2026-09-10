@@ -34,7 +34,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, ChevronDown, X } from "lucide-react";
 import { it } from "date-fns/locale";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import type { Dispatch, SetStateAction } from "react";
 import DateRangeField from "@/components/ui/DateRangeField";
 import DestinationField from "@/components/navbar/DestinationField";
@@ -383,8 +383,14 @@ export default function MobileSearchOverlay({
 										Quando
 									</span>
 									<span className="text-sm font-semibold text-foreground">
+										{/* Bugfix 2026-09-10 (defect 2): dateFrom === dateTo per un
+										    giorno singolo (DateRangeField li imposta sempre insieme
+										    ora) — senza !isSameDay qui la pillola mostrerebbe
+										    "10 set – 10 set" invece di "10 set". */}
 										{filters.dateFrom && filters.dateTo
-											? `${format(filters.dateFrom, "d MMM", { locale: it })} – ${format(filters.dateTo, "d MMM", { locale: it })}`
+											? isSameDay(filters.dateFrom, filters.dateTo)
+												? format(filters.dateFrom, "d MMM", { locale: it })
+												: `${format(filters.dateFrom, "d MMM", { locale: it })} – ${format(filters.dateTo, "d MMM", { locale: it })}`
 											: "Aggiungi date"}
 									</span>
 								</button>

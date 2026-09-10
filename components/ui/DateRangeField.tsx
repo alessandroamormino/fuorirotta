@@ -34,24 +34,35 @@ export default function DateRangeField({
 	const [currentMonth, setCurrentMonth] = useState(new Date());
 	const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
 
+	// Bugfix 2026-09-10 (defect 2): un click seleziona SUBITO un giorno singolo
+	// (dateFrom = dateTo = quel giorno), pronto per la ricerca senza un secondo
+	// click sulla stessa data. "Estendibile" (dateFrom === dateTo) e "committato"
+	// (dateFrom !== dateTo, un range vero) si distinguono confrontando i due
+	// valori, senza uno stato aggiuntivo: un range gia' committato riparte da
+	// zero al prossimo click, uno estendibile si allunga in avanti o riparte se
+	// il click cade prima dell'inizio (mai un range invertito).
 	const handleDateSelect = (date: Date) => {
-		if (!dateFrom || (dateFrom && dateTo)) {
-			onChange({ dateFrom: date, dateTo: null });
+		const committedRange = dateFrom && dateTo && !isSameDay(dateFrom, dateTo);
+		if (!dateFrom || committedRange) {
+			onChange({ dateFrom: date, dateTo: date });
+		} else if (date < dateFrom) {
+			onChange({ dateFrom: date, dateTo: date });
 		} else {
-			if (date < dateFrom) {
-				onChange({ dateFrom: date, dateTo: dateFrom });
-			} else {
-				onChange({ dateFrom, dateTo: date });
-			}
+			onChange({ dateFrom, dateTo: date });
 		}
 	};
 
 	const isDateInRange = (date: Date) => {
 		if (!dateFrom) return false;
-		if (!dateTo && !hoveredDate) return isSameDay(date, dateFrom);
-		const endDate = dateTo || hoveredDate;
-		if (!endDate) return isSameDay(date, dateFrom);
-		return date >= dateFrom && date <= endDate;
+		// Mentre la selezione e' ancora estendibile (un solo giorno scelto),
+		// l'hover mostra l'anteprima del range che si formerebbe cliccando li' —
+		// stessa anteprima che il vecchio dateTo:null dava gratis. Un range gia'
+		// committato non cresce in hover, comportamento invariato.
+		const extendable = !dateTo || isSameDay(dateFrom, dateTo);
+		const previewEnd = extendable && hoveredDate ? hoveredDate : dateTo;
+		if (!previewEnd) return isSameDay(date, dateFrom);
+		if (previewEnd < dateFrom) return isSameDay(date, dateFrom);
+		return date >= dateFrom && date <= previewEnd;
 	};
 
 	const isDateRangeStart = (date: Date) =>

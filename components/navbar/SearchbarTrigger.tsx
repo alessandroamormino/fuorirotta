@@ -5,7 +5,7 @@ import type { Ref } from "react";
 import { motion } from "framer-motion";
 import { Search, ChevronLeft } from "lucide-react";
 import { it } from "date-fns/locale";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 
 interface SearchbarTriggerProps {
 	// D-19: variante esplicita invece di un ramo implicito. "desktop" rende
@@ -50,8 +50,11 @@ export default function SearchbarTrigger({
 	ref,
 }: SearchbarTriggerProps) {
 	if (variant === "mobile") {
+		// Bugfix 2026-09-10 (defect 2): dateFrom === dateTo per un giorno singolo
+		// (DateRangeField li imposta sempre insieme ora) — senza !isSameDay qui
+		// la pillola mostrerebbe "10 set – 10 set" invece di "10 set".
 		const dateLabel =
-			dateFrom && dateTo
+			dateFrom && dateTo && !isSameDay(dateFrom, dateTo)
 				? `${format(dateFrom, "d MMM", { locale: it })} – ${format(dateTo, "d MMM", { locale: it })}`
 				: dateFrom
 					? format(dateFrom, "d MMM", { locale: it })
@@ -132,7 +135,7 @@ export default function SearchbarTrigger({
 						</span>
 						<span className="text-disabled-foreground font-light">·</span>
 						<span className="text-sm text-muted-foreground-subtle truncate flex-shrink-0">
-							{dateFrom && dateTo
+							{dateFrom && dateTo && !isSameDay(dateFrom, dateTo)
 								? `${format(dateFrom, "d MMM", { locale: it })} – ${format(dateTo, "d MMM", { locale: it })}`
 								: dateFrom
 									? format(dateFrom, "d MMM", { locale: it })
