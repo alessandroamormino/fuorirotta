@@ -64,9 +64,13 @@ export default function Navbar({
 	// mano) — stesso pattern di ThemeToggle.tsx/ViewSwitch.tsx.
 	const [isDark, setIsDark] = useState(false);
 	useEffect(() => {
-		// Stesso pattern letto dal DOM di ViewSwitch.tsx/ThemeToggle.tsx, li'
-		// senza avviso: il compiler bail-a l'analisi su funzioni piccole,
-		// Navbar.tsx e' grande abbastanza da essere analizzata per intero.
+		// Stesso pattern letto dal DOM di ViewSwitch.tsx/ThemeToggle.tsx, dove
+		// la stessa regola NON scatta. Perche' scatti qui e non li' non e'
+		// stato verificato: non dedurlo dal sorgente, misuralo, se un giorno
+		// serve saperlo davvero.
+		// Perche' un effect e non uno stato iniziale pigro: il server non ha
+		// document, e leggere il tema durante il render romperebbe
+		// l'idratazione. Questo e' il motivo accertato della soppressione.
 		// Nessuna cascata reale: isDark non e' letto da nessun altro effect
 		// di questo file, solo da JSX (activeFieldBgClass).
 		// eslint-disable-next-line react-hooks/set-state-in-effect
