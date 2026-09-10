@@ -13,6 +13,7 @@ import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent, groupMembersByCanonical } from "@/lib/dedup/compose";
 import { romeMidnightUTC, todayInRome, nextDateStr } from "@/lib/dateWindow";
+import { compareByWindowRelevance } from "@/lib/eventOrdering";
 
 // Helper per convertire Decimal in number
 
@@ -244,9 +245,10 @@ export async function GET(request: NextRequest) {
 			// Fetch tutti gli eventi che matchano i criteri base (senza paginazione)
 			// include comune (T-12-04): solo name/provinceCode, mai la riga intera
 			// (coordinate del centroide, codici regione, timestamp non servono al client).
+			// Nessun orderBy qui: l'ordine finale e' quello clampato-alla-finestra
+			// applicato sotto a filteredEvents, non il dateStart grezzo del DB.
 			const allEvents = await prisma.event.findMany({
 				where,
-				orderBy: { dateStart: "asc" },
 				include: { comune: { select: { name: true, provinceCode: true } } },
 			});
 
@@ -256,6 +258,9 @@ export async function GET(request: NextRequest) {
 			// dai risultati pur avendo un punto perfettamente valido.
 			// I confronti sono su null e non sulla verita' del valore: 0 e' una
 			// coordinata valida e un test falsy la scarterebbe in silenzio.
+			// Questo ramo NON ordina per distanza: e' cosi' anche prima di questo
+			// fix (l'orderBy era dateStart, non un calcolo su userLat/userLng), e
+			// resta cosi' — cambiarlo qui sarebbe un secondo problema non chiesto.
 			const filteredEvents = allEvents.filter((event) => {
 				const lat = event.resolvedLatitude ?? event.latitude;
 				const lng = event.resolvedLongitude ?? event.longitude;
@@ -268,6 +273,12 @@ export async function GET(request: NextRequest) {
 				);
 				return distance <= radiusKm;
 			});
+
+			// Ordina per rilevanza clampata alla finestra (lib/eventOrdering.ts),
+			// non per dateStart assoluto: qui la paginazione e' uno .slice() in
+			// JS (mai take/skip lato DB, il fetch sopra e' gia' completo), quindi
+			// ordinare prima dello slice basta — nessuna query aggiuntiva.
+			filteredEvents.sort(compareByWindowRelevance(windowStart));
 
 			// DEDUP-04: compone una volta sola l'intero set filtrato (non solo la
 			// pagina) perche' la stessa lista alimenta sia la pagina corrente sia i
@@ -304,39 +315,50 @@ export async function GET(request: NextRequest) {
 				sourceId: e.sourceId,
 			}));
 		} else {
-			// Senza filtro raggio: query normale con paginazione DB
-			// include comune (T-12-04): solo name/provinceCode, mai la riga intera.
-			const pageEvents = await prisma.event.findMany({
-				where,
-				orderBy: { dateStart: "asc" },
-				take: limit,
-				skip: offset,
+			// Senza filtro raggio: Prisma non sa esprimere GREATEST(dateStart,
+			// windowStart) in orderBy (lib/eventOrdering.ts), quindi l'ordine
+			// clampato-alla-finestra si calcola in JS sopra un fetch completo di
+			// TUTTI gli eventi che matchano `where` — lo stesso fetch che questo
+			// ramo doveva gia' fare per la mappa (sotto, mai paginato), quindi non
+			// e' una query in piu': sostituisce sia il count() sia il findMany
+			// paginato di prima. take/skip restano compatibili perche' lo slice
+			// avviene qui su un array gia' ordinato, non su Prisma.
+			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
+			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
+			// al solo centroide del comune non avrebbero nessun punto da leggere.
+			const allMatchingEvents = await prisma.event.findMany({ where });
+			allMatchingEvents.sort(compareByWindowRelevance(windowStart));
+			total = allMatchingEvents.length;
+
+			const pageIds = allMatchingEvents
+				.slice(offset, offset + limit)
+				.map((e) => e.id);
+
+			// Solo la pagina corrente porta l'include comune (T-12-04): solo
+			// name/provinceCode, mai la riga intera. Un secondo findMany per id,
+			// non uno slice del fetch sopra, perche' quello non ha l'include.
+			const pageEventsRaw = await prisma.event.findMany({
+				where: { id: { in: pageIds } },
 				include: { comune: { select: { name: true, provinceCode: true } } },
 			});
+			const pageEventsById = new Map(pageEventsRaw.map((e) => [e.id, e]));
+			// `in` non garantisce l'ordine: si ricostruisce da pageIds, gia'
+			// ordinato per rilevanza.
+			const pageEvents = pageIds
+				.map((id) => pageEventsById.get(id))
+				.filter((e): e is (typeof pageEventsRaw)[number] => e !== undefined);
+
 			// DEDUP-04: compone solo la pagina corrente, una query aggiuntiva sui
 			// soli membri dei gruppi di questa pagina (niente N+1).
 			events = await withComposedFields(pageEvents);
 
-			total = await prisma.event.count({ where });
-
-			// Fetch dati per la mappa (tutti gli eventi che matchano, non
-			// paginati). DEDUP-04: servono i campi componibili (title/imageUrl/
-			// locationName/category) per non mostrare nel popup un valore diverso
-			// dalla scheda dello stesso evento fuso — description non serve alla
-			// mappa e resta fuori. La select ristretta di prima e' sostituita da
-			// righe complete: comporre solo i campi necessari via una select
-			// parziale avrebbe richiesto una seconda forma ad-hoc di
-			// composeEvent; riusare le righe intere e la stessa funzione
-			// factorizzata e' piu' semplice e non introduce divergenze, e il
-			// costo in byte e' accettabile al volume attuale (~2.700 eventi).
-			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
-			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
-			// al solo centroide del comune non avrebbero nessun punto da leggere.
-			const mapEventsRaw = await prisma.event.findMany({
-				where,
-				orderBy: { dateStart: "asc" },
-			});
-			const composedMapEvents = await withComposedFields(mapEventsRaw);
+			// DEDUP-04: servono i campi componibili (title/imageUrl/locationName/
+			// category) per non mostrare nel popup un valore diverso dalla scheda
+			// dello stesso evento fuso — description non serve alla mappa e resta
+			// fuori. Riusare le righe intere e la stessa funzione factorizzata e'
+			// piu' semplice di una select parziale ad-hoc, e il costo in byte e'
+			// accettabile al volume attuale (~2.700 eventi).
+			const composedMapEvents = await withComposedFields(allMatchingEvents);
 
 			mapEvents = composedMapEvents.map((e) => ({
 				id: e.id,
