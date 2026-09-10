@@ -192,7 +192,15 @@ export default function DesktopSearchDropdown({
 								layout: { type: "spring", damping: 30, stiffness: 400 },
 								opacity: { duration: MOTION_BASE },
 							}}
-							className={`bg-surface/95 backdrop-blur-md rounded-3xl shadow-2xl border border-surface/30 overflow-hidden absolute top-0 ${
+							// UAT 2026-09-10: fondo pieno e opaco (bg-surface, non piu'
+							// /95) e bordo a piena opacita' (border-border, non piu'
+							// border-surface/30) — la traslucidita' sopra backdrop-blur-md
+							// leggeva come "un mini gradiente" (nessun linear-gradient e'
+							// mai stato qui). backdrop-blur-md rimosso: dietro un fondo
+							// opaco non sfoca piu' nulla di visibile, stesso trattamento
+							// gia' usato da components/ui/Popover.tsx e Dialog.tsx per un
+							// pannello solido (bg-surface + border-border, nessun blur).
+							className={`bg-surface rounded-3xl shadow-2xl border border-border overflow-hidden absolute top-0 ${
 								activeField === "where"
 									? "left-0 right-0 sm:left-0 sm:right-auto sm:w-[500px]"
 									: "left-0 right-0 sm:left-auto sm:right-0 sm:w-[700px]"

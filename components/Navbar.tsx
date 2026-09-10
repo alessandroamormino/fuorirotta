@@ -55,6 +55,31 @@ export default function Navbar({
 		panels;
 	const hasActiveFilters = search.hasActiveFilters;
 
+	// UAT 2026-09-10 (uniformare i colori navbar/toggle): stesso pattern di
+	// ViewSwitch.tsx per il campo attivo Dove/Date (--background in chiaro,
+	// --border in scuro — --background scuro e' nero puro, invisibile come
+	// "pillola sollevata" su --surface scuro altrettanto vicino al nero).
+	// Letto dal DOM, non da `dark:` di Tailwind (risolverebbe su
+	// prefers-color-scheme, non sulla classe .dark che l'utente sceglie a
+	// mano) — stesso pattern di ThemeToggle.tsx/ViewSwitch.tsx.
+	const [isDark, setIsDark] = useState(false);
+	useEffect(() => {
+		// Stesso pattern letto dal DOM di ViewSwitch.tsx/ThemeToggle.tsx, li'
+		// senza avviso: il compiler bail-a l'analisi su funzioni piccole,
+		// Navbar.tsx e' grande abbastanza da essere analizzata per intero.
+		// Nessuna cascata reale: isDark non e' letto da nessun altro effect
+		// di questo file, solo da JSX (activeFieldBgClass).
+		// eslint-disable-next-line react-hooks/set-state-in-effect
+		setIsDark(document.documentElement.classList.contains("dark"));
+		const handleThemeChange = (event: Event) => {
+			const detail = (event as CustomEvent<{ isDark: boolean }>).detail;
+			setIsDark(!!detail?.isDark);
+		};
+		window.addEventListener("theme-change", handleThemeChange);
+		return () => window.removeEventListener("theme-change", handleThemeChange);
+	}, []);
+	const activeFieldBgClass = isDark ? "bg-border" : "bg-background";
+
 	// Il dropdown desktop e' aperto per ogni activeField tranne il caso
 	// mobile_search (che apre invece l'overlay fullscreen sopra) e null.
 	const dropdownOpen = activeField !== null && activeField !== "mobile_search";
@@ -293,7 +318,13 @@ export default function Navbar({
 										// framer corregge il raggio frame per frame solo se e' lui a
 										// controllarlo come stile inline.
 										style={{ borderRadius: 9999 }}
-										className={`flex items-center bg-surface/90 backdrop-blur-md border border-surface/40 shadow-lg hover:shadow-xl transition-[color,background-color,border-color,box-shadow] px-2 relative ${searchbarWidthClass}`}
+										// UAT 2026-09-10: traccia GRIGIA a riposo (bg-surface piena,
+										// non piu' /90) — stessa regola del contenitore di
+										// ViewSwitch.tsx ("grigio a riposo, bianco quando attivo").
+										// Divergenza dichiarata dal mock: assets/desktop.css da'
+										// a .searchbar bg:var(--bg) bianco — qui si uniforma al
+										// toggle invece di seguirlo (decisione utente).
+										className={`flex items-center bg-surface backdrop-blur-md border border-surface/40 shadow-lg hover:shadow-xl transition-[color,background-color,border-color,box-shadow] px-2 relative ${searchbarWidthClass}`}
 									>
 										{/* Desktop: pillola (stato A) oppure barra a due campi
 										    (stati B/C/D) — un solo cross-fade di opacity fra i due,
@@ -368,7 +399,7 @@ export default function Navbar({
 													<div className="hidden sm:block flex-1 relative">
 														<div
 															onClick={() => setActiveField("where")}
-															className="relative px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
+															className="relative z-10 px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50"
 														>
 															<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 																Dove
@@ -415,7 +446,8 @@ export default function Navbar({
 														{activeField === "where" && (
 															<motion.div
 																layoutId="activeRing"
-																className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
+																className={`absolute inset-x-0 top-2 bottom-2 rounded-full ${activeFieldBgClass} pointer-events-none`}
+																style={!isDark ? { boxShadow: "0 1px 3px rgba(0,0,0,0.1), 0 0 0 0.5px rgba(0,0,0,0.04)" } : undefined}
 																transition={{
 																	type: "spring",
 																	stiffness: 500,
@@ -437,7 +469,7 @@ export default function Navbar({
 															// tabulazione esistente non cambia.
 															tabIndex={-1}
 															onClick={() => setActiveField("when")}
-															className="px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+															className="relative z-10 px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer transition-all hover:bg-surface/50 outline-none focus-visible:ring-2 focus-visible:ring-ring"
 														>
 															<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 																Date
@@ -451,7 +483,8 @@ export default function Navbar({
 														{activeField === "when" && (
 															<motion.div
 																layoutId="activeRing"
-																className="absolute inset-x-0 top-2 bottom-2 rounded-full bg-primary/5 pointer-events-none"
+																className={`absolute inset-x-0 top-2 bottom-2 rounded-full ${activeFieldBgClass} pointer-events-none`}
+																style={!isDark ? { boxShadow: "0 1px 3px rgba(0,0,0,0.1), 0 0 0 0.5px rgba(0,0,0,0.04)" } : undefined}
 																transition={{
 																	type: "spring",
 																	stiffness: 500,
