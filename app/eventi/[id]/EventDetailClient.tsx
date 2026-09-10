@@ -467,7 +467,16 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 							{event.imageUrl ? (
 								<div
 									className={cn(
-										"grid w-full place-items-center border-b border-border-soft bg-surface",
+										// NIENTE w-full qui: width:100% fissa la larghezza a quella del
+									// content box del genitore, e i margini negativi -mx-4 non la
+									// allargano — la SPOSTANO. Il riquadro partiva 16px prima del
+									// bordo sinistro e finiva 16px PRIMA del destro (rilievo UAT da
+									// iPhone del 2026-09-10: "le immagini creano un margine a
+									// destra"). A larghezza automatica il div assorbe entrambi i
+									// margini negativi come deve. Il ramo CategoryPlaceholder qui
+									// sotto non ha mai avuto w-full, ed e' il motivo per cui non
+									// mostrava il difetto.
+									"grid place-items-center border-b border-border-soft bg-surface",
 										"-mx-4 lg:mx-0 lg:mb-8 lg:overflow-hidden lg:rounded-lg lg:border-b-0 lg:shadow-[var(--elev-ring)]",
 										!heroLoaded && "aspect-[3/2]"
 									)}
