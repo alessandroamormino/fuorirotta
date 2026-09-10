@@ -1056,7 +1056,14 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				// pannello desktop resta aperto (T-17-09).
 				inert={navPanelOpen}
 			>
-				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] py-4 h-full flex flex-col gap-3">
+				{/* UAT produzione 2026-09-10 (rilievo 4): pt-3 (12px) invece di py-4
+				    (16px sopra) per eguagliare il gap-3 (12px) che gia' separa le chip
+				    dalla riga sotto — margine sopra/sotto le chip ora uguale. pb-4
+				    resta 16px, e' il fondo dell'intera colonna (dopo la paginazione),
+				    non lo spazio intorno alle chip: non c'entra con questa asimmetria.
+				    Cambio uniforme, non scoped a mobile — vedi nota nel commit/SUMMARY
+				    sull'impatto desktop. */}
+				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-3 pb-4 h-full flex flex-col gap-3">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
