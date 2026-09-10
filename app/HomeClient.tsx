@@ -767,8 +767,26 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			}
 			// mapEvents non e' paginato (key_links del piano): la rotta lo
 			// restituisce sempre completo per i filtri correnti, a prescindere
-			// da quanti eventi la lista ha accodato finora.
-			setMapEvents(newMapEvents);
+			// da quanti eventi la lista ha accodato finora. Ma un fetch "page"
+			// riusa GLI STESSI filtri gia' in stato (goToPage non li tocca):
+			// il contenuto e' garantito identico a quello gia' in mapEvents,
+			// cambia solo l'offset della LISTA. Riscriverlo comunque darebbe a
+			// mapEvents un nuovo riferimento di array a contenuto invariato, e
+			// EventsMap rilancia il proprio effect su OGNI cambio di
+			// riferimento di `events` — fitBounds incondizionato +
+			// chiusura del popup incondizionata (components/EventsMap.tsx,
+			// updateMarkers). Difetto UAT del 2026-09-10, causa isolata (non
+			// dedotta): cliccare un pin fuori pagina innesca l'effect di
+			// scorrimento -> goToPage -> fetchEvents(mode:"page") -> qui, e la
+			// mappa chiudeva il popup appena aperto e rifaceva un fit
+			// animato su un insieme che non era affatto cambiato ("Attempted
+			// to synchronously unmount a root while React was already
+			// rendering" in console). recenterNonce non c'entra: si aggiorna
+			// solo dal bottone "Centra sulla destinazione", mai da un click
+			// sul pin.
+			if (mode !== "page") {
+				setMapEvents(newMapEvents);
+			}
 			setTotal(newTotal);
 
 			// Cache solo la forma canonica di "prima pagina" (stesso criterio
