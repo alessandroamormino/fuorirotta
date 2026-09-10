@@ -12,8 +12,12 @@ interface InputProps
 	errorMessage?: string;
 }
 
+// UAT da telefono vero, produzione, 2026-09-10 (rilievo 1): nessun call site
+// passa size="sm" oggi (verificato), ma se uno arrivasse su un campo
+// focusabile touch text-sm/14px farebbe zoomare iOS Safari (soglia 16px).
+// "sm" resta piu' basso in altezza di "md", solo il font non scende sotto 16px.
 const sizeClasses: Record<InputSize, string> = {
-	sm: "h-9 text-sm px-3",
+	sm: "h-9 text-base px-3",
 	md: "h-11 text-base px-4",
 };
 

@@ -417,7 +417,15 @@ export default function Navbar({
 																	destinations.selectComune(comune);
 																	setActiveField("when");
 																}}
-																className={`w-full text-xs sm:text-sm outline-none bg-transparent placeholder-muted-foreground-faint ${
+																// UAT da telefono vero, produzione, 2026-09-10 (rilievo
+																// 1): il contenitore e' "hidden sm:block", quindi il
+																// campo puo' ricevere focus touch da 640px in su
+																// (tablet, telefono in orizzontale) — sm:text-sm restava
+																// a 14px a ogni larghezza, sotto la soglia 16px che fa
+																// zoomare iOS Safari. sm:text-base la porta a 16px;
+																// sotto sm il campo e' comunque hidden, quindi text-xs
+																// li' non e' mai visibile.
+																className={`w-full text-xs sm:text-base outline-none bg-transparent placeholder-muted-foreground-faint ${
 																	radius.isNearby
 																		? "text-foreground cursor-not-allowed font-medium"
 																		: "text-foreground-secondary"

@@ -254,7 +254,12 @@ export default function MobileSearchOverlay({
 															destinations.selectComune(comune);
 															setMobileWhenOpen(true);
 														}}
-														className="flex-1 text-sm outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
+														// UAT da telefono vero, produzione, 2026-09-10
+														// (rilievo 1): text-sm = 14px faceva scattare lo
+														// zoom automatico di iOS Safari su ogni focus (soglia
+														// 16px). text-base non cambia la geometria del
+														// foglio, solo la dimensione del carattere digitato.
+														className="flex-1 text-base outline-none bg-transparent placeholder-muted-foreground-faint text-foreground-secondary"
 														// D-19 (corretta il 2026-08-20): la lista arriva nel
 														// contenitore "Risultati" qui sotto via
 														// createPortal, non in un popover proprio — una
