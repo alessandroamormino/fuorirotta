@@ -842,6 +842,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// fetch superfluo), altrimenti aggiorna lo stato e richiede la pagina.
 	// scrollToList=false e' usato dal salto pin->pagina (Task 3, D-7): li'
 	// il bersaglio dello scorrimento e' la card, non la cima della lista.
+	// 12-11 checkpoint B: il bersaglio dello scroll e' lo SCROLLER interno
+	// (scrollContainerRef), non piu' il documento — a lg la pagina non
+	// scorre piu', scorre solo la colonna lista. window.scrollTo contro
+	// getBoundingClientRect()+navHeight era il calcolo per il vecchio
+	// modello a pagina scorrevole (12-08); qui basta scrollTop sul nodo
+	// che gia' porta lo scroll reale, senza ricalcolare alcuna posizione
+	// nel documento.
 	const goToPage = (target: number, scrollToList = true) => {
 		const nextPage = Math.min(Math.max(target, 1), lastPage);
 		if (nextPage === currentPage) return;
@@ -849,11 +856,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		setPageError(false);
 		fetchEvents(searchFilters, { mode: "page", limit: LIMIT, offset: (nextPage - 1) * LIMIT });
 		if (!scrollToList) return;
-		const node = document.getElementById(VIEW_SWITCH_PANEL_ID.list);
-		if (!node) return;
+		if (!scrollContainerRef.current) return;
 		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-		window.scrollTo({
-			top: Math.max(0, node.getBoundingClientRect().top + window.scrollY - navHeight - 16),
+		scrollContainerRef.current.scrollTo({
+			top: 0,
 			behavior: prefersReducedMotion ? "auto" : "smooth",
 		});
 	};
@@ -1014,13 +1020,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			/>
 
 			<main
-				className="fixed left-0 right-0 bottom-0 overflow-hidden lg:static lg:overflow-visible"
+				// 12-11 checkpoint B: guscio da applicazione anche a lg — la
+				// PAGINA non scorre piu' a desktop, solo la colonna lista lo
+				// fa internamente. Prima 12-08 (`lg:static lg:overflow-visible`)
+				// aveva scelto il contrario di proposito; l'utente lo ha
+				// ribaltato per la sola HOME (dettaglio: 12-10-PLAN.md:22 resta
+				// valida, quella pagina scorre ancora come pagina).
+				className="fixed left-0 right-0 bottom-0 overflow-hidden"
 				style={{ top: navHeight }}
 				// D-11: fuori portata da Tab e dal puntatore finche' il
 				// pannello desktop resta aperto (T-17-09).
 				inert={navPanelOpen}
 			>
-				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] py-4 h-full lg:h-auto flex flex-col gap-3">
+				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] py-4 h-full flex flex-col gap-3">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
@@ -1059,7 +1071,15 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							// risale solo a QUESTO antenato e non collide piu' col group
 							// senza nome di EventCard.
 							"group/view flex-1 min-h-0 flex gap-6",
-							"lg:grid lg:items-start lg:gap-8",
+							// 12-11 checkpoint B: niente piu' lg:items-start. La riga
+							// implicita di grid non si allarga da sola al contenitore
+							// (align-content:normal si comporta come start su un'unica
+							// riga auto) — grid-rows-[minmax(0,1fr)] la forza a riempire
+							// tutta l'altezza disponibile, e SOLO cosi' align-items
+							// (default: stretch, non piu' sovrascritto) da' a lista e
+							// mappa un'altezza reale su cui applicare min-h-0/scroll
+							// interno invece che una riga sagomata sul contenuto.
+							"lg:grid lg:gap-8 lg:grid-rows-[minmax(0,1fr)]",
 							"lg:grid-cols-[minmax(0,1fr)_clamp(380px,40%,620px)]",
 							"lg:data-[view=list]:grid-cols-[minmax(0,1fr)]",
 							"lg:data-[view=map]:grid-cols-[minmax(0,1fr)]"
@@ -1086,7 +1106,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							<div
 								ref={scrollContainerRef}
 								onScroll={handleScroll}
-								className="h-full overflow-y-auto lg:h-auto lg:overflow-visible"
+								// 12-11 checkpoint B: stesso scroller del ramo mobile, ora
+								// anche a lg -- prima qui c'era lg:h-auto lg:overflow-visible
+								// perche' a scorrere era il documento (12-08). handleScroll
+								// gia' legge scrollTop/scrollHeight da questo nodo, non da
+								// window: a mobile era gia' corretto, a desktop ora inizia
+								// a scattare davvero invece di restare inerte a scrollTop 0.
+								className="h-full overflow-y-auto"
 							>
 								<AnimatePresence mode="wait">
 									{loading ? (
@@ -1204,78 +1230,6 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 														)}
 													</div>
 
-													{/* D-6: paginazione numerata, solo desktop — il
-													    piede "carica altri" sopra resta il contratto
-													    mobile (lg:hidden), questo e' il suo pari
-													    lg:flex. Finestra a 7 caselle da
-													    lib/pagination.ts (VR-08). */}
-													<div className="hidden lg:flex lg:flex-col lg:items-center lg:gap-3 lg:pb-12 lg:pt-8">
-														{pageError && (
-															<div className="flex items-center gap-3 text-sm text-muted-foreground">
-																<span>Non è stato possibile caricare questa pagina.</span>
-																<button
-																	type="button"
-																	onClick={retryPageFetch}
-																	className="font-medium text-foreground underline underline-offset-4"
-																>
-																	Riprova
-																</button>
-															</div>
-														)}
-														{lastPage > 1 && (
-															<nav aria-label="Pagine dei risultati" className="flex items-center gap-1">
-																<button
-																	type="button"
-																	onClick={() => goToPage(page - 1)}
-																	disabled={pageLoading || page === 1}
-																	aria-label="Pagina precedente"
-																	className="grid h-11 w-11 place-items-center rounded-full text-foreground-secondary hover:bg-surface hover:text-foreground disabled:text-muted-foreground-subtle disabled:hover:bg-transparent disabled:hover:text-muted-foreground-subtle"
-																>
-																	<ChevronLeft className="h-[18px] w-[18px]" aria-hidden="true" />
-																</button>
-																{slots.map((slot, index) =>
-																	slot === "…" ? (
-																		<span
-																			key={`gap-${index}`}
-																			aria-hidden="true"
-																			className="w-7 select-none text-center text-sm text-muted-foreground"
-																		>
-																			…
-																		</span>
-																	) : (
-																		<button
-																			key={slot}
-																			type="button"
-																			onClick={() => goToPage(slot)}
-																			disabled={pageLoading}
-																			aria-label={`Pagina ${slot}`}
-																			aria-current={slot === page ? "page" : undefined}
-																			className={cn(
-																				"grid h-11 w-11 place-items-center rounded-full text-sm font-medium tabular-nums",
-																				slot === page
-																					? "bg-primary text-primary-foreground font-semibold"
-																					: "text-foreground-secondary hover:bg-surface hover:text-foreground"
-																			)}
-																		>
-																			{slot}
-																		</button>
-																	)
-																)}
-																<button
-																	type="button"
-																	onClick={() => goToPage(page + 1)}
-																	disabled={pageLoading || page === lastPage}
-																	aria-label="Pagina successiva"
-																	className="grid h-11 w-11 place-items-center rounded-full text-foreground-secondary hover:bg-surface hover:text-foreground disabled:text-muted-foreground-subtle disabled:hover:bg-transparent disabled:hover:text-muted-foreground-subtle"
-																>
-																	<ChevronRight className="h-[18px] w-[18px]" aria-hidden="true" />
-																</button>
-															</nav>
-														)}
-														<span className="text-xs text-muted-foreground tabular-nums">
-															{pageFrom}–{pageTo} di {total} eventi
-														</span>
-													</div>
 												</>
 											)}
 										</motion.div>
@@ -1283,6 +1237,87 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								</AnimatePresence>
 							</div>
 						</div>
+						{/* D-6: paginazione numerata desktop, ANCORATA FUORI dallo
+						    scroller -- 12-11 checkpoint B. Prima viveva dentro
+						    scrollContainerRef e scorreva via insieme alle card; ora e'
+						    un fratello del riquadro di scroll dentro list-pane (che e'
+						    flex-col), quindi resta sempre visibile sotto la lista che
+						    scorre internamente -- e' esattamente il 'pinned beneath,
+						    always visible' del checkpoint. Stessa condizione della
+						    porzione di albero che prima la conteneva dentro
+						    AnimatePresence (!loading, events.length>0), replicata qui
+						    perche' il piede non ne fa piu' parte. Il piede "carica
+						    altri" mobile (D-07/D-23) resta dentro lo scroller,
+						    lg:hidden, invariato. */}
+						{!loading && events.length > 0 && (
+							<div className="hidden lg:flex lg:flex-col lg:shrink-0 lg:items-center lg:gap-3 lg:pb-8 lg:pt-4">
+								{pageError && (
+									<div className="flex items-center gap-3 text-sm text-muted-foreground">
+										<span>Non è stato possibile caricare questa pagina.</span>
+										<button
+											type="button"
+											onClick={retryPageFetch}
+											className="font-medium text-foreground underline underline-offset-4"
+										>
+											Riprova
+										</button>
+									</div>
+								)}
+								{lastPage > 1 && (
+									<nav aria-label="Pagine dei risultati" className="flex items-center gap-1">
+										<button
+											type="button"
+											onClick={() => goToPage(page - 1)}
+											disabled={pageLoading || page === 1}
+											aria-label="Pagina precedente"
+											className="grid h-11 w-11 place-items-center rounded-full text-foreground-secondary hover:bg-surface hover:text-foreground disabled:text-muted-foreground-subtle disabled:hover:bg-transparent disabled:hover:text-muted-foreground-subtle"
+										>
+											<ChevronLeft className="h-[18px] w-[18px]" aria-hidden="true" />
+										</button>
+										{slots.map((slot, index) =>
+											slot === "…" ? (
+												<span
+													key={`gap-${index}`}
+													aria-hidden="true"
+													className="w-7 select-none text-center text-sm text-muted-foreground"
+												>
+													…
+												</span>
+											) : (
+												<button
+													key={slot}
+													type="button"
+													onClick={() => goToPage(slot)}
+													disabled={pageLoading}
+													aria-label={`Pagina ${slot}`}
+													aria-current={slot === page ? "page" : undefined}
+													className={cn(
+														"grid h-11 w-11 place-items-center rounded-full text-sm font-medium tabular-nums",
+														slot === page
+															? "bg-primary text-primary-foreground font-semibold"
+															: "text-foreground-secondary hover:bg-surface hover:text-foreground"
+													)}
+												>
+													{slot}
+												</button>
+											)
+										)}
+										<button
+											type="button"
+											onClick={() => goToPage(page + 1)}
+											disabled={pageLoading || page === lastPage}
+											aria-label="Pagina successiva"
+											className="grid h-11 w-11 place-items-center rounded-full text-foreground-secondary hover:bg-surface hover:text-foreground disabled:text-muted-foreground-subtle disabled:hover:bg-transparent disabled:hover:text-muted-foreground-subtle"
+										>
+											<ChevronRight className="h-[18px] w-[18px]" aria-hidden="true" />
+										</button>
+									</nav>
+								)}
+								<span className="text-xs text-muted-foreground tabular-nums">
+									{pageFrom}–{pageTo} di {total} eventi
+								</span>
+							</div>
+						)}
 					</div>
 
 					{/* D-08: vista mappa mobile — peer della lista, non un overlay.
@@ -1351,16 +1386,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					    e' stato rimosso, D-3 — a
 					    desktop l'ingrandimento a piena vista lo fa lo stato "map"
 					    dell'interruttore, non un bottone separato. 12-09: cablaggio
-					    di onViewportChange, pillola d'area e comando di ricentraggio. */}
+					    di onViewportChange, pillola d'area e comando di ricentraggio.
+					    12-11 checkpoint B: non piu' sticky. Prima il riquadro
+					    calcolava la propria altezza/posizione da --topbar-h perche'
+					    era un elemento indipendente dentro una pagina che scorreva;
+					    ora e' un fratello di list-pane dentro una riga di griglia
+					    gia' bloccata a minmax(0,1fr) (vedi region div sopra), quindi
+					    riceve la propria altezza per intero da align-items:stretch —
+					    niente calc, niente --topbar-h qui, --topbar-h resta
+					    sottratta una volta sola, in alto, nello style di <main>. */}
 					<div className="hidden lg:block lg:group-data-[view=list]/view:hidden">
 						<div
-							className="lg:sticky rounded-lg overflow-hidden relative"
-							style={{
-								top: "calc(var(--topbar-h, 92px) + 16px)",
-								height: "calc(100dvh - var(--topbar-h, 92px) - 32px)",
-								minHeight: "420px",
-								boxShadow: "var(--elev-ring)",
-							}}
+							className="lg:h-full lg:min-h-[420px] rounded-lg overflow-hidden relative"
+							style={{ boxShadow: "var(--elev-ring)" }}
 						>
 							<EventsMap
 								events={mapEvents}
