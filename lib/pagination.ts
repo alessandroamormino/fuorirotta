@@ -22,11 +22,32 @@ export type PageSlot = number | "…";
  * viene riportato dentro [1, last] prima del calcolo — un ingresso fuori
  * scala non lancia e rispetta comunque le invarianti della finestra.
  *
- * RED phase stub (12-11, Task 1): implementazione intenzionalmente sbagliata,
- * sostituita nel commit GREEN.
  */
-export function pageWindow(_current: number, _last: number): PageSlot[] {
-  return [1];
+export function pageWindow(current: number, last: number): PageSlot[] {
+  const lastPage = last < 1 ? 1 : last;
+  const page = Math.min(Math.max(current, 1), lastPage);
+
+  if (lastPage <= PAGE_WINDOW_SLOTS) {
+    return Array.from({ length: lastPage }, (_, i) => i + 1);
+  }
+
+  let from = Math.max(2, page - 1);
+  let to = Math.min(lastPage - 1, page + 1);
+  if (page <= 3) {
+    from = 2;
+    to = 4;
+  }
+  if (page >= lastPage - 2) {
+    from = lastPage - 3;
+    to = lastPage - 1;
+  }
+
+  const out: PageSlot[] = [1];
+  if (from > 2) out.push("…");
+  for (let p = from; p <= to; p++) out.push(p);
+  if (to < lastPage - 1) out.push("…");
+  out.push(lastPage);
+  return out;
 }
 
 // Self-check: `npx tsx lib/pagination.ts`. Guardia a tre condizioni copiata

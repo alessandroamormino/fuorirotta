@@ -18,7 +18,8 @@ import ViewSwitch, {
 import MapEventsRail from "@/components/map/MapEventsRail";
 import type { MapViewportChange } from "@/components/EventsMap";
 import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
-import { Check, Crosshair, Loader2, RefreshCw, Search } from "lucide-react";
+import { pageWindow, PAGE_WINDOW_SLOTS, type PageSlot } from "@/lib/pagination";
+import { Check, ChevronLeft, ChevronRight, Crosshair, Loader2, RefreshCw, Search } from "lucide-react";
 import { useEventCache } from "@/lib/eventCache";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { EASE_STANDARD, MOTION_BASE, MOTION_FAST } from "@/lib/motion";
@@ -47,6 +48,21 @@ const MAX_AREA_RADIUS_KM = 200;
 // movimento di pochi metri (assestamento del gesto di pan) non e' una nuova
 // area.
 const AREA_PILL_THRESHOLD_KM = 0.5;
+
+// VR-08: il gate fa un grep letterale su questo file e vuole una
+// dichiarazione (const/function), non un import rinominato — vedi
+// <perche_due_nomi> di 12-11-PLAN.md. L'implementazione vera vive in
+// lib/pagination.ts (pageWindow/PAGE_WINDOW_SLOTS), pura e autoverificata
+// con `npx tsx lib/pagination.ts`: questi due nomi sono soltanto gli alias
+// che il gate cerca, non una seconda logica duplicata.
+const buildPageWindow = pageWindow;
+const MAX_PAGE_SLOTS = PAGE_WINDOW_SLOTS;
+
+// T-12-D13: tetto di validazione sul ripristino di currentPage da
+// sessionStorage — stesso trattamento di MAX_LOADED_COUNT/T-12-12. 1000
+// pagine * 12 = 12.000 eventi, largamente fuori dalla scala reale del
+// catalogo (oggi 1.971 eventi = 165 pagine).
+const MAX_RESTORED_PAGE = 1000;
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -227,6 +243,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// spinner centrale.
 	const [loadingMore, setLoadingMore] = useState(false);
 
+	// D-6: paginazione numerata desktop — modello indipendente da loadedCount
+	// (D-07, "carica altri" mobile). I due modelli non condividono stato, ma
+	// coesistono nello stesso componente perche' attivi su superfici
+	// mutuamente esclusive per larghezza (D-23).
+	const [currentPage, setCurrentPage] = useState(1);
+	const [pageLoading, setPageLoading] = useState(false);
+	const [pageError, setPageError] = useState(false);
+	const lastPage = Math.max(1, Math.ceil(total / LIMIT));
+	// Valore ripristinato da sessionStorage (validato) in attesa di sapere se
+	// la superficie e' desktop: caricare la pagina 7 su un telefono sarebbe
+	// peggio del non ripristinarla affatto. 0 = niente da applicare.
+	const restoredPageRef = useRef(0);
+
 	// WR-04: due chip cliccati in rapida sequenza lanciano due fetch
 	// concorrenti; senza un identificatore di generazione, l'ULTIMA risposta
 	// che ARRIVA (non l'ultima INVIATA) vince — con rete variabile la UI
@@ -245,6 +274,14 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		if (!hydratedRef.current) return;
 		sessionStorage.setItem("loadedCount", loadedCount.toString());
 	}, [loadedCount]);
+
+	// D-6: stessa forma esatta dell'effect sopra, chiave dedicata — i due
+	// modelli (accodamento mobile, paginazione desktop) non condividono
+	// stato.
+	useEffect(() => {
+		if (!hydratedRef.current) return;
+		sessionStorage.setItem("currentPage", String(currentPage));
+	}, [currentPage]);
 
 	useEffect(() => {
 		if (!hydratedRef.current) return;
@@ -278,16 +315,45 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const [isDesktopSurface, setIsDesktopSurface] = useState(false);
 	useEffect(() => {
 		const mql = window.matchMedia("(min-width: 1024px)");
-		const applyFallback = (matches: boolean) => {
-			if (!matches) {
+
+		// Mount: inizializza isDesktopSurface e, se la superficie e' gia'
+		// desktop, applica una pagina ripristinata da sessionStorage (D-6,
+		// Task 2) — il mount non attraversa il confine, quindi non passa mai
+		// dal ramo di azzeramento di handleChange sotto: e' per questo che
+		// il ripristino vive qui e non in un effect su isDesktopSurface, che
+		// girerebbe anche alla sua stessa inizializzazione al mount.
+		const matchesAtMount = mql.matches;
+		if (!matchesAtMount) {
+			setDesktopView((prev) => (prev === "split" ? "list" : prev));
+		}
+		setIsDesktopSurface(matchesAtMount);
+		if (matchesAtMount && restoredPageRef.current > 1) {
+			const restored = restoredPageRef.current;
+			setCurrentPage(restored);
+			fetchEvents(searchFilters, { mode: "page", limit: LIMIT, offset: (restored - 1) * LIMIT });
+		}
+		// Il ripristino avviene una volta sola: se la superficie non e'
+		// desktop il valore ripristinato viene semplicemente lasciato
+		// cadere — la pagina 7 non ha significato su una lista che accoda.
+		restoredPageRef.current = 0;
+
+		// Cambio di superficie, cioe' esattamente quando il confine viene
+		// attraversato: riportare la lista all'inizio impedisce ai due
+		// modelli di mescolarsi — sessanta card accodate da mobile mostrate
+		// come "pagina 1", oppure le dodici card della pagina 50 da cui
+		// "carica altri" mobile ripartirebbe con l'offset sbagliato.
+		const handleChange = (e: MediaQueryListEvent) => {
+			if (!e.matches) {
 				setDesktopView((prev) => (prev === "split" ? "list" : prev));
 			}
-			setIsDesktopSurface(matches);
+			setIsDesktopSurface(e.matches);
+			setCurrentPage(1);
+			setPageError(false);
+			fetchEvents(searchFilters, { mode: "replace" });
 		};
-		applyFallback(mql.matches);
-		const handleChange = (e: MediaQueryListEvent) => applyFallback(e.matches);
 		mql.addEventListener("change", handleChange);
 		return () => mql.removeEventListener("change", handleChange);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	// Task 2 (D-5): comando "Centra sulla destinazione" del riquadro mappa
@@ -440,6 +506,22 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			setDesktopView(savedDesktopView);
 		}
 
+		// D-6/T-12-D13: ripristino di currentPage — fuori dalle venti righe
+		// che seguono JSON.parse(savedFilters) (il gate ci cerca
+		// setDraftFilters in quell'intervallo), e con una forma di
+		// validazione diversa dalle guardie typeof sulle chiavi di `parsed`
+		// che lo stesso gate conta: Number.parseInt piu' Number.isInteger e'
+		// una forma diversa e sufficiente. Il valore validato non scatta un
+		// fetch qui: a questo punto del mount la superficie attiva non e'
+		// ancora nota (vedi l'effect della media query sotto), e caricare la
+		// pagina 7 su un telefono sarebbe peggio del non ripristinarla
+		// affatto — resta in un ref finche' quell'effect non lo consuma.
+		const savedCurrentPage = sessionStorage.getItem("currentPage");
+		const parsedCurrentPage = savedCurrentPage ? Number.parseInt(savedCurrentPage, 10) : NaN;
+		if (Number.isInteger(parsedCurrentPage) && parsedCurrentPage >= 1) {
+			restoredPageRef.current = Math.min(parsedCurrentPage, MAX_RESTORED_PAGE);
+		}
+
 		// Da qui in poi il ripristino e' completo: gli effect di persistenza
 		// possono tornare a scrivere. Questo punto e' l'unico attraversato in
 		// ogni caso — il ramo `cached` piu' sotto contiene un `return`
@@ -496,6 +578,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		// ancora vecchia in questo stesso giro): vedi commento su fetchEvents.
 		setAreaSearch(null);
 		setLastSearchOrigin(null);
+		// D-6: l'insieme dei risultati cambia — restare a pagina 50 di un
+		// elenco che ora ne ha 3 mostrerebbe il vuoto. Stessa ragione per cui
+		// questo effect gia' azzera loadedCount (il ramo mobile) sotto.
+		setCurrentPage(1);
+		setPageError(false);
 
 		const queryKey = generateQueryKey(searchFilters, selectedCategory);
 		const cached = getCachedEvents(queryKey);
@@ -552,7 +639,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// valore vecchio senza un override esplicito.
 	const fetchEvents = async (
 		filters: SearchFilters = searchFilters,
-		options: { mode?: "replace" | "append"; limit?: number; offset?: number } = {},
+		options: { mode?: "replace" | "append" | "page"; limit?: number; offset?: number } = {},
 		area: { lat: number; lng: number; radiusKm: number } | null = areaSearch
 	) => {
 		const mode = options.mode ?? "replace";
@@ -565,6 +652,8 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		}
 		if (mode === "append") {
 			setLoadingMore(true);
+		} else if (mode === "page") {
+			setPageLoading(true);
 		} else {
 			setLoading(true);
 		}
@@ -635,10 +724,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				// WR-01: lista vuota, totale azzerato, mappa invariata — SOLO per
 				// un rimpiazzo. Un accodamento fallito non deve svuotare quanto
 				// gia' mostrato (T-12-14): si arrende e basta, il finally sotto
-				// spegne lo spinner del piede.
-				if (mode !== "append") {
+				// spegne lo spinner del piede. D-6: un fetch di PAGINA fallito
+				// segue una politica propria, decisione utente 2026-09-08 — la
+				// pagina precedente resta a schermo, non svuota, non azzera,
+				// segnala solo l'errore (non riusa WR-01: quella e' per i
+				// filtri, dove l'insieme dei risultati cambia davvero).
+				if (mode === "replace") {
 					setEvents([]);
 					setTotal(0);
+				} else if (mode === "page") {
+					setPageError(true);
 				}
 				return;
 			}
@@ -648,10 +743,12 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			if (requestId !== requestIdRef.current) return;
 
 			if (data.error || !data.events) {
-				// WR-01: vedi commento sopra, stessa politica.
-				if (mode !== "append") {
+				// WR-01/D-6: vedi commento sopra, stessa politica.
+				if (mode === "replace") {
 					setEvents([]);
 					setTotal(0);
+				} else if (mode === "page") {
+					setPageError(true);
 				}
 				return;
 			}
@@ -666,6 +763,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			} else {
 				setEvents(newEvents);
 				setLoadedCount(newEvents.length);
+				if (mode === "page") setPageError(false);
 			}
 			// mapEvents non e' paginato (key_links del piano): la rotta lo
 			// restituisce sempre completo per i filtri correnti, a prescindere
@@ -674,8 +772,9 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			setTotal(newTotal);
 
 			// Cache solo la forma canonica di "prima pagina" (stesso criterio
-			// di `page === 1` di prima): un accodamento o un ripristino a
-			// limit piu' grande non la sovrascrivono con uno stato parziale.
+			// di `page === 1` di prima): un accodamento, un cambio pagina o un
+			// ripristino a limit piu' grande non la sovrascrivono con uno
+			// stato parziale.
 			if (mode === "replace" && offset === 0 && limit === LIMIT) {
 				const queryKey = generateQueryKey(filters, selectedCategory);
 				setCachedEvents(queryKey, {
@@ -695,14 +794,18 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			// la lista si svuota, il totale va a 0, la mappa NON viene toccata e
 			// conserva l'ultima risposta valida — e' il comportamento che
 			// 11-UI-SPEC.md (error/map-view) dichiara. Solo per un rimpiazzo,
-			// stesso ragionamento del ramo !response.ok sopra.
-			if (mode !== "append") {
+			// stesso ragionamento del ramo !response.ok sopra. D-6: un fetch
+			// di pagina segue la propria politica, non WR-01 — vedi sopra.
+			if (mode === "replace") {
 				setEvents([]);
 				setTotal(0);
+			} else if (mode === "page") {
+				setPageError(true);
 			}
 		} finally {
 			if (requestId === requestIdRef.current) {
 				if (mode === "append") setLoadingMore(false);
+				else if (mode === "page") setPageLoading(false);
 				else setLoading(false);
 			}
 		}
@@ -714,6 +817,37 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const loadMore = () => {
 		if (loadingMore || loadedCount >= total) return;
 		fetchEvents(searchFilters, { mode: "append" });
+	};
+
+	// D-6: cambio pagina esplicito — normalizza il bersaglio dentro
+	// [1, lastPage], esce se coincide gia' con la pagina corrente (nessun
+	// fetch superfluo), altrimenti aggiorna lo stato e richiede la pagina.
+	// scrollToList=false e' usato dal salto pin->pagina (Task 3, D-7): li'
+	// il bersaglio dello scorrimento e' la card, non la cima della lista.
+	const goToPage = (target: number, scrollToList = true) => {
+		const nextPage = Math.min(Math.max(target, 1), lastPage);
+		if (nextPage === currentPage) return;
+		setCurrentPage(nextPage);
+		setPageError(false);
+		fetchEvents(searchFilters, { mode: "page", limit: LIMIT, offset: (nextPage - 1) * LIMIT });
+		if (!scrollToList) return;
+		const node = document.getElementById(VIEW_SWITCH_PANEL_ID.list);
+		if (!node) return;
+		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		window.scrollTo({
+			top: Math.max(0, node.getBoundingClientRect().top + window.scrollY - navHeight - 16),
+			behavior: prefersReducedMotion ? "auto" : "smooth",
+		});
+	};
+
+	// D-6: "Riprova" sull'errore di pagina. goToPage esce quando il bersaglio
+	// coincide con currentPage — un retry sulla pagina corrente deve quindi
+	// richiamare fetchEvents direttamente, stesso mode e stesso offset,
+	// senza passare da goToPage (scelta dichiarata, l'alternativa era un
+	// parametro `force` su goToPage).
+	const retryPageFetch = () => {
+		const targetPage = Math.min(currentPage, lastPage);
+		fetchEvents(searchFilters, { mode: "page", limit: LIMIT, offset: (targetPage - 1) * LIMIT });
 	};
 
 	// D-07: azione dello stato vuoto — allarga il raggio a 200km e rilancia
@@ -810,20 +944,47 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// l'etichetta di default)" — intestazione della lista, Task 2.
 	const listScopeLabel = searchFilters.location || "In tutta la Lombardia";
 
-	// Verso pin -> lista (D-12, caso desktop dove lista e mappa convivono):
-	// scorrimento via scrollIntoView sull'elemento, mai un offset calcolato a
-	// mano, rispettando prefers-reduced-motion. Se l'evento selezionato non
-	// e' fra quelli caricati il querySelector non trova nulla e la funzione
-	// esce: il pin resta comunque evidenziato, nessun caricamento a inseguimento.
+	// D-6: page e' currentPage bloccato dentro [1, lastPage] — copre il caso
+	// limite di un total che cala a parita' di filtri (una risposta piu'
+	// magra), senza mostrare mai una pagina che non esiste.
+	const page = Math.min(currentPage, lastPage);
+	const slots: PageSlot[] = buildPageWindow(page, lastPage).slice(0, MAX_PAGE_SLOTS);
+	const pageFrom = (page - 1) * LIMIT + 1;
+	const pageTo = Math.min(page * LIMIT, total);
+
+	// Verso pin -> lista (D-12/D-7, caso desktop dove lista e mappa
+	// convivono): se il pin cade fuori dalla pagina corrente, il salto di
+	// pagina precede lo scorrimento — altrimenti il verso pin->card
+	// punterebbe a una card che non e' a schermo. La logica vive qui, non in
+	// handleEventSelect: quella callback ha lista di dipendenze vuota
+	// apposta (identita' stabile, le istanze di EventsMap non si
+	// riagganciano), e dipendere da mapEvents/currentPage la farebbe
+	// cambiare identita' a ogni fetch. Scorrimento via scrollIntoView
+	// sull'elemento, mai un offset calcolato a mano, rispettando
+	// prefers-reduced-motion.
 	useEffect(() => {
 		if (selectedEventId == null || !scrollContainerRef.current) return;
+
+		const alreadyOnPage = events.some((event) => event.id === selectedEventId);
+		if (isDesktopSurface && !alreadyOnPage) {
+			const index = mapEvents.findIndex((event) => event.id === selectedEventId);
+			if (index >= 0) {
+				const targetPage = Math.floor(index / LIMIT) + 1;
+				if (targetPage !== currentPage) {
+					goToPage(targetPage, false);
+					return;
+				}
+			}
+		}
+
 		const node = scrollContainerRef.current.querySelector<HTMLElement>(
 			`[data-event-id="${selectedEventId}"]`
 		);
 		if (!node) return;
 		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 		node.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "nearest" });
-	}, [selectedEventId]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedEventId, events, mapEvents, currentPage, isDesktopSurface]);
 
 	return (
 		<div className="min-h-screen bg-background">
@@ -964,7 +1125,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												</div>
 											) : (
 												<>
-													<div className="grid-cards">
+													<div
+														className={cn("grid-cards", pageLoading && "opacity-60 transition-opacity")}
+														aria-busy={pageLoading || undefined}
+													>
 														{events.map((event, index) => (
 															<div
 																key={`${event.source}-${event.id}`}
@@ -986,8 +1150,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 													</div>
 
 													{/* Task 3: "carica altri" — un solo nodo, bottone
-													    reale e bersaglio dell'IntersectionObserver. */}
-													<div className="flex flex-col items-center gap-2 py-6">
+													    reale e bersaglio dell'IntersectionObserver.
+													    D-23: contratto mobile, invariato — lg:hidden
+													    lo esclude sul ramo desktop, dove il piede
+													    diventa la paginazione numerata sotto. */}
+													<div className="flex flex-col items-center gap-2 py-6 lg:hidden">
 														{loadedCount >= total ? (
 															<span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
 																<Check className="h-4 w-4" aria-hidden="true" />
@@ -1017,6 +1184,79 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 																</span>
 															</>
 														)}
+													</div>
+
+													{/* D-6: paginazione numerata, solo desktop — il
+													    piede "carica altri" sopra resta il contratto
+													    mobile (lg:hidden), questo e' il suo pari
+													    lg:flex. Finestra a 7 caselle da
+													    lib/pagination.ts (VR-08). */}
+													<div className="hidden lg:flex lg:flex-col lg:items-center lg:gap-3 lg:pb-12 lg:pt-8">
+														{pageError && (
+															<div className="flex items-center gap-3 text-sm text-muted-foreground">
+																<span>Non è stato possibile caricare questa pagina.</span>
+																<button
+																	type="button"
+																	onClick={retryPageFetch}
+																	className="font-medium text-foreground underline underline-offset-4"
+																>
+																	Riprova
+																</button>
+															</div>
+														)}
+														{lastPage > 1 && (
+															<nav aria-label="Pagine dei risultati" className="flex items-center gap-1">
+																<button
+																	type="button"
+																	onClick={() => goToPage(page - 1)}
+																	disabled={pageLoading || page === 1}
+																	aria-label="Pagina precedente"
+																	className="grid h-11 w-11 place-items-center rounded-full text-foreground-secondary hover:bg-surface hover:text-foreground disabled:text-muted-foreground-subtle disabled:hover:bg-transparent disabled:hover:text-muted-foreground-subtle"
+																>
+																	<ChevronLeft className="h-[18px] w-[18px]" aria-hidden="true" />
+																</button>
+																{slots.map((slot, index) =>
+																	slot === "…" ? (
+																		<span
+																			key={`gap-${index}`}
+																			aria-hidden="true"
+																			className="w-7 select-none text-center text-sm text-muted-foreground"
+																		>
+																			…
+																		</span>
+																	) : (
+																		<button
+																			key={slot}
+																			type="button"
+																			onClick={() => goToPage(slot)}
+																			disabled={pageLoading}
+																			aria-label={`Pagina ${slot}`}
+																			aria-current={slot === page ? "page" : undefined}
+																			className={cn(
+																				"grid h-11 w-11 place-items-center rounded-full text-sm font-medium tabular-nums",
+																				slot === page
+																					? "bg-primary text-primary-foreground font-semibold"
+																					: "text-foreground-secondary hover:bg-surface hover:text-foreground"
+																			)}
+																		>
+																			{slot}
+																		</button>
+																	)
+																)}
+																<button
+																	type="button"
+																	onClick={() => goToPage(page + 1)}
+																	disabled={pageLoading || page === lastPage}
+																	aria-label="Pagina successiva"
+																	className="grid h-11 w-11 place-items-center rounded-full text-foreground-secondary hover:bg-surface hover:text-foreground disabled:text-muted-foreground-subtle disabled:hover:bg-transparent disabled:hover:text-muted-foreground-subtle"
+																>
+																	<ChevronRight className="h-[18px] w-[18px]" aria-hidden="true" />
+																</button>
+															</nav>
+														)}
+														<span className="text-xs text-muted-foreground tabular-nums">
+															{pageFrom}–{pageTo} di {total} eventi
+														</span>
 													</div>
 												</>
 											)}
