@@ -17,7 +17,11 @@ interface InputProps
 // focusabile touch text-sm/14px farebbe zoomare iOS Safari (soglia 16px).
 // "sm" resta piu' basso in altezza di "md", solo il font non scende sotto 16px.
 const sizeClasses: Record<InputSize, string> = {
-	sm: "h-9 text-base px-3",
+	// text-sm e' la misura di disegno della taglia piccola; pointer-coarse la
+	// porta a 16px SOLO sui dispositivi touch, dove sotto quella soglia iOS
+	// Safari zooma da solo al focus. Non alzarla a 16px fissi: renderebbe ogni
+	// form desktop futuro piu' grande del disegno senza una ragione visibile.
+	sm: "h-9 text-sm pointer-coarse:text-base px-3",
 	md: "h-11 text-base px-4",
 };
 

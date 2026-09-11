@@ -426,15 +426,16 @@ export default function Navbar({
 																	destinations.selectComune(comune);
 																	setActiveField("when");
 																}}
-																// UAT da telefono vero, produzione, 2026-09-10 (rilievo
-																// 1): il contenitore e' "hidden sm:block", quindi il
-																// campo puo' ricevere focus touch da 640px in su
-																// (tablet, telefono in orizzontale) — sm:text-sm restava
-																// a 14px a ogni larghezza, sotto la soglia 16px che fa
-																// zoomare iOS Safari. sm:text-base la porta a 16px;
-																// sotto sm il campo e' comunque hidden, quindi text-xs
-																// li' non e' mai visibile.
-																className={`w-full text-xs sm:text-base outline-none bg-transparent placeholder-muted-foreground-faint ${
+																// UAT 2026-09-10/11: iOS Safari zooma su un campo con
+																// font-size sotto i 16px. Lo zoom dipende dal TIPO DI
+																// PUNTATORE, non dalla larghezza: pointer-coarse colpisce
+																// i dispositivi che zoomano davvero, mentre sm: era
+																// un'approssimazione che lasciava scoperto un tablet
+																// touch (e, alzando a 16px ovunque, disallineava questo
+																// campo da "Aggiungi date" rimasto a 14 — rilievo
+																// dell'utente). Col mouse resta il 14px del disegno
+																// approvato in Fase 12.
+																className={`w-full text-xs sm:text-sm pointer-coarse:text-base outline-none bg-transparent placeholder-muted-foreground-faint ${
 																	radius.isNearby
 																		? "text-foreground cursor-not-allowed font-medium"
 																		: "text-foreground-secondary"
@@ -495,7 +496,12 @@ export default function Navbar({
 															<label className="text-[10px] sm:text-xs font-semibold text-foreground block mb-0.5">
 																Date
 															</label>
-															<div className="text-xs sm:text-sm text-muted-foreground-faint truncate">
+															{/* Stessa coppia di regole del campo Dove qui sopra: i due
+																valori devono restare della STESSA misura in entrambe le
+																modalita', ed e' il disallineamento (16 contro 14) che
+																l'utente ha segnalato. Questo e' un div, non un input:
+																non zooma, ma deve seguire. */}
+															<div className="text-xs sm:text-sm pointer-coarse:text-base text-muted-foreground-faint truncate">
 																{/* Bugfix 2026-09-10 (defect 2, sito mancato dal cascade
 																	di 342583a): dateFrom === dateTo per un giorno
 																	singolo, senza !isSameDay qui il campo Date del
