@@ -220,7 +220,16 @@ export default function Navbar({
 			<nav
 				id="main-navbar"
 				ref={navRef}
-				className="fixed top-2 left-0 right-0 z-50 px-4 py-4 sm:px-[18px] lg:sticky lg:top-0 lg:z-[60] lg:px-[22px] lg:py-3 topbar-desktop"
+				// pb-3 e non py-4: navHeight in HomeClient e' rect.bottom di questo
+				// <nav>, quindi il SUO padding inferiore e' spazio visibile fra la
+				// pillola e l'inizio di <main>. Con py-4 (16px) piu' il pt-3 (12px)
+				// del contenitore sotto, lo spazio sopra le chip valeva 28px contro i
+				// 12 del gap-3 sotto — rapporto 2,33:1, misurato e confermato dallo
+				// screenshot dell'utente (UAT iPhone 12 Pro, 2026-09-10). La prima
+				// correzione aveva toccato un solo contributo su due. Ora il gap ha un
+				// solo proprietario: questi 12px. lg:py-3 li sovrascrive entrambi a
+				// desktop, dove il conto torna uguale.
+				className="fixed top-2 left-0 right-0 z-50 px-4 pt-4 pb-3 sm:px-[18px] lg:sticky lg:top-0 lg:z-[60] lg:px-[22px] lg:py-3 topbar-desktop"
 			>
 				<div className="mx-auto w-full max-w-[1760px]">
 					<div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-4 lg:gap-6 lg:grid lg:grid-cols-[1fr_minmax(0,720px)_1fr] lg:items-center lg:gap-4">

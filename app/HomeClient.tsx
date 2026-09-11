@@ -1056,14 +1056,17 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				// pannello desktop resta aperto (T-17-09).
 				inert={navPanelOpen}
 			>
-				{/* UAT produzione 2026-09-10 (rilievo 4): pt-3 (12px) invece di py-4
-				    (16px sopra) per eguagliare il gap-3 (12px) che gia' separa le chip
-				    dalla riga sotto — margine sopra/sotto le chip ora uguale. pb-4
-				    resta 16px, e' il fondo dell'intera colonna (dopo la paginazione),
-				    non lo spazio intorno alle chip: non c'entra con questa asimmetria.
-				    Cambio uniforme, non scoped a mobile — vedi nota nel commit/SUMMARY
-				    sull'impatto desktop. */}
-				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-3 pb-4 h-full flex flex-col gap-3">
+				{/* pt-0 e NON pt-3: lo spazio sopra le chip ha due contributi, non
+				    uno. <main> e' posizionato a top=navHeight, e navHeight e'
+				    rect.bottom del <nav> — quindi il padding inferiore della navbar e'
+				    gia' spazio visibile prima che questo contenitore cominci. La prima
+				    correzione (2026-09-10) mise pt-3 credendo di essere l'unico
+				    proprietario del gap: risultato 16 (navbar) + 12 (qui) = 28px sopra
+				    contro 12 sotto, rapporto 2,33:1, che l'utente ha rivisto sul
+				    proprio iPhone. Ora il gap lo possiede solo la navbar (pb-3 = 12px)
+				    e qui non se ne aggiunge altro. pb-4 resta: e' il fondo dell'intera
+				    colonna dopo la paginazione, non ha a che vedere con le chip. */}
+				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-0 pb-4 h-full flex flex-col gap-3">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
