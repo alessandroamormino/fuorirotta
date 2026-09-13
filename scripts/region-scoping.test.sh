@@ -200,5 +200,37 @@ if [[ -n "${s7_hits}" ]]; then
 fi
 echo "S7 OK: app/api/scrape/route.ts non esiste, nessun import nuovo di runAllScrapers sotto app/ (a parte l'esenzione nota app/api/events/route.ts)"
 
-echo "PASS: contratto di scoping per regione (SCHED-01, D-01/D-02/D-03/D-04)"
+# --- S8: lock occupato -> 409, nessuno scrape avviato (SCHED-03, D-13) ------
+# Riavvia il dev server (S3..S5 lo hanno fermato sopra): e' l'unico modo
+# sicuro di esercitare il ramo 409 con una regione reale senza toccare la
+# rete — inseriamo a mano una riga region_locks con scadenza futura, cosi'
+# acquireRegionLock nella route trova il lock gia' occupato.
+psql_dev_s8() {
+  docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
+    psql -U fuorirotta -d fuorirotta_dev -tAc "$1"
+}
+if ! docker compose -f "${repo_root}/docker-compose.dev.yml" ps postgres-dev 2>/dev/null | grep -q "Up\|running"; then
+  fail "S8: il container postgres-dev non e' in esecuzione. Esegui 'npm run db:dev:up'."
+fi
+psql_dev_s8 "DELETE FROM region_locks WHERE region = 'lombardia'" >/dev/null
+psql_dev_s8 "INSERT INTO region_locks (region, locked_at, expires_at) VALUES ('lombardia', now(), now() + interval '1 hour')" >/dev/null
+
+bash scripts/dev-db.sh npx next dev -p "${port}" >"${tmp_dir}/dev-server-s8.log" 2>&1 &
+server_pid=$!
+wait_for_port "${port}"
+
+resp8="${tmp_dir}/resp8.json"
+http_code8="$(curl -s -o "${resp8}" -w '%{http_code}' --max-time 15 -X POST \
+  -H "Authorization: Bearer ${secret}" \
+  "http://127.0.0.1:${port}/api/cron/scrape?region=lombardia")"
+[[ "${http_code8}" == "409" ]] || fail "S8: atteso 409 con lock lombardia gia' occupato, ottenuto ${http_code8} (body: $(cat "${resp8}" 2>/dev/null))"
+
+stop_server
+
+remaining="$(psql_dev_s8 "SELECT count(*) FROM region_locks WHERE region = 'lombardia'")"
+psql_dev_s8 "DELETE FROM region_locks WHERE region = 'lombardia'" >/dev/null
+[[ "${remaining}" == "1" ]] || fail "S8: la riga di lock di prova per lombardia non era piu' presente dopo il 409 (count=${remaining}) — il ramo 409 non deve mai rilasciare un lock che non ha acquisito"
+echo "S8 OK: POST /api/cron/scrape?region=lombardia con lock gia' occupato risponde 409, nessuno scrape avviato, riga di prova ripulita"
+
+echo "PASS: contratto di scoping per regione (SCHED-01, D-01/D-02/D-03/D-04) + lock (SCHED-03, D-13)"
 exit 0

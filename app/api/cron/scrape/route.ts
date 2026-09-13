@@ -6,6 +6,7 @@ import {
   failWorkflowExecution
 } from '@/lib/cacheService';
 import { updateClusterCache } from '@/lib/clusterCache';
+import { acquireRegionLock, releaseRegionLock } from '@/lib/scrapers/regionLock';
 
 /**
  * Validate CRON_SECRET from request headers
@@ -62,49 +63,59 @@ async function executeScrape(region: string) {
 
   console.log(`[Cron] Starting scheduled scrape for region "${region}"...`);
 
-  // Create execution tracking record
-  const executionId = await createWorkflowExecution(cacheQuery);
-  console.log(`[Cron] Created execution ${executionId}`);
-
+  // Il finally avvolge l'INTERO corpo (createWorkflowExecution incluso), non
+  // solo il ramo runRegion: il rilascio deve avvenire anche se la creazione
+  // della riga WorkflowExecution stessa fallisse, non solo su un fallimento
+  // dello scrape (D-13, plan 14-02 Task 2).
   try {
-    // Run scrapers scoped to this region only
-    const result = await runRegion(region, { dateFrom: today, dateTo: endOfYear });
+    // Create execution tracking record
+    const executionId = await createWorkflowExecution(cacheQuery);
+    console.log(`[Cron] Created execution ${executionId}`);
 
-    // Mark execution as complete
-    await completeWorkflowExecution(executionId, result.saved);
-
-    // Update map cluster cache with new event data
     try {
-      await updateClusterCache();
-      console.log('[Cron] Cluster cache updated');
-    } catch (clusterError) {
-      console.error('[Cron] Failed to update cluster cache:', clusterError);
-      // Non-fatal: map will fall back to computing from events
+      // Run scrapers scoped to this region only
+      const result = await runRegion(region, { dateFrom: today, dateTo: endOfYear });
+
+      // Mark execution as complete
+      await completeWorkflowExecution(executionId, result.saved);
+
+      // Update map cluster cache with new event data
+      try {
+        await updateClusterCache();
+        console.log('[Cron] Cluster cache updated');
+      } catch (clusterError) {
+        console.error('[Cron] Failed to update cluster cache:', clusterError);
+        // Non-fatal: map will fall back to computing from events
+      }
+
+      console.log(`[Cron] Scrape completed successfully for region "${region}"`);
+
+      return {
+        success: true,
+        message: 'Cron scrape completed',
+        executionId,
+        region,
+        events: {
+          saved: result.saved,
+          skipped: result.skipped,
+          total: result.total,
+        },
+        clusterCacheUpdated: true,
+        errors: result.errors.length > 0 ? result.errors : undefined
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[Cron] Scrape failed for region "${region}":`, errorMsg);
+
+      // Mark execution as failed
+      await failWorkflowExecution(executionId, errorMsg);
+
+      throw error;
     }
-
-    console.log(`[Cron] Scrape completed successfully for region "${region}"`);
-
-    return {
-      success: true,
-      message: 'Cron scrape completed',
-      executionId,
-      region,
-      events: {
-        saved: result.saved,
-        skipped: result.skipped,
-        total: result.total,
-      },
-      clusterCacheUpdated: true,
-      errors: result.errors.length > 0 ? result.errors : undefined
-    };
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[Cron] Scrape failed for region "${region}":`, errorMsg);
-
-    // Mark execution as failed
-    await failWorkflowExecution(executionId, errorMsg);
-
-    throw error;
+  } finally {
+    // Best-effort (releaseRegionLock inghiotte i propri errori): la scadenza
+    // ripara comunque entro LOCK_TTL_MS se questo rilascio non arrivasse mai.
+    await releaseRegionLock(region);
   }
 }
 
@@ -135,6 +146,16 @@ async function handleCronTrigger(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       { error: `Regione sconosciuta: "${region}"`, availableRegions: getRegions() },
       { status: 404 }
+    );
+  }
+
+  // Unica acquisizione SINCRONA della route (D-13, SCHED-03): se uno scrape
+  // e' gia' in corso per questa regione, 409 immediato e nessuno scrape parte.
+  // Il rilascio avviene dentro executeScrape (finally), non qui.
+  if (!(await acquireRegionLock(region))) {
+    return NextResponse.json(
+      { error: `Scrape gia' in corso per la regione "${region}"` },
+      { status: 409 }
     );
   }
 

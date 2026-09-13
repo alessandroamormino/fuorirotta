@@ -15,6 +15,7 @@ import { truncateError } from './health'
 import { prisma } from '../prisma'
 import { backfillEvents } from '../territorial/backfill'
 import { dedupeEvents } from '../dedup/dedupe'
+import { acquireRegionLock, releaseRegionLock } from './regionLock'
 import type { ScrapeParams, ScrapeResult, RunResult } from './types'
 
 /**
@@ -289,7 +290,17 @@ if (require.main === module) {
         process.exit(1)
       }
       console.log(`[Scraper] Running region: ${regionSlug}`)
-      await runRegion(regionSlug, params)
+      // Stessa coppia importata da ./regionLock usata dalla route cron (D-13):
+      // mai una seconda implementazione del lock per il chiamante CLI.
+      if (!(await acquireRegionLock(regionSlug))) {
+        console.error(`[Scraper] Scrape gia' in corso per la regione "${regionSlug}", esco.`)
+        process.exit(1)
+      }
+      try {
+        await runRegion(regionSlug, params)
+      } finally {
+        await releaseRegionLock(regionSlug)
+      }
     } else if (sourceId) {
       const entry = getSourceById(sourceId)
       if (!entry) {
