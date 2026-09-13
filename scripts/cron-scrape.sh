@@ -9,6 +9,12 @@
 # configurazione (file .env assente o variabile obbligatoria mancante).
 set -euo pipefail
 
+# Fase 14 (D-01, SCHED-01): lo scrape e' sempre vincolato a una regione, mai
+# "tutte le sorgenti insieme". Questo controllo fallisce PRIMA di leggere
+# .env o contattare qualunque server, cosi' un crontab con un argomento
+# dimenticato non e' un no-op invisibile.
+region="${1:?uso: cron-scrape.sh <region>}"
+
 script_dir="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd -P)"
 root_dir="$(dirname -- "${script_dir}")"
 env_file="${ENV_FILE:-${root_dir}/.env}"
@@ -58,7 +64,7 @@ if [[ -z "${app_url}" ]]; then
   exit 2
 fi
 
-target_url="${app_url%/}/api/cron/scrape"
+target_url="${app_url%/}/api/cron/scrape?region=${region}"
 
 # Il segreto viene passato via `curl -K -` (config da stdin) invece che come
 # argomento `-H`, cosi' non finisce nell'argv del processo visibile a `ps` /

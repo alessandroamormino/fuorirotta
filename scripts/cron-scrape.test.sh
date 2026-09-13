@@ -8,9 +8,11 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -
 cron_script="${script_dir}/cron-scrape.sh"
 port="${PORT:-39871}"
 secret="test-secret-value-123"
+region="lombardia"
 
 tmp_dir="$(mktemp -d)"
 auth_file="${tmp_dir}/auth_header"
+url_file="${tmp_dir}/request_url"
 server_pid=""
 
 cleanup() {
@@ -39,20 +41,23 @@ write_env() {
   } > "${tmp_dir}/.env"
 }
 
-# Avvia un server HTTP effimero che registra l'header Authorization ricevuto
-# su file e risponde con il codice HTTP passato come argomento.
+# Avvia un server HTTP effimero che registra l'header Authorization e l'URL
+# della richiesta ricevuti su file, e risponde con il codice HTTP passato
+# come argomento.
 start_server() {
   local code="$1"
-  rm -f "${auth_file}"
-  PORT="${port}" RESPONSE_CODE="${code}" AUTH_HEADER_FILE="${auth_file}" \
+  rm -f "${auth_file}" "${url_file}"
+  PORT="${port}" RESPONSE_CODE="${code}" AUTH_HEADER_FILE="${auth_file}" URL_FILE="${url_file}" \
     node -e '
       const http = require("http");
       const fs = require("fs");
       const port = process.env.PORT;
       const code = parseInt(process.env.RESPONSE_CODE, 10);
       const authFile = process.env.AUTH_HEADER_FILE;
+      const urlFile = process.env.URL_FILE;
       const server = http.createServer((req, res) => {
         fs.writeFileSync(authFile, req.headers["authorization"] || "");
+        fs.writeFileSync(urlFile, req.url || "");
         res.writeHead(code);
         res.end();
       });
@@ -84,7 +89,7 @@ stop_server() {
 write_env yes
 start_server 202
 set +e
-output_case1="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}")"
+output_case1="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" "${region}")"
 code_case1=$?
 set -e
 stop_server
@@ -98,7 +103,7 @@ auth_received="$(cat "${auth_file}" 2>/dev/null || echo "")"
 # --- Caso 2: risposta 401 ---
 start_server 401
 set +e
-output_case2="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}")"
+output_case2="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" "${region}")"
 code_case2=$?
 set -e
 stop_server
@@ -110,7 +115,7 @@ stop_server
 # --- Caso 3: .env privo del segreto ---
 write_env no
 set +e
-output_case3="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" 2>/dev/null)"
+output_case3="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" "${region}" 2>/dev/null)"
 code_case3=$?
 set -e
 
@@ -126,7 +131,7 @@ set -e
 } > "${tmp_dir}/.env"
 start_server 202
 set +e
-output_case4="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}")"
+output_case4="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" "${region}")"
 code_case4=$?
 set -e
 stop_server
@@ -142,13 +147,41 @@ auth_received_case4="$(cat "${auth_file}" 2>/dev/null || echo "")"
 # caso 2 (server raggiungibile, risposta non-2xx).
 write_env yes
 set +e
-output_case5="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" 2>/dev/null)"
+output_case5="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" "${region}" 2>/dev/null)"
 code_case5=$?
 set -e
 
 [[ "${code_case5}" -eq 1 ]] || fail "caso 5: atteso exit 1, ottenuto ${code_case5}"
 [[ "${output_case5}" == *"http_code=000"* ]] || fail "caso 5: output senza http_code=000 (output: ${output_case5})"
 [[ "${output_case5}" == *"FAILED"* ]] || fail "caso 5: output senza etichetta FAILED (output: ${output_case5})"
+
+# --- Caso 6: argomento regione assente -> exit != 0, nessuna richiesta HTTP -
+# Fase 14 (D-01, SCHED-01): senza regione lo script deve fallire PRIMA di
+# leggere .env o contattare il server — un crontab con l'argomento
+# dimenticato non deve diventare un no-op invisibile.
+write_env yes
+start_server 202
+set +e
+output_case6="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" 2>&1)"
+code_case6=$?
+set -e
+
+[[ "${code_case6}" -ne 0 ]] || fail "caso 6: atteso exit diverso da 0 senza argomento regione, ottenuto ${code_case6}"
+[[ ! -s "${url_file}" ]] || fail "caso 6: il server finto ha ricevuto una richiesta senza argomento regione (url: $(cat "${url_file}" 2>/dev/null))"
+stop_server
+
+# --- Caso 7: argomento regione "lombardia" -> l'URL contiene lo slug -------
+write_env yes
+start_server 202
+set +e
+output_case7="$(ENV_FILE="${tmp_dir}/.env" "${cron_script}" "${region}")"
+code_case7=$?
+set -e
+stop_server
+
+[[ "${code_case7}" -eq 0 ]] || fail "caso 7: atteso exit 0, ottenuto ${code_case7} (output: ${output_case7})"
+url_received="$(cat "${url_file}" 2>/dev/null || echo "")"
+[[ "${url_received}" == *"region=${region}"* ]] || fail "caso 7: url ricevuto '${url_received}', atteso contenesse 'region=${region}'"
 
 echo "OK"
 exit 0

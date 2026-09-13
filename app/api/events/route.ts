@@ -6,7 +6,13 @@ import {
 	completeWorkflowExecution,
 	failWorkflowExecution,
 } from "@/lib/cacheService";
-import { runAllScrapers } from "@/lib/scrapers";
+// Import diretto da './runner' e non dal barrel `@/lib/scrapers`: il barrel
+// non riesporta piu' runAllScrapers dalla Fase 14 (D-01) per chiudere il
+// percorso "scrapa tutto" da qualunque route sotto app/. Il refresh da
+// traffico qui resta legato a tutte le sorgenti fino a 14-05 (D-08), quando
+// diventera' per-regione tramite runRegion — deviazione tracciata, non
+// silenziosa (vedi 14-01-SUMMARY.md).
+import { runAllScrapers } from "@/lib/scrapers/runner";
 import { Prisma, Event as PrismaEvent } from "@prisma/client";
 import { Event } from "@/lib/types";
 import { calculateDistanceKm } from "@/lib/territorial/distance";

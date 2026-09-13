@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runAllScrapers } from '@/lib/scrapers';
+// Import diretto da './runner': il barrel `@/lib/scrapers` non riesporta piu'
+// runAllScrapers dalla Fase 14 (D-01). Questo intero file viene cancellato
+// nel Task 2 di questo stesso piano (14-01) — fix minimo per tenere verde
+// `npx tsc --noEmit` fra un task e l'altro, non un investimento su un file
+// che sta per sparire.
+import { runAllScrapers } from '@/lib/scrapers/runner';
 
 /**
  * Manual scrape trigger endpoint

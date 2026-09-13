@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runAllScrapers } from '@/lib/scrapers';
+import { runRegion, getRegions, getSourcesByRegion } from '@/lib/scrapers';
 import {
   createWorkflowExecution,
   completeWorkflowExecution,
@@ -42,27 +42,33 @@ function validateCronSecret(request: NextRequest): boolean {
 }
 
 /**
- * Execute scraping with WorkflowExecution tracking
+ * Execute scraping with WorkflowExecution tracking, scoped a una regione (D-01, SCHED-01).
  */
-async function executeScrape() {
+async function executeScrape(region: string) {
   const today = new Date().toISOString().split('T')[0];
   const endOfYear = `${new Date().getFullYear()}-12-31`;
 
-  // Create cacheQuery for tracking
+  // La regione entra nel cacheQuery (campo `cities`) perche' generateQueryHash
+  // (lib/cacheService.ts) normalizza SOLO {cities, radiusKm, centerLat,
+  // centerLng, dateFrom, dateTo} e createWorkflowExecution fa upsert su
+  // quello stesso hash: senza la regione qui, due regioni triggerate lo
+  // stesso giorno condividerebbero una sola riga WorkflowExecution e si
+  // sovrascriverebbero lo stato a vicenda (RESEARCH Pitfall 2).
   const cacheQuery = {
     dateFrom: today,
-    dateTo: endOfYear
+    dateTo: endOfYear,
+    cities: [region]
   };
 
-  console.log('[Cron] Starting scheduled scrape...');
+  console.log(`[Cron] Starting scheduled scrape for region "${region}"...`);
 
   // Create execution tracking record
   const executionId = await createWorkflowExecution(cacheQuery);
   console.log(`[Cron] Created execution ${executionId}`);
 
   try {
-    // Run all scrapers
-    const result = await runAllScrapers({ dateFrom: today, dateTo: endOfYear });
+    // Run scrapers scoped to this region only
+    const result = await runRegion(region, { dateFrom: today, dateTo: endOfYear });
 
     // Mark execution as complete
     await completeWorkflowExecution(executionId, result.saved);
@@ -76,12 +82,13 @@ async function executeScrape() {
       // Non-fatal: map will fall back to computing from events
     }
 
-    console.log('[Cron] Scrape completed successfully');
+    console.log(`[Cron] Scrape completed successfully for region "${region}"`);
 
     return {
       success: true,
       message: 'Cron scrape completed',
       executionId,
+      region,
       events: {
         saved: result.saved,
         skipped: result.skipped,
@@ -92,7 +99,7 @@ async function executeScrape() {
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Cron] Scrape failed:', errorMsg);
+    console.error(`[Cron] Scrape failed for region "${region}":`, errorMsg);
 
     // Mark execution as failed
     await failWorkflowExecution(executionId, errorMsg);
@@ -102,37 +109,54 @@ async function executeScrape() {
 }
 
 /**
- * GET handler for cron triggers (called by server-side crontab)
+ * Handler condiviso da GET e POST (erano identici): valida il segreto,
+ * DOPO valida la regione (l'ordine e' parte del contratto — l'autenticazione
+ * precede sempre la validazione della regione, non-regressione Fase 5),
+ * poi avvia lo scrape fire-and-forget.
  */
-export async function GET(request: NextRequest) {
-  // Validate CRON_SECRET
+async function handleCronTrigger(request: NextRequest): Promise<NextResponse> {
+  // Validate CRON_SECRET PRIMA di qualunque altra cosa
   if (!validateCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const region = request.nextUrl.searchParams.get('region')?.trim();
+
+  // Assente o vuota -> 400 immediato, nessun fire-and-forget (D-01)
+  if (!region) {
+    return NextResponse.json(
+      { error: 'Parametro "region" obbligatorio' },
+      { status: 400 }
+    );
+  }
+
+  // Regione sconosciuta al registry -> 404 immediato con l'elenco (D-03)
+  if (getSourcesByRegion(region).length === 0) {
+    return NextResponse.json(
+      { error: `Regione sconosciuta: "${region}"`, availableRegions: getRegions() },
+      { status: 404 }
+    );
+  }
+
   // Fire-and-forget: respond immediately to avoid nginx 504 timeout.
   // Scraping can take several minutes; the result is tracked via WorkflowExecution.
-  executeScrape().catch(err =>
+  executeScrape(region).catch(err =>
     console.error('[Cron] Background scrape failed:', err)
   );
 
-  return NextResponse.json({ success: true, message: 'Scrape started' }, { status: 202 });
+  return NextResponse.json({ success: true, message: 'Scrape started', region }, { status: 202 });
+}
+
+/**
+ * GET handler for cron triggers (called by server-side crontab)
+ */
+export async function GET(request: NextRequest) {
+  return handleCronTrigger(request);
 }
 
 /**
  * POST handler for manual cron triggers
  */
 export async function POST(request: NextRequest) {
-  // Validate CRON_SECRET
-  if (!validateCronSecret(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Fire-and-forget: respond immediately to avoid nginx 504 timeout.
-  // Scraping can take several minutes; the result is tracked via WorkflowExecution.
-  executeScrape().catch(err =>
-    console.error('[Cron] Background scrape failed:', err)
-  );
-
-  return NextResponse.json({ success: true, message: 'Scrape started' }, { status: 202 });
+  return handleCronTrigger(request);
 }
