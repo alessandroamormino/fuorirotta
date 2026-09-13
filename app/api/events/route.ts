@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 				);
 			} else {
 				console.log(
-					"[Cache] Reading from database (use /api/scrape to update data from sources)"
+					"[Cache] Reading from database (data refreshed via the per-region cron scrape)"
 				);
 			}
 		} catch (cacheError: any) {

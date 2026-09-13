@@ -174,5 +174,31 @@ if grep -n "runAllScrapers" app/api/cron/scrape/route.ts | grep -vE '^\s*[0-9]+:
 fi
 echo "S6 OK: il barrel lib/scrapers/index.ts non riesporta runAllScrapers, app/api/cron/scrape/route.ts usa runRegion"
 
+# --- S7: non-regressione — l'endpoint di scrape pubblico e' cancellato ------
+# T-14-01: app/api/scrape/route.ts avviava lo scrape completo di tutte le
+# sorgenti senza alcuna autenticazione. Il Task 2 di 14-01 lo ha cancellato;
+# questa sezione impedisce che ricompaia, sia come file sia come nuovo import
+# sotto app/. `grep -v '^\s*//'` ignora i commenti (es. questo stesso file
+# cita "api/scrape/route.ts" sopra) cosi' una citazione non rende il gate
+# auto-invalidante.
+#
+# ESCLUSIONE (Rule 1 - il testo del piano prescriveva un grep cieco su tutto
+# app/, dimostrato falso eseguendo il gate): app/api/events/route.ts importa
+# runAllScrapers direttamente da './runner' per il refresh da traffico
+# (D-08), esenzione gia' documentata in S6 sopra e deferita a 14-05. Un
+# blanket-check qui romperebbe una scelta esplicita e invariata, non una
+# regressione. Verifichiamo quindi la stessa cosa di S6 ma su TUTTO app/
+# tranne quel singolo file gia' noto.
+if [[ -e "${repo_root}/app/api/scrape/route.ts" ]]; then
+  fail "S7: app/api/scrape/route.ts esiste ancora (T-14-01 non chiusa)"
+fi
+s7_hits="$(cd "${repo_root}" && grep -rn "runAllScrapers" app/ 2>/dev/null \
+  | grep -v '^app/api/events/route\.ts:' \
+  | grep -vE ':[0-9]+:\s*//' || true)"
+if [[ -n "${s7_hits}" ]]; then
+  fail "S7: un file sotto app/ (diverso da app/api/events/route.ts, gia' esente per D-08/14-05) importa ancora runAllScrapers fuori da un commento: ${s7_hits}"
+fi
+echo "S7 OK: app/api/scrape/route.ts non esiste, nessun import nuovo di runAllScrapers sotto app/ (a parte l'esenzione nota app/api/events/route.ts)"
+
 echo "PASS: contratto di scoping per regione (SCHED-01, D-01/D-02/D-03/D-04)"
 exit 0
