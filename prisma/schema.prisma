@@ -147,6 +147,19 @@ model ScrapeRun {
   @@map("scrape_runs")
 }
 
+// Lock per regione (D-13, SCHED-03): riga con scadenza, non pg_advisory_lock.
+// Un advisory lock e' legato alla sessione fisica Postgres; $queryRaw prende
+// in prestito una connessione dal pool di Prisma solo per la durata della
+// query, quindi lo sblocco successivo puo' capitare su una connessione
+// diversa e diventare un no-op silenzioso. Vedi lib/scrapers/regionLock.ts.
+model RegionLock {
+  region    String   @id @db.VarChar(50)
+  lockedAt  DateTime @map("locked_at") @db.Timestamptz(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@map("region_locks")
+}
+
 model MapClusterCache {
   id          String   @id @default("default")
   geojson     Json     // GeoJSON FeatureCollection with all event points
