@@ -133,10 +133,10 @@ server {
 
 The crontab is no longer a single hand-written line: it is the output of `scripts/generate-crontab.ts`, which reads `REGION_SCHEDULES` from `lib/scrapers/registry.ts` (Phase 14, D-09). Adding a region to the registry means one file to touch; the crontab lines that region needs are regenerated, not hand-edited.
 
-**1. Generate the lines, inside the container.** The generator is TypeScript living in the repo/image — it needs `node_modules`, which only exists inside the built container. The host checkout only ever runs `git pull` and `docker build`, nothing with `node_modules`:
+**1. Generate the lines, on the host checkout — NOT inside the container.** The final `runner` stage of the `Dockerfile` copies only `public`, `.next/standalone`, `.next/static`, `node_modules/.prisma` and `prisma/`. It contains neither `scripts/` nor `lib/` nor the devDependencies `tsx` needs to import raw TypeScript, so `docker compose exec … npx tsx scripts/generate-crontab.ts` fails immediately with a missing-file error. This is the same "maintenance scripts live outside the image" rule that `npx prisma migrate deploy` (§Migrations) and `scripts/cron-maintenance.sh` already follow: run it from the same git checkout that `docker compose` itself runs from.
 
 ```bash
-docker compose exec -T fuorirotta-frontend npx tsx scripts/generate-crontab.ts
+cd /opt/docker/fuori-rotta/fuorirotta && npx tsx scripts/generate-crontab.ts
 ```
 
 Install the printed output with `crontab -e`, replacing whatever crontab is currently installed. Example output at the time of writing (one region, Lombardy, plus the consolidated maintenance job):
@@ -160,8 +160,8 @@ CRON_TZ=Europe/Rome
 # On the host:
 crontab -l > /tmp/installed-crontab.txt
 
-# Then, from the same host:
-docker compose exec -T fuorirotta-frontend npx tsx scripts/generate-crontab.ts --check /dev/stdin < /tmp/installed-crontab.txt
+# Then, from the same host — on the checkout, not in the container (see step 1):
+cd /opt/docker/fuori-rotta/fuorirotta && npx tsx scripts/generate-crontab.ts --check /tmp/installed-crontab.txt
 ```
 
 Exits `0` and prints `OK: crontab installato combacia col registry` when they match; exits `1` and prints both versions when they diverge. A region added to the registry and never scheduled, or a stale line left behind after a region is removed, is exactly the kind of divergence this catches — it must not be able to sit unnoticed for months.

@@ -57,7 +57,22 @@ export function generate(): string {
  * e' un controllo (D-09, prova di non-vacuita' S5).
  */
 function runCheck(installedPath: string): never {
-  const installed = readFileSync(installedPath === '-' ? 0 : installedPath, 'utf8')
+  // Un percorso illeggibile esce 2 come il percorso assente, invece di morire
+  // con lo stack trace ENOENT di Node: la procedura di rilevamento drift
+  // (DEPLOYMENT.md §"Detect drift") e' manuale e in due passi, quindi un dump
+  // mai creato — `crontab -l` fallito, path digitato male — e' il modo piu'
+  // probabile in cui questo comando sbaglia, ed e' l'unico caso in cui la
+  // differenza fra "combacia" e "non ho potuto guardare" conta davvero.
+  let installed: string
+  try {
+    installed = readFileSync(installedPath === '-' ? 0 : installedPath, 'utf8')
+  } catch (error) {
+    console.error(
+      `Impossibile leggere il dump del crontab installato (${installedPath}): ` +
+        (error instanceof Error ? error.message : String(error))
+    )
+    process.exit(2)
+  }
   const expected = generate()
   if (installed.trim() !== expected.trim()) {
     console.error('DIVERGENZA fra registry e crontab installato:')

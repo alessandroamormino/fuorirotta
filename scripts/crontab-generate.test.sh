@@ -8,6 +8,7 @@
 #   S4: ordine stabile — due invocazioni identiche, ordine di dichiarazione
 #   S5: --check sa fallire su una divergenza (prova di non-vacuita', D-05-style)
 #   S6: una regione senza voce in REGION_SCHEDULES fa uscire il generatore
+#   S7: --check su un dump illeggibile esce 2 con un messaggio, non stack trace
 #       non-zero nominando lo slug — mai una riga silenziosamente omessa
 set -euo pipefail
 
@@ -115,5 +116,28 @@ trap cleanup EXIT
 [[ "${mutated_exit}" -ne 0 ]] || fail "S6: generatore uscito 0 con una regione senza schedule — riga silenziosamente omessa"
 printf '%s' "${mutated_output}" | grep -q "lombardia" || fail "S6: il messaggio d'errore non nomina la regione senza schedule mancante"
 echo "ok  S6: una regione senza voce in REGION_SCHEDULES fa fallire il generatore nominando lo slug"
+
+# --- S7: un dump illeggibile esce 2, non con uno stack trace -----------------
+#
+# La procedura di rilevamento drift (DEPLOYMENT.md §"Detect drift") e' manuale e
+# in due passi: `crontab -l > /tmp/...` poi `--check /tmp/...`. Un dump mai
+# creato (crontab -l fallito, percorso digitato male) e' il modo piu' probabile
+# in cui quel comando sbaglia, ed e' l'unico caso in cui la differenza fra
+# "combacia" e "non ho potuto guardare" conta: prima usciva 1 con uno stack
+# trace ENOENT di Node, indistinguibile a occhio da una divergenza reale.
+
+missing_path="${repo_root}/.gsd-nonexistent-crontab-dump-$$"
+[[ ! -e "${missing_path}" ]] || fail "S7: il percorso di prova esiste davvero, la prova non dimostrerebbe nulla"
+
+set +e
+missing_output="$(npx tsx scripts/generate-crontab.ts --check "${missing_path}" 2>&1)"
+missing_exit=$?
+set -e
+
+[[ "${missing_exit}" -eq 2 ]] || fail "S7: --check su un percorso inesistente uscito ${missing_exit}, atteso 2"
+printf '%s' "${missing_output}" | grep -q "Impossibile leggere" || fail "S7: nessun messaggio leggibile, probabile stack trace grezzo"
+! printf '%s' "${missing_output}" | grep -q "readFileUtf8" || fail "S7: l'uscita contiene ancora lo stack trace interno di Node"
+echo "ok  S7: --check su un dump illeggibile esce 2 con un messaggio, non con uno stack trace"
+
 
 echo "PASS: generatore di crontab (SCHED-02), CRON_TZ in testa (D-12), ordine stabile, --check dimostrato capace di fallire (D-09)"
