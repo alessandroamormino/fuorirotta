@@ -149,6 +149,24 @@ export const REGION_SCHEDULES: Record<string, string> = {
   lombardia: '17 3 * * *'
 }
 
+/**
+ * Orario del job di manutenzione consolidato (scripts/maintenance-job.ts,
+ * 14-03: backfill+dedup+cache dei cluster). Non e' una voce di
+ * REGION_SCHEDULES perche' non appartiene a nessuna singola regione — gira
+ * una volta al giorno DOPO l'ultima regione pianificata, non insieme a una
+ * di esse (D-05).
+ *
+ * Pianificato alle 05:30: con la sola Lombardia alle 03:17 e una durata
+ * misurata di >=53 minuti (08-05-SUMMARY.md, limite inferiore, probabilmente
+ * oltre un'ora), questo lascia oltre due ore di margine. Alla Fase 15, con
+ * piu' voci in REGION_SCHEDULES, questo orario andra' ricalcolato
+ * sull'ultima regione pianificata quel giorno — dichiarato qui e non in
+ * `scripts/generate-crontab.ts` perche' il registry resta l'unica fonte di
+ * verita' dell'orario (D-09): nessuno schedule va scritto a mano nel
+ * generatore.
+ */
+export const MAINTENANCE_SCHEDULE = '30 5 * * *'
+
 export function getSourceById(id: string): SourceRegistryEntry | undefined {
   return SOURCE_REGISTRY.find(entry => entry.id === id)
 }
