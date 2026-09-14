@@ -5,14 +5,17 @@ import {
 	createWorkflowExecution,
 	completeWorkflowExecution,
 	failWorkflowExecution,
+	type ScrapeQuery,
 } from "@/lib/cacheService";
-// Import diretto da './runner' e non dal barrel `@/lib/scrapers`: il barrel
-// non riesporta piu' runAllScrapers dalla Fase 14 (D-01) per chiudere il
-// percorso "scrapa tutto" da qualunque route sotto app/. Il refresh da
-// traffico qui resta legato a tutte le sorgenti fino a 14-05 (D-08), quando
-// diventera' per-regione tramite runRegion — deviazione tracciata, non
-// silenziosa (vedi 14-01-SUMMARY.md).
-import { runAllScrapers } from "@/lib/scrapers/runner";
+// Refresh da traffico ora per-regione (D-08, 14-05): runRegion/getRegions dal
+// barrel `@/lib/scrapers`, che dalla Fase 14 (D-01) non riesporta piu'
+// runAllScrapers. Questo era l'ultimo chiamante rimasto di runAllScrapers
+// (vedi 14-01-SUMMARY.md/14-03-SUMMARY.md) — chiuso qui, insieme alla
+// funzione stessa (rimossa da lib/scrapers/runner.ts, nessun altro
+// chiamante). Stesso lock di route cron e CLI (D-13): mai una quarta
+// implementazione (RESEARCH anti-pattern).
+import { runRegion, getRegions } from "@/lib/scrapers";
+import { acquireRegionLock, releaseRegionLock } from "@/lib/scrapers/regionLock";
 import { Prisma, Event as PrismaEvent } from "@prisma/client";
 import { Event } from "@/lib/types";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
@@ -44,6 +47,58 @@ async function withComposedFields<T extends PrismaEvent>(
 	return events.map(
 		(e) => composeEvent(e, membersByCanonical.get(e.id) ?? []) as T
 	);
+}
+
+/**
+ * Avvia il refresh fire-and-forget per UNA regione (D-08). Il lock si
+ * acquisisce SINCRONAMENTE (una singola query, mai il costo dello scrape:
+ * >=53 min misurati per in-lombardia.it) cosi' la risposta HTTP puo'
+ * riportare subito se il refresh e' davvero partito o se uno scrape era gia'
+ * in corso — solo runRegion() e il tracking WorkflowExecution restano
+ * fire-and-forget dietro il .then/.catch, la risposta non li aspetta mai.
+ * Stessa coppia acquireRegionLock/releaseRegionLock di route cron e CLI
+ * (D-13): mai una quarta implementazione del lock.
+ *
+ * @returns true se il refresh e' stato avviato (lock ottenuto), false se uno
+ *   scrape per questa regione era gia' in corso (nessun secondo avviato).
+ */
+async function triggerRegionRefresh(
+	region: string,
+	cacheQuery: ScrapeQuery
+): Promise<boolean> {
+	if (!(await acquireRegionLock(region))) {
+		console.log(
+			`[Refresh On-Demand] Scrape gia' in corso per la regione "${region}", nessun secondo avviato.`
+		);
+		return false;
+	}
+
+	// Fire-and-forget: non aspettiamo il completamento (stesso pattern gia'
+	// usato prima di questo piano). Il finally sotto avvolge sia il ramo
+	// riuscito (completeWorkflowExecution) sia quello fallito
+	// (failWorkflowExecution): il rilascio del lock non deve mai dipendere
+	// dall'esito dello scrape (D-13, 14-02 Task 2). L'outer .catch copre il
+	// caso in cui createWorkflowExecution stessa rigetti, prima ancora che
+	// runRegion parta.
+	createWorkflowExecution(cacheQuery)
+		.then(async (executionId) => {
+			try {
+				const params = { dateFrom: cacheQuery.dateFrom, dateTo: cacheQuery.dateTo };
+				const result = await runRegion(region, params);
+				await completeWorkflowExecution(executionId, result.saved);
+			} catch (err) {
+				await failWorkflowExecution(executionId, String(err));
+				console.error(`[Refresh On-Demand] Background refresh failed for region "${region}":`, err);
+			} finally {
+				await releaseRegionLock(region);
+			}
+		})
+		.catch(async (err) => {
+			console.error(`[Refresh On-Demand] Background refresh failed for region "${region}":`, err);
+			await releaseRegionLock(region);
+		});
+
+	return true;
 }
 
 export async function GET(request: NextRequest) {
@@ -82,6 +137,29 @@ export async function GET(request: NextRequest) {
 				: null;
 		const istatCode = searchParams.get("istatCode") || "";
 
+		// Regione dedotta dalla ricerca (D-08): serve sia a distinguere il
+		// cacheQuery sotto (stessa ragione gia' chiusa in 14-01 sulla route
+		// cron: generateQueryHash non include mai la regione) sia a decidere
+		// piu' sotto SE e quale regione rinfrescare. Regola volutamente
+		// conservativa finche' una regione sola e' viva (RESEARCH Open
+		// Question n.3): comuneId deve risolvere a un Comune la cui
+		// regionName normalizza a uno slug noto del registry; ogni altro caso
+		// (nessun comuneId, o regionName che non corrisponde — ricerca
+		// nazionale o regione non ancora popolata) lascia region a null, e
+		// piu' sotto NESSUN refresh parte (D-08). Il raccordo piu' fine
+		// slug<->ISTAT resta esplicitamente della Fase 15 (D-04).
+		let region: string | null = null;
+		if (comuneId) {
+			const comune = await prisma.comune.findUnique({
+				where: { id: comuneId },
+				select: { regionName: true },
+			});
+			const slug = comune?.regionName.toLowerCase();
+			if (slug && getRegions().includes(slug)) {
+				region = slug;
+			}
+		}
+
 		// Estrai città dal parametro location
 		const cities = await parseCitiesFromLocation(location);
 
@@ -89,8 +167,17 @@ export async function GET(request: NextRequest) {
 		const today = new Date().toISOString().split("T")[0];
 		const endOfYear = `${new Date().getFullYear()}-12-31`;
 
+		// La regione entra esplicitamente nel cacheQuery (un array NUOVO, mai
+		// lo stesso riferimento di `cities`, che resta invariato per il resto
+		// della query sotto): senza distinguerla, due regioni diverse
+		// collidono sulla stessa riga WorkflowExecution (RESEARCH Pitfall 2,
+		// gia' chiuso sulla route cron in 14-01). Qui il rischio e' minore —
+		// `cities` porta gia' i nomi cercati dall'utente — ma la regola si
+		// applica comunque, in modo esplicito.
+		const cacheQueryCities = region ? [...cities, region] : cities;
+
 		const cacheQuery = {
-			cities: cities.length > 0 ? cities : undefined,
+			cities: cacheQueryCities.length > 0 ? cacheQueryCities : undefined,
 			radiusKm: radius ? parseInt(radius) : undefined,
 			centerLat: lat ? parseFloat(lat) : undefined,
 			centerLng: lng ? parseFloat(lng) : undefined,
@@ -396,64 +483,37 @@ export async function GET(request: NextRequest) {
 
 		let refreshTriggered = false;
 
-		if (offset === 0) {
-			// CASO 1: Nessun evento trovato → Refresh ASINCRONO (08-05, T-08-18)
-			// Era sincrono (await runAllScrapers prima di rispondere). Con il Crawl-delay
-			// di in-lombardia.it (D-10) la durata proiettata misurata è di almeno ~53 minuti
-			// (limite inferiore) — ben oltre qualunque timeout HTTP/proxy/serverless, quindi
-			// il ramo sincrono restituiva già un errore, mai risultati freschi. Reso
-			// fire-and-forget con lo stesso pattern già usato dal CASO 2 sotto: risposta
-			// vuota immediata, popolamento in background — un errore garantito diventa una
-			// risposta vuota immediata, coerente con la promessa cache-first di PROJECT.md.
+		// Senza regione deducibile (region === null), NESSUNO dei due casi
+		// parte: nessun comuneId risolto, o una regione non ancora popolata /
+		// non riconosciuta (D-08). E' anche il comportamento corretto per la
+		// Fase 15 ("regione non ancora popolata"), non un ripiego temporaneo.
+		if (offset === 0 && region) {
+			// CASO 1: Nessun evento trovato → Refresh ASINCRONO per LA SOLA
+			// regione dedotta (08-05, T-08-18, D-08). Era sincrono (await
+			// runAllScrapers prima di rispondere) e su TUTTE le sorgenti. Con
+			// il Crawl-delay di in-lombardia.it (D-10) la durata proiettata
+			// misurata e' di almeno ~53 minuti (limite inferiore) — ben oltre
+			// qualunque timeout HTTP/proxy/serverless, quindi il ramo
+			// sincrono restituiva gia' un errore, mai risultati freschi. Fire-
+			// and-forget con lo stesso pattern gia' usato dal CASO 2 sotto:
+			// risposta vuota immediata, popolamento in background.
 			if (total === 0 && cacheResult?.shouldTrigger) {
 				console.log(
-					"[Refresh On-Demand] No events found, triggering background refresh..."
+					`[Refresh On-Demand] Nessun evento trovato, avvio il refresh per la regione "${region}"...`
 				);
-
-				refreshTriggered = true;
-
-				// Fire-and-forget: non aspettiamo il completamento (stesso pattern del CASO 2)
-				createWorkflowExecution(cacheQuery)
-					.then(async (executionId) => {
-						try {
-							const params = {
-								dateFrom: cacheQuery.dateFrom,
-								dateTo: cacheQuery.dateTo
-							};
-							const result = await runAllScrapers(params);
-							await completeWorkflowExecution(executionId, result.saved);
-						} catch (err) {
-							await failWorkflowExecution(executionId, String(err));
-							console.error('[Refresh On-Demand] Background refresh failed:', err);
-						}
-					})
-					.catch(err => console.error('[Refresh On-Demand] Background refresh failed:', err));
+				refreshTriggered = await triggerRegionRefresh(region, cacheQuery);
 			}
-			// CASO 2: Eventi trovati ma cache vecchia (>4h) → Refresh ASINCRONO
+			// CASO 2: Eventi trovati ma cache vecchia (>4h) → Refresh
+			// ASINCRONO per la sola regione dedotta (D-08).
 			else if (
 				total > 0 &&
 				cacheResult?.shouldTrigger &&
 				!cacheResult?.isRunning
 			) {
 				console.log(
-					"[Refresh On-Demand] Cache stale, triggering background refresh..."
+					`[Refresh On-Demand] Cache non aggiornata, avvio il refresh per la regione "${region}"...`
 				);
-
-				refreshTriggered = true;
-
-				// Fire-and-forget: non aspettiamo il completamento
-				createWorkflowExecution(cacheQuery)
-					.then(async (executionId) => {
-						try {
-							const params = { dateFrom: cacheQuery.dateFrom, dateTo: cacheQuery.dateTo };
-							const result = await runAllScrapers(params);
-							await completeWorkflowExecution(executionId, result.saved);
-						} catch (err) {
-							await failWorkflowExecution(executionId, String(err));
-							console.error('[Refresh On-Demand] Background refresh failed:', err);
-						}
-					})
-					.catch(err => console.error('[Refresh On-Demand] Background refresh failed:', err));
+				refreshTriggered = await triggerRegionRefresh(region, cacheQuery);
 			}
 		}
 		// ==============================================

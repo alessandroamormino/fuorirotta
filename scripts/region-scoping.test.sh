@@ -159,20 +159,16 @@ echo "S5 OK: POST /api/cron/scrape?region=lombardia senza Authorization risponde
 
 stop_server
 
-# --- S6: asserzione di sorgente — nessun file sotto app/ importa il barrel --
-# runAllScrapers non e' piu' riesportata dal barrel lib/scrapers/index.ts, e
-# app/api/cron/scrape/route.ts non la nomina piu' (usa runRegion). Non
-# controlliamo app/api/events/route.ts: quel chiamante (refresh da traffico,
-# D-08) resta esplicitamente aperto fino a 14-05 (vedi 14-01-SUMMARY.md e
-# 14-02-PLAN.md riga 229-230) — importa direttamente da './runner', mai dal
-# barrel, quindi il barrel resta comunque chiuso.
-if grep -n "runAllScrapers" lib/scrapers/index.ts | grep -vE '^\s*[0-9]+:\s*//' >/dev/null; then
-  fail "S6: lib/scrapers/index.ts nomina ancora runAllScrapers fuori da un commento"
+# --- S6: asserzione di sorgente — runAllScrapers non esiste piu' -----------
+# runAllScrapers cancellata da lib/scrapers/runner.ts in 14-05 (D-08): il suo
+# ultimo chiamante (app/api/events/route.ts, refresh da traffico) e' stato
+# migrato a runRegion, chiudendo l'esenzione che questa sezione documentava
+# fino a 14-01/14-03. Nessuna eccezione residua: un grep pulito su tutto il
+# repository (esclusi i commenti) non deve trovarla piu' da nessuna parte.
+if grep -rn "runAllScrapers" lib/ app/ scripts/ --include='*.ts' 2>/dev/null | grep -vE ':[0-9]+:\s*(//|\*)' >/dev/null; then
+  fail "S6: runAllScrapers nominata ancora fuori da un commento (attesa cancellata da 14-05)"
 fi
-if grep -n "runAllScrapers" app/api/cron/scrape/route.ts | grep -vE '^\s*[0-9]+:\s*//' >/dev/null; then
-  fail "S6: app/api/cron/scrape/route.ts nomina ancora runAllScrapers fuori da un commento"
-fi
-echo "S6 OK: il barrel lib/scrapers/index.ts non riesporta runAllScrapers, app/api/cron/scrape/route.ts usa runRegion"
+echo "S6 OK: runAllScrapers non esiste piu' in nessun file .ts del repository"
 
 # --- S7: non-regressione — l'endpoint di scrape pubblico e' cancellato ------
 # T-14-01: app/api/scrape/route.ts avviava lo scrape completo di tutte le
@@ -180,25 +176,18 @@ echo "S6 OK: il barrel lib/scrapers/index.ts non riesporta runAllScrapers, app/a
 # questa sezione impedisce che ricompaia, sia come file sia come nuovo import
 # sotto app/. `grep -v '^\s*//'` ignora i commenti (es. questo stesso file
 # cita "api/scrape/route.ts" sopra) cosi' una citazione non rende il gate
-# auto-invalidante.
-#
-# ESCLUSIONE (Rule 1 - il testo del piano prescriveva un grep cieco su tutto
-# app/, dimostrato falso eseguendo il gate): app/api/events/route.ts importa
-# runAllScrapers direttamente da './runner' per il refresh da traffico
-# (D-08), esenzione gia' documentata in S6 sopra e deferita a 14-05. Un
-# blanket-check qui romperebbe una scelta esplicita e invariata, non una
-# regressione. Verifichiamo quindi la stessa cosa di S6 ma su TUTTO app/
-# tranne quel singolo file gia' noto.
+# auto-invalidante. Dalla 14-05 nessuna eccezione residua (vedi S6): un
+# import di runAllScrapers sotto app/ sarebbe di per se' impossibile, la
+# funzione non esiste piu'.
 if [[ -e "${repo_root}/app/api/scrape/route.ts" ]]; then
   fail "S7: app/api/scrape/route.ts esiste ancora (T-14-01 non chiusa)"
 fi
 s7_hits="$(cd "${repo_root}" && grep -rn "runAllScrapers" app/ 2>/dev/null \
-  | grep -v '^app/api/events/route\.ts:' \
   | grep -vE ':[0-9]+:\s*//' || true)"
 if [[ -n "${s7_hits}" ]]; then
-  fail "S7: un file sotto app/ (diverso da app/api/events/route.ts, gia' esente per D-08/14-05) importa ancora runAllScrapers fuori da un commento: ${s7_hits}"
+  fail "S7: un file sotto app/ importa ancora runAllScrapers fuori da un commento: ${s7_hits}"
 fi
-echo "S7 OK: app/api/scrape/route.ts non esiste, nessun import nuovo di runAllScrapers sotto app/ (a parte l'esenzione nota app/api/events/route.ts)"
+echo "S7 OK: app/api/scrape/route.ts non esiste, nessun import di runAllScrapers sotto app/"
 
 # --- S8: lock occupato -> 409, nessuno scrape avviato (SCHED-03, D-13) ------
 # Riavvia il dev server (S3..S5 lo hanno fermato sopra): e' l'unico modo

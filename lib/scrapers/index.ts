@@ -9,9 +9,9 @@ export { scrapeSoloSagre } from './solosagre'
 export { scrapeOpenData } from './opendata'
 export { scrapeInLombardia } from './inlombardia'
 export { saveEvents, logMetrics } from './utils'
-// runAllScrapers NON e' riesportata (14-01, D-01): resta raggiungibile solo
-// come `import { runAllScrapers } from './runner'`, mai da questo barrel, cosi'
-// nessuna route sotto app/ puo' piu' avviare uno scrape non vincolato a una
-// regione passando dal barrel pubblico.
+// runAllScrapers cancellata (14-01 -> 14-05, D-01/D-08): l'ultimo chiamante
+// rimasto (app/api/events/route.ts, refresh da traffico) e' stato migrato a
+// runRegion in 14-05. Nessuna route sotto app/ puo' piu' avviare uno scrape
+// non vincolato a una regione.
 export { runRegion, getRegions, getSourcesByRegion } from './runner'
 export type { ScrapedEvent, ScrapeParams, ScrapeResult } from './types'
