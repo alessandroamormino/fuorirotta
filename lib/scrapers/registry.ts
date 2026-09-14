@@ -17,7 +17,6 @@ export interface SourceRegistryEntry {
   region: string
   type: SourceType
   url: string
-  schedule: string
   scrape: (params?: ScrapeParams) => Promise<AdapterResult>
   /**
    * Gerarchia di fiducia fra sorgenti (Fase 10, D-12): numero piu' basso vince.
@@ -59,15 +58,15 @@ export interface SourceRegistryEntry {
 // Fanno parte del vincolo unique (source, sourceId): cambiarle tratterebbe ogni evento
 // esistente come nuovo al prossimo upsert, duplicando l'intero dataset.
 //
-// `schedule` e' informativo in questa fase: nessun codice lo legge o lo esegue ancora,
-// sara' consumato dalla Fase 14.
+// L'orario NON e' piu' un campo di questa entry (Fase 14, D-10): si e' spostato su
+// REGION_SCHEDULES qui sotto, perche' l'unita' schedulabile e' la regione, non la
+// sorgente — vedi il commento su REGION_SCHEDULES per il perche'.
 export const SOURCE_REGISTRY: SourceRegistryEntry[] = [
   {
     id: 'solosagre',
     region: 'lombardia',
     type: 'html',
     url: 'https://www.solosagre.it/sagre/lombardia/',
-    schedule: '0 */4 * * *',
     scrape: scrapeSoloSagre,
     trustRank: 3,
     categoryMap: {
@@ -79,7 +78,6 @@ export const SOURCE_REGISTRY: SourceRegistryEntry[] = [
     region: 'lombardia',
     type: 'json',
     url: 'https://www.dati.lombardia.it/resource/hs8z-dcey.json',
-    schedule: '0 */4 * * *',
     scrape: scrapeOpenData,
     trustRank: 2,
     categoryMap: {
@@ -92,7 +90,6 @@ export const SOURCE_REGISTRY: SourceRegistryEntry[] = [
     region: 'lombardia',
     type: 'html',
     url: 'https://www.in-lombardia.it/eventi',
-    schedule: '0 */4 * * *',
     scrape: scrapeInLombardia,
     trustRank: 1,
     categoryMap: {
@@ -114,6 +111,43 @@ export const SOURCE_REGISTRY: SourceRegistryEntry[] = [
     }
   }
 ]
+
+/**
+ * Orario per regione (Fase 14, D-09/D-10/D-11): l'unita' schedulabile e' la
+ * regione, non la sorgente — e' quello che il trigger accetta (D-01,
+ * `?region=` su `/api/cron/scrape`). Tre sorgenti lombarde con tre orari
+ * identici scritti a mano sarebbero tre occasioni di divergere per niente;
+ * una sola voce per regione qui e' l'unica fonte di verita' letta da
+ * `scripts/generate-crontab.ts` (D-09) — nessuno schedule va scritto a mano
+ * altrove.
+ *
+ * Struttura piatta (Record<string, string>) e non un'entita' con piu' campi:
+ * a N=1 non c'e' nulla da modellare, e la Fase 15 la estendera' se e quando
+ * servira' davvero.
+ *
+ * La frequenza si giustifica con un numero misurato, mai con una stima
+ * (D-11): in-lombardia.it costa **>=53 minuti misurati** (limite inferiore,
+ * probabilmente oltre un'ora — 08-05-SUMMARY.md), quindi la Lombardia non
+ * entra in una finestra da 4 ore ripetuta sei volte al giorno e passa a una
+ * cadenza giornaliera. Il minuto di partenza (17, non 0) e' deliberatamente
+ * non tondo: e' la prima voce di uno scaglionamento che alla Fase 15
+ * diventera' venti voci a minuti di distanza, e partire da uno slot gia'
+ * spostato evita che le regioni future si accalchino tutte sul minuto zero.
+ *
+ * La sostenibilita' e' aritmetica: 24h / 20 regioni = 72 minuti di slot,
+ * che copre anche la regione piu' lenta misurata. Le regioni leggere (solo
+ * l'adattatore SoloSagre generalizzato, costo in secondi) restano ogni 4h
+ * quando la Fase 15 le aggiungera' — non tutte le regioni hanno bisogno
+ * della stessa cadenza solo perche' ora e' una proprieta' della regione.
+ *
+ * Ogni regione presente in `SOURCE_REGISTRY` DEVE avere una voce qui:
+ * `scripts/generate-crontab.ts` fallisce rumorosamente se manca, mai un
+ * crontab con una riga silenziosamente omessa (mitigazione della
+ * prohibition di transparency di 14-04-PLAN.md).
+ */
+export const REGION_SCHEDULES: Record<string, string> = {
+  lombardia: '17 3 * * *'
+}
 
 export function getSourceById(id: string): SourceRegistryEntry | undefined {
   return SOURCE_REGISTRY.find(entry => entry.id === id)
