@@ -1056,17 +1056,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				// pannello desktop resta aperto (T-17-09).
 				inert={navPanelOpen}
 			>
-				{/* pt-0 e NON pt-3: lo spazio sopra le chip ha due contributi, non
-				    uno. <main> e' posizionato a top=navHeight, e navHeight e'
-				    rect.bottom del <nav> — quindi il padding inferiore della navbar e'
-				    gia' spazio visibile prima che questo contenitore cominci. La prima
-				    correzione (2026-09-10) mise pt-3 credendo di essere l'unico
-				    proprietario del gap: risultato 16 (navbar) + 12 (qui) = 28px sopra
-				    contro 12 sotto, rapporto 2,33:1, che l'utente ha rivisto sul
-				    proprio iPhone. Ora il gap lo possiede solo la navbar (pb-3 = 12px)
-				    e qui non se ne aggiunge altro. pb-4 resta: e' il fondo dell'intera
-				    colonna dopo la paginazione, non ha a che vedere con le chip. */}
-				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-0 pb-4 h-full flex flex-col gap-3">
+				{/* pt-0 a mobile, lg:pt-3 a desktop — e il perche' della differenza e'
+				    una riga di 1px. Il padding inferiore della navbar puo' fare da gap
+				    sopra le chip SOLO se sotto di esso non c'e' nulla di disegnato: a
+				    mobile e' cosi' (pillola flottante, sfondo trasparente) e li' il
+				    gap lo possiede la navbar con pb-3, come stabilito il 2026-09-11.
+				    Da lg in su pero' .topbar-desktop ha border-bottom 1px
+				    (app/globals.css): quel padding sta SOPRA la linea, non sotto, e
+				    quindi non separa niente dalle chip — con pt-0 le chip finivano
+				    incollate alla linea di separazione. Sotto la linea il gap non ha
+				    piu' un proprietario nella navbar, quindi torna qui, e vale 12px
+				    come il gap-3 che separa le chip dalla riga successiva. pb-4 resta:
+				    e' il fondo dell'intera colonna dopo la paginazione. */}
+				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-0 lg:pt-3 pb-4 h-full flex flex-col gap-3">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
@@ -1302,9 +1304,17 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						    AnimatePresence (!loading, events.length>0), replicata qui
 						    perche' il piede non ne fa piu' parte. Il piede "carica
 						    altri" mobile (D-07/D-23) resta dentro lo scroller,
-						    lg:hidden, invariato. */}
+						    lg:hidden, invariato.
+
+						    Spaziatura del piede: pt-3/pb-0, non pt-4/pb-8. Sotto, il gap
+						    aveva due proprietari — il pb-8 di qui (32px) piu' il pb-4 del
+						    contenitore di colonna (16px), 48px totali sotto la
+						    paginazione. Il contenitore e' l'unico dei due che sa dove
+						    finisce la colonna, quindi il fondo resta suo e qui va a zero.
+						    Sopra, pt-4 era l'unico valore della pagina fuori dal ritmo da
+						    12px (gap-3) usato fra chip e lista: allineato a pt-3. */}
 						{!loading && events.length > 0 && (
-							<div className="hidden lg:flex lg:flex-col lg:shrink-0 lg:items-center lg:gap-3 lg:pb-8 lg:pt-4">
+							<div className="hidden lg:flex lg:flex-col lg:shrink-0 lg:items-center lg:gap-3 lg:pb-0 lg:pt-3">
 								{pageError && (
 									<div className="flex items-center gap-3 text-sm text-muted-foreground">
 										<span>Non è stato possibile caricare questa pagina.</span>
