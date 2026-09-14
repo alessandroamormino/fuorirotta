@@ -3,8 +3,9 @@
  * D-14).
  *
  * Legge l'anagrafica comuni una sola volta, costruisce l'indice di matching con
- * `buildComuneIndex()` e scorre tutti gli `Event` in batch da 5 (stesso vincolo
- * di connection pool documentato in `lib/scrapers/utils.ts:163-165`, limite 9).
+ * `buildComuneIndex()` e scorre tutti gli `Event` in batch da `PRISMA_BATCH_SIZE`
+ * (lib/scrapers/connectionLimit.ts, D-16: derivata dal `connection_limit` reale
+ * della `DATABASE_URL`, non piu' un numero scritto a mano qui).
  * Scrive solo dove il valore risolto differisce da quello gia' presente: una
  * `update()` incondizionata toccherebbe `Event.updatedAt` (`@updatedAt`) anche
  * a parita' di valori, e la seconda esecuzione non sarebbe piu' un no-op
@@ -25,6 +26,7 @@
 import { prisma } from '../prisma'
 import { buildComuneIndex, resolveComune, type ComuneRow, type MatchStep } from './resolve'
 import { updateClusterCache } from '../clusterCache'
+import { PRISMA_BATCH_SIZE } from '../scrapers/connectionLimit'
 import type { Prisma } from '@prisma/client'
 
 export type BackfillReport = {
@@ -40,8 +42,6 @@ export type BackfillReport = {
   // implausibile (D-11) e sostituita dal centroide.
   implausibleReplaced: number
 }
-
-const BATCH_SIZE = 5
 
 function toNumberOrNull(value: Prisma.Decimal | null): number | null {
   return value === null ? null : value.toNumber()
@@ -107,8 +107,8 @@ export async function backfillEvents(): Promise<BackfillReport> {
   // vedi commento header).
   const unresolvedCounts = new Map<string, number>()
 
-  for (let i = 0; i < events.length; i += BATCH_SIZE) {
-    const batch = events.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < events.length; i += PRISMA_BATCH_SIZE) {
+    const batch = events.slice(i, i + PRISMA_BATCH_SIZE)
     const results = await Promise.allSettled(
       batch.map(async event => {
         const resolved = resolveComune(

@@ -27,6 +27,7 @@ import { prisma } from '../prisma'
 import { updateClusterCache } from '../clusterCache'
 import { normalizeTitle } from './normalizeTitle'
 import { MAX_BUCKET_SIZE, TITLE_SIMILARITY_THRESHOLD } from './config'
+import { PRISMA_BATCH_SIZE } from '../scrapers/connectionLimit'
 
 export type MatchInput = {
   id: number
@@ -54,8 +55,6 @@ export type DedupReport = {
   byReason: Record<string, number>
   clusterFeatureCount: number
 }
-
-const BATCH_SIZE = 5 // stesso vincolo di connection pool documentato in lib/scrapers/utils.ts (limite 9)
 
 function dayUTC(date: Date): string {
   // UTC, non ora locale del processo (D-06): il Postgres locale gira in UTC e
@@ -330,10 +329,10 @@ export async function dedupeEvents(): Promise<DedupReport> {
   report.groups = membersPerRoot.size
   report.merged = [...membersPerRoot.values()].reduce((sum, n) => sum + n, 0)
 
-  // 6. Scrittura in batch da 5, solo sul diff: nessuna colonna di sorgente
-  // compare mai in `data`.
-  for (let i = 0; i < events.length; i += BATCH_SIZE) {
-    const batch = events.slice(i, i + BATCH_SIZE)
+  // 6. Scrittura in batch da PRISMA_BATCH_SIZE (D-16, lib/scrapers/connectionLimit.ts),
+  // solo sul diff: nessuna colonna di sorgente compare mai in `data`.
+  for (let i = 0; i < events.length; i += PRISMA_BATCH_SIZE) {
+    const batch = events.slice(i, i + PRISMA_BATCH_SIZE)
     const results = await Promise.allSettled(
       batch.map(async event => {
         const target = targets.get(event.id)!

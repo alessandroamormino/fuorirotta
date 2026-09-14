@@ -10,6 +10,7 @@
 import type { ScrapeResult, ScrapedEvent } from './types'
 import { prisma } from '../prisma'
 import { canonicalizeCategory } from '../categories/taxonomy'
+import { PRISMA_BATCH_SIZE } from './connectionLimit'
 
 interface FetchWithRetryOptions extends RequestInit {
   retries?: number
@@ -163,10 +164,11 @@ export async function saveEvents(
 
     // Process in small batches to avoid exhausting the connection pool.
     // Firing all upserts concurrently (Promise.allSettled over 2000 items)
-    // saturates the pool (limit: 9) and causes P2024 timeout errors.
-    const batchSize = 5
-    for (let i = 0; i < events.length; i += batchSize) {
-      const batch = events.slice(i, i + batchSize)
+    // saturates the pool and causes P2024 timeout errors. PRISMA_BATCH_SIZE
+    // (lib/scrapers/connectionLimit.ts, D-16) e' derivata dal connection_limit
+    // reale della DATABASE_URL, non piu' un numero scritto a mano qui.
+    for (let i = 0; i < events.length; i += PRISMA_BATCH_SIZE) {
+      const batch = events.slice(i, i + PRISMA_BATCH_SIZE)
 
       const results = await Promise.allSettled(
         batch.map(event => {
