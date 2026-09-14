@@ -131,13 +131,50 @@ server {
 
 ### Automated Scraping via Crontab
 
-Add to the server crontab (`crontab -e`):
+The crontab is no longer a single hand-written line: it is the output of `scripts/generate-crontab.ts`, which reads `REGION_SCHEDULES` from `lib/scrapers/registry.ts` (Phase 14, D-09). Adding a region to the registry means one file to touch; the crontab lines that region needs are regenerated, not hand-edited.
 
-```cron
-0 */4 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh >> /var/log/fuorirotta-cron.log 2>&1
+**1. Generate the lines, inside the container.** The generator is TypeScript living in the repo/image — it needs `node_modules`, which only exists inside the built container. The host checkout only ever runs `git pull` and `docker build`, nothing with `node_modules`:
+
+```bash
+docker compose exec -T fuorirotta-frontend npx tsx scripts/generate-crontab.ts
 ```
 
-This runs at 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC. Note that **the crontab line no longer carries any secret** — `scripts/cron-scrape.sh` reads `CRON_SECRET` from the same `.env` the container uses. This closes off the failure mode where the token in the crontab and the token in `.env` silently drift apart: rotating the secret now means editing exactly one file.
+Install the printed output with `crontab -e`, replacing whatever crontab is currently installed. Example output at the time of writing (one region, Lombardy, plus the consolidated maintenance job):
+
+```cron
+CRON_TZ=Europe/Rome
+
+17 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh lombardia >> /var/log/fuorirotta-cron.log 2>&1
+30 5 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
+```
+
+`CRON_TZ=Europe/Rome` on its own line at the top applies to every line below it — Vixie cron / cronie support this, BusyBox cron does not (see the one-time verification note below). This closes **IN-02**, an item left open (info severity, never fixed) by the Phase 5 code review: the crontab's timezone was never pinned before this.
+
+**2. Replacing the line is MANDATORY in the same deploy that ships this phase.** Since Phase 14, `/api/cron/scrape` requires `?region=` and answers `400` without it (D-01). A crontab left on the old unscoped line — or simply forgotten during a deploy — does not fail silently: it fails loudly, with a `400` in `/var/log/fuorirotta-cron.log` and a missed dead man's switch ping. That is the intended behavior, not a risk to work around: a scrape that silently stopped running would be far worse than one that visibly errors on every invocation until the crontab is fixed.
+
+**3. The consolidated maintenance job needs a SECOND dead man's switch.** `scripts/cron-maintenance.sh` (territorial backfill + dedup + cluster cache, Phase 14 D-05/D-06) pings `HEALTHCHECK_MAINTENANCE_URL`, read from the host `.env` exactly like `HEALTHCHECK_URL` is — but it is a **distinct** variable, on a **daily** period, because the maintenance job itself runs once a day (unlike the per-region scrape, which may run more or less often depending on `REGION_SCHEDULES`). Configure a second check in whatever dead man's switch service already backs `HEALTHCHECK_URL`, and add `HEALTHCHECK_MAINTENANCE_URL=...` to `.env` on the host.
+
+**4. Detect drift between the registry and what is actually installed.** This is a manual, two-step procedure to run after any deploy that touches the registry — never an `npm test` gate, because it requires a real crontab installed on a real host, unlike every other gate in this project (`scripts/crontab-generate.test.sh` itself is fully self-contained and needs neither):
+
+```bash
+# On the host:
+crontab -l > /tmp/installed-crontab.txt
+
+# Then, from the same host:
+docker compose exec -T fuorirotta-frontend npx tsx scripts/generate-crontab.ts --check /dev/stdin < /tmp/installed-crontab.txt
+```
+
+Exits `0` and prints `OK: crontab installato combacia col registry` when they match; exits `1` and prints both versions when they diverge. A region added to the registry and never scheduled, or a stale line left behind after a region is removed, is exactly the kind of divergence this catches — it must not be able to sit unnoticed for months.
+
+**5. One-time host verification (not automatable, not yet done).** Confirm the cron actually installed on the Hetzner host supports `CRON_TZ`:
+
+```bash
+man 5 crontab
+```
+
+Vixie cron and cronie (the Debian/Ubuntu defaults, the likely OS here) support it; BusyBox cron does not. This is Assumption A2 from `14-RESEARCH.md`, never verified against the real host — if the host's cron does not support `CRON_TZ`, the generated lines are silently interpreted in UTC despite declaring `Europe/Rome`.
+
+The crontab line still carries no secret — `scripts/cron-scrape.sh` reads `CRON_SECRET` from the same `.env` the container uses, so rotating the secret still means editing exactly one file.
 
 The script exits:
 - `0` — the endpoint answered with a 2xx status.
