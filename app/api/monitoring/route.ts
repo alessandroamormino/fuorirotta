@@ -36,9 +36,35 @@ export async function GET() {
       })
     )
 
+    // Job di manutenzione consolidato (D-06, 14-03): stessa tabella
+    // scrape_runs, source='maintenance'/region='all', stessa funzione pura
+    // computeSourceHealth — lib/scrapers/health.ts NON viene toccata, e'
+    // gia' generica su qualunque coppia (source, region).
+    const maintenanceRuns = await prisma.scrapeRun.findMany({
+      where: { source: 'maintenance', region: 'all' },
+      orderBy: { startedAt: 'desc' },
+      take: HEALTH_WINDOW_SIZE + 1
+    })
+
+    const maintenanceHealth: SourceHealth | null =
+      maintenanceRuns.length === 0
+        ? null
+        : computeSourceHealth(
+            'maintenance',
+            'all',
+            maintenanceRuns.map(run => ({
+              startedAt: run.startedAt,
+              eventCount: run.eventCount,
+              durationMs: run.durationMs,
+              error: run.error
+            }))
+          )
+
+    const allSources = [...sources, maintenanceHealth]
+
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
-      sources: sources.filter((source): source is SourceHealth => source !== null)
+      sources: allSources.filter((source): source is SourceHealth => source !== null)
     })
   } catch (error) {
     // Il messaggio dell'eccezione resta solo nei log: puo' contenere l'URL di connessione

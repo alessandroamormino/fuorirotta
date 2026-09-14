@@ -372,22 +372,30 @@ else
   fi
 fi
 
-# --- Sezione 9 (D-15) — il runner chiama il backfill dopo saveEvents ----------------------
+# --- Sezione 9 (D-15, riaggiornata da 14-03/D-05) — il job consolidato chiama il backfill ---
 # Gate durevole contro la rimozione accidentale della chiamata: verifica che in
-# lib/scrapers/runner.ts esista almeno una riga DI CODICE che invoca
+# scripts/maintenance-job.ts esista almeno una riga DI CODICE che invoca
 # backfillEvents(), escludendo le righe di commento (// * /*) prima di
 # contare — altrimenti un commento che nomina la funzione basterebbe a far
 # passare il gate, e un controllo che si accontenta di una parola scritta in
 # un commento non controlla niente.
-runner_file="${repo_root}/lib/scrapers/runner.ts"
-if [[ ! -f "${runner_file}" ]]; then
-  fail "D-15: ${runner_file} non esiste"
+#
+# AGGIORNATO da 14-03 (D-05): backfillEvents() e' uscita da
+# lib/scrapers/runner.ts ed e' diventata un job consolidato giornaliero
+# (scripts/maintenance-job.ts) — la garanzia "una regressione si vede
+# subito" originale di questa sezione (D-15 Fase 6) e' sostituita, non
+# abbandonata: D-06 la rimpiazza con una riga scrape_runs
+# source='maintenance' e un secondo dead man's switch esterno. Il controllo
+# di NON regressione resta identico nella forma, solo il file cambia.
+maintenance_file="${repo_root}/scripts/maintenance-job.ts"
+if [[ ! -f "${maintenance_file}" ]]; then
+  fail "D-15: ${maintenance_file} non esiste"
 else
-  code_calls="$(grep -v '^[[:space:]]*\(//\|\*\|/\*\)' "${runner_file}" | grep -c 'backfillEvents(' || true)"
+  code_calls="$(grep -v '^[[:space:]]*\(//\|\*\|/\*\)' "${maintenance_file}" | grep -c 'backfillEvents(' || true)"
   if [[ "${code_calls}" -lt 1 ]]; then
-    fail "D-15: nessuna riga di codice in lib/scrapers/runner.ts invoca backfillEvents() — senza quella chiamata ogni scrape futuro crea eventi che nessuno aggancia"
+    fail "D-15: nessuna riga di codice in scripts/maintenance-job.ts invoca backfillEvents() — senza quella chiamata il job consolidato crea eventi che nessuno aggancia"
   else
-    ok "D-15: lib/scrapers/runner.ts contiene almeno una chiamata a backfillEvents() in codice (non in commento)"
+    ok "D-15: scripts/maintenance-job.ts contiene almeno una chiamata a backfillEvents() in codice (non in commento)"
   fi
 fi
 

@@ -106,6 +106,25 @@ node -e "
 " || fail "coerenza anomaly/status violata su almeno un elemento di sources"
 echo "ok  ogni elemento di sources ha anomaly=null esattamente quando status=insufficient_history"
 
+# --- 4.5. Il job di manutenzione consolidato compare in sources (D-06, 14-03) -----------------
+# Nessuna scrittura qui (T-08-12 resta valido): si limita a leggere di nuovo la stessa risposta
+# gia' ottenuta al passo 3 e a verificare che, se almeno una riga scrape_runs con
+# source='maintenance' esiste gia' sul database locale (il job consolidato l'ha scritta
+# eseguendo `npm run maintenance:local`), la route la espone come elemento di `sources` con
+# source === 'maintenance'. Se nessuna riga 'maintenance' esiste ancora, questa sezione e' un
+# no-op dichiarato (stessa semantica "coppia senza esecuzioni -> omessa", non un fallimento).
+maintenance_present="$(docker exec fuorirotta-postgres-dev psql -U fuorirotta -d fuorirotta_dev -tAc "SELECT count(*) FROM scrape_runs WHERE source = 'maintenance';" 2>/dev/null | tr -d '[:space:]')"
+if [[ "${maintenance_present}" != "0" ]]; then
+  node -e "
+    const body = require('${response_ok}');
+    const found = body.sources.some((s) => s.source === 'maintenance');
+    if (!found) throw new Error('nessun elemento di sources con source===\"maintenance\" nonostante ' + '${maintenance_present}' + ' righe scrape_runs source=maintenance sul database');
+  " || fail "4.5: GET /api/monitoring non espone il job di manutenzione consolidato (D-06)"
+  echo "ok  GET /api/monitoring espone un elemento di sources con source==='maintenance' (${maintenance_present} righe scrape_runs sul database, D-06)"
+else
+  echo "ok  4.5 saltata: nessuna riga scrape_runs source='maintenance' ancora sul database locale (eseguire 'npm run maintenance:local' per esercitarla)"
+fi
+
 stop_server
 
 # --- 5. Endpoint a database irraggiungibile: 500, corpo senza dettagli del driver ------------

@@ -264,19 +264,24 @@ else
   fi
 fi
 
-# --- Sezione 9 (D-03) — aggancio al runner ---------------------------------------------------
+# --- Sezione 9 (D-03, riaggiornata da 14-03/D-05) — aggancio al job consolidato --------------
 # Escludere le righe di commento prima di contare — una parola scritta dentro un
 # commento non e' una chiamata (stesso idioma della sezione D-15 dell'analogo
 # territoriale).
-runner_file="${repo_root}/lib/scrapers/runner.ts"
-if [[ ! -f "${runner_file}" ]]; then
-  fail "S9: ${runner_file} non esiste"
+#
+# AGGIORNATO da 14-03 (D-05): dedupeEvents() e' uscita da
+# lib/scrapers/runner.ts ed e' diventata un job consolidato giornaliero
+# (scripts/maintenance-job.ts) — vedi la stessa nota nella Sezione 9 di
+# scripts/territorial-backfill.test.sh.
+maintenance_file="${repo_root}/scripts/maintenance-job.ts"
+if [[ ! -f "${maintenance_file}" ]]; then
+  fail "S9: ${maintenance_file} non esiste"
 else
-  code_calls="$(grep -v '^[[:space:]]*\(//\|\*\|/\*\)' "${runner_file}" | grep -c 'dedupeEvents(' || true)"
+  code_calls="$(grep -v '^[[:space:]]*\(//\|\*\|/\*\)' "${maintenance_file}" | grep -c 'dedupeEvents(' || true)"
   if [[ "${code_calls}" -lt 1 ]]; then
-    fail "S9: nessuna riga di codice in lib/scrapers/runner.ts invoca dedupeEvents() — senza quella chiamata ogni scrape futuro crea eventi che nessuno dedupica"
+    fail "S9: nessuna riga di codice in scripts/maintenance-job.ts invoca dedupeEvents() — senza quella chiamata il job consolidato crea eventi che nessuno dedupica"
   else
-    ok "S9: lib/scrapers/runner.ts contiene almeno una chiamata a dedupeEvents() in codice (non in commento)"
+    ok "S9: scripts/maintenance-job.ts contiene almeno una chiamata a dedupeEvents() in codice (non in commento)"
   fi
 fi
 
