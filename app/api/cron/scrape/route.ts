@@ -5,7 +5,6 @@ import {
   completeWorkflowExecution,
   failWorkflowExecution
 } from '@/lib/cacheService';
-import { updateClusterCache } from '@/lib/clusterCache';
 import { acquireRegionLock, releaseRegionLock } from '@/lib/scrapers/regionLock';
 
 /**
@@ -79,17 +78,13 @@ async function executeScrape(region: string) {
       // Mark execution as complete
       await completeWorkflowExecution(executionId, result.saved);
 
-      // Update map cluster cache with new event data
-      try {
-        await updateClusterCache();
-        console.log('[Cron] Cluster cache updated');
-      } catch (clusterError) {
-        console.error('[Cron] Failed to update cluster cache:', clusterError);
-        // Non-fatal: map will fall back to computing from events
-      }
-
       console.log(`[Cron] Scrape completed successfully for region "${region}"`);
 
+      // La cache dei cluster NON viene piu' ricalcolata qui (D-07, 14-03):
+      // e' l'ultimo passo del job consolidato giornaliero
+      // (scripts/maintenance-job.ts), dopo backfill territoriale e dedup —
+      // ricalcolarla anche a ogni scrape la mostrerebbe aggiornata prima
+      // che backfill/dedup abbiano risolto comune e duplicati.
       return {
         success: true,
         message: 'Cron scrape completed',
@@ -100,7 +95,6 @@ async function executeScrape(region: string) {
           skipped: result.skipped,
           total: result.total,
         },
-        clusterCacheUpdated: true,
         errors: result.errors.length > 0 ? result.errors : undefined
       };
     } catch (error) {

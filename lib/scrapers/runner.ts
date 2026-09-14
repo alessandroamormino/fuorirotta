@@ -13,8 +13,6 @@ import type { SourceRegistryEntry } from './registry'
 import { saveEvents, logMetrics } from './utils'
 import { truncateError } from './health'
 import { prisma } from '../prisma'
-import { backfillEvents } from '../territorial/backfill'
-import { dedupeEvents } from '../dedup/dedupe'
 import { acquireRegionLock, releaseRegionLock } from './regionLock'
 import type { ScrapeParams, ScrapeResult, RunResult } from './types'
 
@@ -62,9 +60,9 @@ export function groupSourcesByHost(entries: SourceRegistryEntry[]): SourceRegist
  * regione, raggruppa per host (D-02) ed esegue i gruppi in parallelo fra
  * loro e in sequenza dentro ogni gruppo. Non decide codici HTTP: se la
  * regione non ha sorgenti restituisce un RunResult a zero, ed e' la ROUTE a
- * rispondere 404 con getRegions() (D-03). Non chiama backfillEvents/
- * dedupeEvents/updateClusterCache: quella coda e' del job consolidato
- * separato (D-05/D-06/D-07, 14-03), non di questa funzione.
+ * rispondere 404 con getRegions() (D-03). Non esegue la coda di aggancio
+ * territoriale/deduplica/cache dei cluster: quella coda e' del job
+ * consolidato separato (D-05/D-06/D-07, 14-03), non di questa funzione.
  *
  * @param region - Slug di regione (D-04), gia' validato dal chiamante
  * @param params - Optional date range parameters
@@ -128,11 +126,15 @@ export async function runRegion(region: string, params?: ScrapeParams): Promise<
 /**
  * Run all scrapers concurrently and save to database
  *
- * Resta come funzione di libreria per la CLI locale (`npx tsx runner.ts`
- * senza `--region`) ma smette di essere esportata dal barrel `lib/scrapers`
- * (14-01): nessuna route HTTP puo' piu' raggiungerla. La sua cancellazione
- * definitiva, insieme alla coda backfill/dedup che porta dietro, avviene in
- * 14-03 quando quella coda avra' una nuova casa nel job consolidato.
+ * Smette di essere esportata dal barrel `lib/scrapers` (14-01) e di essere
+ * raggiungibile dal ramo CLI senza argomenti (14-03: quel ramo e' ora un
+ * ciclo su `getRegions()`/`runRegion` piu' sotto). L'unico chiamante rimasto
+ * e' `app/api/events/route.ts` (refresh da traffico, D-08), che resta
+ * esplicitamente aperto fino alla 14-05 — vedi 14-01-SUMMARY.md e le sezioni
+ * S6/S7 di `scripts/region-scoping.test.sh`, che gia' documentano e
+ * verificano questa esenzione. Non esegue piu' l'aggancio territoriale ne'
+ * la deduplica cross-sorgente (D-05): quella coda vive ora nel job
+ * consolidato `scripts/maintenance-job.ts`.
  *
  * @param params - Optional date range parameters
  * @returns RunResult with saved, skipped, total counts and errors
@@ -188,39 +190,14 @@ export async function runAllScrapers(params?: ScrapeParams): Promise<RunResult> 
 
     console.log(`[Scraper] Done. ${saved} new events saved to database.`)
 
-    // Aggancio territoriale in coda a ogni scrape (D-15).
-    // Perche' qui e non dentro saveEvents: l'aggancio esiste in una sola
-    // implementazione al mondo (la cascata di lib/territorial/), esercitata a
-    // ogni scrape invece che una volta sola — una regressione del matching si
-    // vede subito, invece di restare latente fino al prossimo backfill manuale.
-    // Perche' l'errore propaga, a differenza di recordScrapeRuns qui sopra:
-    // quando questa chiamata parte gli eventi sono gia' persistiti, quindi
-    // propagare non perde niente; inghiottire l'errore ricreerebbe esattamente
-    // lo scenario che D-15 esiste per impedire — eventi che si accumulano
-    // senza comune mentre tutto sembra funzionare. La finestra di incoerenza
-    // dichiarata sono i millisecondi fra le due chiamate.
-    // Costo basso per costruzione (D-08): il backfill ripassa su tutti gli
-    // eventi ma scrive solo dove il valore differisce, quindi a dati fermi
-    // scrive quasi niente.
-    const backfillReport = await backfillEvents()
-    console.log(
-      `[Scraper] Backfill territoriale: ${backfillReport.updated} agganciati/aggiornati, ${backfillReport.unchanged} invariati su ${backfillReport.scanned} eventi (no_input: ${backfillReport.byStep.no_input}).`
-    )
-
-    // Deduplica cross-sorgente in coda al backfill territoriale (D-03, Fase 10).
-    // Perche' qui e dopo il backfill: il match usa comuneId, che e' il backfill
-    // ad assegnare — dedup prima del backfill vedrebbe ogni riga senza comune
-    // ancora risolto e le classificherebbe tutte 'no_geo'.
-    // Perche' l'errore propaga, per la stessa ragione gia' scritta sopra per il
-    // backfill territoriale (decisione D-15 della Fase 6, da non confondere con
-    // la D-15 di questa fase, che riguarda il percorso di dettaglio): quando la
-    // chiamata parte gli eventi sono gia' persistiti, quindi propagare non perde
-    // niente, mentre inghiottirlo lascerebbe accumulare duplicati mentre tutto
-    // sembra funzionare.
-    const dedupReport = await dedupeEvents()
-    console.log(
-      `[Scraper] Dedup: ${dedupReport.groups} gruppi, ${dedupReport.merged} righe fuse, ${dedupReport.updated} scritture, ${dedupReport.unchanged} invariate su ${dedupReport.scanned} eventi (noGeo: ${dedupReport.noGeo}).`
-    )
+    // Aggancio territoriale e dedup NON girano piu' qui (D-05, 14-03): sono
+    // usciti da questa funzione e sono ora un job consolidato giornaliero,
+    // scripts/maintenance-job.ts — a venti regioni una coda per-scrape
+    // moltiplicherebbe per venti la stessa passata whole-table (SCHED-02). Le
+    // motivazioni originali di ordine e propagazione dell'errore (D-15 Fase
+    // 6, D-03 Fase 10) sono spostate li', con la sostituzione D-06 (riga
+    // scrape_runs + secondo dead man's switch) che rimpiazza la garanzia
+    // "una regressione si vede subito" che questa coda dava stando qui.
 
     return {
       saved,
@@ -321,7 +298,24 @@ if (require.main === module) {
         console.log('[Scraper] No events found.')
       }
     } else {
-      await runAllScrapers(params)
+      // Nessun argomento: scrape sequenziale di tutte le regioni dichiarate
+      // nel registry (14-03), non piu' runAllScrapers() — quel ramo non
+      // aveva ne' lock ne' scoping per regione. Stessa coppia acquireRegion-
+      // Lock/releaseRegionLock del ramo --region sopra (D-13): una regione
+      // gia' occupata (es. da un trigger cron in corso) viene saltata, non
+      // interrompe il ciclo sulle altre.
+      for (const region of getRegions()) {
+        console.log(`[Scraper] Running region: ${region}`)
+        if (!(await acquireRegionLock(region))) {
+          console.error(`[Scraper] Scrape gia' in corso per la regione "${region}", salto.`)
+          continue
+        }
+        try {
+          await runRegion(region, params)
+        } finally {
+          await releaseRegionLock(region)
+        }
+      }
     }
     await prisma.$disconnect()
   }
