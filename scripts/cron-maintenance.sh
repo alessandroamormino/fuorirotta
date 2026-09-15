@@ -7,20 +7,21 @@
 # route da autenticare, quindi non legge il segreto del cron ne'
 # NEXT_PUBLIC_APP_URL.
 #
-# DEVIAZIONE da 14-03-PLAN.md (documentata in 14-03-SUMMARY.md, Rule 4):
-# il piano prescriveva `docker compose exec -T <servizio> npx tsx
-# scripts/maintenance-job.ts`, eseguendo il job DENTRO il container. Lo
-# stage finale del Dockerfile ("runner") copia solo .next/standalone,
-# .next/static, node_modules/.prisma e prisma/ — non scripts/ ne' lib/ ne'
-# le devDependencies che tsx richiede per importare TypeScript grezzo: quel
-# comando fallirebbe subito con "file non trovato". Il progetto ha gia' la
-# regola "script fuori dall'immagine" per le operazioni di manutenzione sul
-# database (vedi DEPLOYMENT.md §Migrations, `npx prisma migrate deploy`
-# gira sul checkout host, mai dentro il container). Questo script segue la
-# stessa regola: esegue npx tsx direttamente sul checkout host (lo stesso
-# git checkout da cui gira `docker compose`, DEPLOYMENT.md
-# §"Architecture Overview"), leggendo DATABASE_URL dallo stesso .env che
-# la Fase 5/8 gia' usa per il container, invece che via docker exec.
+# DOVE gira il job: dentro node:20-alpine col checkout montato, non sull'host
+# e non dentro l'immagine dell'app. Le tre opzioni e perche' restano due:
+#   - immagine dell'app: lo stage "runner" del Dockerfile copia solo
+#     .next/standalone, .next/static, node_modules/.prisma e prisma/ — niente
+#     scripts/ ne' lib/ ne' tsx. Il comando fallirebbe subito (14-03).
+#   - checkout host: e' quello che 14-03 aveva scelto, e in produzione ha
+#     fallito due volte il 2026-09-15 — prima con "File is not defined"
+#     (host Node 18.19.1, undici@7 vuole Node 20), poi, risolto quello, con
+#     "could not locate the Query Engine for runtime debian-openssl-3.0.x"
+#     (l'engine sul disco e' musl, generato dentro l'immagine; l'host e'
+#     Debian). La seconda non si risolve aggiornando Node: e' la libc.
+#   - container node:20-alpine col checkout montato: Node 20 e libc musl,
+#     cioe' esattamente l'ambiente per cui node_modules e' stato costruito.
+#     E' anche la regola gia' in uso nel progetto per gli script di
+#     manutenzione sul database (DEPLOYMENT.md).
 #
 # Legge DATABASE_URL e HEALTHCHECK_MAINTENANCE_URL da .env (rimuovendo
 # eventuali apici e commenti inline, stesso parsing di cron-scrape.sh —
@@ -71,7 +72,31 @@ fi
 
 timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-if (cd "${root_dir}" && DATABASE_URL="${database_url}" npx tsx scripts/maintenance-job.ts); then
+# Il job Node gira DENTRO node:20-alpine col checkout montato, non sull'host.
+# Due ragioni, entrambe misurate sull'host reale il 2026-09-15:
+#
+#  1. node_modules/.prisma/client contiene il query engine per
+#     linux-musl-openssl-3.0.x (generato dentro l'immagine, che e'
+#     node:20-alpine). L'host e' Debian: eseguire qui il job fallisce con
+#     "Prisma Client could not locate the Query Engine for runtime
+#     debian-openssl-3.0.x". Aggiungere un secondo binaryTarget significherebbe
+#     tenere due engine in sync per sempre; usare il container usa l'engine che
+#     e' gia' sul disco, quello giusto.
+#  2. L'host gira Node 18.19.1, l'immagine node:20. Diverse dipendenze
+#     richiedono >= 20.
+#
+# E' anche la regola gia' in uso nel progetto per gli script di manutenzione
+# ("stanno fuori dall'immagine, girano in un container a parte col checkout
+# montato" — DEPLOYMENT.md). 14-03 se n'era discostato facendo girare npx tsx
+# sull'host: funzionava in sviluppo e non in produzione.
+#
+# Il wrapper resta sull'host: legge .env, decide lo stato, pinga il dead man's
+# switch. Nel container entra solo la parte Node, con la sola DATABASE_URL.
+if docker run --rm \
+  -v "${root_dir}:/app" -w /app \
+  -e DATABASE_URL="${database_url}" \
+  node:20-alpine \
+  npx --yes tsx scripts/maintenance-job.ts; then
   status_word="ok"
 else
   status_word="FAILED"

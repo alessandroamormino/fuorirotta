@@ -37,11 +37,16 @@ const EXTS = ['.ts', '.tsx', '.js', '.mjs', '.cjs']
  * (DEPLOYMENT.md §Migrations e §"Automated Scraping via Crontab"), quindi
  * girano col Node dell'host.
  */
-const HOST_SCRIPTS = [
-  'scripts/generate-crontab.ts',
-  'scripts/maintenance-job.ts',
-  'scripts/n1-proof.ts',
-]
+const HOST_SCRIPTS = ['scripts/generate-crontab.ts']
+
+/**
+ * Script che girano DENTRO node:20-alpine col checkout montato
+ * (scripts/cron-maintenance.sh, e la procedura per n1-proof in DEPLOYMENT.md).
+ * Elencati qui per documentazione e per il controllo di completezza sotto: NON
+ * sono soggetti ai vincoli di HOST_SCRIPTS, perche' nel container il Node e' 20
+ * e l'engine Prisma sul disco (musl) e' quello giusto.
+ */
+const CONTAINER_SCRIPTS = ['scripts/maintenance-job.ts', 'scripts/n1-proof.ts']
 
 /**
  * Pacchetti che richiedono Node >= 20 e non possono comparire nella chiusura
@@ -49,6 +54,17 @@ const HOST_SCRIPTS = [
  * perche' e' la porta d'ingresso reale: nessuno importa undici direttamente.
  */
 const FORBIDDEN = ['undici', 'cheerio']
+
+/**
+ * Prisma e' proibito negli script host per una ragione diversa dalla versione
+ * di Node, scoperta sull'host il 2026-09-15: node_modules/.prisma/client
+ * contiene il query engine per linux-musl-openssl-3.0.x, generato dentro
+ * l'immagine (node:20-alpine). L'host e' Debian, e un import di Prisma li'
+ * fallisce con "could not locate the Query Engine for runtime
+ * debian-openssl-3.0.x". Non e' risolvibile aggiornando Node: e' la libc.
+ * Chi tocca il database gira nel container, punto.
+ */
+const FORBIDDEN_ON_HOST_MODULES = ['lib/prisma.ts']
 
 function resolveImport(specifier: string, fromFile: string): { file?: string; pkg?: string } | null {
   let base: string
@@ -104,30 +120,66 @@ function pathToForbidden(entry: string): string[] | null {
 }
 
 let failed = false
+
+/** Cammino piu' corto dall'entry a un modulo interno proibito, o null. */
+function pathToForbiddenModule(entry: string): string[] | null {
+  const seen = new Set([entry])
+  const queue: [string, string[]][] = [[entry, [entry]]]
+  while (queue.length) {
+    const [file, path] = queue.shift()!
+    for (const spec of importsOf(file)) {
+      const r = resolveImport(spec, file)
+      if (!r || r.pkg) continue
+      const relPath = rel(r.file!)
+      if (FORBIDDEN_ON_HOST_MODULES.includes(relPath)) return [...path.map(rel), relPath]
+      if (seen.has(r.file!)) continue
+      seen.add(r.file!)
+      queue.push([r.file!, [...path, r.file!]])
+    }
+  }
+  return null
+}
+
+for (const script of [...HOST_SCRIPTS, ...CONTAINER_SCRIPTS]) {
+  if (!existsSync(join(ROOT, script))) {
+    console.error(`FAIL: ${script} non esiste — gli elenchi in questo gate sono fuori sincrono col repo`)
+    failed = true
+  }
+}
+
 for (const script of HOST_SCRIPTS) {
   const entry = join(ROOT, script)
-  if (!existsSync(entry)) {
-    console.error(`FAIL: ${script} non esiste — l'elenco HOST_SCRIPTS e' fuori sincrono col repo`)
+  if (!existsSync(entry)) continue
+  const pkgChain = pathToForbidden(entry)
+  const modChain = pathToForbiddenModule(entry)
+  if (pkgChain) {
+    console.error(`FAIL: ${script} gira sull'host e raggiunge un pacchetto che richiede Node >= 20`)
+    console.error(`  catena: ${pkgChain.join(' -> ')}`)
     failed = true
-    continue
   }
-  const chain = pathToForbidden(entry)
-  if (chain) {
-    console.error(`FAIL: ${script} raggiunge un pacchetto che richiede Node >= 20`)
-    console.error(`  catena: ${chain.join(' -> ')}`)
+  if (modChain) {
+    console.error(`FAIL: ${script} gira sull'host e raggiunge Prisma (engine musl sul disco, host Debian)`)
+    console.error(`  catena: ${modChain.join(' -> ')}`)
     failed = true
-  } else {
-    console.log(`ok  ${script}`)
   }
+  if (!pkgChain && !modChain) console.log(`ok  ${script} (host)`)
+}
+
+for (const script of CONTAINER_SCRIPTS) {
+  console.log(`ok  ${script} (container node:20-alpine — nessun vincolo)`)
 }
 
 if (failed) {
   console.error('')
-  console.error("L'host di produzione gira Node 18.19.1 (l'immagine Docker e' node:20-alpine).")
-  console.error('I metadati delle sorgenti stanno in lib/scrapers/sources.ts, che non importa')
-  console.error('nulla di pesante: importa quello, non lib/scrapers/registry.ts, a meno che tu')
-  console.error('non debba davvero ESEGUIRE uno scrape.')
+  console.error("L'host gira Node 18.19.1 e Debian; l'immagine e' node:20-alpine e l'engine")
+  console.error('Prisma sul disco e\' musl. Due vie d\'uscita:')
+  console.error('  - se lo script legge solo METADATI: importa lib/scrapers/sources.ts, che non')
+  console.error('    tira dentro ne\' scraper ne\' Prisma;')
+  console.error('  - se lo script tocca il DATABASE: spostalo in CONTAINER_SCRIPTS e invocalo')
+  console.error('    dentro node:20-alpine col checkout montato, come scripts/cron-maintenance.sh.')
   process.exit(1)
 }
 
-console.log(`PASS: ${HOST_SCRIPTS.length} script host, nessuna dipendenza che richieda Node >= 20`)
+console.log(
+  `PASS: ${HOST_SCRIPTS.length} script host puliti, ${CONTAINER_SCRIPTS.length} nel container`
+)
