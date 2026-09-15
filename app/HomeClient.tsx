@@ -1066,9 +1066,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				    quindi non separa niente dalle chip — con pt-0 le chip finivano
 				    incollate alla linea di separazione. Sotto la linea il gap non ha
 				    piu' un proprietario nella navbar, quindi torna qui, e vale 12px
-				    come il gap-3 che separa le chip dalla riga successiva. pb-4 resta:
-				    e' il fondo dell'intera colonna dopo la paginazione. */}
-				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-0 lg:pt-3 pb-4 h-full flex flex-col gap-3">
+				    come il gap-3 che separa le chip dalla riga successiva. pb-4 resta
+				    a mobile (fondo dell'intera colonna), ma a desktop scende a lg:pb-2:
+				    e' l'unico proprietario dello spazio sotto la paginazione da quando
+				    il piede e' andato a pb-0, e 16px erano troppi. */}
+				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-0 lg:pt-3 pb-4 lg:pb-2 h-full flex flex-col gap-3">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
@@ -1321,15 +1323,20 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 						    altri" mobile (D-07/D-23) resta dentro lo scroller,
 						    lg:hidden, invariato.
 
-						    Spaziatura del piede: pt-3/pb-0, non pt-4/pb-8. Sotto, il gap
-						    aveva due proprietari — il pb-8 di qui (32px) piu' il pb-4 del
-						    contenitore di colonna (16px), 48px totali sotto la
-						    paginazione. Il contenitore e' l'unico dei due che sa dove
-						    finisce la colonna, quindi il fondo resta suo e qui va a zero.
-						    Sopra, pt-4 era l'unico valore della pagina fuori dal ritmo da
-						    12px (gap-3) usato fra chip e lista: allineato a pt-3. */}
+						    Spaziatura del piede, seconda passata. Il fondo aveva due
+						    proprietari — il pb-8 di qui (32px) piu' il pb-4 del contenitore
+						    di colonna (16px), 48px sotto la paginazione. Il contenitore e'
+						    l'unico dei due che sa dove finisce la colonna, quindi il fondo
+						    resta suo (lg:pb-2, 8px) e qui va a zero. Sopra pt-2 (8px), e
+						    gap-1 (4px) fra i numeri di pagina e la riga del conteggio:
+						    quest'ultima e' una didascalia del controllo che la precede, non
+						    un blocco a se', quindi sta piu' vicina di quanto stia qualunque
+						    altra coppia di elementi della pagina — il ritmo da 12px vale fra
+						    blocchi diversi, non dentro lo stesso. I bottoni restano h-11
+						    (44px): e' il bersaglio tattile minimo, non un margine, e non
+						    rientra in questa dieta. */}
 						{!loading && events.length > 0 && (
-							<div className="hidden lg:flex lg:flex-col lg:shrink-0 lg:items-center lg:gap-3 lg:pb-0 lg:pt-3">
+							<div className="hidden lg:flex lg:flex-col lg:shrink-0 lg:items-center lg:gap-1 lg:pb-0 lg:pt-2">
 								{pageError && (
 									<div className="flex items-center gap-3 text-sm text-muted-foreground">
 										<span>Non è stato possibile caricare questa pagina.</span>
@@ -1392,7 +1399,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 										</button>
 									</nav>
 								)}
-								<span className="text-xs text-muted-foreground tabular-nums">
+								{/* 11px e non text-xs: e' la didascalia del controllo sopra,
+								    deve pesare meno dei numeri di pagina. tabular-nums resta —
+								    e' cio' che evita che la riga cambi larghezza a ogni
+								    cambio pagina. */}
+								<span className="text-[11px] text-muted-foreground tabular-nums">
 									{pageFrom}–{pageTo} di {total} eventi
 								</span>
 							</div>
