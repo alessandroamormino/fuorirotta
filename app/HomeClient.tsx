@@ -1402,10 +1402,32 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								{/* 11px e non text-xs: e' la didascalia del controllo sopra,
 								    deve pesare meno dei numeri di pagina. tabular-nums resta —
 								    e' cio' che evita che la riga cambi larghezza a ogni
-								    cambio pagina. */}
-								<span className="text-[11px] text-muted-foreground tabular-nums">
-									{pageFrom}–{pageTo} di {total} eventi
-								</span>
+								    cambio pagina.
+
+								    Durante il caricamento questa riga diventa lo stato di
+								    avanzamento. Prima l'unico segnale era opacity-60 sulla
+								    griglia: un'attesa senza spinner non si legge come
+								    "caricamento", si legge come lentezza — anche quando dura
+								    poche centinaia di millisecondi. Lo spinner sta QUI e non
+								    sulla lista perche' qui c'e' gia' l'occhio: l'utente ha
+								    appena cliccato un numero di pagina, a due centimetri di
+								    distanza. role="status" (aria-live polite implicito) lo
+								    annuncia anche a chi non lo vede; aria-busy sulla griglia
+								    resta e non e' ridondante, dice un'altra cosa (quel
+								    contenuto e' stantio) a un'altra parte dell'albero. */}
+								{pageLoading ? (
+									<span
+										role="status"
+										className="flex items-center gap-2 text-[11px] text-muted-foreground"
+									>
+										<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+										Caricamento…
+									</span>
+								) : (
+									<span className="text-[11px] text-muted-foreground tabular-nums">
+										{pageFrom}–{pageTo} di {total} eventi
+									</span>
+								)}
 							</div>
 						)}
 					</div>
