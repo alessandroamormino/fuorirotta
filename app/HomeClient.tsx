@@ -1184,8 +1184,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								// scrollbar, solo l'anello da 2px da non tagliare.
 								className="h-full overflow-y-auto pl-2 -ml-2 pr-5 -mr-5 [scrollbar-gutter:stable]"
 							>
+								{/* pageLoading accanto a loading, non solo loading: al cambio
+								    pagina si vuole LO STESSO spinner grande del primo
+								    caricamento, che sostituisce la lista. Prima il cambio
+								    pagina si segnalava con opacity-60 sulle card — piu'
+								    chiare, ma non abbastanza da leggersi come "sto
+								    caricando": l'utente lo ha descritto come "non si capisce
+								    tanto che sta caricando". Un indicatore che non si nota
+								    non e' un indicatore. */}
 								<AnimatePresence mode="wait">
-									{loading ? (
+									{loading || pageLoading ? (
 										<motion.div
 											key="loading"
 											initial={{ opacity: 0 }}
@@ -1239,10 +1247,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												</div>
 											) : (
 												<>
-													<div
-														className={cn("grid-cards", pageLoading && "opacity-60 transition-opacity")}
-														aria-busy={pageLoading || undefined}
-													>
+													{/* niente opacity-60/aria-busy qui: da quando pageLoading
+													    mostra lo spinner grande al posto della lista, questa
+													    griglia non e' nemmeno montata durante un cambio pagina —
+													    sarebbero rami morti. */}
+													<div className="grid-cards">
 														{events.map((event, index) => (
 															<div
 																key={`${event.source}-${event.id}`}
@@ -1404,30 +1413,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								    e' cio' che evita che la riga cambi larghezza a ogni
 								    cambio pagina.
 
-								    Durante il caricamento questa riga diventa lo stato di
-								    avanzamento. Prima l'unico segnale era opacity-60 sulla
-								    griglia: un'attesa senza spinner non si legge come
-								    "caricamento", si legge come lentezza — anche quando dura
-								    poche centinaia di millisecondi. Lo spinner sta QUI e non
-								    sulla lista perche' qui c'e' gia' l'occhio: l'utente ha
-								    appena cliccato un numero di pagina, a due centimetri di
-								    distanza. role="status" (aria-live polite implicito) lo
-								    annuncia anche a chi non lo vede; aria-busy sulla griglia
-								    resta e non e' ridondante, dice un'altra cosa (quel
-								    contenuto e' stantio) a un'altra parte dell'albero. */}
-								{pageLoading ? (
-									<span
-										role="status"
-										className="flex items-center gap-2 text-[11px] text-muted-foreground"
-									>
-										<Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-										Caricamento…
-									</span>
-								) : (
-									<span className="text-[11px] text-muted-foreground tabular-nums">
-										{pageFrom}–{pageTo} di {total} eventi
-									</span>
-								)}
+								    Qui NON va uno spinner: lo stato di caricamento del cambio
+								    pagina e' quello grande sopra la lista, che sostituisce le
+								    card. Un secondo indicatore piu' piccolo nel piede sarebbe
+								    rumore doppio per lo stesso evento. */}
+								<span className="text-[11px] text-muted-foreground tabular-nums">
+									{pageFrom}–{pageTo} di {total} eventi
+								</span>
 							</div>
 						)}
 					</div>
