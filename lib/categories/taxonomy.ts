@@ -3,11 +3,11 @@
  *
  * Modulo puro: nessun accesso al database, nessuna funzione asincrona, nessun
  * idioma Node-only (require/module). Legge solo i dati dichiarativi di
- * SOURCE_REGISTRY (Fase 8/10). E' importato anche da componenti client (es.
+ * SOURCE_META (Fase 8/10). E' importato anche da componenti client (es.
  * CategoryFilterBar.tsx) e deve restare sicuro nel bundle browser — il
  * self-check vive separato in lib/categories/taxonomy.selfcheck.ts.
  */
-import { getSourceById, SOURCE_REGISTRY } from '../scrapers/registry'
+import { getSourceMetaById, SOURCE_META } from '../scrapers/sources'
 import { decodeHtmlEntities } from '../utils'
 
 // I 7 nomi canonici, in ordine di volume misurato (D-01). 'Altro' e' sempre
@@ -39,7 +39,7 @@ const warnedPairs = new Set<string>()
 
 /**
  * Risolve (source, rawCategory) sul nome canonico dichiarato in
- * SOURCE_REGISTRY[source].categoryMap. Pura e sincrona: nessun accesso al
+ * SOURCE_META[source].categoryMap. Pura e sincrona: nessun accesso al
  * database.
  *
  * Il valore grezzo viene sempre trimmato prima del lookup: lib/scrapers/
@@ -72,7 +72,7 @@ export function canonicalizeCategory(
   // invece di undefined, bypassando sia il fallback Altro sia il warning di
   // deriva (D-11) — e un valore non-stringa arriverebbe a Prisma come
   // canonicalCategory. hasOwnProperty esclude sempre la catena di prototipo.
-  const entry = getSourceById(source)
+  const entry = getSourceMetaById(source)
   const mapped =
     entry && Object.prototype.hasOwnProperty.call(entry.categoryMap, trimmed)
       ? entry.categoryMap[trimmed]

@@ -14,7 +14,7 @@ import {
   orderCategories,
   type CanonicalCategory
 } from './taxonomy'
-import { SOURCE_REGISTRY } from '../scrapers/registry'
+import { SOURCE_META } from '../scrapers/sources'
 
 let failures = 0
 const assert = (condition: boolean, message: string) => {
@@ -93,7 +93,7 @@ assert(
 // Object.prototype non deve mai "matchare" — un `entry?.categoryMap[x]` senza
 // hasOwnProperty restituirebbe la funzione ereditata invece di undefined,
 // bypassando sia il fallback Altro sia il warning di deriva (D-11). Ogni
-// sorgente reale di SOURCE_REGISTRY viene provata, non solo una a campione.
+// sorgente reale di SOURCE_META viene provata, non solo una a campione.
 const prototypePollutionKeys = [
   'constructor',
   'toString',
@@ -103,7 +103,7 @@ const prototypePollutionKeys = [
   'propertyIsEnumerable',
   'toLocaleString'
 ]
-for (const entry of SOURCE_REGISTRY) {
+for (const entry of SOURCE_META) {
   for (const key of prototypePollutionKeys) {
     assert(
       canonicalizeCategory(entry.id, key) === 'Altro',
@@ -119,7 +119,7 @@ assert(
 )
 
 // Ogni valore di ogni categoryMap deve essere un membro di CANONICAL_CATEGORIES.
-for (const entry of SOURCE_REGISTRY) {
+for (const entry of SOURCE_META) {
   for (const [raw, canonical] of Object.entries(entry.categoryMap)) {
     assert(
       (CANONICAL_CATEGORIES as readonly string[]).includes(canonical),

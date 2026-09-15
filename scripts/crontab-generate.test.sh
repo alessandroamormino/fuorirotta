@@ -92,10 +92,14 @@ echo "ok  S5b: --check su un dump con una riga alterata esce non-zero e stampa e
 # trap cleanup, stesso idioma gia' usato altrove nel progetto (14-03: "mutazione
 # mirata + revert").
 
-registry_path="${repo_root}/lib/scrapers/registry.ts"
+# REGION_SCHEDULES si e' spostato in lib/scrapers/sources.ts (modulo di soli
+# metadati, senza cheerio/Prisma): la mutazione deve colpire quel file, non
+# registry.ts, altrimenti non cambia nulla e il gate passa per il motivo
+# sbagliato — che e' esattamente come questo gate ha scoperto lo spostamento.
+registry_path="${repo_root}/lib/scrapers/sources.ts"
 registry_backup_dir="$(mktemp -d)"
 tmp_dirs+=("${registry_backup_dir}")
-registry_backup="${registry_backup_dir}/registry.ts.orig"
+registry_backup="${registry_backup_dir}/sources.ts.orig"
 cp "${registry_path}" "${registry_backup}"
 restore_registry() {
   cp "${registry_backup}" "${registry_path}"

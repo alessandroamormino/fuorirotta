@@ -18,7 +18,7 @@ import { normalizeComuneName } from './normalize'
 import { extractComuneCandidates } from './addressParse'
 import { isPlausibleCoordinate } from './bbox'
 import { calculateDistanceKm } from './distance'
-import { getSourceById } from '../scrapers/registry'
+import { getSourceMetaById } from '../scrapers/sources'
 
 export type ComuneRow = {
   id: number
@@ -167,7 +167,7 @@ function disambiguateHomonyms(
     // Nessun candidato ha un centroide: si passa al gradino regione sotto.
   }
 
-  const sourceRegion = getSourceById(input.source)?.region
+  const sourceRegion = getSourceMetaById(input.source)?.region
   if (sourceRegion) {
     const regionMatches = candidates.filter(
       c => c.regionName.toLowerCase() === sourceRegion.toLowerCase()

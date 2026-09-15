@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { SOURCE_REGISTRY } from '@/lib/scrapers/registry'
+import { SOURCE_META } from '@/lib/scrapers/sources'
 import { computeSourceHealth, HEALTH_WINDOW_SIZE, type RunRecord, type SourceHealth } from '@/lib/scrapers/health'
 
 /**
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const sources = await Promise.all(
-      SOURCE_REGISTRY.map(async (entry): Promise<SourceHealth | null> => {
+      SOURCE_META.map(async (entry): Promise<SourceHealth | null> => {
         const runs = await prisma.scrapeRun.findMany({
           where: { source: entry.id, region: entry.region },
           orderBy: { startedAt: 'desc' },

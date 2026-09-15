@@ -2,8 +2,8 @@
 /**
  * Genera le righe di crontab dal registry (SCHED-02, D-09): il crontab
  * smette di essere una riga scritta a mano in DEPLOYMENT.md e diventa
- * l'output di questa funzione. Legge SOLO `REGION_SCHEDULES` (registry.ts)
- * e `getRegions()` (runner.ts) — nessuno schedule scritto a mano qui dentro
+ * l'output di questa funzione. Legge SOLO `REGION_SCHEDULES` e `getRegions()`
+ * da lib/scrapers/sources.ts — nessuno schedule scritto a mano qui dentro
  * (D-10/D-11 restano l'unica fonte di verita').
  *
  * Puro: non contatta rete ne' database, non legge il crontab installato
@@ -19,8 +19,13 @@
  *   npx tsx scripts/generate-crontab.ts --check <path>   # confronta con un dump di `crontab -l` ('-' per stdin)
  */
 import { readFileSync } from 'fs'
-import { getRegions } from '../lib/scrapers/runner'
-import { REGION_SCHEDULES, MAINTENANCE_SCHEDULE } from '../lib/scrapers/registry'
+// SOLO lib/scrapers/sources.ts, mai registry.ts ne' runner.ts: quelli tirano
+// dentro i tre adattatori -> cheerio -> undici@7, che richiede il global `File`
+// aggiunto in Node 20. L'host di produzione gira Node 18.19.1 (l'immagine
+// Docker no, e' node:20-alpine), e con l'import precedente questo script
+// moriva la' con "ReferenceError: File is not defined". Il gate
+// scripts/host-script-deps.ts impedisce che l'import pesante rientri.
+import { getRegions, REGION_SCHEDULES, MAINTENANCE_SCHEDULE } from '../lib/scrapers/sources'
 
 const SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh'
 const MAINTENANCE_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh'
@@ -29,7 +34,7 @@ const LOG_PATH = '/var/log/fuorirotta-cron.log'
 /**
  * Genera l'intero contenuto del crontab: CRON_TZ (D-12) in testa su una
  * riga propria seguita da una riga vuota, poi una riga per regione
- * (ordine di dichiarazione di SOURCE_REGISTRY via getRegions(), D-04/S4),
+ * (ordine di dichiarazione di SOURCE_META via getRegions(), D-04/S4),
  * poi la riga del job consolidato. Nessun algoritmo di scaglionamento
  * automatico qui: a N=1 non c'e' nulla da distribuire, gli orari sono
  * dichiarati a mano in REGION_SCHEDULES (D-11).

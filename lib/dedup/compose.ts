@@ -4,13 +4,13 @@
  * Perche' a lettura e non materializzata: le colonne di sorgente restano
  * intatte per costruzione, quindi il principio "mai sovrascrivere il dato di
  * sorgente" della Fase 6 e' rispettato senza doverci pensare, e cambiare la
- * gerarchia di fiducia (SOURCE_REGISTRY[*].trustRank) non richiede nessun
+ * gerarchia di fiducia (SOURCE_META[*].trustRank) non richiede nessun
  * backfill: il prossimo GET vede subito il nuovo ordine. Costo accettato: una
  * query in piu' in lettura, sui soli gruppi realmente fusi (vedi
  * groupMembersByCanonical() e i chiamanti in app/api/events/).
  */
 import type { Event as PrismaEvent } from '@prisma/client'
-import { SOURCE_REGISTRY } from '../scrapers/registry'
+import { SOURCE_META } from '../scrapers/sources'
 
 // Campi componibili: quelli su cui una sorgente puo' essere piu' o meno
 // ricca di un'altra per lo STESSO evento. Esclusioni motivate:
@@ -55,7 +55,7 @@ type ComposableField = (typeof COMPOSABLE_FIELDS)[number]
  * errore su una sorgente nota.
  */
 export function trustRankFor(source: string): number {
-  const entry = SOURCE_REGISTRY.find((s) => s.id === source)
+  const entry = SOURCE_META.find((s) => s.id === source)
   return entry ? entry.trustRank : Number.MAX_SAFE_INTEGER
 }
 
@@ -142,7 +142,7 @@ export function composeEvent(canonical: PrismaEvent, members: PrismaEvent[]): Pr
 // modulo e' puro e il suo self-check deve restare eseguibile senza container.
 // Le fixture qui sotto sono oggetti costruiti a mano — nominare le tre
 // sorgenti in QUESTA regione del file e' l'unico posto in cui e' permesso
-// (il codice di produzione sopra le legge sempre da SOURCE_REGISTRY).
+// (il codice di produzione sopra le legge sempre da SOURCE_META).
 if (require.main === module) {
   const base: PrismaEvent = {
     id: 1,
@@ -171,7 +171,7 @@ if (require.main === module) {
     mergeReason: null
   } as unknown as PrismaEvent
 
-  // trustRankFor: ordine dichiarato in SOURCE_REGISTRY.
+  // trustRankFor: ordine dichiarato in SOURCE_META.
   console.assert(
     trustRankFor('in-lombardia') < trustRankFor('opendata_lombardia'),
     'in-lombardia deve avere trustRank minore (piu' + " prioritario) di opendata_lombardia"
