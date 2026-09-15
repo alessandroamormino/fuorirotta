@@ -273,6 +273,17 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	// che ARRIVA (non l'ultima INVIATA) vince — con rete variabile la UI
 	// potrebbe mostrare gli eventi della categoria A mentre il chip attivo e' B.
 	const requestIdRef = useRef(0);
+	// Ultimo requestId PER FLAG di caricamento, non solo globale.
+	// requestIdRef da solo impedisce a una risposta superata di scrivere i dati,
+	// ed e' giusto cosi'. Ma usarlo anche per SPEGNERE il flag di caricamento lo
+	// lascia acceso per sempre quando a superare la richiesta e' una di modo
+	// diverso: al mount, con una pagina ripristinata da sessionStorage, parte un
+	// fetch mode:"page" insieme a quello iniziale, uno dei due supera l'altro e
+	// il flag dell'altro non si spegne mai. Prima si vedeva solo come card
+	// perennemente a opacity-60; da quando pageLoading mostra lo spinner grande,
+	// la lista non compariva piu' affatto. Qui ogni flag ricorda l'ultima
+	// richiesta che lo riguarda, e solo quella lo spegne.
+	const latestByFlagRef = useRef<Record<string, number>>({ more: 0, page: 0, main: 0 });
 
 	// Gap 2 di 11-VERIFICATION.md: senza questa guardia, al mount React esegue
 	// i tre effect di scrittura qui sotto PRIMA dell'effect di ripristino piu'
@@ -662,9 +673,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		if (process.env.APP_DEBUG === "true") {
 			console.log(`[Fetch] mode=${mode} limit=${limit} offset=${offset}`);
 		}
-		if (mode === "append") {
+		const flagKey = mode === "append" ? "more" : mode === "page" ? "page" : "main";
+		latestByFlagRef.current[flagKey] = requestId;
+		if (flagKey === "more") {
 			setLoadingMore(true);
-		} else if (mode === "page") {
+		} else if (flagKey === "page") {
 			setPageLoading(true);
 		} else {
 			setLoading(true);
@@ -833,9 +846,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				setPageError(true);
 			}
 		} finally {
-			if (requestId === requestIdRef.current) {
-				if (mode === "append") setLoadingMore(false);
-				else if (mode === "page") setPageLoading(false);
+			// Confronto sul flag, non sul contatore globale: una richiesta di modo
+			// diverso che supera questa non deve lasciarne il flag acceso.
+			if (latestByFlagRef.current[flagKey] === requestId) {
+				if (flagKey === "more") setLoadingMore(false);
+				else if (flagKey === "page") setPageLoading(false);
 				else setLoading(false);
 			}
 		}
