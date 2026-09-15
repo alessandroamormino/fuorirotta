@@ -9,6 +9,8 @@
 #   S5: --check sa fallire su una divergenza (prova di non-vacuita', D-05-style)
 #   S6: una regione senza voce in REGION_SCHEDULES fa uscire il generatore
 #   S7: --check su un dump illeggibile esce 2 con un messaggio, non stack trace
+#   S8: righe estranee fuori dal blocco gestito non fanno divergenza
+#   S9: blocco assente -> messaggio utile e blocco da incollare
 #       non-zero nominando lo slug — mai una riga silenziosamente omessa
 set -euo pipefail
 
@@ -61,8 +63,11 @@ echo "ok  S2: riga per lombardia presente con schedule/percorso/argomento/log co
 if ! printf '%s\n' "${output}" | grep -qE '^30 5 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance\.sh >> /var/log/fuorirotta-cron\.log 2>&1$'; then
   fail "S3: riga attesa per cron-maintenance.sh assente o mal formata"
 fi
-last_line="$(printf '%s\n' "${output}" | grep -v '^$' | tail -1)"
-[[ "${last_line}" == *"cron-maintenance.sh"* ]] || fail "S3: la riga del job consolidato non e' l'ultima riga non vuota"
+# Ultima riga di CRON (non l'ultima riga in assoluto: da quando il generatore
+# possiede un blocco delimitato, l'ultima e' il marcatore di chiusura). Si
+# filtrano i commenti e le righe vuote, restano solo le voci pianificate.
+last_cron_line="$(printf '%s\n' "${output}" | grep -vE '^\s*(#|$)' | tail -1)"
+[[ "${last_cron_line}" == *"cron-maintenance.sh"* ]] || fail "S3: la riga del job consolidato non e' l'ultima voce pianificata del blocco"
 echo "ok  S3: riga del job consolidato presente, pianificata dopo l'ultima regione"
 
 # --- S4: ordine stabile -------------------------------------------------------
@@ -85,15 +90,15 @@ printf '%s' "${output}" > "${tmp1}/identical.txt"
 if ! npx tsx scripts/generate-crontab.ts --check "${tmp1}/identical.txt" > "${tmp1}/check-ok.out" 2>&1; then
   fail "S5: --check su un dump identico e' uscito non-zero: $(cat "${tmp1}/check-ok.out")"
 fi
-grep -q "OK: crontab installato combacia col registry" "${tmp1}/check-ok.out" || fail "S5: --check su dump identico non ha stampato il messaggio OK atteso"
+grep -q "OK: blocco gestito nel crontab combacia col registry" "${tmp1}/check-ok.out" || fail "S5: --check su dump identico non ha stampato il messaggio OK atteso"
 echo "ok  S5a: --check su un dump identico esce 0"
 
 printf '%s' "${output}" | sed 's/17 3 \* \* \*/0 0 \* \* \*/' > "${tmp1}/mutated.txt"
 if npx tsx scripts/generate-crontab.ts --check "${tmp1}/mutated.txt" > "${tmp1}/check-fail.out" 2>&1; then
   fail "S5: --check su un dump con una riga alterata e' uscito 0 — gate vacuo"
 fi
-grep -q "DIVERGENZA fra registry e crontab installato" "${tmp1}/check-fail.out" || fail "S5: --check su dump alterato non ha stampato la divergenza attesa"
-grep -q -- "--- installato ---" "${tmp1}/check-fail.out" || fail "S5: --check su dump alterato non ha stampato la versione installata"
+grep -q "DIVERGENZA fra registry e blocco installato" "${tmp1}/check-fail.out" || fail "S5: --check su dump alterato non ha stampato la divergenza attesa"
+grep -q -- "--- installato (solo il blocco gestito) ---" "${tmp1}/check-fail.out" || fail "S5: --check su dump alterato non ha stampato la versione installata"
 grep -q -- "--- atteso (dal registry) ---" "${tmp1}/check-fail.out" || fail "S5: --check su dump alterato non ha stampato la versione attesa"
 echo "ok  S5b: --check su un dump con una riga alterata esce non-zero e stampa entrambe le versioni"
 
@@ -154,6 +159,55 @@ set -e
 printf '%s' "${missing_output}" | grep -q "Impossibile leggere" || fail "S7: nessun messaggio leggibile, probabile stack trace grezzo"
 ! printf '%s' "${missing_output}" | grep -q "readFileUtf8" || fail "S7: l'uscita contiene ancora lo stack trace interno di Node"
 echo "ok  S7: --check su un dump illeggibile esce 2 con un messaggio, non con uno stack trace"
+
+
+# --- S8: righe estranee fuori dal blocco non fanno divergenza ----------------
+#
+# Il crontab dell'host reale contiene anche il rinnovo certbot di
+# fuori-rotta.it, che ricarica nginx. La prima stesura generava e confrontava il
+# crontab INTERO: --check avrebbe segnalato divergenza per sempre, e la
+# procedura documentata ("sostituisci il crontab con questo output") avrebbe
+# cancellato quel rinnovo — sito giu' settimane dopo, senza un indizio.
+# Qui si prova che il confronto guarda SOLO il blocco fra i marcatori.
+
+tmp8="$(mktemp -d)"
+tmp_dirs+=("${tmp8}")
+foreign_line='0 3 * * * certbot renew --quiet && docker exec nginx nginx -s reload'
+
+{
+  echo "# commento di sistema che non ci appartiene"
+  echo "${foreign_line}"
+  echo ""
+  npx tsx scripts/generate-crontab.ts
+  echo ""
+  echo '0 7 * * * /usr/local/bin/qualcos-altro.sh'
+} > "${tmp8}/con-estranee.txt"
+
+if ! npx tsx scripts/generate-crontab.ts --check "${tmp8}/con-estranee.txt" > "${tmp8}/s8.out" 2>&1; then
+  cat "${tmp8}/s8.out" >&2
+  fail "S8: --check ha segnalato divergenza per righe ESTRANEE al blocco gestito"
+fi
+grep -q 'blocco gestito' "${tmp8}/s8.out" || fail "S8: messaggio di successo non menziona il blocco gestito"
+echo "ok  S8: righe estranee fuori dal blocco sono ignorate dal confronto"
+
+# --- S9: blocco assente -> messaggio utile, non divergenza muta --------------
+#
+# Prima installazione: il crontab non ha ancora i marcatori. Deve dirlo e
+# stampare il blocco da incollare, avvisando di non toccare il resto.
+
+{
+  echo "${foreign_line}"
+} > "${tmp8}/senza-blocco.txt"
+
+set +e
+npx tsx scripts/generate-crontab.ts --check "${tmp8}/senza-blocco.txt" > "${tmp8}/s9.out" 2>&1
+s9_exit=$?
+set -e
+
+[[ "${s9_exit}" -ne 0 ]] || fail "S9: --check uscito 0 con il blocco gestito assente"
+grep -q 'Blocco gestito non trovato' "${tmp8}/s9.out" || fail "S9: non spiega che il blocco manca"
+grep -q 'SENZA toccare le altre righe' "${tmp8}/s9.out" || fail "S9: non avverte di non toccare le altre righe del crontab"
+echo "ok  S9: blocco assente -> spiegazione e blocco da incollare, con l'avvertenza"
 
 
 echo "PASS: generatore di crontab (SCHED-02), fuso dichiarato in chiaro (D-12 rivisto), ordine stabile, --check dimostrato capace di fallire (D-09)"

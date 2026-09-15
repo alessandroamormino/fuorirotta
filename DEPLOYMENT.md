@@ -147,9 +147,14 @@ The crontab is no longer a single hand-written line: it is the output of `script
 cd /opt/docker/fuori-rotta/fuorirotta && npx tsx scripts/generate-crontab.ts
 ```
 
-Install the printed output with `crontab -e`, replacing whatever crontab is currently installed. Example output at the time of writing (one region, Lombardy, plus the consolidated maintenance job):
+**Install it as a BLOCK — never replace the whole crontab.** The output is delimited by `# >>> fuorirotta:crontab-generato >>>` and `# <<< fuorirotta:crontab-generato <<<`. Open `crontab -e`, delete any previous fuorirotta lines (before Phase 14 there was a single unscoped `0 */4 * * * … cron-scrape.sh` line), paste the block, and **leave every other line untouched**.
+
+> This host's crontab also carries the certbot renewal for fuori-rotta.it, which copies the new certificate and reloads nginx. An earlier version of this guide said "replace whatever crontab is currently installed" — following it would have deleted that renewal, and the site would have gone dark weeks later when the certificate expired, with nothing pointing at the cause. The generator now owns only what is between its markers; everything outside is none of its business, and `--check` does not even read it.
+
+Example output at the time of writing (one region, Lombardy, plus the consolidated maintenance job):
 
 ```cron
+# >>> fuorirotta:crontab-generato >>>
 # Generato da scripts/generate-crontab.ts — non modificare a mano.
 # ORARI IN UTC: questo host e' su UTC e il suo cron (Vixie 3.0pl1) NON
 # supporta CRON_TZ (verificato 2026-09-15). 03:17 UTC = 05:17 in Italia
@@ -177,7 +182,7 @@ crontab -l > /tmp/installed-crontab.txt
 cd /opt/docker/fuori-rotta/fuorirotta && npx tsx scripts/generate-crontab.ts --check /tmp/installed-crontab.txt
 ```
 
-Exits `0` and prints `OK: crontab installato combacia col registry` when they match; exits `1` and prints both versions when they diverge. A region added to the registry and never scheduled, or a stale line left behind after a region is removed, is exactly the kind of divergence this catches — it must not be able to sit unnoticed for months.
+Exits `0` and prints `OK: blocco gestito nel crontab combacia col registry` when they match; exits `1` and prints both versions when they diverge. **Only the delimited block is compared** — unrelated crontab entries (certbot, anything else the host runs) are neither read nor reported. If the markers are missing entirely, it says so and prints the block to paste, with the warning not to touch the other lines. A region added to the registry and never scheduled, or a stale line left behind after a region is removed, is exactly the kind of divergence this catches — it must not be able to sit unnoticed for months.
 
 **5. One-time host verification — DONE on 2026-09-15, result negative.** The question was whether this host's cron supports `CRON_TZ`. It does not:
 

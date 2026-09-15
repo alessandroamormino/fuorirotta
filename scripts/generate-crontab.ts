@@ -54,7 +54,11 @@ const LOG_PATH = '/var/log/fuorirotta-cron.log'
  * d'inverno. Entrambe dentro la finestra notturna voluta, e il salto dell'ora
  * legale non sposta nulla di significativo.
  */
+export const BLOCK_BEGIN = '# >>> fuorirotta:crontab-generato >>>'
+export const BLOCK_END = '# <<< fuorirotta:crontab-generato <<<'
+
 const HEADER = [
+  BLOCK_BEGIN,
   '# Generato da scripts/generate-crontab.ts — non modificare a mano.',
   '# ORARI IN UTC: questo host e\' su UTC e il suo cron (Vixie 3.0pl1) NON',
   '# supporta CRON_TZ (verificato 2026-09-15). 03:17 UTC = 05:17 in Italia',
@@ -81,6 +85,7 @@ export function generate(): string {
     lines.push(`${schedule} ${SCRIPT_PATH} ${region} >> ${LOG_PATH} 2>&1`)
   }
   lines.push(`${MAINTENANCE_SCHEDULE} ${MAINTENANCE_SCRIPT_PATH} >> ${LOG_PATH} 2>&1`)
+  lines.push(BLOCK_END)
   return lines.join('\n') + '\n'
 }
 
@@ -91,6 +96,30 @@ export function generate(): string {
  * entrambe le versioni su divergenza — un `--check` che non sa fallire non
  * e' un controllo (D-09, prova di non-vacuita' S5).
  */
+/**
+ * Estrae il blocco gestito da un dump di `crontab -l`. Restituisce null se i
+ * marcatori non ci sono.
+ *
+ * Perche' esiste (2026-09-15): il crontab di questo host contiene anche righe
+ * che non ci appartengono — il rinnovo certbot di fuori-rotta.it, che ricarica
+ * nginx. La prima stesura di questo script generava e confrontava il crontab
+ * INTERO, dando per scontato che il file fosse tutto nostro. Non lo e': con
+ * quell'assunzione `--check` avrebbe segnalato divergenza per sempre (rendendo
+ * inutile il rilevamento di drift, D-09), e la procedura "sostituisci il
+ * crontab con questo output" avrebbe cancellato il rinnovo del certificato —
+ * sito irraggiungibile settimane dopo, senza un indizio sul perche'.
+ *
+ * Ora il generatore possiede SOLO le righe fra i due marcatori. Tutto cio' che
+ * sta fuori non viene ne' letto ne' toccato.
+ */
+export function extractBlock(dump: string): string | null {
+  const lines = dump.split('\n')
+  const begin = lines.findIndex((l) => l.trim() === BLOCK_BEGIN)
+  const end = lines.findIndex((l) => l.trim() === BLOCK_END)
+  if (begin === -1 || end === -1 || end < begin) return null
+  return lines.slice(begin, end + 1).join('\n')
+}
+
 function runCheck(installedPath: string): never {
   // Un percorso illeggibile esce 2 come il percorso assente, invece di morire
   // con lo stack trace ENOENT di Node: la procedura di rilevamento drift
@@ -109,13 +138,25 @@ function runCheck(installedPath: string): never {
     process.exit(2)
   }
   const expected = generate()
-  if (installed.trim() !== expected.trim()) {
-    console.error('DIVERGENZA fra registry e crontab installato:')
-    console.error('--- installato ---\n' + installed)
-    console.error('--- atteso (dal registry) ---\n' + expected)
+  const block = extractBlock(installed)
+  if (block === null) {
+    console.error(
+      `Blocco gestito non trovato nel crontab installato (${installedPath}).\n` +
+        `Attesi i marcatori:\n  ${BLOCK_BEGIN}\n  ${BLOCK_END}\n\n` +
+        `Se e' la prima installazione: apri 'crontab -e' e incolla il blocco qui sotto\n` +
+        `SENZA toccare le altre righe (questo host ne ha, fra cui il rinnovo certbot).\n\n` +
+        expected
+    )
     process.exit(1)
   }
-  console.log('OK: crontab installato combacia col registry')
+  if (block.trim() !== expected.trim()) {
+    console.error('DIVERGENZA fra registry e blocco installato:')
+    console.error('--- installato (solo il blocco gestito) ---\n' + block)
+    console.error('--- atteso (dal registry) ---\n' + expected)
+    console.error('\nLe righe fuori dal blocco non sono confrontate e non vanno toccate.')
+    process.exit(1)
+  }
+  console.log('OK: blocco gestito nel crontab combacia col registry')
   process.exit(0)
 }
 
