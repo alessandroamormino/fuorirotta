@@ -32,15 +32,45 @@ const MAINTENANCE_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron
 const LOG_PATH = '/var/log/fuorirotta-cron.log'
 
 /**
- * Genera l'intero contenuto del crontab: CRON_TZ (D-12) in testa su una
- * riga propria seguita da una riga vuota, poi una riga per regione
+ * Gli orari di REGION_SCHEDULES sono in UTC, e il crontab lo dichiara in chiaro
+ * invece di affidarsi a CRON_TZ.
+ *
+ * Perche' non CRON_TZ (D-12, rivisto il 2026-09-15): l'Assumption A2 di
+ * 14-RESEARCH.md dava per buono che l'host supportasse `CRON_TZ=Europe/Rome`
+ * in testa al crontab. Verificata contro l'host reale, e' FALSA: cron e'
+ * 3.0pl1-184ubuntu2 e `strings /usr/sbin/cron | grep CRON_TZ` non stampa nulla,
+ * cosi' come `man 5 crontab`. Vixie tratterebbe quella riga come una comune
+ * assegnazione di variabile d'ambiente — innocua, ma una promessa falsa scritta
+ * in cima a un file che qualcuno rileggera' fra mesi.
+ *
+ * Perche' non si sposta l'host su Europe/Rome: l'orario assoluto qui non conta.
+ * Lo scrape gira di notte e la manutenzione un'ora e mezza dopo; cio' che il
+ * design richiede e' che siano giornalieri e SCAGLIONATI fra loro, e lo
+ * scaglionamento e' relativo, quindi regge in qualunque fuso. Cambiare il fuso
+ * di un host tocca log, altri servizi e ogni cron di sistema: raggio d'azione
+ * sproporzionato per un problema che non si manifesta.
+ *
+ * Conseguenza pratica: 03:17 UTC sono le 05:17 italiane d'estate e le 04:17
+ * d'inverno. Entrambe dentro la finestra notturna voluta, e il salto dell'ora
+ * legale non sposta nulla di significativo.
+ */
+const HEADER = [
+  '# Generato da scripts/generate-crontab.ts — non modificare a mano.',
+  '# ORARI IN UTC: questo host e\' su UTC e il suo cron (Vixie 3.0pl1) NON',
+  '# supporta CRON_TZ (verificato 2026-09-15). 03:17 UTC = 05:17 in Italia',
+  '# d\'estate, 04:17 d\'inverno.',
+]
+
+/**
+ * Genera l'intero contenuto del crontab: intestazione di commento che dichiara
+ * il fuso, riga vuota, poi una riga per regione
  * (ordine di dichiarazione di SOURCE_META via getRegions(), D-04/S4),
  * poi la riga del job consolidato. Nessun algoritmo di scaglionamento
  * automatico qui: a N=1 non c'e' nulla da distribuire, gli orari sono
  * dichiarati a mano in REGION_SCHEDULES (D-11).
  */
 export function generate(): string {
-  const lines = ['CRON_TZ=Europe/Rome', '']
+  const lines = [...HEADER, '']
   for (const region of getRegions()) {
     const schedule = REGION_SCHEDULES[region]
     if (!schedule) {

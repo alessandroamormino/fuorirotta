@@ -136,6 +136,8 @@ export const SOURCE_META: SourceMeta[] = [
  * a N=1 non c'e' nulla da modellare, e la Fase 15 la estendera' se e quando
  * servira' davvero.
  *
+ * Gli orari sono in UTC (vedi il commento immediatamente sopra la costante).
+ *
  * La frequenza si giustifica con un numero misurato, mai con una stima
  * (D-11): in-lombardia.it costa **>=53 minuti misurati** (limite inferiore,
  * probabilmente oltre un'ora — 08-05-SUMMARY.md), quindi la Lombardia non
@@ -156,6 +158,13 @@ export const SOURCE_META: SourceMeta[] = [
  * crontab con una riga silenziosamente omessa (mitigazione della
  * prohibition di transparency di 14-04-PLAN.md).
  */
+// ORARI IN UTC. Non e' una scelta estetica: l'host di produzione e' su UTC e il
+// suo cron (Vixie 3.0pl1-184ubuntu2) NON supporta CRON_TZ — verificato contro la
+// macchina reale il 2026-09-15, `strings /usr/sbin/cron | grep CRON_TZ` non
+// stampa nulla. L'Assumption A2 di 14-RESEARCH.md, che dava per buono il
+// contrario, e' caduta. 03:17 UTC = 05:17 in Italia d'estate, 04:17 d'inverno:
+// entrambe dentro la finestra notturna voluta, e cio' che il design richiede
+// (giornalieri e scaglionati FRA LORO) e' relativo, quindi regge in ogni fuso.
 export const REGION_SCHEDULES: Record<string, string> = {
   lombardia: '17 3 * * *'
 }
@@ -165,6 +174,9 @@ export const REGION_SCHEDULES: Record<string, string> = {
  * 14-03: backfill+dedup+cache dei cluster). Non e' una voce di
  * REGION_SCHEDULES perche' non appartiene a nessuna singola regione — gira
  * una volta al giorno DOPO l'ultima regione pianificata, non insieme a una.
+ *
+ * In UTC come REGION_SCHEDULES. 05:30 UTC lascia 1h13m dall'avvio dello scrape
+ * lombardo (03:17 UTC), che costa >=53 minuti misurati.
  */
 export const MAINTENANCE_SCHEDULE = '30 5 * * *'
 

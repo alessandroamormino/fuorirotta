@@ -17,22 +17,29 @@ Three event scrapers run as Node.js processes:
 2. **OpenData Lombardia** - Official regional API (dati.lombardia.it/resource/hs8z-dcey.json)
 3. **InLombardia** - HTML scraping with AJAX pagination and detail page fetching
 
-Automated scraping is triggered every 4 hours via a server-side crontab invoking `scripts/cron-scrape.sh`, which POSTs to `/api/cron/scrape`.
+Automated scraping is triggered **per region, on a daily staggered schedule** (Phase 14) via a server-side crontab invoking `scripts/cron-scrape.sh <region>`, which POSTs to `/api/cron/scrape?region=<region>`. The unscoped every-4-hours run and the `runAllScrapers()` entry point it used no longer exist: `/api/cron/scrape` requires `?region=` and answers `400` without it, and a per-region lock makes two concurrent runs of the same region return `409`.
 
 **Data Flow:**
 ```
-crontab (every 4h)
-  -> scripts/cron-scrape.sh
-  -> POST /api/cron/scrape
-  -> runAllScrapers()
+crontab (daily, one line per region, staggered)
+  -> scripts/cron-scrape.sh <region>
+  -> POST /api/cron/scrape?region=<region>   (401 no auth / 400 no region / 404 unknown / 409 locked)
+  -> runRegion(region)
   -> PostgreSQL
-  -> /api/events
-  -> Frontend
+
+crontab (daily, after the last region)
+  -> scripts/cron-maintenance.sh
+  -> node:20-alpine container
+  -> scripts/maintenance-job.ts   (territorial backfill -> dedup -> cluster cache)
+  -> PostgreSQL
+  -> /api/events -> Frontend
 ```
+
+The post-scrape queue (backfill, dedup, cluster cache) was deliberately moved **out** of the scrape path into that daily consolidated job: at twenty regions, running a whole-table pass after every regional scrape would multiply the same work twentyfold.
 
 **Caching Strategy:**
 
-Users receive instant responses (<1s) from cached data. When cache is stale (>4 hours), the API returns cached results immediately while triggering a background refresh. The cron job also refreshes data proactively every 4 hours.
+Users receive instant responses (<1s) from cached data. When cache is stale, the API returns cached results immediately while triggering a background refresh — which since Phase 14 refreshes **only the region inferred from the request** (via `comuneId -> Comune.regionName`), under the same lock the cron path uses, and does nothing at all when no region can be inferred. The scheduled per-region cron runs refresh data proactively.
 
 ## Prerequisites
 
@@ -88,7 +95,8 @@ npm run scrape -- --from 2026-04-01 --to 2026-12-31
 
 **Trigger via API:**
 ```bash
-curl -X POST http://localhost:3000/api/cron/scrape \
+# `?region=` e' obbligatorio dalla Fase 14: senza, la route risponde 400.
+curl -X POST "http://localhost:3000/api/cron/scrape?region=lombardia" \
   -H "Authorization: Bearer YOUR_CRON_SECRET"
 ```
 
@@ -131,7 +139,7 @@ server {
 
 ### Automated Scraping via Crontab
 
-The crontab is no longer a single hand-written line: it is the output of `scripts/generate-crontab.ts`, which reads `REGION_SCHEDULES` from `lib/scrapers/registry.ts` (Phase 14, D-09). Adding a region to the registry means one file to touch; the crontab lines that region needs are regenerated, not hand-edited.
+The crontab is no longer a single hand-written line: it is the output of `scripts/generate-crontab.ts`, which reads `REGION_SCHEDULES` from `lib/scrapers/sources.ts` (Phase 14, D-09). Adding a region to the registry means one file to touch; the crontab lines that region needs are regenerated, not hand-edited.
 
 **1. Generate the lines, on the host checkout — NOT inside the container.** The final `runner` stage of the `Dockerfile` copies only `public`, `.next/standalone`, `.next/static`, `node_modules/.prisma` and `prisma/`. It contains neither `scripts/` nor `lib/` nor the devDependencies `tsx` needs to import raw TypeScript, so `docker compose exec … npx tsx scripts/generate-crontab.ts` fails immediately with a missing-file error. This is the same "maintenance scripts live outside the image" rule that `npx prisma migrate deploy` (§Migrations) and `scripts/cron-maintenance.sh` already follow: run it from the same git checkout that `docker compose` itself runs from.
 
@@ -142,13 +150,18 @@ cd /opt/docker/fuori-rotta/fuorirotta && npx tsx scripts/generate-crontab.ts
 Install the printed output with `crontab -e`, replacing whatever crontab is currently installed. Example output at the time of writing (one region, Lombardy, plus the consolidated maintenance job):
 
 ```cron
-CRON_TZ=Europe/Rome
+# Generato da scripts/generate-crontab.ts — non modificare a mano.
+# ORARI IN UTC: questo host e' su UTC e il suo cron (Vixie 3.0pl1) NON
+# supporta CRON_TZ (verificato 2026-09-15). 03:17 UTC = 05:17 in Italia
+# d'estate, 04:17 d'inverno.
 
 17 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh lombardia >> /var/log/fuorirotta-cron.log 2>&1
 30 5 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
 ```
 
-`CRON_TZ=Europe/Rome` on its own line at the top applies to every line below it — Vixie cron / cronie support this, BusyBox cron does not (see the one-time verification note below). This closes **IN-02**, an item left open (info severity, never fixed) by the Phase 5 code review: the crontab's timezone was never pinned before this.
+**Schedules are in UTC, and the crontab says so in a comment rather than relying on `CRON_TZ`.** The original design pinned the timezone with a `CRON_TZ=Europe/Rome` line (Assumption A2 of `14-RESEARCH.md`). Verified against this host on 2026-09-15, that assumption is **false**: cron here is `3.0pl1-184ubuntu2` and neither `man 5 crontab` nor `strings /usr/sbin/cron` mentions `CRON_TZ`. Vixie would have parsed the line as an ordinary environment assignment — harmless, but a false promise at the top of a file someone re-reads months later. The host runs UTC, so the schedules are UTC: 03:17 UTC is 05:17 Italian time in summer, 04:17 in winter. This still closes **IN-02** from the Phase 5 code review (the crontab's timezone was never stated before), just by declaring the timezone honestly instead of by a directive this cron ignores.
+
+The host timezone was deliberately left on UTC rather than moved to `Europe/Rome`: the absolute hour does not matter here — what the design requires is that the jobs be daily and **staggered relative to each other**, which holds in any timezone. Changing a host's timezone touches logs, other services and every system cron job: too wide a blast radius for a problem that does not manifest.
 
 **2. Replacing the line is MANDATORY in the same deploy that ships this phase.** Since Phase 14, `/api/cron/scrape` requires `?region=` and answers `400` without it (D-01). A crontab left on the old unscoped line — or simply forgotten during a deploy — does not fail silently: it fails loudly, with a `400` in `/var/log/fuorirotta-cron.log` and a missed dead man's switch ping. That is the intended behavior, not a risk to work around: a scrape that silently stopped running would be far worse than one that visibly errors on every invocation until the crontab is fixed.
 
@@ -166,13 +179,16 @@ cd /opt/docker/fuori-rotta/fuorirotta && npx tsx scripts/generate-crontab.ts --c
 
 Exits `0` and prints `OK: crontab installato combacia col registry` when they match; exits `1` and prints both versions when they diverge. A region added to the registry and never scheduled, or a stale line left behind after a region is removed, is exactly the kind of divergence this catches — it must not be able to sit unnoticed for months.
 
-**5. One-time host verification (not automatable, not yet done).** Confirm the cron actually installed on the Hetzner host supports `CRON_TZ`:
+**5. One-time host verification — DONE on 2026-09-15, result negative.** The question was whether this host's cron supports `CRON_TZ`. It does not:
 
 ```bash
-man 5 crontab
+man 5 crontab | grep -c CRON_TZ       # -> 0
+strings /usr/sbin/cron | grep CRON_TZ  # -> no output
+timedatectl                            # -> UTC
+dpkg -l | grep '^ii  cron '            # -> cron 3.0pl1-184ubuntu2
 ```
 
-Vixie cron and cronie (the Debian/Ubuntu defaults, the likely OS here) support it; BusyBox cron does not. This is Assumption A2 from `14-RESEARCH.md`, never verified against the real host — if the host's cron does not support `CRON_TZ`, the generated lines are silently interpreted in UTC despite declaring `Europe/Rome`.
+Assumption A2 of `14-RESEARCH.md` is therefore **falsified**, and the generator no longer emits a `CRON_TZ` line. Schedules are UTC and the generated crontab states it in a comment. Re-run these four commands only if the host is rebuilt or its cron package is replaced.
 
 The crontab line still carries no secret — `scripts/cron-scrape.sh` reads `CRON_SECRET` from the same `.env` the container uses, so rotating the secret still means editing exactly one file.
 

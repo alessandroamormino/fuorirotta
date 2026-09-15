@@ -31,11 +31,23 @@ trap cleanup EXIT
 
 output="$(npx tsx scripts/generate-crontab.ts)"
 
-# --- S1: CRON_TZ=Europe/Rome come prima riga (D-12) --------------------------
+# --- S1: intestazione che dichiara UTC, e NESSUN CRON_TZ (D-12 rivisto) ------
+#
+# La prima stesura asseriva `CRON_TZ=Europe/Rome` come prima riga. L'Assumption
+# A2 di 14-RESEARCH.md e' stata verificata contro l'host reale il 2026-09-15 ed
+# e' FALSA: cron 3.0pl1-184ubuntu2 non conosce CRON_TZ (ne' `strings
+# /usr/sbin/cron` ne' `man 5 crontab` lo nominano). Il gate ora asserisce
+# l'opposto: che quella riga NON venga emessa, e che il fuso sia dichiarato in
+# chiaro in un commento — un crontab che si autodescrive, invece di una riga
+# decorativa che il cron ignora.
 
 first_line="$(printf '%s\n' "${output}" | head -1)"
-[[ "${first_line}" == "CRON_TZ=Europe/Rome" ]] || fail "S1: prima riga attesa 'CRON_TZ=Europe/Rome', trovata '${first_line}'"
-echo "ok  S1: CRON_TZ=Europe/Rome e' la prima riga"
+[[ "${first_line}" == \#* ]] || fail "S1: prima riga attesa come commento, trovata '${first_line}'"
+# Ancorato a inizio riga: l'ASSEGNAZIONE e' vietata, nominarlo in un commento
+# e' anzi cio' che spiega al lettore perche' non c'e'.
+printf '%s' "${output}" | grep -qE '^CRON_TZ=' && fail "S1: il crontab assegna CRON_TZ, che questo host ignora — sarebbe una promessa falsa"
+printf '%s' "${output}" | grep -q 'ORARI IN UTC' || fail "S1: l'intestazione non dichiara che gli orari sono in UTC"
+echo "ok  S1: intestazione dichiara UTC, nessun CRON_TZ emesso"
 
 # --- S2: una riga per regione, con schedule/percorso/argomento/log corretti --
 
@@ -144,4 +156,4 @@ printf '%s' "${missing_output}" | grep -q "Impossibile leggere" || fail "S7: nes
 echo "ok  S7: --check su un dump illeggibile esce 2 con un messaggio, non con uno stack trace"
 
 
-echo "PASS: generatore di crontab (SCHED-02), CRON_TZ in testa (D-12), ordine stabile, --check dimostrato capace di fallire (D-09)"
+echo "PASS: generatore di crontab (SCHED-02), fuso dichiarato in chiaro (D-12 rivisto), ordine stabile, --check dimostrato capace di fallire (D-09)"
