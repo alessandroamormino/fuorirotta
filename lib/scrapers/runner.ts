@@ -150,7 +150,14 @@ async function recordScrapeRuns(results: ScrapeResult[], startedAt: Date): Promi
 }
 
 // Run directly: npx tsx lib/scrapers/runner.ts [source] [--region <slug>] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
-if (require.main === module) {
+//
+// Stessa guardia a tre condizioni degli altri self-check del progetto. Oggi
+// questo modulo non e' raggiungibile dal bundle browser (i client importano
+// lib/scrapers/registry.ts direttamente, mai il barrel che riesporta di qui),
+// quindi la forma nuda non esplodeva — ma e' la stessa mina che ha ucciso la
+// homepage quando connectionLimit.ts, quello SI' raggiungibile, l'ha usata.
+// Basterebbe un import del barrel da un componente client per riaccenderla.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   const args = process.argv.slice(2)
   const params: ScrapeParams = {}
   let sourceId: string | null = null

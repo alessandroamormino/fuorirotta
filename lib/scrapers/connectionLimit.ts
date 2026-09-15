@@ -51,7 +51,18 @@ export const PRISMA_BATCH_SIZE = Math.max(1, getConnectionLimit() - 1)
 // Self-check minimale, idioma di lib/scrapers/health.ts: `npx tsx lib/scrapers/connectionLimit.ts`.
 // Non un framework di test, solo un demo() con assert che fallisce
 // rumorosamente se il parsing o il ramo di riserva si rompono.
-if (require.main === module) {
+//
+// La guardia a tre condizioni non e' difensiva a vuoto, e' obbligatoria qui:
+// questo modulo FINISCE nel bundle del browser. La catena e'
+// app/HomeClient.tsx ('use client') -> lib/categories/taxonomy.ts ->
+// lib/scrapers/registry.ts -> lib/scrapers/solosagre.ts ->
+// lib/scrapers/utils.ts -> questo file. Nel bundle browser `module` non
+// esiste, quindi `require.main === module` da solo esplode con "module is not
+// defined" alla valutazione del modulo — prima che la pagina renda una sola
+// riga. Stesso idioma gia' usato in lib/eventStatus.ts, lib/dateWindow.ts,
+// lib/pagination.ts, lib/eventOrdering.ts e lib/territorial/distance.ts, tutti
+// con lo stesso commento: e' la convenzione del progetto, non una variante.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   console.assert(
     getConnectionLimit('postgresql://u:p@host:5432/db?connection_limit=9') === 9,
     'atteso 9 con ?connection_limit=9'

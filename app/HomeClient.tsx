@@ -1165,7 +1165,22 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								// evita che lo spazio riservato allo scrollbar (quando appare o
 								// sparisce, es. tra uno stato di errore breve e una pagina piena)
 								// faccia oscillare questo stesso margine.
-								className="h-full overflow-y-auto px-2 -mx-2 [scrollbar-gutter:stable]"
+								// A destra 20px invece di 8, e NON per simmetria: e' il lato
+								// dove vive la scrollbar. scrollbar-gutter:stable qui sotto
+								// non basta da solo — per specifica non ha alcun effetto sulle
+								// scrollbar OVERLAY (il default macOS), che non consumano
+								// spazio di layout e si disegnano SOPRA il contenuto,
+								// rientrando dal bordo del padding box. Misurato in overlay:
+								// card fino a 1293 (il bordo di .list-pane, come da progetto),
+								// anello della card selezionata fino a 1295, bordo scroller a
+								// 1301, banda della scrollbar ~[1286,1301] — cioe' sopra il
+								// bordo della card e il suo anello. Con 20px il bordo scroller
+								// va a 1313, la banda a ~[1298,1313] e l'anello e' libero,
+								// mentre le card restano ferme a 1293 (pr e -mr crescono
+								// insieme, si annullano come prima). La mappa comincia a 1325:
+								// restano 12px di margine. A sinistra 8px bastano: li' non c'e'
+								// scrollbar, solo l'anello da 2px da non tagliare.
+								className="h-full overflow-y-auto pl-2 -ml-2 pr-5 -mr-5 [scrollbar-gutter:stable]"
 							>
 								<AnimatePresence mode="wait">
 									{loading ? (
