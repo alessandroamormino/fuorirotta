@@ -161,8 +161,22 @@ Example output at the time of writing (one region, Lombardy, plus the consolidat
 # d'estate, 04:17 d'inverno.
 
 17 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh lombardia >> /var/log/fuorirotta-cron.log 2>&1
-30 5 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
+0 9 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
 ```
+
+**Updating an already-installed block: back up, transform, DIFF, then install behind a guard.** When only a schedule changes there is nothing to paste — but `crontab <file>` replaces the whole crontab with whatever that file contains, *including nothing at all*. On 2026-09-16 a `sed` pipeline broke on a multi-line paste, produced a zero-byte file, and `crontab /tmp/crontab.new` installed it: the certbot renewal was gone, and only `grep -c certbot` returning `0` caught it. The backup made the recovery a single command. Never run `crontab <file>` on a file you have not just diffed, and never on one that has not passed the guard:
+
+```bash
+crontab -l > /tmp/crontab.bak                                    # 1. backup FIRST, always
+sed 's/^30 5 \(.*cron-maintenance\)/0 9 \1/' /tmp/crontab.bak > /tmp/crontab.new
+diff /tmp/crontab.bak /tmp/crontab.new                           # 2. expect exactly the intended lines
+grep -q certbot /tmp/crontab.new && [ "$(wc -l < /tmp/crontab.new)" -ge 30 ] && crontab /tmp/crontab.new && echo INSTALLATO || echo "NON installato, controllo fallito"
+crontab -l | grep -c certbot                                     # 3. -> 1, never 0
+```
+
+Keep every command on ONE line. The failure above came from a `\`-continued command that picked up a newline inside the `sed` expression when pasted into the terminal; `sed` then failed, the redirect had already truncated the output file, and the empty result looked like a successful step. A guard that refuses to install a file without `certbot` in it — or shorter than the crontab is known to be — costs one line and makes that class of accident unreachable.
+
+If the backup is ever lost, the recovery is `crontab -e` and re-pasting: the generated block from `npx tsx scripts/generate-crontab.ts`, plus the certbot renewal, which is not the generator's business and is therefore NOT in its output. That is the reason to take the backup first.
 
 **Schedules are in UTC, and the crontab says so in a comment rather than relying on `CRON_TZ`.** The original design pinned the timezone with a `CRON_TZ=Europe/Rome` line (Assumption A2 of `14-RESEARCH.md`). Verified against this host on 2026-09-15, that assumption is **false**: cron here is `3.0pl1-184ubuntu2` and neither `man 5 crontab` nor `strings /usr/sbin/cron` mentions `CRON_TZ`. Vixie would have parsed the line as an ordinary environment assignment — harmless, but a false promise at the top of a file someone re-reads months later. The host runs UTC, so the schedules are UTC: 03:17 UTC is 05:17 Italian time in summer, 04:17 in winter. This still closes **IN-02** from the Phase 5 code review (the crontab's timezone was never stated before), just by declaring the timezone honestly instead of by a directive this cron ignores.
 
