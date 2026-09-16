@@ -19,6 +19,16 @@ import { MARKUP_DRIFT_ERROR } from './solosagre'
 // AJAX e pagine di dettaglio, non "fra pagine": T-08-17.
 export const INLOMBARDIA_CRAWL_DELAY_MS = 10000
 
+// Una riga di progresso ogni 50 pagine di dettaglio, cioe' ogni ~8 minuti.
+// Il ciclo dei dettagli non logga per pagina — sarebbero migliaia di righe —
+// ma senza NESSUNA riga resta muto per ore: il 2026-09-16, con uno scrape a
+// meta' strada, dal log non si riusciva a distinguere "sta lavorando" da "e'
+// morto", e ci sono voluti tre controlli indiretti (docker stats, il lock in
+// database, l'assenza di riga in scrape_runs) per rispondere. Il refresh
+// completo settimanale ha esattamente la stessa durata, quindi il problema
+// non sparisce col dettaglio incrementale.
+export const DETAIL_PROGRESS_EVERY = 50
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -592,10 +602,21 @@ async function fetchDetailPages(
   // opposto di "una richiesta ogni dieci secondi allo stesso host" (D-10, T-08-17).
   // Un fallimento su una singola pagina non deve interrompere le altre — fetchDetailPage
   // gestisce già la degradazione controllata internamente (dati null, mai un throw).
+  let done = 0
   for (const event of eventsToFetch) {
     await sleep(INLOMBARDIA_CRAWL_DELAY_MS)
     const data = await fetchDetailPage(event.url!)
     detailDataMap.set(event.url!, data)
+
+    done++
+    if (done % DETAIL_PROGRESS_EVERY === 0) {
+      const remainingMin = Math.round(
+        ((eventsToFetch.length - done) * INLOMBARDIA_CRAWL_DELAY_MS) / 60000
+      )
+      console.log(
+        `[InLombardia] Dettagli ${done}/${eventsToFetch.length}, ~${remainingMin} min rimanenti`
+      )
+    }
   }
 
   console.log(`[InLombardia] Fetched ${detailDataMap.size} detail pages successfully`)
