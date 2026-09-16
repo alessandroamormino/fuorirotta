@@ -13,20 +13,31 @@
  * chiude (mai, finche' resta nel pool e viene riusata per altre query).
  * L'unica forma sicura di advisory lock con Prisma richiederebbe una
  * transazione esplicita che pinni una connessione per l'intera sezione
- * critica — qui la sezione critica e' lo scrape stesso, fino a oltre un'ora
- * per in-lombardia.it (>=53 min misurati, 08-05-SUMMARY.md): tenere una
- * connessione del pool bloccata per un'ora e' proprio il problema che D-16
- * vuole risolvere, non uno strumento per risolverlo.
+ * critica — qui la sezione critica e' lo scrape stesso, quasi cinque ore per
+ * in-lombardia.it (4h53m osservate in produzione il 2026-09-15): tenere una
+ * connessione del pool bloccata per mezza giornata e' proprio il problema che
+ * D-16 vuole risolvere, non uno strumento per risolverlo.
  */
 import { prisma } from '../prisma'
 
-// 2h: ampio margine sopra il limite inferiore misurato per in-lombardia.it
-// (>=53 min, 08-05-SUMMARY.md), ma molto sotto la finestra giornaliera di una
-// regione "ricca" — un lock davvero orfano si autoripara entro la giornata.
-// NON validato contro un run reale piu' lungo di 2h (Assumption A3,
-// 14-RESEARCH.md): se la prova a N=1 (14-05) mostrasse un run oltre il TTL,
-// il numero va rialzato QUI e in nessun altro punto.
-export const LOCK_TTL_MS = 2 * 60 * 60 * 1000
+// 8h. Il valore precedente (2h) veniva dal limite inferiore della Fase 8
+// (>=53 min, 08-05-SUMMARY.md) e l'Assumption A3 di 14-RESEARCH.md avvertiva
+// che non era validato contro un run piu' lungo. La prova a N=1 del
+// 2026-09-16 l'ha falsificata: due run di in-lombardia da 4h53m e 5h05m,
+// col lock scaduto a meta' strada e un secondo scrape partito sopra il primo
+// (3 sovrapposizioni osservate).
+//
+// 8h non e' un margine scelto a occhio: il costo dello scrape e' aritmetico,
+// (pagine AJAX + pagine di dettaglio) x INLOMBARDIA_CRAWL_DELAY_MS, cioe'
+// ~1660 x 10s = 4h37m di pavimento per la Lombardia di oggi. 8h copre quel
+// pavimento con quasi il doppio di margine e resta molto sotto le 24h fra
+// due run della stessa regione, cosi' un lock davvero orfano si autoripara
+// entro la giornata.
+//
+// Se una regione superasse le 8h il numero va rialzato QUI e in nessun altro
+// punto — ma prima conviene chiedersi perche' sta scaricando cosi' tante
+// pagine di dettaglio (vedi ScrapeParams.detailCachedUrls).
+export const LOCK_TTL_MS = 8 * 60 * 60 * 1000
 
 /**
  * Acquisizione atomica: un solo statement, nessuna finestra fra lettura e

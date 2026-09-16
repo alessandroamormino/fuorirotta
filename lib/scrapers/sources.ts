@@ -139,19 +139,31 @@ export const SOURCE_META: SourceMeta[] = [
  * Gli orari sono in UTC (vedi il commento immediatamente sopra la costante).
  *
  * La frequenza si giustifica con un numero misurato, mai con una stima
- * (D-11): in-lombardia.it costa **>=53 minuti misurati** (limite inferiore,
- * probabilmente oltre un'ora — 08-05-SUMMARY.md), quindi la Lombardia non
- * entra in una finestra da 4 ore ripetuta sei volte al giorno e passa a una
- * cadenza giornaliera. Il minuto di partenza (17, non 0) e' deliberatamente
+ * (D-11): in-lombardia.it costa **4h53m osservate in produzione** il
+ * 2026-09-15 (il ">=53 min" di 08-05-SUMMARY.md era un limite inferiore
+ * preso su molti meno eventi), quindi la Lombardia non entra in una finestra
+ * da 4 ore ripetuta sei volte al giorno e passa a una cadenza giornaliera. Il minuto di partenza (17, non 0) e' deliberatamente
  * non tondo: e' la prima voce di uno scaglionamento che alla Fase 15
  * diventera' venti voci a minuti di distanza, e partire da uno slot gia'
  * spostato evita che le regioni future si accalchino tutte sul minuto zero.
  *
- * La sostenibilita' e' aritmetica: 24h / 20 regioni = 72 minuti di slot,
- * che copre anche la regione piu' lenta misurata. Le regioni leggere (solo
- * l'adattatore SoloSagre generalizzato, costo in secondi) restano ogni 4h
- * quando la Fase 15 le aggiungera' — non tutte le regioni hanno bisogno
- * della stessa cadenza solo perche' ora e' una proprieta' della regione.
+ * ATTENZIONE FASE 15 — l'aritmetica scritta qui in origine ("24h / 20 regioni
+ * = 72 minuti di slot, che copre anche la regione piu' lenta misurata") e'
+ * FALSA, e lo e' sempre stata: la Lombardia da sola costa 4h53m, che in 72
+ * minuti non entra. Venti regioni in slot serializzati non stanno in una
+ * giornata.
+ *
+ * La via d'uscita non e' allungare gli slot ma il fatto che il Crawl-delay
+ * sia un vincolo PER HOST (D-02, gia' implementato in groupSourcesByHost):
+ * regioni con siti diversi possono sovrapporsi senza violare alcun
+ * robots.txt, e il limite vero diventa pool e CPU con N scrape in parallelo —
+ * cioe' proprio cio' che scripts/n1-proof.ts misura. Da decidere pianificando
+ * la Fase 15, non qui.
+ *
+ * Le regioni leggere (solo l'adattatore SoloSagre generalizzato, costo in
+ * secondi) restano ogni 4h quando la Fase 15 le aggiungera' — non tutte le
+ * regioni hanno bisogno della stessa cadenza solo perche' ora e' una
+ * proprieta' della regione.
  *
  * Ogni regione presente in `SOURCE_META` DEVE avere una voce qui:
  * `scripts/generate-crontab.ts` fallisce rumorosamente se manca, mai un
@@ -175,10 +187,19 @@ export const REGION_SCHEDULES: Record<string, string> = {
  * REGION_SCHEDULES perche' non appartiene a nessuna singola regione — gira
  * una volta al giorno DOPO l'ultima regione pianificata, non insieme a una.
  *
- * In UTC come REGION_SCHEDULES. 05:30 UTC lascia 1h13m dall'avvio dello scrape
- * lombardo (03:17 UTC), che costa >=53 minuti misurati.
+ * In UTC come REGION_SCHEDULES. 09:00 UTC, non 05:30: il valore precedente era
+ * calcolato su ">=53 minuti misurati" (Fase 8) e cadeva quindi DENTRO la
+ * finestra di scrape reale. Osservato il 2026-09-16: lo scrape delle 03:17
+ * finisce verso le 08:10, e la manutenzione delle 05:30 ha girato a meta'
+ * scrape — senza acquisire alcun lock (WR-01). Nessun P2024 quella volta, ma
+ * per fortuna, non per costruzione.
+ *
+ * 09:00 sta dopo il pavimento aritmetico dello scrape lombardo (03:17 + 4h37m
+ * = 07:54) con un'ora di margine. Se la Lombardia crescesse oltre le ~5h40m
+ * di scrape questo numero va rispostato in avanti — o, meglio, va ridotto il
+ * numero di pagine di dettaglio scaricate (ScrapeParams.detailCachedUrls).
  */
-export const MAINTENANCE_SCHEDULE = '30 5 * * *'
+export const MAINTENANCE_SCHEDULE = '0 9 * * *'
 
 /** Metadati di una sorgente per id. */
 export function getSourceMetaById(id: string): SourceMeta | undefined {
