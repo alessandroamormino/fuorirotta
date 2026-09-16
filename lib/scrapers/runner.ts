@@ -56,6 +56,51 @@ export function groupSourcesByHost(entries: SourceRegistryEntry[]): SourceRegist
 }
 
 /**
+ * Giorno del refresh completo: la domenica (UTC) nessun dettaglio viene
+ * saltato e ogni pagina viene riscaricata.
+ *
+ * Perche' serve: saltare il dettaglio degli eventi gia' noti rende lo scrape
+ * quotidiano minuti invece di ore, ma una pagina di dettaglio PUO' cambiare
+ * dopo la prima lettura — un orario spostato, un indirizzo corretto. Senza un
+ * giro completo periodico quelle correzioni non arriverebbero mai.
+ *
+ * Perche' il giorno della settimana e non una colonna `detailFetchedAt`:
+ * quella colonna sarebbe una migrazione, un backfill su 12.499 righe e uno
+ * stato in piu' da mantenere, per ottenere la stessa cosa che un confronto
+ * sul calendario da' gratis. Se un giorno servisse una politica per-evento
+ * (es. ricontrollare piu' spesso gli eventi imminenti) allora la colonna si
+ * giustifica; oggi no.
+ */
+export const FULL_DETAIL_REFRESH_WEEKDAY = 0
+
+/** Domenica UTC: nessun dettaglio saltato, si riscarica tutto. */
+export function isFullDetailRefreshDay(now: Date = new Date()): boolean {
+  return now.getUTCDay() === FULL_DETAIL_REFRESH_WEEKDAY
+}
+
+/**
+ * `sourceUrl` degli eventi di questa sorgente il cui dettaglio e' gia' stato
+ * letto e salvato. `description` non nulla e' il marcatore: e' il campo che
+ * esiste SOLO nella pagina di dettaglio, quindi se c'e', quella pagina e'
+ * stata scaricata almeno una volta.
+ *
+ * Conseguenza accettata: un evento la cui pagina di dettaglio non ha davvero
+ * descrizione viene riscaricato ogni giorno per sempre. Sono pochi e il costo
+ * e' proporzionale a quanti sono — nessuno stato in piu' da mantenere per
+ * distinguerli.
+ *
+ * Solo il runner parla col database: gli adattatori ricevono l'insieme gia'
+ * pronto via ScrapeParams e restano puri.
+ */
+async function detailCachedUrls(sourceId: string): Promise<Set<string>> {
+  const rows = await prisma.event.findMany({
+    where: { source: sourceId, description: { not: null }, sourceUrl: { not: null } },
+    select: { sourceUrl: true }
+  })
+  return new Set(rows.map(row => row.sourceUrl).filter((url): url is string => Boolean(url)))
+}
+
+/**
  * Scrape di una singola regione (SCHED-01, D-01): filtra il registry sulla
  * regione, raggruppa per host (D-02) ed esegue i gruppi in parallelo fra
  * loro e in sequenza dentro ogni gruppo. Non decide codici HTTP: se la
@@ -75,6 +120,12 @@ export async function runRegion(region: string, params?: ScrapeParams): Promise<
   try {
     const groups = groupSourcesByHost(getSourcesByRegion(region))
 
+    // Il refresh completo settimanale ignora la cache dei dettagli.
+    const fullRefresh = isFullDetailRefreshDay()
+    if (fullRefresh) {
+      console.log('[Scraper] Refresh completo settimanale: nessuna pagina di dettaglio saltata.')
+    }
+
     // Gruppi (host diversi) in parallelo fra loro; dentro ogni gruppo (stesso
     // host) le sorgenti in sequenza — D-02.
     const groupSettled = await Promise.allSettled(
@@ -82,7 +133,10 @@ export async function runRegion(region: string, params?: ScrapeParams): Promise<
         const groupResults: ScrapeResult[] = []
         for (const entry of group) {
           try {
-            const adapterResult = await entry.scrape(params)
+            const entryParams: ScrapeParams = fullRefresh
+              ? { ...params }
+              : { ...params, detailCachedUrls: await detailCachedUrls(entry.id) }
+            const adapterResult = await entry.scrape(entryParams)
             groupResults.push({ ...adapterResult, region: entry.region })
           } catch (err) {
             groupResults.push({

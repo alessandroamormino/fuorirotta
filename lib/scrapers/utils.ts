@@ -178,6 +178,27 @@ export async function saveEvents(
           // sempre il valore canonico calcolato sotto la mappatura vecchia se
           // la sorgente cambia markup.
           const canonicalCategory = canonicalizeCategory(event.source, event.category)
+
+          // Campi che nascono nella pagina di dettaglio, o che il dettaglio
+          // arricchisce rispetto alla card in lista. Quando il dettaglio non
+          // e' stato scaricato (detailSkipped) valgono null o la versione
+          // povera della lista, e scriverli CANCELLEREBBE dati buoni gia' in
+          // database: sono l'unica parte dell'update che diventa condizionale.
+          // title/date/categoria restano sempre aggiornati, perche' vengono
+          // dalla lista, che viene letta a ogni scrape — e' la ragione per cui
+          // un evento saltato viene comunque salvato invece che ignorato: una
+          // sagra rinviata deve cambiare data anche nei giorni senza refresh
+          // completo.
+          const detailFields = {
+            description: event.description,
+            locationName: event.locationName,
+            address: event.address,
+            latitude: event.latitude,
+            longitude: event.longitude,
+            imageUrl: event.imageUrl,
+            phone: event.phone
+          }
+
           return prisma.event.upsert({
             where: {
               events_source_source_id_key: {
@@ -185,6 +206,11 @@ export async function saveEvents(
                 sourceId: event.sourceId
               }
             },
+            // Il ramo create resta completo: l'insieme dei dettagli gia' noti
+            // e' costruito DAL database, quindi un evento che qui non esiste
+            // non puo' esserci dentro. Se per un disallineamento ci finisse,
+            // la riga nascerebbe con description null — e proprio per questo
+            // uscirebbe dall'insieme al giro dopo, riscaricandosi da sola.
             create: {
               source: event.source,
               sourceId: event.sourceId,
@@ -204,19 +230,13 @@ export async function saveEvents(
             },
             update: {
               title: event.title,
-              description: event.description,
               dateStart: event.dateStart,
               dateEnd: event.dateEnd,
-              locationName: event.locationName,
-              address: event.address,
-              latitude: event.latitude,
-              longitude: event.longitude,
               category: event.category,
               canonicalCategory,
               sourceUrl: event.sourceUrl,
-              imageUrl: event.imageUrl,
-              phone: event.phone,
-              updatedAt: new Date()
+              updatedAt: new Date(),
+              ...(event.detailSkipped ? {} : detailFields)
             }
           })
         })

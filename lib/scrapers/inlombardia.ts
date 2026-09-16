@@ -108,8 +108,8 @@ export async function scrapeInLombardia(params: ScrapeParams = {}): Promise<Adap
     // Step 2: Parse HTML to extract events
     const outcome = parseInLombardiaCards(html)
 
-    // Step 3: Fetch detail pages for rich data
-    const detailDataMap = await fetchDetailPages(outcome.events)
+    // Step 3: Fetch detail pages for rich data (solo quelle non gia' in database)
+    const detailDataMap = await fetchDetailPages(outcome.events, params.detailCachedUrls)
 
     // Step 4: Transform to ScrapedEvent format with filtering and detail data
     const events = transformEvents(outcome.events, params, detailDataMap)
@@ -557,11 +557,30 @@ export function parseInLombardiaDetail(html: string): DetailParseOutcome {
   }
 }
 
-async function fetchDetailPages(events: ParsedEvent[]): Promise<Map<string, DetailData>> {
+async function fetchDetailPages(
+  events: ParsedEvent[],
+  detailCachedUrls?: Set<string>
+): Promise<Map<string, DetailData>> {
   const detailDataMap = new Map<string, DetailData>()
 
   // Filter to only events with valid URLs
-  const eventsToFetch = events.filter(e => e.url && e.url.startsWith('http'))
+  const withUrl = events.filter(e => e.url && e.url.startsWith('http'))
+
+  // Il dettaglio gia' in database non si riscarica: a regime quasi tutte le
+  // pagine sono identiche a ieri, e ognuna costa INLOMBARDIA_CRAWL_DELAY_MS
+  // di attesa obbligatoria. Chi decide cosa e' gia' noto e' il runner.
+  const eventsToFetch = detailCachedUrls
+    ? withUrl.filter(e => !detailCachedUrls.has(e.url!))
+    : withUrl
+
+  const skipped = withUrl.length - eventsToFetch.length
+  if (skipped > 0) {
+    const savedMs = skipped * INLOMBARDIA_CRAWL_DELAY_MS
+    console.log(
+      `[InLombardia] ${skipped} pagine di dettaglio gia' in database, non riscaricate ` +
+      `(~${Math.round(savedMs / 60000)} min di Crawl-delay risparmiati)`
+    )
+  }
 
   if (eventsToFetch.length === 0) {
     return detailDataMap
@@ -646,6 +665,11 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, deta
     // Look up detail data for this event URL
     const detailData = data.url ? detailDataMap.get(data.url) : null
 
+    // Dettaglio non scaricato perche' gia' in database (non "assente"): i
+    // campi che seguono degradano alla versione povera della lista, e
+    // saveEvents non deve sovrascrivere con essi quelli buoni gia' salvati.
+    const detailSkipped = Boolean(data.url && params.detailCachedUrls?.has(data.url))
+
     // Use detail data if available, fallback to list-view data
     const description = detailData?.description || null
     const phone = detailData?.phone || null
@@ -693,7 +717,8 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, deta
       category: data.category || 'Evento',
       sourceUrl: data.url || 'https://www.in-lombardia.it',
       imageUrl,
-      phone
+      phone,
+      ...(detailSkipped ? { detailSkipped: true } : {})
     })
   }
 
