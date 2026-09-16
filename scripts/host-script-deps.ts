@@ -46,7 +46,7 @@ const HOST_SCRIPTS = ['scripts/generate-crontab.ts']
  * sono soggetti ai vincoli di HOST_SCRIPTS, perche' nel container il Node e' 20
  * e l'engine Prisma sul disco (musl) e' quello giusto.
  */
-const CONTAINER_SCRIPTS = ['scripts/maintenance-job.ts', 'scripts/n1-proof.ts']
+const CONTAINER_SCRIPTS = ['scripts/maintenance-job.ts', 'scripts/n1-proof.ts', 'scripts/rls-check.ts']
 
 /**
  * Pacchetti che richiedono Node >= 20 e non possono comparire nella chiusura
