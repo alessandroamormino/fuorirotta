@@ -43,3 +43,5 @@ next-env.d.ts
 
 .planning/
 .claude/
+# MCP config locale: contiene chiavi API, non va in git
+.mcp.json
