@@ -161,7 +161,7 @@ Example output at the time of writing (one region, Lombardy, plus the consolidat
 # d'estate, 04:17 d'inverno.
 
 17 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh lombardia >> /var/log/fuorirotta-cron.log 2>&1
-0 9 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
+0 11 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
 ```
 
 **Updating an already-installed block: back up, transform, DIFF, then install behind a guard.** When only a schedule changes there is nothing to paste — but `crontab <file>` replaces the whole crontab with whatever that file contains, *including nothing at all*. On 2026-09-16 a `sed` pipeline broke on a multi-line paste, produced a zero-byte file, and `crontab /tmp/crontab.new` installed it: the certbot renewal was gone, and only `grep -c certbot` returning `0` caught it. The backup made the recovery a single command. Never run `crontab <file>` on a file you have not just diffed, and never on one that has not passed the guard:

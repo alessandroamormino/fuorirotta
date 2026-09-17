@@ -60,7 +60,7 @@ echo "ok  S2: riga per lombardia presente con schedule/percorso/argomento/log co
 
 # --- S3: la riga del job consolidato, dopo l'ultima regione ------------------
 
-if ! printf '%s\n' "${output}" | grep -qE '^0 9 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance\.sh >> /var/log/fuorirotta-cron\.log 2>&1$'; then
+if ! printf '%s\n' "${output}" | grep -qE '^0 11 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance\.sh >> /var/log/fuorirotta-cron\.log 2>&1$'; then
   fail "S3: riga attesa per cron-maintenance.sh assente o mal formata"
 fi
 # Ultima riga di CRON (non l'ultima riga in assoluto: da quando il generatore

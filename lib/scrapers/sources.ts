@@ -194,12 +194,22 @@ export const REGION_SCHEDULES: Record<string, string> = {
  * scrape — senza acquisire alcun lock (WR-01). Nessun P2024 quella volta, ma
  * per fortuna, non per costruzione.
  *
- * 09:00 sta dopo il pavimento aritmetico dello scrape lombardo (03:17 + 4h37m
- * = 07:54) con un'ora di margine. Se la Lombardia crescesse oltre le ~5h40m
- * di scrape questo numero va rispostato in avanti — o, meglio, va ridotto il
- * numero di pagine di dettaglio scaricate (ScrapeParams.detailCachedUrls).
+ * 11:00 UTC, non 09:00: nei giorni feriali lo scrape incrementale dura ~40
+ * minuti e qualunque orario dopo le 04:00 andrebbe bene, ma **la domenica**
+ * scatta il refresh completo (isFullDetailRefreshDay in runner.ts) e lo scrape
+ * torna al suo pavimento aritmetico di ~4h37m, finendo verso le 07:54-08:10.
+ * Le 09:00 lasciavano cinquanta minuti di margine un giorno su sette — un
+ * margine che per giunta si assottiglia da solo, perche' il costo dello scrape
+ * cresce col catalogo. 11:00 ne lascia circa tre ore.
+ *
+ * ATTENZIONE, questo e' un rimedio d'orario, non la correzione vera. WR-01
+ * resta aperto: scripts/maintenance-job.ts non acquisisce alcun RegionLock, e
+ * finche' non lo fa e' l'orologio a separare i due job, non il codice. Con
+ * venti regioni (Fase 15) l'orologio non bastera' piu': li' il job di
+ * manutenzione deve prendere il lock, e la scelta fra un lock per regione e
+ * uno globale e' parte di quella riprogettazione.
  */
-export const MAINTENANCE_SCHEDULE = '0 9 * * *'
+export const MAINTENANCE_SCHEDULE = '0 11 * * *'
 
 /** Metadati di una sorgente per id. */
 export function getSourceMetaById(id: string): SourceMeta | undefined {
