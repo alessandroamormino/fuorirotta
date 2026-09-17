@@ -1,7 +1,8 @@
 /**
  * SoloSagre.it scraper
  *
- * Fetches and parses HTML from solosagre.it/sagre/lombardia/
+ * Fetches and parses HTML from solosagre.it/sagre/{region-slug}/ (Fase 15, SRC-04:
+ * parametrizzato per slug regione, prima era solo la Lombardia)
  * Fetches event listings, parses HTML via cheerio (DOM selectors), and transforms to Event schema.
  */
 
@@ -47,71 +48,87 @@ interface ParseOutcome {
   error?: string
 }
 
-export async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<AdapterResult> {
-  const startTime = Date.now()
+// Fabbrica esportata (Fase 15, SRC-04): chiude sullo slug regione e costruisce l'URL
+// di base e quello di pagina N a partire da esso. Prima di questa fabbrica l'URL era
+// scritto a mano in due punti (solo Lombardia) — SRC-04 generalizza SoloSagre a
+// tutte e venti le regioni ISTAT SENZA toccare il parsing: tutto cio' che segue
+// (parseSoloSagreHtml, mergeSoloSagrePages, transformEvents, deriveSoloSagreSourceId)
+// resta identico, regione-agnostico com'era gia' prima. `soloSagreSlug` e' lo slug
+// prodotto da `istatRegionToSlug()` (lib/scrapers/regionSlug.ts) — la stessa funzione
+// costruisce sia lo slug del registry sia lo slug URL, cosi' non serve una seconda
+// tabella di corrispondenza (vedi l'intestazione di regionSlug.ts).
+//
+// SOLOSAGRE_CRAWL_DELAY_MS NON cambia valore qui: il passaggio da una a venti regioni
+// si assorbe scaglionando le righe di crontab (REGION_SCHEDULES, 15-05 Task 2), mai
+// accorciando il ritardo fra richieste allo stesso host.
+export function scrapeSoloSagreForRegion(soloSagreSlug: string): (params?: ScrapeParams) => Promise<AdapterResult> {
+  return async function scrapeSoloSagre(params: ScrapeParams = {}): Promise<AdapterResult> {
+    const startTime = Date.now()
+    const baseUrl = `https://www.solosagre.it/sagre/${soloSagreSlug}/`
 
-  try {
-    // Step 1: Fetch pagina 1 (serve comunque per il contenuto, nessun costo aggiuntivo)
-    const page1Response = await fetchWithRetry('https://www.solosagre.it/sagre/lombardia/')
-    const page1Html = await page1Response.text()
-    const page1Outcome = parseSoloSagreHtml(page1Html)
+    try {
+      // Step 1: Fetch pagina 1 (serve comunque per il contenuto, nessun costo aggiuntivo)
+      const page1Response = await fetchWithRetry(baseUrl)
+      const page1Html = await page1Response.text()
+      const page1Outcome = parseSoloSagreHtml(page1Html)
 
-    const outcomes: ParseOutcome[] = [page1Outcome]
+      const outcomes: ParseOutcome[] = [page1Outcome]
 
-    // Se pagina 1 ha già l'anchor mancante (markup cambiato), non ha senso proseguire
-    // la paginazione: il totale letto da #paging su un documento mutato non è affidabile.
-    if (!page1Outcome.error) {
-      const totalPages = parseSoloSagreTotalPages(page1Html)
+      // Se pagina 1 ha già l'anchor mancante (markup cambiato), non ha senso proseguire
+      // la paginazione: il totale letto da #paging su un documento mutato non è affidabile.
+      if (!page1Outcome.error) {
+        const totalPages = parseSoloSagreTotalPages(page1Html)
 
-      for (let page = 2; page <= totalPages; page++) {
-        // Attesa PRIMA della richiesta, scritta nell'adapter (mai dentro fetchWithRetry).
-        await new Promise(resolve => setTimeout(resolve, SOLOSAGRE_CRAWL_DELAY_MS))
+        for (let page = 2; page <= totalPages; page++) {
+          // Attesa PRIMA della richiesta, scritta nell'adapter (mai dentro fetchWithRetry).
+          await new Promise(resolve => setTimeout(resolve, SOLOSAGRE_CRAWL_DELAY_MS))
 
-        const pageResponse = await fetchWithRetry(`https://www.solosagre.it/sagre/lombardia/${page}/`)
-        const pageHtml = await pageResponse.text()
-        const pageOutcome = parseSoloSagreHtml(pageHtml)
+          const pageResponse = await fetchWithRetry(`${baseUrl}${page}/`)
+          const pageHtml = await pageResponse.text()
+          const pageOutcome = parseSoloSagreHtml(pageHtml)
 
-        if (pageOutcome.error) {
-          // Anchor mancante su una pagina successiva: markup cambiato, propagare
-          // l'errore come stabilito in 08-03 (D-07) e fermarsi.
+          if (pageOutcome.error) {
+            // Anchor mancante su una pagina successiva: markup cambiato, propagare
+            // l'errore come stabilito in 08-03 (D-07) e fermarsi.
+            outcomes.push(pageOutcome)
+            break
+          }
+
+          if (pageOutcome.events.length === 0) {
+            // Anchor presente, zero eventi: segnale coerente (il sito ha ripaginato
+            // mentre lo si leggeva, o N era sovrastimato), non un guasto. Ci si ferma
+            // qui senza aggiungere una pagina vuota e senza errore.
+            break
+          }
+
           outcomes.push(pageOutcome)
-          break
         }
-
-        if (pageOutcome.events.length === 0) {
-          // Anchor presente, zero eventi: segnale coerente (il sito ha ripaginato
-          // mentre lo si leggeva, o N era sovrastimato), non un guasto. Ci si ferma
-          // qui senza aggiungere una pagina vuota e senza errore.
-          break
-        }
-
-        outcomes.push(pageOutcome)
       }
-    }
 
-    // Step 2: Unire le pagine raccolte, deduplicando per sourceId
-    const merged = mergeSoloSagrePages(outcomes)
+      // Step 2: Unire le pagine raccolte, deduplicando per sourceId
+      const merged = mergeSoloSagrePages(outcomes, soloSagreSlug)
 
-    // Step 3: Transform to ScrapedEvent format with filtering
-    const events = transformEvents(merged.events, params)
+      // Step 3: Transform to ScrapedEvent format with filtering
+      const events = transformEvents(merged.events, params, soloSagreSlug)
 
-    const duration = Date.now() - startTime
+      const duration = Date.now() - startTime
 
-    // Un markup cambiato non è un'eccezione: è un risultato che riporta un errore (D-07).
-    // merged.error viene propagato qui, senza passare dal ramo catch.
-    return {
-      events,
-      source: 'solosagre',
-      duration,
-      ...(merged.error ? { error: merged.error } : {})
-    }
-  } catch (error) {
-    const duration = Date.now() - startTime
-    return {
-      events: [],
-      source: 'solosagre',
-      duration,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      // Un markup cambiato non è un'eccezione: è un risultato che riporta un errore (D-07).
+      // merged.error viene propagato qui, senza passare dal ramo catch.
+      return {
+        events,
+        source: 'solosagre',
+        duration,
+        ...(merged.error ? { error: merged.error } : {})
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime
+      return {
+        events: [],
+        source: 'solosagre',
+        duration,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
   }
 }
@@ -137,14 +154,21 @@ export function parseSoloSagreTotalPages(html: string): number {
 
 // Stesso identificativo usato sia dalla deduplicazione fra pagine sia dalla trasformazione
 // finale (transformEvents), così che le due non possano divergere. Se l'evento ha un URL,
-// l'id resta quello derivato dall'URL (comportamento invariato). Solo per gli eventi privi
-// di URL il ripiego cambia: prima era `String(Math.random())` (mai deduplicabile, una riga
-// nuova a ogni esecuzione), ora è deterministico da titolo + data di inizio, così lo stesso
-// evento senza URL produce sempre lo stesso sourceId.
-export function deriveSoloSagreSourceId(data: Pick<ParsedEvent, 'url' | 'title' | 'date_start'>): string {
+// l'id resta quello derivato dall'URL (comportamento invariato) — una pagina reale sul
+// sito è già univoca per costruzione, indipendentemente dalla regione. Solo per gli eventi
+// privi di URL il ripiego cambia: prima era `String(Math.random())` (mai deduplicabile, una
+// riga nuova a ogni esecuzione), poi deterministico da titolo + data di inizio; ora (Fase
+// 15, SRC-04) porta anche `soloSagreSlug` come discriminante — senza, due sagre omonime
+// alla stessa data in regioni diverse (entrambe senza URL) collasserebbero sulla stessa
+// riga in `events.sourceId`, perché prima di questa fase esisteva una sola regione e il
+// caso non poteva presentarsi.
+export function deriveSoloSagreSourceId(
+  data: Pick<ParsedEvent, 'url' | 'title' | 'date_start'>,
+  soloSagreSlug: string
+): string {
   const fromUrl = data.url ? data.url.split('/').pop()?.replace('.html', '') : null
   if (fromUrl) return fromUrl
-  return `senza-url:${data.title ?? ''}|${data.date_start ?? ''}`
+  return `senza-url:${soloSagreSlug}:${data.title ?? ''}|${data.date_start ?? ''}`
 }
 
 // Concatena gli eventi nell'ordine di pagina e poi di documento, deduplicando per
@@ -152,7 +176,7 @@ export function deriveSoloSagreSourceId(data: Pick<ParsedEvent, 'url' | 'title' 
 // (il sito ripagina mentre lo si sta leggendo) esce una volta sola. L'ordine risultante
 // è deterministico e identico fra due esecuzioni sugli stessi input. Se una qualunque
 // pagina riporta un errore (anchor mancante), quell'errore è propagato nel risultato.
-export function mergeSoloSagrePages(outcomes: ParseOutcome[]): ParseOutcome {
+export function mergeSoloSagrePages(outcomes: ParseOutcome[], soloSagreSlug: string): ParseOutcome {
   const seen = new Set<string>()
   const events: ParsedEvent[] = []
   let error: string | undefined
@@ -162,7 +186,7 @@ export function mergeSoloSagrePages(outcomes: ParseOutcome[]): ParseOutcome {
       error = outcome.error
     }
     for (const event of outcome.events) {
-      const id = deriveSoloSagreSourceId(event)
+      const id = deriveSoloSagreSourceId(event, soloSagreSlug)
       if (seen.has(id)) continue
       seen.add(id)
       events.push(event)
@@ -214,7 +238,7 @@ export function parseSoloSagreHtml(html: string): ParseOutcome {
   return { events }
 }
 
-function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): ScrapedEvent[] {
+function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams, soloSagreSlug: string): ScrapedEvent[] {
   // Set default date range (today to 6 months from now)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -251,7 +275,7 @@ function transformEvents(parsedEvents: ParsedEvent[], params: ScrapeParams): Scr
 
     // Stesso identificativo usato dalla deduplicazione fra pagine (mergeSoloSagrePages),
     // così che le due non possano divergere.
-    const sourceId = deriveSoloSagreSourceId(data)
+    const sourceId = deriveSoloSagreSourceId(data, soloSagreSlug)
 
     // Handle image URL (prepend domain if relative)
     let imageUrl: string | null = null

@@ -3,14 +3,14 @@
  * Run with: npx tsx lib/scrapers/test-all-scrapers.ts
  */
 
-import { scrapeSoloSagre, scrapeOpenData, scrapeInLombardia } from './index'
+import { scrapeSoloSagreForRegion, scrapeOpenData, scrapeInLombardia } from './index'
 
 async function verifyAllScrapers() {
   console.log('=== Final Verification: All Scrapers ===\n')
 
   // Test 1: SoloSagre returns events with Sagra category
-  console.log('1. Testing scrapeSoloSagre()...')
-  const soloSagreResult = await scrapeSoloSagre({})
+  console.log('1. Testing scrapeSoloSagreForRegion("lombardia")...')
+  const soloSagreResult = await scrapeSoloSagreForRegion('lombardia')({})
   const hasSoloSagreEvents = soloSagreResult.events.length > 0
   const hasSagraCategory = soloSagreResult.events.every(e => e.category === 'Sagra')
   console.log(`   ✓ Returns ${soloSagreResult.events.length} events`)

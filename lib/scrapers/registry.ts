@@ -16,7 +16,7 @@
  * produzione (bundle browser e host Node 18).
  */
 
-import { scrapeSoloSagre } from './solosagre'
+import { scrapeSoloSagreForRegion } from './solosagre'
 import { scrapeOpenData } from './opendata'
 import { scrapeInLombardia } from './inlombardia'
 import { scrapeEmiliaRomagna } from './emiliaromagna'
@@ -40,15 +40,25 @@ export interface SourceRegistryEntry extends SourceMeta {
 }
 
 /**
+ * Fabbrica per id, non piu' una funzione fissa (Fase 15, SRC-04): venti entry
+ * SoloSagre condividono lo stesso id ('solosagre', scritto in produzione in
+ * `events.source` — non si tocca), quindi la funzione di scrape non puo' piu'
+ * dipendere dal solo id, deve ricevere la propria entry per sapere QUALE
+ * regione servire. Le altre sorgenti (una regione ciascuna) ignorano
+ * l'argomento e restituiscono la funzione esistente invariata.
+ */
+type ScrapeFactory = (meta: SourceMeta) => ScrapeFn
+
+/**
  * Implementazione per id. Le chiavi devono coincidere ESATTAMENTE con gli id
  * dichiarati in SOURCE_META: il controllo qui sotto lo impone.
  */
-const SCRAPERS: Record<string, ScrapeFn> = {
-  solosagre: scrapeSoloSagre,
-  opendata_lombardia: scrapeOpenData,
-  'in-lombardia': scrapeInLombardia,
-  'emilia-romagna': scrapeEmiliaRomagna,
-  puglia: scrapePuglia,
+const SCRAPERS: Record<string, ScrapeFactory> = {
+  solosagre: (meta) => scrapeSoloSagreForRegion(meta.region),
+  opendata_lombardia: () => scrapeOpenData,
+  'in-lombardia': () => scrapeInLombardia,
+  'emilia-romagna': () => scrapeEmiliaRomagna,
+  puglia: () => scrapePuglia,
 }
 
 // Join fail-closed, in entrambe le direzioni. Un metadato senza scraper
@@ -79,7 +89,7 @@ if (orphanScrapers.length > 0) {
  */
 export const SOURCE_REGISTRY: SourceRegistryEntry[] = SOURCE_META.map((meta) => ({
   ...meta,
-  scrape: SCRAPERS[meta.id],
+  scrape: SCRAPERS[meta.id](meta),
 }))
 
 export function getSourceById(id: string): SourceRegistryEntry | undefined {

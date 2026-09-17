@@ -8,9 +8,11 @@
  *   npx tsx scripts/scrape-measure.ts --source solosagre
  *   npx tsx scripts/scrape-measure.ts --source in-lombardia [--max-detail-pages N] [--max-list-pages N]
  *
- * SoloSagre: esegue scrapeSoloSagre() per intero (già limitato da SOLOSAGRE_MAX_PAGES=20,
- * al momento della scrittura il sito dichiara 3 pagine — misura veloce, nessun bound
- * ulteriore necessario).
+ * SoloSagre: esegue scrapeSoloSagreForRegion('lombardia')() per intero (già limitato da
+ * SOLOSAGRE_MAX_PAGES=20, al momento della scrittura il sito dichiara 3 pagine — misura
+ * veloce, nessun bound ulteriore necessario). Fase 15, SRC-04: questo script misura solo
+ * Lombardia; il costo delle altre 19 regioni si misura con `npm run scrape:local --
+ * --region <slug>` (scrive anche su scrape_runs, vedi 15-05-SUMMARY.md).
  *
  * In-lombardia: una misura completa richiederebbe una richiesta ogni dieci secondi PER
  * OGNI evento trovato, e — scoperta durante l'esecuzione di questo stesso piano — anche la
@@ -30,7 +32,7 @@
  *   4. proietta il costo per pagina (attesa + latenza media misurata), dichiarando
  *      esplicitamente quando il totale reale del sito resta sconosciuto
  */
-import { scrapeSoloSagre } from '../lib/scrapers/solosagre'
+import { scrapeSoloSagreForRegion } from '../lib/scrapers/solosagre'
 import {
   fetchAllPages,
   parseInLombardiaCards,
@@ -81,11 +83,16 @@ function formatSeconds(ms: number): string {
 }
 
 async function measureSoloSagre(): Promise<void> {
+  // Fase 15 (SRC-04): scrapeSoloSagre() non esiste piu' come funzione unica,
+  // e' una fabbrica per slug regione. 'lombardia' preserva il comportamento
+  // storico di questo script (nessun flag --region qui: la misura per le
+  // altre 19 regioni si fa con `npm run scrape:local -- --region <slug>`,
+  // che scrive anche su scrape_runs — vedi 15-05-SUMMARY.md).
   const tracker = trackFetches()
   const start = Date.now()
   let result
   try {
-    result = await scrapeSoloSagre()
+    result = await scrapeSoloSagreForRegion('lombardia')()
   } finally {
     tracker.restore()
   }

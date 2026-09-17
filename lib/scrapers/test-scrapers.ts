@@ -3,12 +3,12 @@
  * Run with: npx tsx lib/scrapers/test-scrapers.ts
  */
 
-import { scrapeSoloSagre } from './solosagre'
+import { scrapeSoloSagreForRegion } from './solosagre'
 import { scrapeOpenData } from './opendata'
 
 async function testScrapers() {
   console.log('Testing SoloSagre scraper...')
-  const soloSagreResult = await scrapeSoloSagre({})
+  const soloSagreResult = await scrapeSoloSagreForRegion('lombardia')({})
   console.log(`✓ SoloSagre: ${soloSagreResult.events.length} events in ${soloSagreResult.duration}ms`)
   if (soloSagreResult.events.length > 0) {
     console.log(`  Sample: ${soloSagreResult.events[0].title} (${soloSagreResult.events[0].category})`)

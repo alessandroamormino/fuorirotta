@@ -254,27 +254,39 @@ function runPagination(): void {
 
   // 4. mergeSoloSagrePages sulle tre fixture reali: conteggio pari ai sourceId distinti,
   //    strettamente maggiore della sola pagina 1
+  // Fase 15 (SRC-04): deriveSoloSagreSourceId/mergeSoloSagrePages portano ora
+  // un discriminante di regione esplicito. 'lombardia' qui perché le fixture
+  // solosagre-page{1,2,3}.html sono pagine reali catturate dalla Lombardia —
+  // questo test prova la logica di paginazione/dedup, non la generalizzazione
+  // multi-regione (quella è scripts/solosagre-national.test.sh).
+  const testSlug = 'lombardia'
   const o1 = parseSoloSagreHtml(p1)
   const o2 = parseSoloSagreHtml(p2)
   const o3 = parseSoloSagreHtml(p3)
   const allEvents = [...o1.events, ...o2.events, ...o3.events]
-  const distinctIds = new Set(allEvents.map(deriveSoloSagreSourceId))
-  const merged = mergeSoloSagrePages([o1, o2, o3])
+  const distinctIds = new Set(allEvents.map((e) => deriveSoloSagreSourceId(e, testSlug)))
+  const merged = mergeSoloSagrePages([o1, o2, o3], testSlug)
   assert.equal(merged.events.length, distinctIds.size)
   assert.ok(merged.events.length > o1.events.length)
   console.log(`ok  mergeSoloSagrePages su tre pagine: ${merged.events.length} eventi (pagina 1 sola: ${o1.events.length})`)
 
   // 5. Passare due volte la stessa pagina: stessa lunghezza di un passaggio solo
   //    (deduplicazione), ordine = prima occorrenza
-  const dupMerge = mergeSoloSagrePages([o1, o1])
+  const dupMerge = mergeSoloSagrePages([o1, o1], testSlug)
   assert.equal(dupMerge.events.length, o1.events.length)
-  assert.deepEqual(dupMerge.events.map(deriveSoloSagreSourceId), o1.events.map(deriveSoloSagreSourceId))
+  assert.deepEqual(
+    dupMerge.events.map((e) => deriveSoloSagreSourceId(e, testSlug)),
+    o1.events.map((e) => deriveSoloSagreSourceId(e, testSlug))
+  )
   console.log('ok  passare due volte la stessa pagina dedupica senza alterare l\'ordine')
 
   // 6. Stabilità dell'ordine fra due esecuzioni consecutive
-  const mergedA = mergeSoloSagrePages([o1, o2, o3])
-  const mergedB = mergeSoloSagrePages([o1, o2, o3])
-  assert.deepEqual(mergedA.events.map(deriveSoloSagreSourceId), mergedB.events.map(deriveSoloSagreSourceId))
+  const mergedA = mergeSoloSagrePages([o1, o2, o3], testSlug)
+  const mergedB = mergeSoloSagrePages([o1, o2, o3], testSlug)
+  assert.deepEqual(
+    mergedA.events.map((e) => deriveSoloSagreSourceId(e, testSlug)),
+    mergedB.events.map((e) => deriveSoloSagreSourceId(e, testSlug))
+  )
   console.log('ok  mergeSoloSagrePages produce la stessa sequenza di sourceId fra due esecuzioni')
 
   console.log('PASS: paginazione SoloSagre (SRC-03) verificata su fixture, senza rete')
