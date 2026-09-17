@@ -64,7 +64,7 @@ count_before="$(docker exec fuorirotta-postgres-dev psql -U fuorirotta -d fuorir
 if ! npx tsx scripts/health-cases.ts; then
   fail "npx tsx scripts/health-cases.ts e' uscito diverso da 0"
 fi
-echo "ok  health-cases.ts: dieci casi verdi (SRC-08)"
+echo "ok  health-cases.ts: undici casi verdi (SRC-08)"
 
 # --- 2. Dev server effimero, Postgres locale reale -------------------------------------------
 # scripts/dev-db.sh e' l'unico modo sicuro di puntare a un database da questo harness: URL

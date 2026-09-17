@@ -77,8 +77,12 @@ s1_output="$(npx tsx -e '
   if (molise.length !== 0) {
     throw new Error("getSourcesByRegion(\"molise\") non vuoto: " + molise.length)
   }
+  // Fase 15 (15-03-PLAN.md): emilia-romagna e puglia si aggiungono al
+  // registry DOPO lombardia (ordine di dichiarazione di SOURCE_META, D-04).
+  // Questa asserzione era congelata a ["lombardia"] da quando esisteva una
+  // sola regione: ora segue lordine reale del registry, non un ricordo.
   const regions = m.getRegions()
-  if (JSON.stringify(regions) !== JSON.stringify(["lombardia"])) {
+  if (JSON.stringify(regions) !== JSON.stringify(["lombardia", "emilia-romagna", "puglia"])) {
     throw new Error("getRegions() = " + JSON.stringify(regions))
   }
 })().catch((err) => { console.error("FAIL: " + err.message); process.exit(1) })
@@ -86,7 +90,7 @@ s1_output="$(npx tsx -e '
 if [[ "${s1_code}" -ne 0 ]]; then
   fail "S1 (getSourcesByRegion/getRegions): ${s1_output}"
 fi
-echo "S1 OK: getSourcesByRegion filtra per regione, getRegions() = ['lombardia'] senza duplicati"
+echo "S1 OK: getSourcesByRegion filtra per regione, getRegions() = ['lombardia','emilia-romagna','puglia'] senza duplicati"
 
 # --- S2: unita' pura — groupSourcesByHost ------------------------------------
 s2_output="$(npx tsx -e '
@@ -107,16 +111,21 @@ s2_output="$(npx tsx -e '
     throw new Error("dimensione gruppi inattesa: " + grouped.map((g) => g.length).join(","))
   }
 
+  // Fase 15 (15-03-PLAN.md): emilia-romagna e puglia aggiungono due host
+  // propri (emiliaromagnaturismo.it, osservatorio.dms.puglia.it), distinti
+  // dai tre host lombardi: 5 gruppi adesso, non piu 3. Questa asserzione era
+  // congelata allepoca di una sola regione: ora segue il numero reale di
+  // host distinti dichiarati in SOURCE_META.
   const real = m.groupSourcesByHost(SOURCE_REGISTRY)
-  if (real.length !== 3) {
-    throw new Error("registry reale lombardo atteso 3 gruppi (host distinti), ottenuto " + real.length)
+  if (real.length !== 5) {
+    throw new Error("registry reale atteso 5 gruppi (host distinti), ottenuto " + real.length)
   }
 })().catch((err) => { console.error("FAIL: " + err.message); process.exit(1) })
 ' 2>&1)" && s2_code=0 || s2_code=$?
 if [[ "${s2_code}" -ne 0 ]]; then
   fail "S2 (groupSourcesByHost): ${s2_output}"
 fi
-echo "S2 OK: due entry sullo stesso host in un solo gruppo, host diversi in gruppi separati; registry reale = 3 gruppi"
+echo "S2 OK: due entry sullo stesso host in un solo gruppo, host diversi in gruppi separati; registry reale = 5 gruppi"
 
 # --- Dev server effimero per S3/S4/S5, Postgres locale reale (D-17) ---------
 export CRON_SECRET="${secret}"

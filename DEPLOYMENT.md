@@ -151,7 +151,7 @@ cd /opt/docker/fuori-rotta/fuorirotta && npx tsx scripts/generate-crontab.ts
 
 > This host's crontab also carries the certbot renewal for fuori-rotta.it, which copies the new certificate and reloads nginx. An earlier version of this guide said "replace whatever crontab is currently installed" — following it would have deleted that renewal, and the site would have gone dark weeks later when the certificate expired, with nothing pointing at the cause. The generator now owns only what is between its markers; everything outside is none of its business, and `--check` does not even read it.
 
-Example output at the time of writing (one region, Lombardy, plus the consolidated maintenance job):
+Example output at the time of writing (three regions — Lombardy, Emilia-Romagna, Puglia — plus the consolidated maintenance job; Phase 15, `15-03-PLAN.md`):
 
 ```cron
 # >>> fuorirotta:crontab-generato >>>
@@ -161,8 +161,12 @@ Example output at the time of writing (one region, Lombardy, plus the consolidat
 # d'estate, 04:17 d'inverno.
 
 17 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh lombardia >> /var/log/fuorirotta-cron.log 2>&1
+20 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh emilia-romagna >> /var/log/fuorirotta-cron.log 2>&1
+23 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh puglia >> /var/log/fuorirotta-cron.log 2>&1
 0 11 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
 ```
+
+**Why emilia-romagna and puglia can sit only 3 minutes apart from lombardia and from each other, and why the SoloSagre-national lines coming in a later phase cannot.** `emiliaromagnaturismo.it` and `osservatorio.dms.puglia.it` are each their own host, distinct from `www.solosagre.it`, `www.dati.lombardia.it` and `www.in-lombardia.it` — `groupSourcesByHost` (`lib/scrapers/runner.ts`) already runs different hosts in parallel, so no `Crawl-delay` is at stake here; the few minutes of stagger exist only to avoid three scrapes starting on the same DB connection pool at once (D-12), not to be polite to a shared server. **This stops being true the moment a region's source is SoloSagre.** `15-05-PLAN.md` generalizes SoloSagre to all 20 ISTAT regions (`SRC-04`), and every SoloSagre line — the Lombardy one already in this crontab, and however many `15-05-PLAN.md` adds for the other regions — shares the *same* host, `www.solosagre.it`. Those lines MUST be serialized against each other in the schedule — staggering them by only a few minutes the way emilia-romagna/puglia are staggered here would violate `www.solosagre.it`'s `Crawl-delay` the moment two of them overlap in practice, because nothing in the crontab itself enforces host-level exclusion across *separate* `runRegion()` invocations (only `groupSourcesByHost` protects sources scraped *within* one invocation — see `15-RESEARCH.md` Pitfall 5). Whoever writes those lines needs schedule gaps sized to the real measured duration of a SoloSagre scrape (Piemonte's single-page ~5s is the only region measured so far, per `15-RESEARCH.md` Assumption A4 — not a safe stand-in for every region), not the few-minutes stagger used for the two regional sources above.
 
 **Updating an already-installed block: back up, transform, DIFF, then install behind a guard.** When only a schedule changes there is nothing to paste — but `crontab <file>` replaces the whole crontab with whatever that file contains, *including nothing at all*. On 2026-09-16 a `sed` pipeline broke on a multi-line paste, produced a zero-byte file, and `crontab /tmp/crontab.new` installed it: the certbot renewal was gone, and only `grep -c certbot` returning `0` caught it. The backup made the recovery a single command. Never run `crontab <file>` on a file you have not just diffed, and never on one that has not passed the guard:
 

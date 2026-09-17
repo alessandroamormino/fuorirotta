@@ -93,7 +93,22 @@ export function computeSourceHealth(source: string, region: string, runs: RunRec
   }
 
   let anomaly: boolean | null = null
-  if (baselineComplete && rawMean !== null) {
+  if (lastRun.error !== null) {
+    // Una run fallita e' sempre un'anomalia, a prescindere dalla baseline: un
+    // errore non ha bisogno di storico per essere un problema. Trovato in
+    // Fase 15 (Rule 1): la primissima esecuzione mai registrata di una
+    // sorgente nuova (puglia, bloccata dal difetto TLS di
+    // 15-RESEARCH.md Pitfall 2) ha baseline vuota (0 run precedenti,
+    // baselineComplete=false) ma status='failed' — senza questo ramo
+    // anomaly restava null, violando il contratto "anomaly=null solo
+    // quando status=insufficient_history" che
+    // scripts/monitoring-endpoint.test.sh verifica su ogni elemento di
+    // sources. Il ramo sotto (baseline completa) restava l'unico percorso
+    // che valorizzava anomaly, e non copriva mai errore+baseline-incompleta
+    // perche' nessuna sorgente esistente aveva mai fallito la sua primissima
+    // esecuzione prima d'ora.
+    anomaly = true
+  } else if (baselineComplete && rawMean !== null) {
     // Confronto strettamente minore: un calo esattamente pari alla soglia non e' anomalo.
     anomaly = lastRun.eventCount < rawMean * (1 - HEALTH_DROP_THRESHOLD)
   }
@@ -164,6 +179,17 @@ if (require.main === module) {
   // lastRun con errore -> failed, precedenza sopra a tutto il resto
   const failed = computeSourceHealth('s', 'r', [run(0, 'boom'), ...Array(HEALTH_WINDOW_SIZE).fill(null).map(() => run(100))])
   console.assert(failed.status === 'failed', 'atteso status failed quando lastRun.error non e\' nullo')
+  console.assert(failed.anomaly === true, 'atteso anomaly true su una run fallita, anche con baseline completa')
+
+  // Fase 15 (Rule 1): PRIMA run mai registrata per una coppia, e fallita —
+  // baseline vuota (0 run precedenti), status deve restare 'failed' (mai
+  // 'insufficient_history': l'errore ha precedenza) e anomaly NON deve
+  // restare null, o violerebbe il contratto "anomaly=null solo quando
+  // status=insufficient_history" (scripts/monitoring-endpoint.test.sh).
+  const failedFirstRun = computeSourceHealth('s', 'r', [run(0, 'boom')])
+  console.assert(failedFirstRun.status === 'failed', 'atteso status failed sulla primissima run, se fallita')
+  console.assert(failedFirstRun.baseline === null, 'atteso baseline null: nessuna run precedente')
+  console.assert(failedFirstRun.anomaly === true, 'atteso anomaly true anche senza alcuna baseline, mai null su una run fallita')
 
   // truncateError: nessuna ellissi sotto soglia, ellissi solo se tronca davvero
   console.assert(truncateError(null) === null, 'truncateError(null) deve restare null')

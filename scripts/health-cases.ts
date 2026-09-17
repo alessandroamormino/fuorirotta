@@ -150,4 +150,22 @@ function ok(label: string): void {
   ok('Caso 10: troncamento a 500 caratteri + ellissi solo quando tronca davvero, null invariato')
 }
 
-console.log('PASS: health-cases (10/10) — computeSourceHealth verificata su tutti i confini di SRC-08')
+// --- Caso 11: la PRIMISSIMA run mai registrata per una coppia, e fallita --------------------
+// Fase 15, Rule 1: scoperto quando puglia (sorgente nuova, bloccata dal difetto TLS di
+// 15-RESEARCH.md Pitfall 2) ha prodotto sul database locale esattamente questa combinazione —
+// baseline vuota (0 run precedenti, mai status=insufficient_history perche' l'errore ha
+// precedenza per costruzione, Caso 8) — e anomaly restava null, violando il contratto
+// "anomaly=null solo quando status=insufficient_history" che
+// scripts/monitoring-endpoint.test.sh verifica su ogni elemento di sources. A differenza del
+// Caso 8 (baseline COMPLETA), qui non c'e' alcuna baseline: e' proprio l'assenza di storico,
+// combinata con un errore, il caso che il Caso 8 da solo non copriva.
+{
+  const runs = [run(0, 'fetch failed')]
+  const health = computeSourceHealth('s', 'r', runs)
+  assert.equal(health.status, 'failed', 'Caso 11 (SRC-08): status=failed sulla primissima run, se fallita')
+  assert.equal(health.baseline, null, 'Caso 11 (SRC-08): baseline=null, nessuna run precedente esiste')
+  assert.equal(health.anomaly, true, 'Caso 11 (SRC-08): anomaly=true anche senza baseline — mai null su una run fallita, l\'unico status per cui anomaly e\' null e\' insufficient_history')
+  ok('Caso 11: primissima run mai registrata, fallita -> status=failed, baseline=null, anomaly=true (mai null)')
+}
+
+console.log('PASS: health-cases (11/11) — computeSourceHealth verificata su tutti i confini di SRC-08')
