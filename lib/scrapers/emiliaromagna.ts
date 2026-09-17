@@ -15,6 +15,8 @@
 
 import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 export interface EmiliaRomagnaLocation {
   title?: string | null
@@ -173,9 +175,6 @@ export function transformEmiliaRomagnaRecords(
 // TDD di questo task e' verificabile a macchina senza introdurre un framework
 // di test nuovo nel progetto.
 if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
-  const fs = require('fs') as typeof import('fs')
-  const path = require('path') as typeof import('path')
-
   let failed = false
   const assert = (cond: boolean, msg: string) => {
     if (!cond) {
@@ -184,8 +183,8 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     }
   }
 
-  const fixturePath = path.join(__dirname, '__fixtures__', 'emiliaromagna-events.json')
-  const fixture: EmiliaRomagnaRecord[] = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'))
+  const fixturePath = join(__dirname, '__fixtures__', 'emiliaromagna-events.json')
+  const fixture: EmiliaRomagnaRecord[] = JSON.parse(readFileSync(fixturePath, 'utf-8'))
 
   const complete = fixture.find(r => r.id === 67773)
   if (!complete) throw new Error('fixture priva del record id 67773 (Viva Varda!)')

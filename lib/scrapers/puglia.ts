@@ -25,6 +25,8 @@
 
 import type { ScrapeParams, AdapterResult, ScrapedEvent } from './types'
 import { fetchWithRetry } from './utils'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 export interface PugliaRecord {
   tipo_scheda?: string | null
@@ -164,9 +166,6 @@ export function transformPugliaRecords(
 // riepilogo in formato TAP (# tests/# pass/# fail + ok/not ok) per
 // l'evidenza RED/GREEN del ciclo TDD di questo task.
 if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
-  const fs = require('fs') as typeof import('fs')
-  const path = require('path') as typeof import('path')
-
   let failed = false
   const assert = (cond: boolean, msg: string) => {
     if (!cond) {
@@ -175,8 +174,8 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     }
   }
 
-  const fixturePath = path.join(__dirname, '__fixtures__', 'puglia-sample.json')
-  const fixture: PugliaRecord[] = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'))
+  const fixturePath = join(__dirname, '__fixtures__', 'puglia-sample.json')
+  const fixture: PugliaRecord[] = JSON.parse(readFileSync(fixturePath, 'utf-8'))
 
   const massafra = fixture.find(r => r.nm_evento_it?.startsWith('Massafra nel medioevo'))
   if (!massafra) throw new Error('fixture priva del record reale Sagra di Massafra')
