@@ -19,19 +19,32 @@
 import { prisma } from '../prisma'
 
 /**
- * Misurato dal vivo sul Postgres locale il 2026-09-17 (comando:
- * `SELECT region, count(*) FROM events WHERE date_start >= now() AND
- * canonical_event_id IS NULL GROUP BY region`): l'unica regione con dati
- * oggi, Lombardia, ne ha 1.806. Nessun secondo punto dati esiste ancora per
- * calibrare un vero taglio — Emilia-Romagna e Puglia (D-14) non sono
- * ancora state ingerite. 0 e' l'unico valore che oggi non esclude
- * arbitrariamente una regione appena accesa con pochi eventi reali: "viva"
- * equivale per ora a "almeno un evento futuro canonico". Il piano
- * 15-03-PLAN.md ri-misura questa costante sui volumi reali di
- * Emilia-Romagna e Puglia una volta ingerite (15-RESEARCH.md Open
- * Question 3) — non stimare un numero piu' alto qui prima di allora.
+ * Ri-misurato dal vivo sul Postgres locale il 2026-09-17, DOPO l'ingestione
+ * di Emilia-Romagna e Puglia (15-03-PLAN.md, comando: `SELECT region,
+ * count(*) FROM events WHERE date_start >= now() AND canonical_event_id IS
+ * NULL GROUP BY region`):
+ *
+ *   lombardia:       1.806 eventi futuri canonici
+ *   emilia-romagna:      6 eventi futuri canonici (bash scripts/dev-db.sh
+ *                        npx tsx -e "runRegion('emilia-romagna')", dati reali)
+ *   puglia:              0 — non ingerita: l'host resta bloccato dal difetto
+ *                        TLS verificato in 15-RESEARCH.md Pitfall 2 e
+ *                        riverificato in questa sessione (identico
+ *                        UNABLE_TO_VERIFY_LEAF_SIGNATURE), non un problema di
+ *                        questa fase (T-15-02 vieta di aggirarlo)
+ *
+ * Emilia-Romagna, la piu' povera fra le regioni EFFETTIVAMENTE ingerite oggi,
+ * ha 6 eventi futuri. 2 sta abbondantemente sotto quel numero (un terzo) e
+ * abbondantemente sopra una manciata di righe residue — una manciata di
+ * eventi finiti in una regione per un errore di aggancio non deve mai
+ * sembrare una sorgente viva. Nessuna isteresi, nessuna finestra di grazia
+ * (D-02): una regione con esattamente 2 eventi futuri NON e' viva, con 3 lo
+ * e'. Puglia resta a 0 e quindi fuori da getLiveRegions() finche' l'host non
+ * torna raggiungibile — non e' un difetto di questa costante, e' il segnale
+ * che funziona esattamente come D-01 lo vuole: una sorgente morta si spegne
+ * da sola.
  */
-export const COVERAGE_THRESHOLD = 0
+export const COVERAGE_THRESHOLD = 2
 
 export async function getLiveRegions(): Promise<Set<string>> {
   const today = new Date()

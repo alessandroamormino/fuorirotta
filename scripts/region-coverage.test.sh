@@ -5,10 +5,15 @@
 # ISTAT reale ma non ancora coperta, 404 su uno slug che non corrisponde a
 # nessuna regione ISTAT.
 #
-# Usa uno slug/sorgente di prova dedicati (__test_coverage_region__,
+# S1/S2 usano uno slug/sorgente di prova dedicati (__test_coverage_region__,
 # __test_coverage_source__), mai un dato reale: nessuna riga esistente viene
-# toccata, stesso idioma di scripts/region-lock.test.sh. Richiede il
-# Postgres locale (scripts/dev-db.sh, D-17) — mai il database di produzione.
+# toccata, stesso idioma di scripts/region-lock.test.sh. S3/S7 (Fase 15,
+# 15-03-PLAN.md) leggono invece i dati REALI gia' nel Postgres locale —
+# lombardia ed emilia-romagna devono essere state ingerite localmente prima
+# di lanciare questo gate (bash scripts/dev-db.sh npx tsx -e con runRegion(),
+# vedi 15-03-SUMMARY.md); Puglia non e' asserita da nessuna parte, perche'
+# l'host resta bloccato dal difetto TLS verificato in 15-RESEARCH.md. Richiede
+# il Postgres locale (scripts/dev-db.sh, D-17) — mai il database di produzione.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -74,11 +79,24 @@ fi
 # Stato pulito prima di iniziare, nel caso una run precedente sia rimasta a meta'.
 psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
 
-# --- S1: soglia secca, direzione bassa — 0 eventi futuri per la regione di
-# prova (== COVERAGE_THRESHOLD): non e' viva. E' anche la prova che
-# getLiveRegions() non solleva eccezioni quando una regione non ha alcuna
-# riga: il gruppo per __test_coverage_region__ non esiste affatto nel
-# risultato di groupBy, esattamente come su una tabella eventi vuota.
+# Letta dal modulo stesso, mai un letterale duplicato qui: se 15-03-PLAN.md
+# (o un piano futuro) rimisura la costante, questo gate segue senza bisogno
+# di essere toccato — resta comunque una prova della soglia SECCA, agli
+# ESATTI due estremi (==soglia, ==soglia+1), non un valore a piacere.
+coverage_threshold="$(bash scripts/dev-db.sh npx tsx -e '
+import("./lib/coverage/liveRegions").then((m) => { console.log(m.COVERAGE_THRESHOLD); process.exit(0) })
+' 2>&1)"
+[[ "${coverage_threshold}" =~ ^[0-9]+$ ]] || fail "impossibile leggere COVERAGE_THRESHOLD da lib/coverage/liveRegions.ts: ${coverage_threshold}"
+
+# --- S1: soglia secca, direzione bassa — esattamente COVERAGE_THRESHOLD
+# eventi futuri per la regione di prova: non e' viva. Con soglia 0 questo
+# inserisce zero righe, che e' anche la prova che getLiveRegions() non
+# solleva eccezioni quando una regione non ha alcuna riga: il gruppo per
+# __test_coverage_region__ non esiste affatto nel risultato di groupBy.
+if [[ "${coverage_threshold}" -gt 0 ]]; then
+  psql_dev "INSERT INTO events (source, source_id, title, date_start, region, canonical_category) SELECT '${test_source}', 't' || gs, 'Evento di prova copertura', now() + interval '1 day', '${test_region}', 'Altro' FROM generate_series(1, ${coverage_threshold}) AS gs" >/dev/null
+fi
+
 s1_output="$(bash scripts/dev-db.sh npx tsx -e '
 (async () => {
   const { getLiveRegions } = await import("./lib/coverage/liveRegions")
@@ -87,12 +105,12 @@ s1_output="$(bash scripts/dev-db.sh npx tsx -e '
   process.exit(0)
 })().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
 ' 2>&1)"
-[[ "${s1_output}" == "false" ]] || fail "S1: con 0 eventi futuri (== COVERAGE_THRESHOLD) la regione di prova risulta viva: ${s1_output}"
-echo "S1 OK: 0 eventi futuri (== COVERAGE_THRESHOLD) -> regione di prova NON viva, nessuna eccezione"
+[[ "${s1_output}" == "false" ]] || fail "S1: con ${coverage_threshold} eventi futuri (== COVERAGE_THRESHOLD) la regione di prova risulta viva: ${s1_output}"
+echo "S1 OK: ${coverage_threshold} eventi futuri (== COVERAGE_THRESHOLD) -> regione di prova NON viva, nessuna eccezione"
 
-# --- S2: soglia secca, direzione alta — 1 evento futuro canonico
+# --- S2: soglia secca, direzione alta — un evento futuro canonico IN PIU'
 # (== COVERAGE_THRESHOLD + 1): la regione di prova diventa viva.
-psql_dev "INSERT INTO events (source, source_id, title, date_start, region, canonical_category) VALUES ('${test_source}', 't1', 'Evento di prova copertura', now() + interval '1 day', '${test_region}', 'Altro')" >/dev/null
+psql_dev "INSERT INTO events (source, source_id, title, date_start, region, canonical_category) VALUES ('${test_source}', 't$((coverage_threshold + 1))', 'Evento di prova copertura', now() + interval '1 day', '${test_region}', 'Altro')" >/dev/null
 
 s2_output="$(bash scripts/dev-db.sh npx tsx -e '
 (async () => {
@@ -102,37 +120,65 @@ s2_output="$(bash scripts/dev-db.sh npx tsx -e '
   process.exit(0)
 })().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
 ' 2>&1)"
-[[ "${s2_output}" == "true" ]] || fail "S2: con 1 evento futuro (== COVERAGE_THRESHOLD + 1) la regione di prova NON risulta viva: ${s2_output}"
-echo "S2 OK: 1 evento futuro (== COVERAGE_THRESHOLD + 1) -> regione di prova viva"
+[[ "${s2_output}" == "true" ]] || fail "S2: con $((coverage_threshold + 1)) eventi futuri (== COVERAGE_THRESHOLD + 1) la regione di prova NON risulta viva: ${s2_output}"
+echo "S2 OK: $((coverage_threshold + 1)) eventi futuri (== COVERAGE_THRESHOLD + 1) -> regione di prova viva"
 
 psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
 
-# --- Dev server effimero per S3/S4/S5, Postgres locale reale (D-17) --------
+# --- S3: getLiveRegions() su DATI REALI (Fase 15, D-14) — lombardia ed
+# emilia-romagna devono comparire dopo l'ingestione locale di 15-03-PLAN.md.
+# Puglia NON viene asserita qui: l'host resta bloccato dal difetto TLS
+# verificato (15-RESEARCH.md Pitfall 2), quindi non e' mai stata ingerita in
+# questo ambiente — asserirla qui la farebbe fallire per un motivo di rete
+# che questo gate non ha modo di risolvere, non per un difetto del segnale.
+s3_output="$(bash scripts/dev-db.sh npx tsx -e '
+(async () => {
+  const { getLiveRegions } = await import("./lib/coverage/liveRegions")
+  const live = await getLiveRegions()
+  console.log(JSON.stringify([...live].sort()))
+  process.exit(0)
+})().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
+' 2>&1)"
+printf '%s' "${s3_output}" | grep -q '"lombardia"' || fail "S3: getLiveRegions() non contiene 'lombardia' sui dati reali: ${s3_output}"
+printf '%s' "${s3_output}" | grep -q '"emilia-romagna"' || fail "S3: getLiveRegions() non contiene 'emilia-romagna' sui dati reali (ingestione mancante o sotto soglia?): ${s3_output}"
+echo "S3 OK: getLiveRegions() su dati reali contiene lombardia ed emilia-romagna: ${s3_output}"
+
+# --- Dev server effimero per S4/S5/S6/S7, Postgres locale reale (D-17) -----
 bash scripts/dev-db.sh npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
 server_pid=$!
 wait_for_port "${port}"
 echo "ok  dev server locale avviato sulla porta ${port} (scripts/dev-db.sh, Postgres locale)"
 
-# --- S3: /lombardia (regione viva, dati reali) -> 200 -----------------------
-resp3="${tmp_dir}/resp3.html"
-http_code3="$(curl -s -o "${resp3}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/lombardia")"
-[[ "${http_code3}" == "200" ]] || fail "S3: atteso 200 su /lombardia, ottenuto ${http_code3}"
-echo "S3 OK: GET /lombardia (regione viva) risponde 200"
+# --- S4: /lombardia (regione viva, dati reali) -> 200 -----------------------
+resp4="${tmp_dir}/resp4.html"
+http_code4="$(curl -s -o "${resp4}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/lombardia")"
+[[ "${http_code4}" == "200" ]] || fail "S4: atteso 200 su /lombardia, ottenuto ${http_code4}"
+echo "S4 OK: GET /lombardia (regione viva) risponde 200"
 
-# --- S4: /zzz-non-esiste (slug non ISTAT) -> 404 ----------------------------
-http_code4="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/zzz-non-esiste")"
-[[ "${http_code4}" == "404" ]] || fail "S4: atteso 404 su /zzz-non-esiste, ottenuto ${http_code4}"
-echo "S4 OK: GET /zzz-non-esiste (slug non ISTAT) risponde 404"
+# --- S5: /zzz-non-esiste (slug non ISTAT) -> 404 ----------------------------
+http_code5="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/zzz-non-esiste")"
+[[ "${http_code5}" == "404" ]] || fail "S5: atteso 404 su /zzz-non-esiste, ottenuto ${http_code5}"
+echo "S5 OK: GET /zzz-non-esiste (slug non ISTAT) risponde 404"
 
-# --- S5: /molise (regione ISTAT reale, oggi senza eventi) -> 200 + noindex --
+# --- S6: /molise (regione ISTAT reale, oggi senza eventi) -> 200 + noindex --
 # D-11: mai 404, mai redirect per una regione reale non ancora coperta.
-resp5="${tmp_dir}/resp5.html"
-http_code5="$(curl -s -o "${resp5}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/molise")"
-[[ "${http_code5}" == "200" ]] || fail "S5: atteso 200 su /molise (regione reale, non coperta), ottenuto ${http_code5}"
-grep -qi "noindex" "${resp5}" || fail "S5: /molise risponde 200 ma il corpo non contiene 'noindex'"
-echo "S5 OK: GET /molise (regione ISTAT reale, non coperta) risponde 200 con noindex"
+resp6="${tmp_dir}/resp6.html"
+http_code6="$(curl -s -o "${resp6}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/molise")"
+[[ "${http_code6}" == "200" ]] || fail "S6: atteso 200 su /molise (regione reale, non coperta), ottenuto ${http_code6}"
+grep -qi "noindex" "${resp6}" || fail "S6: /molise risponde 200 ma il corpo non contiene 'noindex'"
+echo "S6 OK: GET /molise (regione ISTAT reale, non coperta) risponde 200 con noindex"
+
+# --- S7: /emilia-romagna (regione ISTAT reale, ORA viva dopo 15-03-PLAN.md)
+# -> 200 SENZA noindex — la stessa regione di S3, ma sul contratto HTTP di
+# ROLL-06 invece che sul segnale grezzo di ROLL-03. D-11: nessuna differenza
+# di stato URL rispetto a prima dell'accensione, solo il contenuto cambia.
+resp7="${tmp_dir}/resp7.html"
+http_code7="$(curl -s -o "${resp7}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/emilia-romagna")"
+[[ "${http_code7}" == "200" ]] || fail "S7: atteso 200 su /emilia-romagna (regione ora viva), ottenuto ${http_code7}"
+grep -qi "noindex" "${resp7}" && fail "S7: /emilia-romagna e' viva (S3) ma la pagina porta ancora 'noindex'"
+echo "S7 OK: GET /emilia-romagna (regione ISTAT reale, ora viva) risponde 200 senza noindex"
 
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione] (ROLL-06) — S1..S5 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione] (ROLL-06) — S1..S7 verdi"
 exit 0

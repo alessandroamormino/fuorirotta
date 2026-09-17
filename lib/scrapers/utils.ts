@@ -124,14 +124,13 @@ export function logMetrics(results: ScrapeResult[]): void {
     const eventCount = result.events.length
     const duration = formatDuration(result.duration)
 
-    // Format source name for display
-    const sourceName = result.source === 'opendata_lombardia'
-      ? 'OpenData'
-      : result.source === 'solosagre'
-      ? 'SoloSagre'
-      : 'InLombardia'
-
-    console.log(`[Scraper] ${sourceName.padEnd(15)} ${String(eventCount).padStart(4)} events in ${duration.padStart(6)} (${status})`)
+    // Nome per il log: l'id della sorgente stesso, mai una mappa a tre casi
+    // scritta a mano (Fase 15, Rule 1). Quella mappa aveva un default silenzioso
+    // a 'InLombardia' per qualunque source non fra i primi due — innocuo finche'
+    // esistevano solo tre sorgenti, ma con emilia-romagna/puglia (questo piano)
+    // il ramo default sarebbe diventato raggiungibile e avrebbe etichettato ogni
+    // scrape di quelle due regioni come "InLombardia" nei log operativi.
+    console.log(`[Scraper] ${result.source.padEnd(18)} ${String(eventCount).padStart(4)} events in ${duration.padStart(6)} (${status})`)
 
     totalEvents += eventCount
     totalDuration += result.duration
