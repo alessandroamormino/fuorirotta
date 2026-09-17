@@ -8,6 +8,7 @@ import { serializeEvent } from "@/lib/serializeEvent";
 import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Breadcrumb from "@/components/Breadcrumb";
+import CoverageMessage from "@/components/CoverageMessage";
 
 const BASE_URL = (
 	process.env.NEXT_PUBLIC_SITE_URL ||
@@ -128,11 +129,8 @@ export default async function ProvinciaPage({
 	};
 
 	if (!data.isLive) {
-		// D-05/D-06: messaggio esplicito e nient'altro — nessun suggerimento
-		// di provincia vicina, nessuna raccolta di contatti. Il componente
-		// condiviso con la ricerca (CoverageMessage) arriva nel task
-		// successivo di questo stesso piano; qui basta la variante "zona non
-		// coperta", stesso testo gia' scritto per la pagina regione.
+		// D-05/D-06: il testo vive in CoverageMessage, un punto solo, riusato
+		// identico dalla pagina regione.
 		return (
 			<main className="mx-auto max-w-3xl px-4 py-16">
 				<script
@@ -142,15 +140,7 @@ export default async function ProvinciaPage({
 					}}
 				/>
 				<Breadcrumb items={breadcrumbItems} />
-				<div className="text-center">
-					<h1 className="font-display text-2xl font-semibold text-foreground">
-						{data.province.provinceName}
-					</h1>
-					<p className="mt-3 text-muted-foreground">
-						Non copriamo ancora questa zona: stiamo aggiungendo nuove fonti, torna
-						a trovarci presto.
-					</p>
-				</div>
+				<CoverageMessage variant="region-not-covered" title={data.province.provinceName} />
 			</main>
 		);
 	}

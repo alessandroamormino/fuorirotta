@@ -286,6 +286,34 @@ order18="$(grep -oE '/eventi/[0-9]+' "${resp18}")"
 [[ "${order15}" == "${order18}" ]] || fail "S18: due caricamenti consecutivi di /lombardia/bergamo elencano gli eventi in un ordine diverso"
 echo "S18 OK: due caricamenti consecutivi di /lombardia/bergamo elencano gli eventi nello stesso ordine"
 
+# --- S19/S20/S21: l'indicatore di copertura di /api/events (D-06/D-07). Id
+# comune letti dal DB (mai un letterale numerico congelato): la regione di
+# appartenenza e' cio' che conta, non l'id specifico di oggi.
+bergamo_comune_id="$(psql_dev "SELECT id FROM comuni WHERE province_code = 'BG' ORDER BY id LIMIT 1")"
+molise_comune_id="$(psql_dev "SELECT id FROM comuni WHERE region_name = 'Molise' ORDER BY id LIMIT 1")"
+[[ -n "${bergamo_comune_id}" && -n "${molise_comune_id}" ]] || fail "S19: impossibile trovare un comune di prova (bergamo/molise) in tabella comuni"
+
+# --- S19: comuneId di una regione NON coperta (molise) -> indicatore
+# region-not-covered, a prescindere dal numero di risultati.
+resp19="${tmp_dir}/resp19.json"
+curl -s -o "${resp19}" --max-time 15 "http://127.0.0.1:${port}/api/events?comuneId=${molise_comune_id}&limit=1"
+grep -q '"coverage":"region-not-covered"' "${resp19}" || fail "S19: /api/events?comuneId=${molise_comune_id} (molise, non coperta) non porta l'indicatore region-not-covered: $(cat "${resp19}")"
+echo "S19 OK: /api/events con comuneId di una regione non coperta porta l'indicatore region-not-covered"
+
+# --- S20: comuneId di una regione coperta (lombardia/bergamo) con un
+# intervallo di date senza eventi -> indicatore no-events-for-filters.
+resp20="${tmp_dir}/resp20.json"
+curl -s -o "${resp20}" --max-time 15 "http://127.0.0.1:${port}/api/events?comuneId=${bergamo_comune_id}&dateFrom=2000-01-01&dateTo=2000-01-02&limit=1"
+grep -q '"coverage":"no-events-for-filters"' "${resp20}" || fail "S20: /api/events?comuneId=${bergamo_comune_id} (bergamo, filtri vuoti) non porta l'indicatore no-events-for-filters: $(cat "${resp20}")"
+echo "S20 OK: /api/events con comuneId di una regione coperta e filtri vuoti porta l'indicatore no-events-for-filters"
+
+# --- S21: ricerca per raggio SENZA comuneId -> nessun indicatore, mai,
+# nemmeno a zero risultati (D-07: niente prediche a chi cerca "vicino").
+resp21="${tmp_dir}/resp21.json"
+curl -s -o "${resp21}" --max-time 15 "http://127.0.0.1:${port}/api/events?lat=41.9&lng=12.5&radius=5&limit=1"
+grep -q '"coverage":null' "${resp21}" || fail "S21: /api/events per raggio senza comuneId porta un indicatore di copertura: $(cat "${resp21}")"
+echo "S21 OK: /api/events per raggio senza comuneId non porta alcun indicatore di copertura"
+
 # --- S12: la sitemap contiene almeno una voce provincia viva sotto
 # /lombardia/ — la soglia e' abbondantemente sotto i volumi reali di
 # lombardia (S3/S4), quindi almeno una provincia deve essere sopra soglia.
@@ -317,5 +345,5 @@ echo "S14 OK: due generazioni consecutive della sitemap producono lo stesso ordi
 
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05, Fase 15 piano 04) — S1..S18 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) — S1..S21 verdi"
 exit 0

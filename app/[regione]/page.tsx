@@ -8,6 +8,7 @@ import { serializeEvent } from "@/lib/serializeEvent";
 import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Breadcrumb from "@/components/Breadcrumb";
+import CoverageMessage from "@/components/CoverageMessage";
 
 const BASE_URL = (
 	process.env.NEXT_PUBLIC_SITE_URL ||
@@ -103,10 +104,8 @@ export default async function RegionePage({
 	};
 
 	if (!data.isLive) {
-		// D-05/D-06: messaggio esplicito e nient'altro, nessun suggerimento di
-		// regione vicina, nessuna raccolta email. Il testo definitivo e il
-		// componente condiviso con la ricerca per raggio arrivano in
-		// 15-04-PLAN.md — qui basta la variante "regione non coperta".
+		// D-05/D-06: il testo vive in CoverageMessage, un punto solo, riusato
+		// identico dalla pagina provincia.
 		return (
 			<main className="mx-auto max-w-3xl px-4 py-16">
 				<script
@@ -116,15 +115,7 @@ export default async function RegionePage({
 					}}
 				/>
 				<Breadcrumb items={breadcrumbItems} />
-				<div className="text-center">
-					<h1 className="font-display text-2xl font-semibold text-foreground">
-						{data.displayName}
-					</h1>
-					<p className="mt-3 text-muted-foreground">
-						Non copriamo ancora questa regione: stiamo aggiungendo nuove fonti,
-						torna a trovarci presto.
-					</p>
-				</div>
+				<CoverageMessage variant="region-not-covered" title={data.displayName} />
 			</main>
 		);
 	}

@@ -16,6 +16,13 @@ import {
 // implementazione (RESEARCH anti-pattern).
 import { runRegion, getRegions } from "@/lib/scrapers";
 import { acquireRegionLock, releaseRegionLock } from "@/lib/scrapers/regionLock";
+// D-06/D-07 (Fase 15): il segnale di copertura vero, distinto da getRegions()
+// sopra (che risponde solo "dichiarata nel registry"). istatRegionToSlug
+// sostituisce il .toLowerCase() semplice sotto — quello funzionava per caso
+// solo perche' "Lombardia" e' una parola sola senza accenti.
+import { getLiveRegions } from "@/lib/coverage/liveRegions";
+import { istatRegionToSlug } from "@/lib/scrapers/regionSlug";
+import type { CoverageMessageVariant } from "@/components/CoverageMessage";
 import { Prisma, Event as PrismaEvent } from "@prisma/client";
 import { Event } from "@/lib/types";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
@@ -149,14 +156,22 @@ export async function GET(request: NextRequest) {
 		// piu' sotto NESSUN refresh parte (D-08). Il raccordo piu' fine
 		// slug<->ISTAT resta esplicitamente della Fase 15 (D-04).
 		let region: string | null = null;
+		// D-06/D-07: slug ISTAT risolto dal comuneId, indipendentemente dal
+		// fatto che la regione sia dichiarata nel registry (getRegions()) o
+		// meno — serve all'indicatore di copertura sotto, che legge il
+		// segnale vero (getLiveRegions()), non l'elenco delle sorgenti
+		// dichiarate.
+		let resolvedRegionSlug: string | null = null;
 		if (comuneId) {
 			const comune = await prisma.comune.findUnique({
 				where: { id: comuneId },
 				select: { regionName: true },
 			});
-			const slug = comune?.regionName.toLowerCase();
-			if (slug && getRegions().includes(slug)) {
-				region = slug;
+			if (comune) {
+				resolvedRegionSlug = istatRegionToSlug(comune.regionName);
+				if (getRegions().includes(resolvedRegionSlug)) {
+					region = resolvedRegionSlug;
+				}
 			}
 		}
 
@@ -474,6 +489,33 @@ export async function GET(request: NextRequest) {
 			}));
 		}
 
+		// ========== INDICATORE DI COPERTURA (D-06/D-07) ==========
+		// L'indicatore viaggia come campo della risposta JSON, non come testo:
+		// il testo vive in components/CoverageMessage.tsx, in un punto solo.
+		//
+		// - ricerca per raggio (lat/lng/radius) SENZA comuneId: mai un
+		//   indicatore, nemmeno a zero risultati — l'utente ha chiesto
+		//   "vicino", e un confine regionale attraversato non deve produrre
+		//   prediche (D-07). Nascondere eventi reali a chi vive vicino a un
+		//   confine e' esattamente il caso che questa regola evita.
+		// - ricerca esplicitamente regionale (comuneId risolto a una regione
+		//   ISTAT reale) su una regione NON in getLiveRegions(): indicatore
+		//   region-not-covered, a prescindere dal numero di risultati — la
+		//   regione nel suo insieme resta sotto soglia.
+		// - stessa ricerca su una regione coperta ma senza risultati:
+		//   no-events-for-filters — sono i filtri (date/raggio), non la
+		//   copertura, il problema.
+		let coverage: CoverageMessageVariant | null = null;
+		const isRadiusSearch = Boolean(lat && lng && radius);
+		if (!isRadiusSearch && resolvedRegionSlug) {
+			const liveRegions = await getLiveRegions();
+			if (!liveRegions.has(resolvedRegionSlug)) {
+				coverage = "region-not-covered";
+			} else if (total === 0) {
+				coverage = "no-events-for-filters";
+			}
+		}
+
 		// ========== REFRESH ON-DEMAND LOGIC ==========
 		// Solo alla prima pagina (offset === 0) per evitare refresh multipli
 		console.log(
@@ -527,6 +569,7 @@ export async function GET(request: NextRequest) {
 			total,
 			limit,
 			offset,
+			coverage, // D-06/D-07: null | "region-not-covered" | "no-events-for-filters"
 			cache: {
 				hit: cacheResult?.isCached || false,
 				fresh: cacheResult?.isFresh || false,
