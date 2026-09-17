@@ -148,10 +148,17 @@ export function logMetrics(results: ScrapeResult[]): void {
  * pages updates existing records instead of being skipped.
  *
  * @param events - Array of ScrapedEvent to save
+ * @param region - Slug di regione (Fase 15, D-03): il chiamante (runRegion,
+ *   o il ramo CLI a sorgente singola) la conosce gia' come argomento o dal
+ *   registry — nessun adattatore la calcola, resta puro. Scritta su ENTRAMBI
+ *   i rami dell'upsert come canonicalCategory qui sopra: il ramo update e'
+ *   obbligatorio quanto il create, altrimenti un evento ri-scrapato
+ *   terrebbe per sempre la regione scritta al primo scrape.
  * @returns Promise with counts of saved and updated events
  */
 export async function saveEvents(
-  events: ScrapedEvent[]
+  events: ScrapedEvent[],
+  region: string
 ): Promise<{ saved: number; skipped: number }> {
   if (events.length === 0) {
     console.log('[Scraper] No events to save')
@@ -226,7 +233,8 @@ export async function saveEvents(
               canonicalCategory,
               sourceUrl: event.sourceUrl,
               imageUrl: event.imageUrl,
-              phone: event.phone
+              phone: event.phone,
+              region
             },
             update: {
               title: event.title,
@@ -236,6 +244,7 @@ export async function saveEvents(
               canonicalCategory,
               sourceUrl: event.sourceUrl,
               updatedAt: new Date(),
+              region,
               ...(event.detailSkipped ? {} : detailFields)
             }
           })

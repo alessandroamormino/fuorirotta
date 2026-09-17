@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
+import { getLiveRegions } from "@/lib/coverage/liveRegions";
 
 // Force dynamic rendering to avoid database queries during build
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		take: 5000,
 	});
 
+	// ROLL-05/D-10: solo le regioni sopra la stessa soglia di copertura di
+	// lib/coverage/liveRegions.ts entrano in sitemap — nessuna soglia
+	// duplicata qui. Ordinate alfabeticamente per slug: due chiamate
+	// consecutive su dati invariati devono produrre lo stesso documento
+	// (un Set non garantisce un ordine stabile fra chiamate).
+	const liveRegionSlugs = [...(await getLiveRegions())].sort((a, b) => a.localeCompare(b));
+
 	return [
 		{
 			url: `${baseUrl}/`,
@@ -47,6 +55,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 			lastModified: event.updatedAt,
 			changeFrequency: "daily" as const,
 			priority: 0.7,
+		})),
+		...liveRegionSlugs.map((slug) => ({
+			url: `${baseUrl}/${slug}`,
+			lastModified: new Date(),
+			changeFrequency: "daily" as const,
+			priority: 0.6,
 		})),
 	];
 }

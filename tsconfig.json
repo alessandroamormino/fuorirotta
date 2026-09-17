@@ -43,7 +43,9 @@
     ".next-category-taxonomy-test/types/**/*.ts",
     ".next-category-taxonomy-test/dev/types/**/*.ts",
     ".next-region-scoping-test/types/**/*.ts",
-    ".next-region-scoping-test/dev/types/**/*.ts"
+    ".next-region-scoping-test/dev/types/**/*.ts",
+    ".next-region-coverage-test/types/**/*.ts",
+    ".next-region-coverage-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

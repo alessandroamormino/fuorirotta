@@ -167,7 +167,7 @@ export async function runRegion(region: string, params?: ScrapeParams): Promise<
       return { saved: 0, skipped: 0, total: 0, errors }
     }
 
-    const { saved, skipped } = await saveEvents(allEvents)
+    const { saved, skipped } = await saveEvents(allEvents, region)
     console.log(`[Scraper] Done. ${saved} new events saved to database for region "${region}".`)
 
     return { saved, skipped, total: allEvents.length, errors }
@@ -265,7 +265,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
       logMetrics([result])
       await recordScrapeRuns([result], startedAt)
       if (result.events.length > 0) {
-        const { saved, skipped } = await saveEvents(result.events)
+        const { saved, skipped } = await saveEvents(result.events, entry.region)
         console.log(`[Scraper] Done. ${saved} new events saved, ${skipped} skipped.`)
       } else {
         console.log('[Scraper] No events found.')

@@ -27,7 +27,7 @@
     "check:crontab-generate": "bash scripts/crontab-generate.test.sh",
     "check:connection-limit": "npx tsx lib/scrapers/connectionLimit.ts",
     "n1:proof": "bash scripts/dev-db.sh npx tsx scripts/n1-proof.ts",
-    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh && bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && npm run check:navbar && bash scripts/dedup.test.sh && bash scripts/category-taxonomy.test.sh && npm run check:restyle && npm run check:region-lock && npm run check:detail-cache && npm run check:region-scoping && npm run check:crontab-generate && npm run check:connection-limit && npm run check:browser-bundle && npm run check:host-script-deps",
+    "test": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh && bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && npm run check:navbar && bash scripts/dedup.test.sh && bash scripts/category-taxonomy.test.sh && npm run check:restyle && npm run check:region-lock && npm run check:detail-cache && npm run check:region-scoping && npm run check:crontab-generate && npm run check:connection-limit && npm run check:browser-bundle && npm run check:host-script-deps && npm run check:region-coverage",
     "check:tokens": "! grep -rInE '#[0-9a-fA-F]{3,8}\\b' app components lib --include='*.ts' --include='*.tsx' --include='*.css' --exclude='globals.css' | grep -vE '&#[0-9]+;|&#x[0-9a-fA-F]+;'",
     "check:no-regex-parsing": "! grep -nE '\\.(match(All)?|exec)\\(/[^/]*(<|class=)|=\\s*/[^/]*(<|class=)' lib/scrapers/solosagre.ts lib/scrapers/inlombardia.ts",
     "check:parity": "bash scripts/registry-parity.test.sh",
@@ -41,7 +41,8 @@
     "check:region-lock": "bash scripts/region-lock.test.sh",
     "check:detail-cache": "bash scripts/detail-cache.test.sh",
     "check:browser-bundle": "npx tsx scripts/browser-bundle-safety.ts",
-    "check:host-script-deps": "npx tsx scripts/host-script-deps.ts"
+    "check:host-script-deps": "npx tsx scripts/host-script-deps.ts",
+    "check:region-coverage": "bash scripts/region-coverage.test.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.1.0",
