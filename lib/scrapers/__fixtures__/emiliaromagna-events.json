@@ -1,0 +1,41 @@
+[
+  {
+    "id": 67773,
+    "title": "Viva Varda!",
+    "description": "<p>Dal 5 marzo 2026 al 10 gennaio 2027, la <strong>Galleria Modernissimo di Bologna</strong> ospita la mostra <strong>Viva Varda! Il cinema è donna</strong>.&nbsp;</p><p>Curata da Florence Tissot l'esposizione celebra la prima regista Premio Oscar alla carriera.&nbsp;</p><p>Il percorso esplora la sua eredità tra <strong>cinema, arte e militanza politica</strong>, collegandosi idealmente alla mostra simultanea di Villa Medici a Roma.</p><p>Attraverso <strong>film, foto e installazioni</strong>, il progetto testimonia un'opera poliedrica segnata dall'impegno femminista e da incontri con icone come Mastroianni e Godard.&nbsp;</p><p>Le sezioni approfondiscono il suo stile visivo, la scrittura cinematografica e il <strong>legame speciale con l'Italia</strong>, offrendo una visione completa di un'artista che ha saputo documentare i mutamenti sociali del Novecento.</p>",
+    "permalink": "https://emiliaromagnaturismo.it/it/eventi/bologna-mostra-modernissimo-viva-varda-il-cinema-e-donna",
+    "category": [
+      { "id": 1001, "parent": 1, "name": "Cinema" },
+      { "id": 1010, "parent": 1, "name": "Mostre ed Arte" }
+    ],
+    "locations": [
+      {
+        "title": "",
+        "city": "Bologna",
+        "province": "Bologna",
+        "address": "Galleria Modernissimo - Piazza Re Enzo",
+        "lat": 44.4944371,
+        "lng": 11.3436462
+      }
+    ],
+    "dates": { "from": "2026/03/05", "to": "2027/01/09" }
+  },
+  {
+    "id": 900001,
+    "title": "[TEST] Evento senza data di inizio",
+    "description": "Caso sintetico per il gate (15-02 Task 1): dates.from assente, non deve essere salvato con una data inventata.",
+    "permalink": "https://emiliaromagnaturismo.it/it/eventi/test-senza-data",
+    "category": [{ "id": 1, "parent": 1, "name": "Test" }],
+    "locations": [{ "title": "", "city": "Test", "province": "Test", "address": null, "lat": null, "lng": null }],
+    "dates": { "from": null, "to": null }
+  },
+  {
+    "id": 900002,
+    "title": "[TEST] Evento gia' concluso",
+    "description": "Caso sintetico per il gate (15-02 Task 1): evento concluso prima del periodo richiesto, deve essere escluso dal filtro date lato client.",
+    "permalink": "https://emiliaromagnaturismo.it/it/eventi/test-concluso",
+    "category": [{ "id": 1, "parent": 1, "name": "Test" }],
+    "locations": [{ "title": "", "city": "Test", "province": "Test", "address": null, "lat": null, "lng": null }],
+    "dates": { "from": "2020/01/01", "to": "2020/01/05" }
+  }
+]
