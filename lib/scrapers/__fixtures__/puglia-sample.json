@@ -1,0 +1,62 @@
+[
+  {
+    "tipo_scheda": "evento",
+    "nm_evento_it": "Massafra nel medioevo. La notte dei masciari e la magia dei luoghi di Puglia.",
+    "dsc_evento_it": "",
+    "data_inizio": "2017-10-31",
+    "data_fine": "2017-10-31",
+    "comune": "Massafra",
+    "codice_istat_comune": "073015",
+    "sigla_provincia": "TA",
+    "categoria": "EVENTO",
+    "tipologia": "Sagra",
+    "latitudine": "40.5864543",
+    "longitudine": "17.113247900000033",
+    "indirizzo": "Rione SS Medici"
+  },
+  {
+    "tipo_scheda": "attivita",
+    "nm_evento_it": "Bottega Artigiana del Cuoio",
+    "dsc_evento_it": "",
+    "data_inizio": "2026-01-01",
+    "data_fine": "2030-01-01",
+    "comune": "Massafra",
+    "codice_istat_comune": "073015",
+    "sigla_provincia": "TA",
+    "categoria": "ATTIVITA",
+    "tipologia": "Artigianato",
+    "latitudine": "40.5864543",
+    "longitudine": "17.113247900000033",
+    "indirizzo": "Via Roma"
+  },
+  {
+    "tipo_scheda": "evento",
+    "nm_evento_it": "Festival delle Sagre di Puglia",
+    "dsc_evento_it": "Sagra tipica pugliese con degustazioni.",
+    "data_inizio": "2026-11-01",
+    "data_fine": "2026-11-03",
+    "comune": "Massafra",
+    "codice_istat_comune": "073015",
+    "sigla_provincia": "TA",
+    "categoria": "EVENTO",
+    "tipologia": "Sagra",
+    "latitudine": "40.5864543",
+    "longitudine": "17.113247900000033",
+    "indirizzo": "Rione SS Medici"
+  },
+  {
+    "tipo_scheda": "evento",
+    "nm_evento_it": "Evento senza coordinate valide",
+    "dsc_evento_it": "",
+    "data_inizio": "2026-12-01",
+    "data_fine": "2026-12-02",
+    "comune": "Massafra",
+    "codice_istat_comune": "073015",
+    "sigla_provincia": "TA",
+    "categoria": "EVENTO",
+    "tipologia": "Sagra",
+    "latitudine": "",
+    "longitudine": "n/d",
+    "indirizzo": "Rione SS Medici"
+  }
+]

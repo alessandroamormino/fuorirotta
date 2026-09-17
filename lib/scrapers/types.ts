@@ -29,6 +29,15 @@ export interface ScrapedEvent {
    * cancellerebbe dati buoni gia' salvati. Assente/false = evento completo.
    */
   detailSkipped?: boolean
+  /**
+   * Codice ISTAT del comune, quando la sorgente lo fornisce direttamente
+   * (Puglia, Fase 15 ROLL-02: campo `codice_istat_comune`) — permette al
+   * livello di persistenza di agganciare `comuneId` per uguaglianza esatta,
+   * mai per il matching fuzzy di lib/territorial/resolve.ts (quel percorso
+   * esiste per sorgenti che danno solo testo libero, non un codice). Assente
+   * per le sorgenti che non lo forniscono.
+   */
+  istatCode?: string | null
 }
 
 export interface ScrapeParams {
