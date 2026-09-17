@@ -120,6 +120,55 @@ export const SOURCE_META: SourceMeta[] = [
       'Top Events': 'Altro',
       Wellness: 'Altro'
     }
+  },
+  {
+    // ROLL-01 (Fase 15). Le 14 categorie sono l'insieme intero dichiarato da
+    // `GET /opendata/v1/events/categories` (verificato dal vivo il
+    // 2026-09-17, invariato rispetto a 15-RESEARCH.md), mappate a mano su un
+    // nome canonico reale — mai un'inferenza (CAT-02).
+    id: 'emilia-romagna',
+    region: 'emilia-romagna',
+    type: 'json',
+    url: 'https://emiliaromagnaturismo.it/opendata/v1/events',
+    trustRank: 2,
+    categoryMap: {
+      Cinema: 'Musica e spettacolo',
+      'Spettacoli di strada e tradizioni': 'Musica e spettacolo',
+      'Escursioni e Visite guidate': 'Sport e outdoor',
+      'Altri eventi': 'Altro',
+      'Fiere & Congressi': 'Fiere e mercati',
+      'Mercatini e Mostre Mercato': 'Fiere e mercati',
+      'Mostre ed Arte': 'Arte e cultura',
+      Musica: 'Musica e spettacolo',
+      'Eventi enogastronomici': 'Food & Wine',
+      'Eventi sportivi': 'Sport e outdoor',
+      'Opera, teatro e danza': 'Musica e spettacolo',
+      Festival: 'Musica e spettacolo',
+      'Natale / Mercati di Natale': 'Fiere e mercati',
+      'Per famiglie': 'Altro'
+    }
+  },
+  {
+    // ROLL-02 (Fase 15). `tipologia` osservata nel campione reale
+    // (15-RESEARCH.md Pattern 3, COVERAGE.md): 30+ valori distinti, qui i 7
+    // richiesti esplicitamente dal piano piu' i pochi altri gia' visti nel
+    // campione. Un valore non presente qui cade in 'Altro' per costruzione
+    // (canonicalizeCategory), non e' un errore — la deriva si legge dal log,
+    // non da un'eccezione.
+    id: 'puglia',
+    region: 'puglia',
+    type: 'json',
+    url: 'https://osservatorio.dms.puglia.it/opendata/puglia_eventi_attivita/eventi_attivita.json',
+    trustRank: 2,
+    categoryMap: {
+      Sagra: 'Sagre e feste',
+      'Fiera/Salone': 'Fiere e mercati',
+      'Festa patronale/Festa dei santi': 'Sagre e feste',
+      Concerto: 'Musica e spettacolo',
+      Festival: 'Musica e spettacolo',
+      Mostra: 'Arte e cultura',
+      Degustazione: 'Food & Wine'
+    }
   }
 ]
 
@@ -177,8 +226,20 @@ export const SOURCE_META: SourceMeta[] = [
 // contrario, e' caduta. 03:17 UTC = 05:17 in Italia d'estate, 04:17 d'inverno:
 // entrambe dentro la finestra notturna voluta, e cio' che il design richiede
 // (giornalieri e scaglionati FRA LORO) e' relativo, quindi regge in ogni fuso.
+// emilia-romagna e puglia (Fase 15, D-12/D-14): host propri, distinti fra loro
+// e da solosagre.it/dati.lombardia.it/in-lombardia.it — nessun Crawl-delay per
+// host li vincola a girare in sequenza con la Lombardia o fra loro
+// (groupSourcesByHost li mette gia' in gruppi separati). Lo scaglionamento qui
+// sotto (3 e 6 minuti dopo lombardia) non serve a rispettare un robots.txt:
+// serve a non sommare il costo di tre scrape sullo stesso pool di connessioni
+// Prisma nello stesso istante (D-12, CONTEXT.md). Entrambe le sorgenti sono un
+// singolo fetch JSON (Puglia: dump unico; Emilia-Romagna: una pagina da 200
+// record), quindi il margine di pochi minuti e' ampio rispetto al costo
+// osservato.
 export const REGION_SCHEDULES: Record<string, string> = {
-  lombardia: '17 3 * * *'
+  lombardia: '17 3 * * *',
+  'emilia-romagna': '20 3 * * *',
+  puglia: '23 3 * * *'
 }
 
 /**

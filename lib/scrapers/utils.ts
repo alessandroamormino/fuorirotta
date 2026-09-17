@@ -169,6 +169,30 @@ export async function saveEvents(
     let created = 0
     let updated = 0
 
+    // Aggancio esatto istatCode -> comuneId (Fase 15, D-03/T-15-09): risolto
+    // UNA VOLTA per l'intero lotto, un solo `findMany` con `istatCode in
+    // [...]` e una mappa in memoria — mai una `findUnique` per evento dentro
+    // il ciclo di upsert sotto, altrimenti un lotto Puglia da 7.590 eventi
+    // aggiungerebbe 7.590 query al percorso di salvataggio. Un `istatCode`
+    // che non trova comune lascia `comuneId` invariato (mai un valore
+    // inventato): il backfill territoriale (lib/territorial/backfill.ts)
+    // resta la seconda rete per gli eventi non agganciati qui. Le sorgenti
+    // che non forniscono `istatCode` (es. SoloSagre) non entrano mai in
+    // questo insieme, quindi non pagano il costo della query.
+    const istatCodes = Array.from(
+      new Set(events.map(event => event.istatCode).filter((code): code is string => Boolean(code)))
+    )
+    const comuneIdByIstatCode = new Map<string, number>()
+    if (istatCodes.length > 0) {
+      const comuni = await prisma.comune.findMany({
+        where: { istatCode: { in: istatCodes } },
+        select: { id: true, istatCode: true }
+      })
+      for (const comune of comuni) {
+        comuneIdByIstatCode.set(comune.istatCode, comune.id)
+      }
+    }
+
     // Process in small batches to avoid exhausting the connection pool.
     // Firing all upserts concurrently (Promise.allSettled over 2000 items)
     // saturates the pool and causes P2024 timeout errors. PRISMA_BATCH_SIZE
@@ -185,6 +209,14 @@ export async function saveEvents(
           // sempre il valore canonico calcolato sotto la mappatura vecchia se
           // la sorgente cambia markup.
           const canonicalCategory = canonicalizeCategory(event.source, event.category)
+
+          // Aggancio esatto risolto sopra, in blocco. undefined = nessun
+          // istatCode sull'evento, oppure nessun comune trovato per quel
+          // codice: in entrambi i casi la riga di Prisma sotto (`...(comuneId
+          // !== undefined ? { comuneId } : {})`) NON scrive comuneId, e il
+          // valore gia' presente in database (es. dal backfill territoriale)
+          // resta invariato — mai un `null` che lo cancellerebbe.
+          const comuneId = event.istatCode ? comuneIdByIstatCode.get(event.istatCode) : undefined
 
           // Campi che nascono nella pagina di dettaglio, o che il dettaglio
           // arricchisce rispetto alla card in lista. Quando il dettaglio non
@@ -234,7 +266,8 @@ export async function saveEvents(
               sourceUrl: event.sourceUrl,
               imageUrl: event.imageUrl,
               phone: event.phone,
-              region
+              region,
+              ...(comuneId !== undefined ? { comuneId } : {})
             },
             update: {
               title: event.title,
@@ -245,6 +278,7 @@ export async function saveEvents(
               sourceUrl: event.sourceUrl,
               updatedAt: new Date(),
               region,
+              ...(comuneId !== undefined ? { comuneId } : {}),
               ...(event.detailSkipped ? {} : detailFields)
             }
           })

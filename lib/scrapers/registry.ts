@@ -19,6 +19,8 @@
 import { scrapeSoloSagre } from './solosagre'
 import { scrapeOpenData } from './opendata'
 import { scrapeInLombardia } from './inlombardia'
+import { scrapeEmiliaRomagna } from './emiliaromagna'
+import { scrapePuglia } from './puglia'
 import type { AdapterResult, ScrapeParams } from './types'
 import { SOURCE_META, type SourceMeta } from './sources'
 
@@ -45,6 +47,8 @@ const SCRAPERS: Record<string, ScrapeFn> = {
   solosagre: scrapeSoloSagre,
   opendata_lombardia: scrapeOpenData,
   'in-lombardia': scrapeInLombardia,
+  'emilia-romagna': scrapeEmiliaRomagna,
+  puglia: scrapePuglia,
 }
 
 // Join fail-closed, in entrambe le direzioni. Un metadato senza scraper
