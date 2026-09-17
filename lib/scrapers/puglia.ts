@@ -48,20 +48,113 @@ interface PugliaDumpResponse {
 const PUGLIA_DUMP_URL =
   'https://osservatorio.dms.puglia.it/opendata/puglia_eventi_attivita/eventi_attivita.json'
 
-export async function scrapePuglia(_params: ScrapeParams = {}): Promise<AdapterResult> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  void fetchWithRetry // stub RED: la vera implementazione fa il fetch qui (commit GREEN)
-  void PUGLIA_DUMP_URL
-  return { events: [], source: 'puglia', duration: 0 }
+export async function scrapePuglia(params: ScrapeParams = {}): Promise<AdapterResult> {
+  const startTime = Date.now()
+
+  try {
+    // Dump JSON unico, non paginato: un solo fetch restituisce tutti i
+    // record (15-RESEARCH.md Pattern 3). La verifica del certificato resta
+    // nella configurazione predefinita di fetchWithRetry — se l'host non
+    // completa la catena TLS lato server, questa chiamata fallisce e cade
+    // nel ramo catch sotto, con il messaggio della sorgente propagato cosi'
+    // com'e' (mai un errore silenziato o riscritto).
+    const response = await fetchWithRetry(PUGLIA_DUMP_URL)
+    const body: PugliaDumpResponse = await response.json()
+
+    const events = transformPugliaRecords(body.data ?? [], params)
+
+    const duration = Date.now() - startTime
+    return { events, source: 'puglia', duration }
+  } catch (error) {
+    const duration = Date.now() - startTime
+    return {
+      events: [],
+      source: 'puglia',
+      duration,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }
+  }
+}
+
+function parseCoordinate(raw: string | null | undefined): number | null {
+  // '' e' falsy in JS quindi rientra gia' in !raw: Number('') === 0
+  // varrebbe una coordinata plausibile invece di "assente", motivo per cui
+  // questo controllo precede la conversione invece di affidarsi solo a
+  // Number.isFinite dopo.
+  if (!raw) return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
 }
 
 export function transformPugliaRecords(
-  _records: PugliaRecord[],
-  _params: ScrapeParams = {}
+  records: PugliaRecord[],
+  params: ScrapeParams = {}
 ): ScrapedEvent[] {
-  // Stub RED (15-02 Task 2): sempre vuoto finche' il commit GREEN non
-  // implementa la trasformazione reale.
-  return []
+  // Set default date range (today to 6 months from now) — stesso default di
+  // opendata.ts/solosagre.ts/emiliaromagna.ts. Il dump non filtra per data
+  // (copre dal 2012 al 2027): il filtro va applicato qui, lato client, come
+  // gia' fa transformEvents in solosagre.ts.
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const sixMonthsLater = new Date()
+  sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6)
+  sixMonthsLater.setHours(23, 59, 59, 999)
+
+  const dateFrom = params.dateFrom ? new Date(params.dateFrom) : today
+  dateFrom.setHours(0, 0, 0, 0)
+  const dateTo = params.dateTo ? new Date(params.dateTo) : sixMonthsLater
+  dateTo.setHours(23, 59, 59, 999)
+
+  const results: ScrapedEvent[] = []
+
+  for (const record of records) {
+    // Solo eventi: il dataset mischia eventi e attivita' commerciali/turistiche
+    // permanenti (agriturismi, botteghe) sotto lo stesso schema.
+    if (record.tipo_scheda !== 'evento') continue
+    if (!record.data_inizio) continue
+
+    const eventStartDate = new Date(record.data_inizio)
+    eventStartDate.setHours(0, 0, 0, 0)
+    if (Number.isNaN(eventStartDate.getTime())) continue
+
+    const eventEndDate = record.data_fine ? new Date(record.data_fine) : new Date(eventStartDate)
+    eventEndDate.setHours(23, 59, 59, 999)
+
+    const isActiveInPeriod = eventStartDate <= dateTo && eventEndDate >= dateFrom
+    if (!isActiveInPeriod) continue
+
+    // Nessun campo id univoco nel dataset osservato: sourceId derivato
+    // deterministicamente da codice ISTAT + titolo + data di inizio (stesso
+    // principio del fallback deterministico di deriveSoloSagreSourceId).
+    const sourceId = `${record.codice_istat_comune ?? 'nd'}:${record.nm_evento_it ?? ''}:${record.data_inizio}`
+
+    results.push({
+      source: 'puglia',
+      sourceId,
+      title: record.nm_evento_it || 'Evento',
+      description: record.dsc_evento_it?.trim() || '',
+      dateStart: eventStartDate,
+      dateEnd: eventEndDate,
+      locationName: record.comune || null,
+      address: record.indirizzo || null,
+      latitude: parseCoordinate(record.latitudine),
+      longitude: parseCoordinate(record.longitudine),
+      // tipologia arriva cosi' com'e', senza inferenza — categoria (il campo
+      // grosso "EVENTO") resta volutamente fuori (COVERAGE.md, granularita'
+      // inutile: tipologia e' il campo che discrimina davvero).
+      category: record.tipologia || null,
+      sourceUrl: PUGLIA_DUMP_URL,
+      imageUrl: null,
+      phone: null,
+      // Aggancio esatto al comune (D-03/T-15-09): il livello di persistenza
+      // risolve istatCode -> comuneId con un lookup per uguaglianza, mai col
+      // matching fuzzy di lib/territorial/resolve.ts.
+      istatCode: record.codice_istat_comune || null
+    })
+  }
+
+  return results
 }
 
 // Self-check: `npx tsx lib/scrapers/puglia.ts`.
