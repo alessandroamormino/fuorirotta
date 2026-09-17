@@ -7,6 +7,7 @@ import { VALID_REGION_SLUGS } from "@/lib/scrapers/regionSlug";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
+import Breadcrumb from "@/components/Breadcrumb";
 
 const BASE_URL = (
 	process.env.NEXT_PUBLIC_SITE_URL ||
@@ -84,26 +85,59 @@ export default async function RegionePage({
 	// T-15-03: slug non appartenente all'insieme chiuso ISTAT -> 404.
 	if (!data) notFound();
 
+	const breadcrumbItems = [
+		{ name: "Fuorirotta", href: "/" },
+		{ name: data.displayName },
+	];
+
+	// Stesso pattern di escaping di app/eventi/[id]/page.tsx (righe 138-149) e
+	// di app/[regione]/[provincia]/page.tsx, un livello piu' corto: solo Home
+	// -> regione.
+	const breadcrumbLd = {
+		"@context": "https://schema.org",
+		"@type": "BreadcrumbList",
+		itemListElement: [
+			{ "@type": "ListItem", position: 1, name: "Fuorirotta", item: BASE_URL },
+			{ "@type": "ListItem", position: 2, name: data.displayName, item: `${BASE_URL}/${regione}` },
+		],
+	};
+
 	if (!data.isLive) {
 		// D-05/D-06: messaggio esplicito e nient'altro, nessun suggerimento di
 		// regione vicina, nessuna raccolta email. Il testo definitivo e il
 		// componente condiviso con la ricerca per raggio arrivano in
 		// 15-04-PLAN.md — qui basta la variante "regione non coperta".
 		return (
-			<main className="mx-auto max-w-3xl px-4 py-16 text-center">
-				<h1 className="font-display text-2xl font-semibold text-foreground">
-					{data.displayName}
-				</h1>
-				<p className="mt-3 text-muted-foreground">
-					Non copriamo ancora questa regione: stiamo aggiungendo nuove fonti,
-					torna a trovarci presto.
-				</p>
+			<main className="mx-auto max-w-3xl px-4 py-16">
+				<script
+					type="application/ld+json"
+					dangerouslySetInnerHTML={{
+						__html: JSON.stringify(breadcrumbLd).replace(/</g, "\\u003c"),
+					}}
+				/>
+				<Breadcrumb items={breadcrumbItems} />
+				<div className="text-center">
+					<h1 className="font-display text-2xl font-semibold text-foreground">
+						{data.displayName}
+					</h1>
+					<p className="mt-3 text-muted-foreground">
+						Non copriamo ancora questa regione: stiamo aggiungendo nuove fonti,
+						torna a trovarci presto.
+					</p>
+				</div>
 			</main>
 		);
 	}
 
 	return (
 		<main className="mx-auto max-w-6xl px-4 py-8">
+			<script
+				type="application/ld+json"
+				dangerouslySetInnerHTML={{
+					__html: JSON.stringify(breadcrumbLd).replace(/</g, "\\u003c"),
+				}}
+			/>
+			<Breadcrumb items={breadcrumbItems} />
 			<h1 className="font-display text-2xl font-semibold text-foreground">
 				Eventi in {data.displayName}
 			</h1>

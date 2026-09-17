@@ -250,6 +250,42 @@ http_code7="$(curl -s -o "${resp7}" -w '%{http_code}' --max-time 15 "http://127.
 grep -qi "noindex" "${resp7}" && fail "S7: /emilia-romagna e' viva (S3) ma la pagina porta ancora 'noindex'"
 echo "S7 OK: GET /emilia-romagna (regione ISTAT reale, ora viva) risponde 200 senza noindex"
 
+# --- S15: /lombardia/bergamo (provincia viva, dati reali) -> 200, con
+# almeno un link a un evento reale nel corpo. Dato reale (come S3/S6/S7):
+# bergamo e' viva sui volumi di lombardia osservati (1.806 eventi futuri
+# canonici, S3), non un dato sintetico.
+resp15="${tmp_dir}/resp15.html"
+http_code15="$(curl -s -o "${resp15}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/lombardia/bergamo")"
+[[ "${http_code15}" == "200" ]] || fail "S15: atteso 200 su /lombardia/bergamo, ottenuto ${http_code15}"
+grep -qE '/eventi/[0-9]+' "${resp15}" || fail "S15: /lombardia/bergamo risponde 200 ma il corpo non contiene alcun link a un evento"
+echo "S15 OK: GET /lombardia/bergamo (provincia viva) risponde 200 con almeno un evento"
+
+# --- S16: /emilia-romagna/ferrara (provincia esistente, oggi sotto soglia)
+# -> 200 + noindex. D-11: mai 404, mai redirect per una provincia reale non
+# ancora coperta. Dato reale: emilia-romagna ha solo bologna sopra soglia
+# oggi (6 eventi futuri totali, S3/S7).
+resp16="${tmp_dir}/resp16.html"
+http_code16="$(curl -s -o "${resp16}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/emilia-romagna/ferrara")"
+[[ "${http_code16}" == "200" ]] || fail "S16: atteso 200 su /emilia-romagna/ferrara (provincia reale, non coperta), ottenuto ${http_code16}"
+grep -qi "noindex" "${resp16}" || fail "S16: /emilia-romagna/ferrara risponde 200 ma il corpo non contiene 'noindex'"
+echo "S16 OK: GET /emilia-romagna/ferrara (provincia ISTAT reale, non coperta) risponde 200 con noindex"
+
+# --- S17: /lombardia/bari (provincia esistente, ma della REGIONE SBAGLIATA)
+# -> 404. Una provincia pugliese sotto /lombardia/ non e' una pagina spenta,
+# e' un URL sbagliato (T-15-03).
+http_code17="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/lombardia/bari")"
+[[ "${http_code17}" == "404" ]] || fail "S17: atteso 404 su /lombardia/bari (provincia di un'altra regione), ottenuto ${http_code17}"
+echo "S17 OK: GET /lombardia/bari (provincia esistente ma di un'altra regione) risponde 404"
+
+# --- S18: due caricamenti consecutivi della stessa pagina provincia
+# elencano gli eventi nello stesso ordine.
+resp18="${tmp_dir}/resp18.html"
+curl -s -o "${resp18}" --max-time 15 "http://127.0.0.1:${port}/lombardia/bergamo" >/dev/null
+order15="$(grep -oE '/eventi/[0-9]+' "${resp15}")"
+order18="$(grep -oE '/eventi/[0-9]+' "${resp18}")"
+[[ "${order15}" == "${order18}" ]] || fail "S18: due caricamenti consecutivi di /lombardia/bergamo elencano gli eventi in un ordine diverso"
+echo "S18 OK: due caricamenti consecutivi di /lombardia/bergamo elencano gli eventi nello stesso ordine"
+
 # --- S12: la sitemap contiene almeno una voce provincia viva sotto
 # /lombardia/ — la soglia e' abbondantemente sotto i volumi reali di
 # lombardia (S3/S4), quindi almeno una provincia deve essere sopra soglia.
@@ -281,5 +317,5 @@ echo "S14 OK: due generazioni consecutive della sitemap producono lo stesso ordi
 
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione] (ROLL-06) + province/sitemap (ROLL-05/ROLL-06, Fase 15 piano 04) — S1..S14 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05, Fase 15 piano 04) — S1..S18 verdi"
 exit 0
