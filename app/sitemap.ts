@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
-import { getLiveRegions } from "@/lib/coverage/liveRegions";
+import { getLiveRegions, getLiveProvinces, getProvinceDirectory } from "@/lib/coverage/liveRegions";
 
 // Force dynamic rendering to avoid database queries during build
 export const dynamic = 'force-dynamic';
@@ -43,6 +43,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 	// (un Set non garantisce un ordine stabile fra chiamate).
 	const liveRegionSlugs = [...(await getLiveRegions())].sort((a, b) => a.localeCompare(b));
 
+	// D-10: stessa soglia di lib/coverage/liveRegions.ts, un livello piu'
+	// sotto — nessuna soglia duplicata qui. getProvinceDirectory() esclude
+	// gia' i quattro codici provincia sardi aboliti nel 2016 (15-RESEARCH.md
+	// Pitfall 4): un codice abolito non compare MAI fra le voci provincia,
+	// anche se avesse eventi sopra soglia, perche' non e' mai nella directory
+	// da cui questa mappa legge. Ordinate regione poi provincia, entrambe
+	// alfabetiche (stesso motivo delle regioni sopra: due chiamate
+	// consecutive su dati invariati devono produrre lo stesso documento).
+	const [liveProvinceCodes, provinceDirectory] = await Promise.all([
+		getLiveProvinces(),
+		getProvinceDirectory(),
+	]);
+	const liveProvinceEntries = provinceDirectory
+		.filter((province) => liveProvinceCodes.has(province.provinceCode))
+		.sort(
+			(a, b) =>
+				a.regionSlug.localeCompare(b.regionSlug) ||
+				a.provinceSlug.localeCompare(b.provinceSlug)
+		);
+
 	return [
 		{
 			url: `${baseUrl}/`,
@@ -61,6 +81,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 			lastModified: new Date(),
 			changeFrequency: "daily" as const,
 			priority: 0.6,
+		})),
+		...liveProvinceEntries.map((province) => ({
+			url: `${baseUrl}/${province.regionSlug}/${province.provinceSlug}`,
+			lastModified: new Date(),
+			changeFrequency: "daily" as const,
+			priority: 0.5,
 		})),
 	];
 }

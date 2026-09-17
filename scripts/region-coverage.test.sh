@@ -26,6 +26,12 @@ port="${REGION_COVERAGE_TEST_PORT:-39895}"
 test_dist_dir=".next-region-coverage-test"
 export NEXT_TEST_DIST_DIR="${test_dist_dir}"
 export COVERAGE_TEST_REGION="${test_region}"
+# Fase 15 (D-10): comune/provincia di prova per S9/S10 — vuoto finche' non
+# viene assegnato piu' sotto, cosi' cleanup() puo' riferirlo senza incorrere
+# in una variabile non definita (set -u) se lo script fallisce prima.
+test_comune_istat=""
+test_province_code="ZZPV"
+export COVERAGE_TEST_PROVINCE="${test_province_code}"
 
 tmp_dir="$(mktemp -d)"
 server_pid=""
@@ -67,6 +73,9 @@ stop_server() {
 cleanup() {
   stop_server
   psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null 2>&1 || true
+  if [[ -n "${test_comune_istat}" ]]; then
+    psql_dev "DELETE FROM comuni WHERE istat_code = '${test_comune_istat}'" >/dev/null 2>&1 || true
+  fi
   rm -rf "${tmp_dir}"
   rm -rf "${repo_root}/${test_dist_dir}"
 }
@@ -143,6 +152,69 @@ printf '%s' "${s3_output}" | grep -q '"lombardia"' || fail "S3: getLiveRegions()
 printf '%s' "${s3_output}" | grep -q '"emilia-romagna"' || fail "S3: getLiveRegions() non contiene 'emilia-romagna' sui dati reali (ingestione mancante o sotto soglia?): ${s3_output}"
 echo "S3 OK: getLiveRegions() su dati reali contiene lombardia ed emilia-romagna: ${s3_output}"
 
+# --- Setup comune di prova per S9/S10 (soglia secca sulla provincia, D-10) -
+# Un comune di prova dedicato (mai un comune reale): getLiveProvinces() legge
+# la provincia via JOIN comuni.province_code, non ha una colonna "region" di
+# prova da riusare come S1/S2.
+psql_dev "DELETE FROM comuni WHERE istat_code = 'ZZ9999'" >/dev/null
+test_comune_istat="ZZ9999"
+# CTE con SELECT esterno (stesso idioma di territorial-backfill.test.sh): psql
+# -tAc stampa comunque il tag "INSERT 0 1" dopo un INSERT ... RETURNING anche
+# in modalita' tuples-only, corrompendo la cattura della sola colonna id.
+test_comune_id="$(psql_dev "WITH ins AS (INSERT INTO comuni (istat_code, name, province_code, province_name, region_code, region_name) VALUES ('${test_comune_istat}', '__test_coverage_comune__', '${test_province_code}', '__test_coverage_province__', 'ZZ', '${test_region}') RETURNING id) SELECT id FROM ins")"
+
+# --- S9: soglia secca provincia, direzione bassa — esattamente
+# COVERAGE_THRESHOLD eventi futuri agganciati al comune di prova: la
+# provincia di prova non e' viva. Stessa logica di S1, un livello sotto.
+if [[ "${coverage_threshold}" -gt 0 ]]; then
+  psql_dev "INSERT INTO events (source, source_id, title, date_start, comune_id, canonical_category) SELECT '${test_source}', 'p' || gs, 'Evento di prova copertura provincia', now() + interval '1 day', ${test_comune_id}, 'Altro' FROM generate_series(1, ${coverage_threshold}) AS gs" >/dev/null
+fi
+
+s9_output="$(bash scripts/dev-db.sh npx tsx -e '
+(async () => {
+  const { getLiveProvinces } = await import("./lib/coverage/liveRegions")
+  const live = await getLiveProvinces()
+  console.log(live.has(process.env.COVERAGE_TEST_PROVINCE as string) ? "true" : "false")
+  process.exit(0)
+})().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
+' 2>&1)"
+[[ "${s9_output}" == "false" ]] || fail "S9: con ${coverage_threshold} eventi futuri (== COVERAGE_THRESHOLD) la provincia di prova risulta viva: ${s9_output}"
+echo "S9 OK: ${coverage_threshold} eventi futuri (== COVERAGE_THRESHOLD) -> provincia di prova NON viva"
+
+# --- S10: soglia secca provincia, direzione alta — un evento futuro
+# canonico IN PIU' (== COVERAGE_THRESHOLD + 1): la provincia di prova
+# diventa viva. Stessa costante di S2 (D-10): nessuna soglia duplicata.
+psql_dev "INSERT INTO events (source, source_id, title, date_start, comune_id, canonical_category) VALUES ('${test_source}', 'p$((coverage_threshold + 1))', 'Evento di prova copertura provincia', now() + interval '1 day', ${test_comune_id}, 'Altro')" >/dev/null
+
+s10_output="$(bash scripts/dev-db.sh npx tsx -e '
+(async () => {
+  const { getLiveProvinces } = await import("./lib/coverage/liveRegions")
+  const live = await getLiveProvinces()
+  console.log(live.has(process.env.COVERAGE_TEST_PROVINCE as string) ? "true" : "false")
+  process.exit(0)
+})().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
+' 2>&1)"
+[[ "${s10_output}" == "true" ]] || fail "S10: con $((coverage_threshold + 1)) eventi futuri (== COVERAGE_THRESHOLD + 1) la provincia di prova NON risulta viva: ${s10_output}"
+echo "S10 OK: $((coverage_threshold + 1)) eventi futuri (== COVERAGE_THRESHOLD + 1) -> provincia di prova viva"
+
+psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
+
+# --- S11: getProvinceDirectory() esclude i quattro codici provincia sardi
+# aboliti dalla riforma del 2016 (15-RESEARCH.md Pitfall 4), anche se la
+# tabella comuni li porta ancora per debito di seed della Fase 6.
+s11_output="$(bash scripts/dev-db.sh npx tsx -e '
+(async () => {
+  const { getProvinceDirectory } = await import("./lib/coverage/liveRegions")
+  const directory = await getProvinceDirectory()
+  const codes = new Set(directory.map((p) => p.provinceCode))
+  const leaked = ["OT", "OG", "VS", "CI"].filter((code) => codes.has(code))
+  console.log(JSON.stringify(leaked))
+  process.exit(0)
+})().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
+' 2>&1)"
+[[ "${s11_output}" == "[]" ]] || fail "S11: getProvinceDirectory() contiene ancora codici provincia sardi aboliti nel 2016: ${s11_output}"
+echo "S11 OK: getProvinceDirectory() esclude OT/OG/VS/CI (province sarde abolite nel 2016)"
+
 # --- Dev server effimero per S4/S5/S6/S7, Postgres locale reale (D-17) -----
 bash scripts/dev-db.sh npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
 server_pid=$!
@@ -178,7 +250,36 @@ http_code7="$(curl -s -o "${resp7}" -w '%{http_code}' --max-time 15 "http://127.
 grep -qi "noindex" "${resp7}" && fail "S7: /emilia-romagna e' viva (S3) ma la pagina porta ancora 'noindex'"
 echo "S7 OK: GET /emilia-romagna (regione ISTAT reale, ora viva) risponde 200 senza noindex"
 
+# --- S12: la sitemap contiene almeno una voce provincia viva sotto
+# /lombardia/ — la soglia e' abbondantemente sotto i volumi reali di
+# lombardia (S3/S4), quindi almeno una provincia deve essere sopra soglia.
+resp_sitemap="${tmp_dir}/sitemap.xml"
+http_code_sitemap="$(curl -s -o "${resp_sitemap}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/sitemap.xml")"
+[[ "${http_code_sitemap}" == "200" ]] || fail "S12: atteso 200 su /sitemap.xml, ottenuto ${http_code_sitemap}"
+grep -qE '<loc>[^<]*/lombardia/[a-z0-9-]+</loc>' "${resp_sitemap}" || fail "S12: nessuna voce provincia viva sotto /lombardia/ nella sitemap"
+echo "S12 OK: la sitemap contiene almeno una voce provincia viva sotto /lombardia/"
+
+# --- S13: nessuna delle quattro province sarde abolite nel 2016 compare
+# nella sitemap, a prescindere dalla soglia (D-10, garantito per costruzione
+# da S11 — questa e' la controprova sul documento HTTP effettivo).
+for abolished_slug in olbia-tempio ogliastra medio-campidano carbonia-iglesias; do
+  grep -q "/${abolished_slug}</loc>" "${resp_sitemap}" && fail "S13: la sitemap contiene una voce per una provincia sarda abolita nel 2016 (${abolished_slug})"
+done
+echo "S13 OK: nessuna provincia sarda abolita nel 2016 (OT/OG/VS/CI) compare nella sitemap"
+
+# --- S14: due generazioni consecutive della sitemap sugli stessi dati
+# producono lo stesso ordine di URL regione/provincia (D-10). Confrontate
+# solo le voci regione/provincia/home (escluse le voci evento: il loro
+# ordine su pareggio di dateStart e' un comportamento preesistente a questo
+# piano, fuori scope qui).
+resp_sitemap2="${tmp_dir}/sitemap2.xml"
+curl -s -o "${resp_sitemap2}" --max-time 15 "http://127.0.0.1:${port}/sitemap.xml" >/dev/null
+locs1="$(grep -oE '<loc>[^<]*</loc>' "${resp_sitemap}" | grep -v '/eventi/')"
+locs2="$(grep -oE '<loc>[^<]*</loc>' "${resp_sitemap2}" | grep -v '/eventi/')"
+[[ "${locs1}" == "${locs2}" ]] || fail "S14: due generazioni consecutive della sitemap producono un ordine diverso di URL regione/provincia"
+echo "S14 OK: due generazioni consecutive della sitemap producono lo stesso ordine di URL regione/provincia"
+
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione] (ROLL-06) — S1..S7 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione] (ROLL-06) + province/sitemap (ROLL-05/ROLL-06, Fase 15 piano 04) — S1..S14 verdi"
 exit 0
