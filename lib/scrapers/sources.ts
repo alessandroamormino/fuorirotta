@@ -23,12 +23,19 @@
  * ESEGUIRE uno scrape importa registry.ts. L'unico consumatore del secondo tipo
  * e' lib/scrapers/runner.ts.
  *
- * Questo file non deve mai importare nulla oltre ai tipi: e' cio' che lo rende
- * sicuro sia nel bundle browser sia su un Node vecchio. Il gate
+ * Questo file non deve mai importare nulla oltre ai tipi E lib/scrapers/regionSlug.ts:
+ * e' cio' che lo rende sicuro sia nel bundle browser sia su un Node vecchio. Il gate
  * scripts/browser-bundle-safety.ts ne verifica la parte browser;
  * scripts/host-script-deps.ts verifica che gli script host non tornino a
- * importare la catena pesante.
+ * importare la catena pesante. regionSlug.ts e' l'unica eccezione ammessa
+ * (Fase 15, SRC-04, 15-05 Task 2): zero import propri (verificato leggendolo
+ * per intero), quindi non porta dentro cheerio/undici/Prisma — e il suo
+ * stesso commento di testa dichiara di condividere ESATTAMENTE questo
+ * vincolo. Le 19 entry SoloSagre nazionali sotto sono generate da
+ * VALID_REGION_SLUGS, non digitate a mano.
  */
+import { VALID_REGION_SLUGS } from './regionSlug'
+
 export type SourceType = 'html' | 'json'
 
 export interface SourceMeta {
@@ -169,7 +176,33 @@ export const SOURCE_META: SourceMeta[] = [
       Mostra: 'Arte e cultura',
       Degustazione: 'Food & Wine'
     }
-  }
+  },
+  // Le 19 regioni SoloSagre mancanti (SRC-04, 15-05 Task 2): tutte le regioni
+  // ISTAT tranne la Lombardia, che ha gia' la sua entry sopra con lo stesso
+  // id. Generate dalla normalizzazione (VALID_REGION_SLUGS, gia' verificata
+  // 20/20 sul sito sorgente da scripts/solosagre-national.test.sh), non
+  // digitate a mano — venti stringhe scritte a mano sarebbero venti occasioni
+  // di refuso che quel gate scoprirebbe solo alla prossima esecuzione. `url`
+  // e `region` derivano dallo STESSO slug: se divergessero sarebbe un bug in
+  // istatRegionToSlug(), non un secondo caso da gestire qui.
+  //
+  // Emilia-Romagna e Puglia compaiono anche qui, non solo nelle loro entry
+  // dedicate sopra: SoloSagre e' una sorgente NAZIONALE che affianca le
+  // sorgenti regionali ricche, non le sostituisce (D-14) — quella regione ha
+  // quindi due sorgenti, su host diversi, eseguite in parallelo da
+  // groupSourcesByHost.
+  ...Array.from(VALID_REGION_SLUGS.keys())
+    .filter((slug) => slug !== 'lombardia')
+    .map((slug): SourceMeta => ({
+      id: 'solosagre',
+      region: slug,
+      type: 'html',
+      url: `https://www.solosagre.it/sagre/${slug}/`,
+      trustRank: 3,
+      categoryMap: {
+        Sagra: 'Sagre e feste'
+      }
+    }))
 ]
 
 /**
@@ -196,18 +229,34 @@ export const SOURCE_META: SourceMeta[] = [
  * diventera' venti voci a minuti di distanza, e partire da uno slot gia'
  * spostato evita che le regioni future si accalchino tutte sul minuto zero.
  *
- * ATTENZIONE FASE 15 — l'aritmetica scritta qui in origine ("24h / 20 regioni
- * = 72 minuti di slot, che copre anche la regione piu' lenta misurata") e'
- * FALSA, e lo e' sempre stata: la Lombardia da sola costa 4h53m, che in 72
- * minuti non entra. Venti regioni in slot serializzati non stanno in una
- * giornata.
+ * RISOLTO IN FASE 15 (15-05 Task 2, 2026-09-18) — l'aritmetica scritta qui in
+ * origine ("24h / 20 regioni = 72 minuti di slot, che copre anche la regione
+ * piu' lenta misurata") era FALSA, e lo e' sempre stata: la Lombardia da sola
+ * costa 4h53m, che in 72 minuti non entra. La via d'uscita non e' stata
+ * allungare gli slot ma il fatto che il Crawl-delay sia un vincolo PER HOST
+ * (D-02, gia' implementato in groupSourcesByHost): in-lombardia.it e'
+ * un'altra sorgente, con un altro host, non SoloSagre — le venti righe
+ * SoloSagre condividono www.solosagre.it (Crawl-delay 5s, robots.txt
+ * riverificato dal vivo il 2026-09-18, invariato da 08-RESEARCH.md) e si
+ * serializzano SOLO fra loro, non con in-lombardia.it.
  *
- * La via d'uscita non e' allungare gli slot ma il fatto che il Crawl-delay
- * sia un vincolo PER HOST (D-02, gia' implementato in groupSourcesByHost):
- * regioni con siti diversi possono sovrapporsi senza violare alcun
- * robots.txt, e il limite vero diventa pool e CPU con N scrape in parallelo —
- * cioe' proprio cio' che scripts/n1-proof.ts misura. Da decidere pianificando
- * la Fase 15, non qui.
+ * Costo reale SoloSagre misurato con `npm run scrape:local -- --region
+ * <slug>` contro il Postgres locale il 2026-09-18 (scrape_runs, colonna
+ * duration_ms): lombardia 11.8-12.0s (26 eventi, 3 pagine, dato preesistente
+ * dalla Fase 8/14), toscana 11.7s (29 eventi, 3 pagine — il costo piu' alto
+ * fra le regioni misurate in questa sessione), veneto 0.6s (7 eventi, 1
+ * pagina), lazio 0.6s (10 eventi, 1 pagina), campania 0.6s (3 eventi, 1
+ * pagina), sicilia 0.6s (0 eventi — vedi il fix in parseSoloSagreHtml sotto).
+ * Nessuna delle regioni misurate si avvicina al tetto teorico
+ * SOLOSAGRE_MAX_PAGES=20 (~100-140s nel caso peggiore, mai osservato). Lo
+ * scaglionamento sotto usa 3 minuti fra una riga SoloSagre e la successiva:
+ * ~15x il costo massimo REALMENTE osservato (11.7s) e ampio margine anche
+ * sul tetto teorico mai raggiunto — Emilia-Romagna e Puglia NON hanno
+ * bisogno di un nuovo orario qui sotto (hanno gia' il loro, righe 273-274:
+ * l'orario e' per REGIONE non per sorgente, quindi la loro riga SoloSagre
+ * scatta insieme alla loro sorgente dedicata) e sono comunque a >= 3 minuti
+ * da ogni altra riga SoloSagre per costruzione (03:17/03:20/03:23, poi le 17
+ * regioni nuove da 03:26 in poi).
  *
  * Le regioni leggere (solo l'adattatore SoloSagre generalizzato, costo in
  * secondi) restano ogni 4h quando la Fase 15 le aggiungera' — non tutte le
@@ -236,10 +285,36 @@ export const SOURCE_META: SourceMeta[] = [
 // singolo fetch JSON (Puglia: dump unico; Emilia-Romagna: una pagina da 200
 // record), quindi il margine di pochi minuti e' ampio rispetto al costo
 // osservato.
+// Le 17 regioni sotto sono nuove (Fase 15, 15-05 Task 2): le altre tre
+// (lombardia/emilia-romagna/puglia) hanno gia' un orario sopra e NON lo
+// duplicano qui — REGION_SCHEDULES e' per REGIONE, non per sorgente, quindi
+// la riga SoloSagre di emilia-romagna/puglia scatta insieme alla loro
+// sorgente dedicata (03:20/03:23), gia' a 3 minuti di distanza da ogni altra
+// riga SoloSagre. Le 17 nuove proseguono lo stesso passo di 3 minuti da dove
+// si ferma puglia (03:23), nell'ordine di dichiarazione di SOURCE_META (lo
+// stesso ordine restituito da getRegions() — vedi il commento sopra la
+// costante per i numeri misurati che giustificano il passo di 3 minuti).
 export const REGION_SCHEDULES: Record<string, string> = {
   lombardia: '17 3 * * *',
   'emilia-romagna': '20 3 * * *',
-  puglia: '23 3 * * *'
+  puglia: '23 3 * * *',
+  abruzzo: '26 3 * * *',
+  basilicata: '29 3 * * *',
+  calabria: '32 3 * * *',
+  campania: '35 3 * * *',
+  'friuli-venezia-giulia': '38 3 * * *',
+  lazio: '41 3 * * *',
+  liguria: '44 3 * * *',
+  marche: '47 3 * * *',
+  molise: '50 3 * * *',
+  piemonte: '53 3 * * *',
+  sardegna: '56 3 * * *',
+  sicilia: '59 3 * * *',
+  toscana: '2 4 * * *',
+  'trentino-alto-adige': '5 4 * * *',
+  umbria: '8 4 * * *',
+  'valle-d-aosta': '11 4 * * *',
+  veneto: '14 4 * * *'
 }
 
 /**

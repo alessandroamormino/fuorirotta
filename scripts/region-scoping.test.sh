@@ -73,16 +73,32 @@ s1_output="$(npx tsx -e '
   if (lomb.join(",") !== "solosagre,opendata_lombardia,in-lombardia") {
     throw new Error("getSourcesByRegion(\"lombardia\") = " + lomb.join(","))
   }
-  const molise = m.getSourcesByRegion("molise")
-  if (molise.length !== 0) {
-    throw new Error("getSourcesByRegion(\"molise\") non vuoto: " + molise.length)
+  // Fase 15 (15-05-PLAN.md, SoloSagre nazionale): "molise" NON e piu un
+  // esempio valido di regione assente dal registry — con SoloSagre
+  // generalizzato a tutte e venti le regioni ISTAT, molise ha ora una sua
+  // entry. Questa asserzione era congelata a "molise" da quando SoloSagre
+  // copriva solo la Lombardia: un identificativo che non e (e non sara mai)
+  // una regione ISTAT reale e il modo corretto di provare "regione assente
+  // dal registry" adesso che tutte e venti sono coperte.
+  const unknown = m.getSourcesByRegion("__test_unknown_region__")
+  if (unknown.length !== 0) {
+    throw new Error("getSourcesByRegion(\"__test_unknown_region__\") non vuoto: " + unknown.length)
   }
-  // Fase 15 (15-03-PLAN.md): emilia-romagna e puglia si aggiungono al
-  // registry DOPO lombardia (ordine di dichiarazione di SOURCE_META, D-04).
-  // Questa asserzione era congelata a ["lombardia"] da quando esisteva una
-  // sola regione: ora segue lordine reale del registry, non un ricordo.
+  // Fase 15 (15-05-PLAN.md): SoloSagre generalizzato aggiunge le altre 17
+  // regioni ISTAT (oltre a lombardia/emilia-romagna/puglia, gia dichiarate
+  // da 15-03) in coda, nellordine di dichiarazione di SOURCE_META (D-04).
+  // Questa asserzione era congelata a ["lombardia","emilia-romagna","puglia"]
+  // da quando SoloSagre copriva solo la Lombardia: ora segue lordine reale
+  // del registry con tutte e venti le regioni, non un ricordo.
   const regions = m.getRegions()
-  if (JSON.stringify(regions) !== JSON.stringify(["lombardia", "emilia-romagna", "puglia"])) {
+  const expectedRegions = [
+    "lombardia", "emilia-romagna", "puglia",
+    "abruzzo", "basilicata", "calabria", "campania",
+    "friuli-venezia-giulia", "lazio", "liguria", "marche", "molise",
+    "piemonte", "sardegna", "sicilia", "toscana", "trentino-alto-adige",
+    "umbria", "valle-d-aosta", "veneto"
+  ]
+  if (JSON.stringify(regions) !== JSON.stringify(expectedRegions)) {
     throw new Error("getRegions() = " + JSON.stringify(regions))
   }
 })().catch((err) => { console.error("FAIL: " + err.message); process.exit(1) })
@@ -90,7 +106,7 @@ s1_output="$(npx tsx -e '
 if [[ "${s1_code}" -ne 0 ]]; then
   fail "S1 (getSourcesByRegion/getRegions): ${s1_output}"
 fi
-echo "S1 OK: getSourcesByRegion filtra per regione, getRegions() = ['lombardia','emilia-romagna','puglia'] senza duplicati"
+echo "S1 OK: getSourcesByRegion filtra per regione, getRegions() = le 20 regioni ISTAT nell'ordine di SOURCE_META, senza duplicati"
 
 # --- S2: unita' pura — groupSourcesByHost ------------------------------------
 s2_output="$(npx tsx -e '
@@ -143,18 +159,22 @@ http_code3="$(curl -s -o "${resp3}" -w '%{http_code}' --max-time 15 -X POST \
 echo "S3 OK: POST /api/cron/scrape autenticata senza 'region' risponde 400"
 
 # --- S4: region sconosciuta -> 404 con elenco regioni note -------------------
+# Fase 15 (15-05-PLAN.md): "molise" e ora una regione reale nel registry
+# (SoloSagre nazionale) — __test_unknown_region__ e il modo corretto di
+# provare "regione sconosciuta" adesso che tutte e venti le regioni ISTAT
+# sono coperte.
 resp4="${tmp_dir}/resp4.json"
 http_code4="$(curl -s -o "${resp4}" -w '%{http_code}' --max-time 15 -X POST \
   -H "Authorization: Bearer ${secret}" \
-  "http://127.0.0.1:${port}/api/cron/scrape?region=molise")"
-[[ "${http_code4}" == "404" ]] || fail "S4: atteso 404 con region=molise, ottenuto ${http_code4} (body: $(cat "${resp4}" 2>/dev/null))"
+  "http://127.0.0.1:${port}/api/cron/scrape?region=__test_unknown_region__")"
+[[ "${http_code4}" == "404" ]] || fail "S4: atteso 404 con region=__test_unknown_region__, ottenuto ${http_code4} (body: $(cat "${resp4}" 2>/dev/null))"
 node -e "
   const body = require('${resp4}');
   if (!Array.isArray(body.availableRegions) || !body.availableRegions.includes('lombardia')) {
     throw new Error('availableRegions non contiene lombardia: ' + JSON.stringify(body));
   }
 " || fail "S4: il corpo del 404 non elenca le regioni note (D-03)"
-echo "S4 OK: POST /api/cron/scrape?region=molise (sconosciuta) risponde 404 con l'elenco delle regioni note"
+echo "S4 OK: POST /api/cron/scrape?region=__test_unknown_region__ (sconosciuta) risponde 404 con l'elenco delle regioni note"
 
 # --- S5: nessuna Authorization -> 401 PRIMA della validazione di region -----
 # Non-regressione Fase 5: l'autenticazione precede la validazione della

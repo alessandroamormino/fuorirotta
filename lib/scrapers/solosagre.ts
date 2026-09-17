@@ -199,12 +199,34 @@ export function mergeSoloSagrePages(outcomes: ParseOutcome[], soloSagreSlug: str
 export function parseSoloSagreHtml(html: string): ParseOutcome {
   const $ = cheerio.load(html)
 
-  // Anchor strutturale (D-07): deve sempre esistere se il template non è cambiato.
+  // Due anchor distinti (Fase 15, SRC-04 — scoperto dal vivo il 2026-09-18
+  // scrapando Sicilia con `npm run scrape:local -- --region sicilia`, prima
+  // volta che questo codice ha visto una regione SoloSagre genuinamente
+  // senza eventi in programma): `.postListBox` e' la sezione esterna, SEMPRE
+  // presente se il template non e' cambiato; `.postList` e' il contenitore
+  // dei post, presente SOLO quando ci sono eventi — quando non ce ne sono il
+  // sito rende invece un paragrafo "Nessun evento in programma al momento"
+  // dentro `.postListBox`, senza alcun `.postList`. Con una sola regione
+  // (Lombardia, prima di questa fase) il caso non si era mai presentato dal
+  // vivo: se prima `.postList` mancava, significava davvero markup cambiato.
+  // Con venti regioni e' invece atteso che càpiti spesso (verificato anche su
+  // Molise, Valle d'Aosta e Trentino-Alto Adige nella stessa sessione) — un
+  // requisito esplicito del piano ("un listato senza eventi produce uno
+  // scrape a zero eventi, mai un errore fatale").
+  const listBox = $('.postListBox')
+  if (listBox.length === 0) {
+    // Anche l'anchor piu' esterno e' sparito: qui il markup e' davvero
+    // cambiato, non una regione vuota.
+    return { events: [], error: MARKUP_DRIFT_ERROR }
+  }
+
   // Il selettore CSS confronta i token di classe, non la stringa intera dell'attributo,
   // quindi resta valido anche con `class="postList "` (spazi aggiuntivi nella fixture reale).
   const container = $('.postList')
   if (container.length === 0) {
-    return { events: [], error: MARKUP_DRIFT_ERROR }
+    // Struttura di pagina intatta (`.postListBox` presente), solo zero eventi
+    // per questa regione in questo momento — esito legittimo, non un guasto.
+    return { events: [] }
   }
 
   const events: ParsedEvent[] = []
