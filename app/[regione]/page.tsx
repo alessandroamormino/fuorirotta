@@ -56,16 +56,18 @@ export async function generateMetadata(
 
 	// D-11: 200 + noindex per una regione reale ma non ancora coperta, MAI
 	// 404 e MAI redirect — l'URL resta stabile prima e dopo l'accensione.
+	// Niente "Fuorirotta" nel titolo: RootLayout applica gia' il template
+	// "%s | Fuorirotta" (app/layout.tsx), altrimenti il nome duplicherebbe.
 	if (!data.isLive) {
 		return {
-			title: `${data.displayName} — in arrivo su Fuorirotta`,
+			title: `${data.displayName} — in arrivo`,
 			alternates: { canonical },
 			robots: { index: false, follow: true },
 		};
 	}
 
 	return {
-		title: `Eventi in ${data.displayName} — Fuorirotta`,
+		title: `Eventi in ${data.displayName}`,
 		description: `Sagre, feste e manifestazioni in ${data.displayName}, aggiornate ogni giorno.`,
 		alternates: { canonical },
 	};
