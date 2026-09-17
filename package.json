@@ -20,6 +20,7 @@
     "seed:comuni": "bash scripts/dev-db.sh npx tsx scripts/seed-comuni.ts",
     "backfill:territorial": "bash scripts/dev-db.sh npx tsx scripts/backfill-events.ts",
     "backfill:categories": "bash scripts/dev-db.sh npx tsx scripts/backfill-categories.ts",
+    "backfill:region": "bash scripts/dev-db.sh npx tsx scripts/backfill-region.ts",
     "dedup:events": "bash scripts/dev-db.sh npx tsx scripts/dedup-events.ts",
     "maintenance:local": "bash scripts/dev-db.sh npx tsx scripts/maintenance-job.ts",
     "crontab:generate": "npx tsx scripts/generate-crontab.ts",

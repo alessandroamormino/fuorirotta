@@ -55,6 +55,19 @@ model Event {
   resolvedLongitude Decimal? @map("resolved_longitude") @db.Decimal(11, 8)
   coordinateSource  String?  @map("coordinate_source") @db.VarChar(20)
 
+  // Regione dell'evento (Fase 15, D-03): scritta durante lo scrape
+  // (`runRegion` la riceve gia' come argomento, `saveEvents` la scrive su
+  // entrambi i rami dell'upsert), MAI derivata a lettura da `comuneId ->
+  // comuni.region_name`: 616 eventi futuri su 1.836 (34%, misurato
+  // 2026-09-17) non hanno `comuneId`, e con SoloSagre nazionale una singola
+  // sorgente servirebbe venti regioni, quindi nemmeno `source` la
+  // determina. Nullable di proposito (checkpoint D-03 di 15-01-PLAN.md,
+  // opzione `nullable-poi-backfill`): la colonna nasce senza DEFAULT e senza
+  // NOT NULL, popolata da `scripts/backfill-region.ts`, idempotente. Il
+  // vincolo NOT NULL e' rimandato a una migrazione successiva, solo dopo
+  // aver confermato zero righe NULL.
+  region            String?  @db.VarChar(50)
+
   // Deduplica cross-sorgente (Fase 10, D-01/D-04): self-relation opzionale.
   // canonicalEventId nullo significa "riga canonica, oppure mai valutata come
   // duplicato"; valorizzato significa "riga membro che punta al MIN(id) del
@@ -77,6 +90,10 @@ model Event {
   @@index([canonicalCategory], name: "idx_events_canonical_category")
   @@index([comuneId])
   @@index([canonicalEventId])
+  // Fase 15, D-04: la funzione di copertura filtra SEMPRE anche su
+  // dateStart (eventi futuri), quindi l'indice e' composito, non su region
+  // da sola — altrimenti servirebbe solo meta' della query.
+  @@index([region, dateStart], name: "idx_events_region_date_start")
   @@map("events")
 }
 
