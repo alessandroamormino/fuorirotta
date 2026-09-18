@@ -14,7 +14,7 @@ import {
 // funzione stessa (rimossa da lib/scrapers/runner.ts, nessun altro
 // chiamante). Stesso lock di route cron e CLI (D-13): mai una quarta
 // implementazione (RESEARCH anti-pattern).
-import { runRegion, getRegions } from "@/lib/scrapers";
+import { runRegion, getRegions, isHostBusyForRegion } from "@/lib/scrapers";
 import { acquireRegionLock, releaseRegionLock } from "@/lib/scrapers/regionLock";
 // D-06/D-07 (Fase 15): il segnale di copertura vero, distinto da getRegions()
 // sopra (che risponde solo "dichiarata nel registry"). istatRegionToSlug
@@ -67,12 +67,28 @@ async function withComposedFields<T extends PrismaEvent>(
  * (D-13): mai una quarta implementazione del lock.
  *
  * @returns true se il refresh e' stato avviato (lock ottenuto), false se uno
- *   scrape per questa regione era gia' in corso (nessun secondo avviato).
+ *   scrape per questa regione era gia' in corso (nessun secondo avviato) o se
+ *   un'altra regione che condivide un host con questa e' gia' in scrape
+ *   (CR-02, D-02: il Crawl-delay e' per host, non per regione).
  */
 async function triggerRegionRefresh(
 	region: string,
 	cacheQuery: ScrapeQuery
 ): Promise<boolean> {
+	// CR-02 (Fase 15 review): SRC-04 ha reso ogni regione capace di innescare
+	// un refresh on-demand, ma il lock sotto resta PER REGIONE — due regioni
+	// diverse (es. Veneto e Toscana) condividono www.solosagre.it e senza
+	// questo controllo potrebbero scrapare quell'host in contemporanea,
+	// moltiplicando per N il volume di richieste che il Crawl-delay vieta.
+	// Stesso esito del lock occupato sotto: nessun secondo scrape avviato,
+	// l'utente riceve i dati in cache.
+	if (await isHostBusyForRegion(region)) {
+		console.log(
+			`[Refresh On-Demand] Un host condiviso con la regione "${region}" e' gia' impegnato da un'altra regione, nessun refresh avviato.`
+		);
+		return false;
+	}
+
 	if (!(await acquireRegionLock(region))) {
 		console.log(
 			`[Refresh On-Demand] Scrape gia' in corso per la regione "${region}", nessun secondo avviato.`

@@ -13,7 +13,7 @@ import type { SourceRegistryEntry } from './registry'
 import { saveEvents, logMetrics } from './utils'
 import { truncateError } from './health'
 import { prisma } from '../prisma'
-import { acquireRegionLock, releaseRegionLock } from './regionLock'
+import { acquireRegionLock, releaseRegionLock, getActiveLockedRegions } from './regionLock'
 import type { ScrapeParams, ScrapeResult, RunResult } from './types'
 
 /**
@@ -53,6 +53,44 @@ export function groupSourcesByHost(entries: SourceRegistryEntry[]): SourceRegist
     }
   }
   return Array.from(byHost.values())
+}
+
+/** Hostname distinti delle sorgenti di una regione. */
+function getHostsForRegion(region: string): Set<string> {
+  return new Set(getSourcesByRegion(region).map(entry => new URL(entry.url).hostname))
+}
+
+/**
+ * True se un'ALTRA regione con un lock attivo condivide almeno un host con
+ * `region` (CR-02, Fase 15 review): il Crawl-delay e' un vincolo per host
+ * (D-02), ma il refresh on-demand (app/api/events/route.ts) acquisiva solo
+ * un lock PER REGIONE — nessuna visibilita' fra due `runRegion()` di regioni
+ * diverse. Prima di SRC-04 questo era innocuo (solo la Lombardia poteva
+ * innescare un refresh); ora ogni regione puo', e SoloSagre condivide
+ * www.solosagre.it con tutte e 20.
+ *
+ * ponytail: query-then-acquire, non atomico — una finestra stretta fra
+ * questo controllo e l'INSERT di acquireRegionLock resta possibile (due
+ * refresh per host diverso partiti nello stesso istante). Un lock per-host
+ * vero richiederebbe una riga aggiuntiva o una transazione dedicata; qui
+ * basta ridurre la finestra da "nessuna protezione" a "una corsa di pochi
+ * millisecondi", coerente con "no nuova tabella, nessun secondo livello di
+ * lock" (vedi anche il commento in cima a regionLock.ts sul perche' non e'
+ * un pg_advisory_lock). Alzare il livello di garanzia se mai si osservasse
+ * la corsa dal vivo, non prima.
+ */
+export async function isHostBusyForRegion(region: string): Promise<boolean> {
+  const hosts = getHostsForRegion(region)
+  if (hosts.size === 0) return false
+
+  const lockedRegions = await getActiveLockedRegions()
+  for (const lockedRegion of lockedRegions) {
+    if (lockedRegion === region) continue
+    for (const host of getHostsForRegion(lockedRegion)) {
+      if (hosts.has(host)) return true
+    }
+  }
+  return false
 }
 
 /**

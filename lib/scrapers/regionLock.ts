@@ -66,3 +66,19 @@ export async function acquireRegionLock(region: string): Promise<boolean> {
 export async function releaseRegionLock(region: string): Promise<void> {
   await prisma.regionLock.delete({ where: { region } }).catch(() => {})
 }
+
+/**
+ * Regioni con un lock ATTUALMENTE attivo (non scaduto), lette dalle stesse
+ * righe di `acquireRegionLock`/`releaseRegionLock` (CR-02, Fase 15 review):
+ * nessuna tabella nuova, nessun secondo livello di lock. Usata dal refresh
+ * on-demand (app/api/events/route.ts) per il controllo cross-regione a
+ * livello di host — mai per decidere un'acquisizione: quella resta SOLO
+ * `acquireRegionLock`, l'unica sezione critica reale e atomica.
+ */
+export async function getActiveLockedRegions(): Promise<string[]> {
+  const rows = await prisma.regionLock.findMany({
+    where: { expiresAt: { gt: new Date() } },
+    select: { region: true },
+  })
+  return rows.map((row) => row.region)
+}
