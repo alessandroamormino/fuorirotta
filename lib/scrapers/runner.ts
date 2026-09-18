@@ -243,6 +243,12 @@ async function recordScrapeRuns(results: ScrapeResult[], startedAt: Date): Promi
 
 // Run directly: npx tsx lib/scrapers/runner.ts [source] [--region <slug>] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 //
+// WR-02 (Fase 15 review): "solosagre" da solo NON basta piu' a identificare
+// una sorgente unica — SRC-04 lo condivide fra 20 regioni. `--region <slug>`
+// e' obbligatorio insieme a un `source` ambiguo (il ramo sotto esce con
+// errore e l'elenco delle regioni se manca); combinato con `source` esegue
+// SOLO quella sorgente in quella regione, non l'intera regione.
+//
 // Stessa guardia a tre condizioni degli altri self-check del progetto. Oggi
 // questo modulo non e' raggiungibile dal bundle browser (i client importano
 // lib/scrapers/registry.ts direttamente, mai il barrel che riesporta di qui),
@@ -271,7 +277,45 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   }
 
   const run = async () => {
-    if (regionSlug) {
+    if (sourceId) {
+      // WR-02 (Fase 15 review): controllato PRIMA di regionSlug cosi'
+      // "solosagre --region toscana" esegue la sola sorgente di quella
+      // regione, non l'intera regione (ramo sotto). Senza questo, un source
+      // ambiguo (piu' di una entry con lo stesso id — oggi solo 'solosagre',
+      // dopo SRC-04) risolveva sempre, silenziosamente, alla prima entry
+      // dichiarata (Lombardia), qualunque fosse l'intento dell'operatore.
+      const matches = SOURCE_REGISTRY.filter(e => e.id === sourceId)
+      if (matches.length === 0) {
+        const ids = Array.from(new Set(SOURCE_REGISTRY.map(e => e.id))).join(', ')
+        console.error(`[Scraper] Unknown source "${sourceId}". Available: ${ids}`)
+        process.exit(1)
+      }
+      if (matches.length > 1 && !regionSlug) {
+        const regions = matches.map(e => e.region).join(', ')
+        console.error(
+          `[Scraper] "${sourceId}" e' condiviso da piu' regioni (${regions}) — specifica --region <slug>, es. "${sourceId} --region ${matches[0].region}".`
+        )
+        process.exit(1)
+      }
+      const entry = getSourceById(sourceId, regionSlug ?? undefined)
+      if (!entry) {
+        const regions = matches.map(e => e.region).join(', ')
+        console.error(`[Scraper] Nessuna sorgente "${sourceId}" per la regione "${regionSlug}". Disponibili: ${regions}`)
+        process.exit(1)
+      }
+      console.log(`[Scraper] Running single scraper: ${entry.id} (${entry.region})`)
+      const startedAt = new Date()
+      const adapterResult = await entry.scrape(params)
+      const result: ScrapeResult = { ...adapterResult, region: entry.region }
+      logMetrics([result])
+      await recordScrapeRuns([result], startedAt)
+      if (result.events.length > 0) {
+        const { saved, skipped } = await saveEvents(result.events, entry.region)
+        console.log(`[Scraper] Done. ${saved} new events saved, ${skipped} skipped.`)
+      } else {
+        console.log('[Scraper] No events found.')
+      }
+    } else if (regionSlug) {
       if (getSourcesByRegion(regionSlug).length === 0) {
         const regions = getRegions().join(', ')
         console.error(`[Scraper] Unknown region "${regionSlug}". Available: ${regions}`)
@@ -288,25 +332,6 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
         await runRegion(regionSlug, params)
       } finally {
         await releaseRegionLock(regionSlug)
-      }
-    } else if (sourceId) {
-      const entry = getSourceById(sourceId)
-      if (!entry) {
-        const ids = SOURCE_REGISTRY.map(e => e.id).join(', ')
-        console.error(`[Scraper] Unknown source "${sourceId}". Available: ${ids}`)
-        process.exit(1)
-      }
-      console.log(`[Scraper] Running single scraper: ${entry.id}`)
-      const startedAt = new Date()
-      const adapterResult = await entry.scrape(params)
-      const result: ScrapeResult = { ...adapterResult, region: entry.region }
-      logMetrics([result])
-      await recordScrapeRuns([result], startedAt)
-      if (result.events.length > 0) {
-        const { saved, skipped } = await saveEvents(result.events, entry.region)
-        console.log(`[Scraper] Done. ${saved} new events saved, ${skipped} skipped.`)
-      } else {
-        console.log('[Scraper] No events found.')
       }
     } else {
       // Nessun argomento: scrape sequenziale di tutte le regioni dichiarate

@@ -92,6 +92,18 @@ export const SOURCE_REGISTRY: SourceRegistryEntry[] = SOURCE_META.map((meta) => 
   scrape: SCRAPERS[meta.id](meta),
 }))
 
-export function getSourceById(id: string): SourceRegistryEntry | undefined {
+/**
+ * Sorgente per id, opzionalmente disambiguata per regione (WR-02, Fase 15
+ * review, stessa logica di getSourceMetaById in sources.ts). Dopo SRC-04
+ * 'solosagre' e' condiviso da 20 entry: senza `region` questa funzione torna
+ * la PRIMA dichiarata (Lombardia) — comportamento storico, preservato per non
+ * rompere chiamate gia' univoche. Il ramo CLI di runner.ts, l'unico
+ * chiamante che puo' ricevere un id ambiguo da un operatore, richiede
+ * `region` esplicitamente prima di arrivare qui.
+ */
+export function getSourceById(id: string, region?: string): SourceRegistryEntry | undefined {
+  if (region !== undefined) {
+    return SOURCE_REGISTRY.find((entry) => entry.id === id && entry.region === region)
+  }
   return SOURCE_REGISTRY.find((entry) => entry.id === id)
 }
