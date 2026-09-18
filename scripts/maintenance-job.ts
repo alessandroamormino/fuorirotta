@@ -35,11 +35,20 @@
  * (produzione): va invocato tramite `bash scripts/dev-db.sh`
  * (vedi `npm run maintenance:local`) oppure dentro il container via
  * scripts/cron-maintenance.sh.
+ *
+ * D-13 (Fase 15, chiude WR-01): con venti regioni l'orologio non separa piu'
+ * scrape e manutenzione — uno scrape che scrive mentre il dedup gira e'
+ * esattamente il caso in cui due eventi si fondono male. Prima di questa
+ * funzione, il job prende il RegionLock di OGNI regione viva (vedi main()),
+ * riusando lib/scrapers/regionLock.ts tale e quale: nessun lock globale,
+ * nessun secondo livello di locking.
  */
 import { backfillEvents } from '../lib/territorial/backfill'
 import { dedupeEvents } from '../lib/dedup/dedupe'
 import { truncateError } from '../lib/scrapers/health'
 import { prisma } from '../lib/prisma'
+import { getLiveRegions } from '../lib/coverage/liveRegions'
+import { acquireRegionLock, releaseRegionLock } from '../lib/scrapers/regionLock'
 
 async function runMaintenance(): Promise<{ eventCount: number }> {
   const backfillReport = await backfillEvents()
@@ -62,17 +71,59 @@ async function runMaintenance(): Promise<{ eventCount: number }> {
   return { eventCount: dedupReport.scanned }
 }
 
+/**
+ * Prende il lock di ogni regione viva (getLiveRegions() — il segnale dei
+ * dati, MAI la funzione che dichiara il registry: bloccare regioni
+ * senza dati sarebbe rumore) in ordine deterministico (alfabetico, cosi' due
+ * esecuzioni non possano prendere i lock in ordine diverso e bloccarsi a
+ * vicenda). Se anche un solo lock non si ottiene, rilascia in ordine inverso
+ * quelli gia' presi e restituisce l'errore SENZA aver toccato backfill ne'
+ * dedup — mai un lock trattenuto oltre il tentativo che l'ha preso.
+ */
+async function acquireAllLiveRegionLocks(): Promise<
+  { acquired: string[]; error: null } | { acquired: string[]; error: string }
+> {
+  const liveRegions = Array.from(await getLiveRegions()).sort()
+  const acquired: string[] = []
+
+  for (const region of liveRegions) {
+    const ok = await acquireRegionLock(region)
+    if (!ok) {
+      for (const held of [...acquired].reverse()) {
+        await releaseRegionLock(held)
+      }
+      return { acquired: [], error: `lock occupato per la regione viva "${region}", manutenzione non avviata` }
+    }
+    acquired.push(region)
+  }
+
+  return { acquired, error: null }
+}
+
 async function main() {
   const startedAt = new Date()
   let eventCount = 0
   let errorMessage: string | null = null
 
-  try {
-    const result = await runMaintenance()
-    eventCount = result.eventCount
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(`[Maintenance] Job fallito: ${errorMessage}`)
+  const lockResult = await acquireAllLiveRegionLocks()
+  if (lockResult.error) {
+    errorMessage = lockResult.error
+    console.error(`[Maintenance] ${errorMessage}`)
+  } else {
+    try {
+      const result = await runMaintenance()
+      eventCount = result.eventCount
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error)
+      console.error(`[Maintenance] Job fallito: ${errorMessage}`)
+    } finally {
+      // Il rilascio avviene anche sul percorso di fallimento di
+      // runMaintenance(): un lock trattenuto per le 8h del TTL bloccherebbe
+      // ogni scrape della giornata (D-13).
+      for (const region of [...lockResult.acquired].reverse()) {
+        await releaseRegionLock(region)
+      }
+    }
   }
 
   const durationMs = Date.now() - startedAt.getTime()
