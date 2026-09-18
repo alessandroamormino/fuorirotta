@@ -1517,6 +1517,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								events={viewportEvents}
 								totalInView={mapViewport?.totalInView ?? 0}
 								selectedEventId={selectedEventId}
+								coverage={coverage}
 							/>
 						</div>
 					)}

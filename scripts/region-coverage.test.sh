@@ -349,6 +349,32 @@ printf '%s' "${empty_state_block}" | grep -qi 'aggiungendo nuove fonti' && fail 
 printf '%s' "${empty_state_block}" | grep -qi 'allargare le date o il raggio' && fail "S24: ${home_client} ridigita il testo di CoverageMessage (no-events-for-filters) invece di riusare il componente"
 echo "S24 OK: nessuna delle due copie di CoverageMessage e' duplicata in ${home_client}"
 
+# --- S25: la stessa lacuna di S22/S23, sull'ALTRA superficie. La colonna
+# lista che rende CoverageMessage e' `hidden lg:flex` quando
+# mobileView === "map" (HomeClient.tsx): su telefono, in vista mappa, il
+# messaggio di copertura non e' nel DOM. Senza questo gate MapEventsRail
+# tornava a invitare ad "allargare il raggio" anche dove nessun
+# allargamento puo' produrre dati — i due testi che D-06 vuole NON
+# intercambiabili, scambiati. S22/S23 non lo vedono: guardano un altro file.
+rail="components/map/MapEventsRail.tsx"
+[[ -f "${rail}" ]] || fail "S25: ${rail} non esiste"
+grep -q 'coverage: CoverageMessageVariant | null' "${rail}" \
+  || fail "S25: ${rail} non riceve il segnale di copertura come prop — la vista mappa mobile resta muta sulla copertura"
+grep -q '<CoverageMessage variant={coverage}' "${rail}" \
+  || fail "S25: ${rail} non rende CoverageMessage sulla variante dinamica"
+grep -qi 'aggiungendo nuove fonti' "${rail}" \
+  && fail "S25: ${rail} ridigita il testo di CoverageMessage invece di riusare il componente"
+grep -qi 'allargare le date o il raggio' "${rail}" \
+  && fail "S25: ${rail} ridigita il testo di CoverageMessage invece di riusare il componente"
+# Il ramo senza copertura dichiarata (coverage === null, D-07) deve
+# conservare il proprio invito a spostare la mappa: e' l'unico caso in cui
+# quel gesto ha davvero senso.
+grep -q "Sposta la mappa o allarga il raggio" "${rail}" \
+  || fail "S25: ${rail} ha perso il messaggio del caso coverage===null (D-07), dove spostare la mappa e' davvero l'azione utile"
+grep -q 'coverage={coverage}' "${home_client}" \
+  || fail "S25: ${home_client} non passa il segnale di copertura a MapEventsRail"
+echo "S25 OK: la vista mappa mobile riceve e rende il segnale di copertura, senza ridigitarne la copy"
+
 # --- S12: la sitemap contiene almeno una voce provincia viva sotto
 # /lombardia/ — la soglia e' abbondantemente sotto i volumi reali di
 # lombardia (S3/S4), quindi almeno una provincia deve essere sopra soglia.
@@ -380,5 +406,5 @@ echo "S14 OK: due generazioni consecutive della sitemap producono lo stesso ordi
 
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) + cablaggio su app/HomeClient.tsx (ROLL-04 closure) — S1..S24 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) + cablaggio su app/HomeClient.tsx e sulla vista mappa mobile (ROLL-04 closure) — S1..S25 verdi"
 exit 0

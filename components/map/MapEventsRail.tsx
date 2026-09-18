@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Event } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import MiniEventCard from "@/components/map/MiniEventCard";
+import CoverageMessage, { type CoverageMessageVariant } from "@/components/CoverageMessage";
 
 interface MapEventsRailProps {
 	/** Eventi in vista, gia' risolti da HomeClient sugli id di onViewportChange (12-03). */
@@ -16,6 +17,18 @@ interface MapEventsRailProps {
 	 */
 	totalInView: number;
 	selectedEventId: number | null;
+	/**
+	 * Segnale di copertura deciso dall'API (D-06/D-07), passato tale e quale
+	 * da HomeClient: `null` significa "nessuna dichiarazione di copertura da
+	 * fare" (tipicamente una ricerca per raggio che attraversa un confine).
+	 *
+	 * Serve qui perche' la colonna lista che rende CoverageMessage e'
+	 * `hidden lg:flex` quando mobileView === "map" (HomeClient.tsx): senza
+	 * questa prop la vista mappa mobile invitava ad "allargare il raggio"
+	 * anche dove nessun allargamento puo' produrre dati, scambiando i due
+	 * testi che D-06 vuole non intercambiabili.
+	 */
+	coverage: CoverageMessageVariant | null;
 }
 
 /**
@@ -29,7 +42,7 @@ interface MapEventsRailProps {
  * HomeClient sugli id che `onViewportChange` di EventsMap riporta — la
  * mappa e' l'unica che sa cosa sta davvero rendendo (key_links del piano).
  */
-export default function MapEventsRail({ events, totalInView, selectedEventId }: MapEventsRailProps) {
+export default function MapEventsRail({ events, totalInView, selectedEventId, coverage }: MapEventsRailProps) {
 	const railRef = useRef<HTMLDivElement>(null);
 
 	// Verso pin -> carosello (D-12): porta in vista la mini-card selezionata
@@ -71,7 +84,14 @@ export default function MapEventsRail({ events, totalInView, selectedEventId }: 
 				</span>
 			</div>
 
-			{totalInView === 0 ? (
+			{totalInView === 0 && coverage ? (
+				/* D-06: a zero eventi la ragione conta. Se l'API ha dichiarato una
+				   copertura, il testo viene da CoverageMessage — la stessa identica
+				   copy della colonna lista, mai una terza variante scritta qui. */
+				<div className="pointer-events-auto px-4 pb-5">
+					<CoverageMessage variant={coverage} />
+				</div>
+			) : totalInView === 0 ? (
 				<p className="pointer-events-auto px-4 pb-5 text-sm text-muted-foreground">
 					{"Nessun evento in quest'area. Sposta la mappa o allarga il raggio."}
 				</p>
