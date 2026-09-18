@@ -75,6 +75,11 @@ export async function backfillEvents(): Promise<BackfillReport> {
       locationName: true,
       address: true,
       source: true,
+      // CR-01 (Fase 15 review): serve alla disambiguazione degli omonimi in
+      // resolve.ts, che non ri-deriva piu' la regione dal `source` tramite
+      // il registry (ambiguo per 'solosagre' dopo SRC-04) — la legge qui,
+      // gia' scritta sulla riga a scrape time (D-03).
+      region: true,
       latitude: true,
       longitude: true,
       comuneId: true,
@@ -116,6 +121,7 @@ export async function backfillEvents(): Promise<BackfillReport> {
             locationName: event.locationName,
             address: event.address,
             source: event.source,
+            region: event.region,
             latitude: toNumberOrNull(event.latitude),
             longitude: toNumberOrNull(event.longitude),
           },

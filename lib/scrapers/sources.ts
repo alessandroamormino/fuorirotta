@@ -347,8 +347,23 @@ export const REGION_SCHEDULES: Record<string, string> = {
  */
 export const MAINTENANCE_SCHEDULE = '0 11 * * *'
 
-/** Metadati di una sorgente per id. */
-export function getSourceMetaById(id: string): SourceMeta | undefined {
+/**
+ * Metadati di una sorgente per id, opzionalmente disambiguato per regione
+ * (CR-01, Fase 15 review). Dopo SRC-04 `id` da solo non e' piu' una chiave
+ * univoca: 20 entry condividono `id: 'solosagre'`, una per regione. Senza
+ * `region` questa funzione torna al comportamento storico — la PRIMA entry
+ * dichiarata con quell'id — sicuro SOLO per campi identici fra tutte le
+ * entry omonime (oggi: `categoryMap`, letto da lib/categories/taxonomy.ts,
+ * identico su tutte le 20 entry SoloSagre). Chi ha bisogno del campo
+ * `region` stesso, o di qualunque campo che DIVERGE fra le entry omonime,
+ * DEVE passare `region` esplicitamente — o, quando possibile, leggerla da
+ * altrove (es. la colonna `events.region`, gia' nota a scrittura: vedi
+ * lib/territorial/resolve.ts).
+ */
+export function getSourceMetaById(id: string, region?: string): SourceMeta | undefined {
+  if (region !== undefined) {
+    return SOURCE_META.find((entry) => entry.id === id && entry.region === region)
+  }
   return SOURCE_META.find((entry) => entry.id === id)
 }
 

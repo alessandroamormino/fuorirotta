@@ -18,7 +18,6 @@ import { normalizeComuneName } from './normalize'
 import { extractComuneCandidates } from './addressParse'
 import { isPlausibleCoordinate } from './bbox'
 import { calculateDistanceKm } from './distance'
-import { getSourceMetaById } from '../scrapers/sources'
 
 export type ComuneRow = {
   id: number
@@ -47,6 +46,13 @@ export type ResolveInput = {
   locationName: string | null
   address: string | null
   source: string
+  // Regione dell'evento (CR-01, Fase 15 review): letta dalla colonna
+  // `events.region` gia' scritta a scrape time (D-03), MAI ri-derivata qui
+  // da `source` tramite il registry — dopo SRC-04 `source` non identifica
+  // piu' una regione unica ('solosagre' e' condiviso da tutte e 20). Un
+  // evento senza region nota (backfill non ancora passato, o riga storica
+  // irrisolvibile) passa `null`: il gradino sotto lo salta, non inventa nulla.
+  region: string | null
   latitude: number | null
   longitude: number | null
 }
@@ -129,15 +135,19 @@ function namesToTry(input: ResolveInput): string[] {
 /**
  * Disambiguazione degli omonimi (D-07): (1) se l'input porta coordinate di
  * sorgente plausibili, vince il candidato piu' vicino; (2) altrimenti si
- * restringe ai candidati la cui regione corrisponde alla regione della
- * sorgente, letta dal registry — se resta esattamente un candidato, quello
- * vince; (3) altrimenti resta ambiguo, nessun aggancio inventato.
+ * restringe ai candidati la cui regione corrisponde a `input.region` — se
+ * resta esattamente un candidato, quello vince; (3) altrimenti resta
+ * ambiguo, nessun aggancio inventato.
  *
- * Avvertenza per il prossimo che tocca questo file: il gradino (2) assume che
- * ogni sorgente appartenga a UNA regione (lib/scrapers/registry.ts). Questa
- * relazione sorgente->regione smette di essere 1:1 dalla Fase 15, quando
- * SoloSagre si generalizza a tutte le regioni — a quel punto il gradino va
- * rivisto (non puo' piu' restringere su `region` singola).
+ * RISOLTO IN FASE 15 (CR-01, code review): il gradino (2) leggeva la
+ * regione dal registry (`getSourceMetaById(input.source)?.region`),
+ * assumendo che ogni sorgente appartenesse a UNA regione — falso dalla
+ * generalizzazione di SoloSagre (SRC-04, 20 entry con lo stesso `id`), che
+ * faceva sistematicamente vincere Lombardia (prima entry dichiarata) per
+ * ogni evento SoloSagre di qualunque regione con un omonimo lombardo. La
+ * regione ora arriva gia' risolta in `input.region`, letta dalla colonna
+ * `events.region` (D-03) — un fatto sulla RIGA, non un'inferenza dal
+ * `source`.
  */
 function disambiguateHomonyms(
   candidates: ComuneRow[],
@@ -167,7 +177,7 @@ function disambiguateHomonyms(
     // Nessun candidato ha un centroide: si passa al gradino regione sotto.
   }
 
-  const sourceRegion = getSourceMetaById(input.source)?.region
+  const sourceRegion = input.region
   if (sourceRegion) {
     const regionMatches = candidates.filter(
       c => c.regionName.toLowerCase() === sourceRegion.toLowerCase()
@@ -385,7 +395,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   }
 
   const index = buildComuneIndex([milano, bergamo, senzaCentroide, bolzano, livoComo, livoTrento])
-  const base = { address: null as string | null, source: 'test' }
+  const base = { address: null as string | null, source: 'test', region: null as string | null }
 
   // Gradino 'exact'
   const exact = resolveComune({ ...base, locationName: 'Milano', latitude: null, longitude: null }, index)
@@ -423,14 +433,16 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     "atteso homonym_distance -> Livo (CO), ottenuto " + JSON.stringify(homonymDistance)
   )
 
-  // Omonimo risolto per regione della sorgente: nessuna coordinata, sorgente 'solosagre' (regione 'lombardia').
+  // Omonimo risolto per regione dell'evento (CR-01): nessuna coordinata,
+  // region gia' nota sulla riga = 'lombardia' (source 'solosagre' non basta
+  // piu' da sola dopo SRC-04, e infatti non e' quella a decidere qui sotto).
   const homonymRegion = resolveComune(
-    { locationName: 'Livo', address: null, source: 'solosagre', latitude: null, longitude: null },
+    { locationName: 'Livo', address: null, source: 'solosagre', region: 'lombardia', latitude: null, longitude: null },
     index
   )
   console.assert(
     homonymRegion.matchStep === 'homonym_region' && homonymRegion.comuneId === 5,
-    "atteso homonym_region -> Livo (CO) per sorgente lombarda, ottenuto " + JSON.stringify(homonymRegion)
+    "atteso homonym_region -> Livo (CO) per region 'lombardia', ottenuto " + JSON.stringify(homonymRegion)
   )
 
   // Omonimo ambiguo: nessuna coordinata, sorgente sconosciuta al registry -> non aggancia.
@@ -463,6 +475,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
       locationName: 'Piazza Duomo',
       address: 'Via Roma - Milano',
       source: 'in-lombardia',
+      region: 'lombardia',
       latitude: null,
       longitude: null,
     },
@@ -477,7 +490,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
 
   // Sorgente 'in-lombardia', address senza candidato estraibile: fallback su locationName.
   const inLombardiaFallback = resolveComune(
-    { locationName: 'Bergamo', address: 'Piazza Duomo', source: 'in-lombardia', latitude: null, longitude: null },
+    { locationName: 'Bergamo', address: 'Piazza Duomo', source: 'in-lombardia', region: 'lombardia', latitude: null, longitude: null },
     index
   )
   console.assert(
