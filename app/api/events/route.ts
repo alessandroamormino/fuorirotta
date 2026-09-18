@@ -110,13 +110,27 @@ async function triggerRegionRefresh(
 				const result = await runRegion(region, params);
 				await completeWorkflowExecution(executionId, result.saved);
 			} catch (err) {
-				await failWorkflowExecution(executionId, String(err));
+				// WR-01 (Fase 15 review): failWorkflowExecution ha il proprio
+				// try/catch, cosi' un suo eventuale throw non scappa dal blocco
+				// catch e non raggiunge il .catch esterno sotto — che rilascerebbe
+				// il lock una SECONDA volta, potenzialmente sul lock gia' ri-preso
+				// nel frattempo da un altro processo (releaseRegionLock e'
+				// best-effort e idempotente contro una riga mancante, quindi non
+				// lo segnalerebbe: cancellerebbe silenziosamente il lock altrui).
+				try {
+					await failWorkflowExecution(executionId, String(err));
+				} catch (innerErr) {
+					console.error(`[Refresh On-Demand] failWorkflowExecution also failed for region "${region}":`, innerErr);
+				}
 				console.error(`[Refresh On-Demand] Background refresh failed for region "${region}":`, err);
 			} finally {
 				await releaseRegionLock(region);
 			}
 		})
 		.catch(async (err) => {
+			// Raggiungibile SOLO se createWorkflowExecution() stessa rigetta: il
+			// lock non e' mai stato preso dal ramo sopra, quindi rilasciarlo qui
+			// resta l'unico rilascio, non un secondo.
 			console.error(`[Refresh On-Demand] Background refresh failed for region "${region}":`, err);
 			await releaseRegionLock(region);
 		});
