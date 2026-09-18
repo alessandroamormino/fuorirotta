@@ -314,6 +314,41 @@ curl -s -o "${resp21}" --max-time 15 "http://127.0.0.1:${port}/api/events?lat=41
 grep -q '"coverage":null' "${resp21}" || fail "S21: /api/events per raggio senza comuneId porta un indicatore di copertura: $(cat "${resp21}")"
 echo "S21 OK: /api/events per raggio senza comuneId non porta alcun indicatore di copertura"
 
+# --- S22/S23/S24: la vera lacuna trovata da 15-VERIFICATION.md — S19/S20/S21
+# sopra provano solo che l'API decide bene, mai che la superficie di ricerca
+# vera (app/HomeClient.tsx, cio' che chi cerca dall'autocomplete vede
+# davvero) legga quella decisione. Asserzioni statiche sul SORGENTE del
+# componente, non sul dev server: e' proprio l'assenza di un check sul file
+# giusto (non sull'endpoint JSON) ad aver lasciato passare la lacuna
+# attraverso sia l'esecuzione del piano sia il code review.
+home_client="app/HomeClient.tsx"
+
+# --- S22: il componente LEGGE data.coverage dalla risposta di /api/events,
+# non lo ricalcola da solo — l'unica fonte della decisione resta
+# getLiveRegions() dentro route.ts (D-04, "una funzione sola").
+grep -q 'data\.coverage' "${home_client}" || fail "S22: ${home_client} non legge data.coverage dalla risposta di /api/events"
+grep -qE 'getLiveRegions|liveRegions' "${home_client}" && fail "S22: ${home_client} importa il segnale di copertura direttamente invece di leggere il campo gia' deciso dall'API (ri-derivazione lato client, vietata da D-04/D-07)"
+echo "S22 OK: ${home_client} legge data.coverage, non ri-deriva la copertura lato client"
+
+# --- S23: il ramo events.length === 0 puo' rendere ENTRAMBE le varianti, non
+# una sola cablata — CoverageMessage riceve la variante dallo stato
+# (variant={coverage}), e il ramo "nessun indicatore" (allarga il raggio)
+# resta un percorso distinto nello stesso ramo condizionale.
+empty_state_block="$(awk '/events\.length === 0 \? \(/{flag=1} flag{print} /grid-cards/{exit}' "${home_client}")"
+[[ -n "${empty_state_block}" ]] || fail "S23: impossibile isolare il ramo events.length === 0 in ${home_client}"
+printf '%s' "${empty_state_block}" | grep -q 'coverage ? (' || fail "S23: il ramo a zero risultati non dirama piu' su coverage — le due varianti non sono raggiungibili"
+printf '%s' "${empty_state_block}" | grep -q '<CoverageMessage variant={coverage}' || fail "S23: CoverageMessage non e' cablato sulla variante dinamica dello stato coverage"
+printf '%s' "${empty_state_block}" | grep -q 'handleWidenRadius' || fail "S23: il ramo coverage===null (ricerca per raggio, D-07) ha perso l'azione 'allarga il raggio'"
+echo "S23 OK: il ramo a zero risultati rende entrambe le varianti di copertura, non una sola cablata"
+
+# --- S24: le due copie di CoverageMessage.tsx vivono SOLO li' — nessuna
+# ridigitazione qui che potrebbe divergere in silenzio da un aggiornamento
+# futuro del testo (il commento di CoverageMessage.tsx lo dichiara esplicito:
+# "Il testo vive QUI e solo qui").
+printf '%s' "${empty_state_block}" | grep -qi 'aggiungendo nuove fonti' && fail "S24: ${home_client} ridigita il testo di CoverageMessage (region-not-covered) invece di riusare il componente"
+printf '%s' "${empty_state_block}" | grep -qi 'allargare le date o il raggio' && fail "S24: ${home_client} ridigita il testo di CoverageMessage (no-events-for-filters) invece di riusare il componente"
+echo "S24 OK: nessuna delle due copie di CoverageMessage e' duplicata in ${home_client}"
+
 # --- S12: la sitemap contiene almeno una voce provincia viva sotto
 # /lombardia/ — la soglia e' abbondantemente sotto i volumi reali di
 # lombardia (S3/S4), quindi almeno una provincia deve essere sopra soglia.
@@ -345,5 +380,5 @@ echo "S14 OK: due generazioni consecutive della sitemap producono lo stesso ordi
 
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) — S1..S21 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) + cablaggio su app/HomeClient.tsx (ROLL-04 closure) — S1..S24 verdi"
 exit 0

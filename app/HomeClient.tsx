@@ -8,6 +8,7 @@ import { Event, SearchFilters } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
 import CategoryFilterBar from "@/components/CategoryFilterBar";
+import CoverageMessage, { type CoverageMessageVariant } from "@/components/CoverageMessage";
 import ViewSwitch, {
 	VIEW_SWITCH_TAB_ID,
 	VIEW_SWITCH_PANEL_ID,
@@ -104,6 +105,9 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 	const [events, setEvents] = useState<Event[]>(initialEvents);
 	const [mapEvents, setMapEvents] = useState<Event[]>(initialEvents);
+	// D-06/D-07 (Fase 15): l'indicatore viaggia gia' nella risposta di
+	// /api/events, letto qui tale e quale, mai ricalcolato lato client.
+	const [coverage, setCoverage] = useState<CoverageMessageVariant | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
 	const [categories, setCategories] = useState<{ name: string; count: number }[]>([]);
@@ -757,6 +761,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				if (mode === "replace") {
 					setEvents([]);
 					setTotal(0);
+					setCoverage(null);
 				} else if (mode === "page") {
 					setPageError(true);
 				}
@@ -772,6 +777,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				if (mode === "replace") {
 					setEvents([]);
 					setTotal(0);
+					setCoverage(null);
 				} else if (mode === "page") {
 					setPageError(true);
 				}
@@ -813,6 +819,9 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				setMapEvents(newMapEvents);
 			}
 			setTotal(newTotal);
+			// D-06/D-07: il campo viaggia gia' deciso dall'API (route.ts),
+			// letto tale e quale — mai ricalcolato qui.
+			setCoverage((data.coverage ?? null) as CoverageMessageVariant | null);
 
 			// Cache solo la forma canonica di "prima pagina" (stesso criterio
 			// di `page === 1` di prima): un accodamento, un cambio pagina o un
@@ -842,6 +851,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			if (mode === "replace") {
 				setEvents([]);
 				setTotal(0);
+				setCoverage(null);
 			} else if (mode === "page") {
 				setPageError(true);
 			}
@@ -1243,22 +1253,35 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 													<div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-surface text-muted-foreground">
 														<Search className="h-6 w-6" aria-hidden="true" />
 													</div>
-													<h3 className="mb-1 font-display text-lg font-semibold tracking-[-0.015em] text-foreground">
-														Nessun evento qui intorno
-													</h3>
-													<p className="mx-auto mb-5 max-w-xs text-sm text-muted-foreground">
-														Allarga il raggio o cambia periodo: in Lombardia c&apos;è quasi
-														sempre qualcosa a un&apos;ora di distanza.
-													</p>
-													{userLocation && searchFilters.radius ? (
-														<button
-															type="button"
-															onClick={handleWidenRadius}
-															className="text-sm font-medium text-foreground underline underline-offset-4"
-														>
-															Allarga a 200 km
-														</button>
-													) : null}
+													{coverage ? (
+														// D-06/D-07 (Fase 15): il campo deciso dall'API sceglie
+														// quale delle due varianti mostrare — mai le due insieme,
+														// mai un terzo testo generico inventato qui. Nessun title:
+														// siamo dentro un risultato di ricerca, non una pagina
+														// regione (vedi doc comment in CoverageMessage.tsx).
+														<CoverageMessage variant={coverage} />
+													) : (
+														<>
+															<h3 className="mb-1 font-display text-lg font-semibold tracking-[-0.015em] text-foreground">
+																Nessun evento qui intorno
+															</h3>
+															<p className="mx-auto mb-5 max-w-xs text-sm text-muted-foreground">
+																{/* Fase 15: l'app e' nazionale, "in Lombardia" non e'
+																    piu' vero per chi cerca altrove — genericizzato. */}
+																Allarga il raggio o cambia periodo: piu&apos; lontano
+																c&apos;è quasi sempre qualcosa.
+															</p>
+															{userLocation && searchFilters.radius ? (
+																<button
+																	type="button"
+																	onClick={handleWidenRadius}
+																	className="text-sm font-medium text-foreground underline underline-offset-4"
+																>
+																	Allarga a 200 km
+																</button>
+															) : null}
+														</>
+													)}
 												</div>
 											) : (
 												<>
