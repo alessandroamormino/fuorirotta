@@ -39,15 +39,28 @@
  * D-13 (Fase 15, chiude WR-01): con venti regioni l'orologio non separa piu'
  * scrape e manutenzione — uno scrape che scrive mentre il dedup gira e'
  * esattamente il caso in cui due eventi si fondono male. Prima di questa
- * funzione, il job prende il RegionLock di OGNI regione viva (vedi main()),
- * riusando lib/scrapers/regionLock.ts tale e quale: nessun lock globale,
- * nessun secondo livello di locking.
+ * funzione, il job prende il RegionLock di OGNI regione DICHIARATA (vedi
+ * main()), riusando lib/scrapers/regionLock.ts tale e quale: nessun lock
+ * globale, nessun secondo livello di locking.
+ *
+ * RISOLTO IN FASE 15 (WR-03, code review): la prima versione bloccava solo
+ * le regioni VIVE (getLiveRegions(), sopra soglia di copertura), per non
+ * generare "rumore" bloccando regioni senza dati. Ma REGION_SCHEDULES
+ * pianifica uno scrape notturno per TUTTE e venti le regioni dichiarate, non
+ * solo per quelle vive: una regione con 1-2 eventi futuri (sotto soglia, ma
+ * non senza dati) restava scrapata dal proprio cron mentre la manutenzione
+ * girava senza averne preso il lock — la stessa race che D-13 esiste per
+ * chiudere, solo per il sottoinsieme sbagliato di regioni. Bloccare una
+ * regione senza alcun dato costa comunque solo un insert/delete non conteso
+ * (nessuna riga da scrivere su cui contendere), quindi il costo del "rumore"
+ * che la versione precedente voleva evitare non esiste davvero — si blocca
+ * ogni regione dichiarata nel registry (getRegions()), non solo quelle vive.
  */
 import { backfillEvents } from '../lib/territorial/backfill'
 import { dedupeEvents } from '../lib/dedup/dedupe'
 import { truncateError } from '../lib/scrapers/health'
 import { prisma } from '../lib/prisma'
-import { getLiveRegions } from '../lib/coverage/liveRegions'
+import { getRegions } from '../lib/scrapers/sources'
 import { acquireRegionLock, releaseRegionLock } from '../lib/scrapers/regionLock'
 
 async function runMaintenance(): Promise<{ eventCount: number }> {
@@ -72,27 +85,29 @@ async function runMaintenance(): Promise<{ eventCount: number }> {
 }
 
 /**
- * Prende il lock di ogni regione viva (getLiveRegions() — il segnale dei
- * dati, MAI la funzione che dichiara il registry: bloccare regioni
- * senza dati sarebbe rumore) in ordine deterministico (alfabetico, cosi' due
- * esecuzioni non possano prendere i lock in ordine diverso e bloccarsi a
- * vicenda). Se anche un solo lock non si ottiene, rilascia in ordine inverso
- * quelli gia' presi e restituisce l'errore SENZA aver toccato backfill ne'
- * dedup — mai un lock trattenuto oltre il tentativo che l'ha preso.
+ * Prende il lock di OGNI regione dichiarata nel registry (getRegions(), non
+ * piu' solo le vive — WR-03, Fase 15 review: REGION_SCHEDULES pianifica uno
+ * scrape notturno per tutte e venti, e una regione sotto soglia ma non
+ * vuota correva comunque la race che D-13 esiste per chiudere) in ordine
+ * deterministico (alfabetico, cosi' due esecuzioni non possano prendere i
+ * lock in ordine diverso e bloccarsi a vicenda). Se anche un solo lock non
+ * si ottiene, rilascia in ordine inverso quelli gia' presi e restituisce
+ * l'errore SENZA aver toccato backfill ne' dedup — mai un lock trattenuto
+ * oltre il tentativo che l'ha preso.
  */
-async function acquireAllLiveRegionLocks(): Promise<
+async function acquireAllRegionLocks(): Promise<
   { acquired: string[]; error: null } | { acquired: string[]; error: string }
 > {
-  const liveRegions = Array.from(await getLiveRegions()).sort()
+  const regions = [...getRegions()].sort()
   const acquired: string[] = []
 
-  for (const region of liveRegions) {
+  for (const region of regions) {
     const ok = await acquireRegionLock(region)
     if (!ok) {
       for (const held of [...acquired].reverse()) {
         await releaseRegionLock(held)
       }
-      return { acquired: [], error: `lock occupato per la regione viva "${region}", manutenzione non avviata` }
+      return { acquired: [], error: `lock occupato per la regione "${region}", manutenzione non avviata` }
     }
     acquired.push(region)
   }
@@ -105,7 +120,7 @@ async function main() {
   let eventCount = 0
   let errorMessage: string | null = null
 
-  const lockResult = await acquireAllLiveRegionLocks()
+  const lockResult = await acquireAllRegionLocks()
   if (lockResult.error) {
     errorMessage = lockResult.error
     console.error(`[Maintenance] ${errorMessage}`)
