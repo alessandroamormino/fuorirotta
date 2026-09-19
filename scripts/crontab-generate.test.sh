@@ -12,6 +12,9 @@
 #   S8: righe estranee fuori dal blocco gestito non fanno divergenza
 #   S9: blocco assente -> messaggio utile e blocco da incollare
 #       non-zero nominando lo slug — mai una riga silenziosamente omessa
+#   S10: aggiungere una sorgente a una regione gia' pianificata (Fase 19,
+#        altoadige su trentino-alto-adige) non aggiunge una riga di
+#        crontab — la riga resta esattamente una, all'orario di Fase 15
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -210,4 +213,22 @@ grep -q 'SENZA toccare le altre righe' "${tmp8}/s9.out" || fail "S9: non avverte
 echo "ok  S9: blocco assente -> spiegazione e blocco da incollare, con l'avvertenza"
 
 
-echo "PASS: generatore di crontab (SCHED-02), fuso dichiarato in chiaro (D-12 rivisto), ordine stabile, --check dimostrato capace di fallire (D-09)"
+
+# --- S10: aggiungere una sorgente a una regione gia' pianificata NON aggiunge
+# una riga di crontab (Fase 19, D-08/19-CONTEXT.md) ---------------------------
+#
+# La sorgente 'altoadige' (19-01-PLAN.md) dichiara region: 'trentino-alto-adige',
+# uno slug che lib/scrapers/regionSlug.ts gia' produceva e che REGION_SCHEDULES
+# gia' pianificava dalla Fase 15 (lombardia era gia' su piu' sorgenti nello
+# stesso modo). L'unita' schedulabile e' la REGIONE, non la sorgente: due
+# sorgenti sulla stessa regione condividono la stessa riga, mai due righe a
+# orari diversi che produrrebbero due scrape della stessa regione. Ancorata a
+# inizio riga su una cifra, cosi' nessuna riga di commento del blocco (tutte
+# iniziano per '#') puo' entrare nel conteggio.
+trentino_lines="$(printf '%s\n' "${output}" | grep -cE '^[0-9].*cron-scrape\.sh trentino-alto-adige ' || true)"
+[[ "${trentino_lines}" -eq 1 ]] || fail "S10: attesa esattamente 1 riga di scrape per trentino-alto-adige, trovate ${trentino_lines}"
+printf '%s\n' "${output}" | grep -qE '^5 4 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape\.sh trentino-alto-adige >> /var/log/fuorirotta-cron\.log 2>&1$' \
+  || fail "S10: la riga di trentino-alto-adige non porta l'orario 5 4 * * * assegnato dalla Fase 15"
+echo "ok  S10: aggiungere altoadige a trentino-alto-adige non ha aggiunto righe di crontab — esattamente 1 riga, orario 5 4 * * * invariato"
+
+echo "PASS: generatore di crontab (SCHED-02), fuso dichiarato in chiaro (D-12 rivisto), ordine stabile, --check dimostrato capace di fallire (D-09), una sorgente in piu' su una regione esistente non duplica la riga (Fase 19)"
