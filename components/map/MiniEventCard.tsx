@@ -47,7 +47,13 @@ export default function MiniEventCard({ event, className }: MiniEventCardProps) 
 				)}
 			</div>
 			<div className="flex min-w-0 flex-col justify-center">
-				<p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">
+				{/* Stesso difetto e stesso valore di EventCard.tsx (UAT mobile
+				    2026-09-19): sotto line-clamp e' overflow:hidden a tagliare i
+				    discendenti, perche' --leading-tight (1.05) lascia alla riga meno
+				    spazio di quanto la scatola del font ne chieda. La soglia e' un
+				    rapporto, non una misura in pixel, quindi vale identica anche a
+				    text-sm. */}
+				<p className="line-clamp-2 text-sm font-semibold leading-[1.2] text-foreground">
 					{decodeHtmlEntities(event.title)}
 				</p>
 				{/* D-21 vincolante: comune+data su foreground-secondary, mai solo sul

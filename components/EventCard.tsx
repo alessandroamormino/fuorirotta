@@ -79,7 +79,23 @@ export default function EventCard({ event, distanceKm, highlighted, onHoverStart
 						</>
 					)}
 				</p>
-				<h3 className="m-0 line-clamp-2 font-display text-base leading-tight font-semibold tracking-[-0.01em] text-balance text-foreground">
+				{/* UAT mobile 2026-09-19: "g", "p", "q" sull'ultima riga tagliati.
+				    --leading-tight di questo progetto e' 1.05 (app/globals.css, non
+				    il 1.25 di Tailwind): a 17px la riga e' alta 17,85px mentre la
+				    scatola del font ne chiede 21, quindi la mezza interlinea e'
+				    NEGATIVA e l'inchiostro esce di 0,89px sotto la riga. Ovunque
+				    altro non si vede perche' non c'e' niente che tagli; qui
+				    line-clamp-2 porta con se' overflow:hidden, ed e' lui a tagliare.
+				    Percio' la correzione sta sul sito di clamp e non sul token: 1.05
+				    resta giusto per tutti i titoli non troncati.
+				    1.2 e' scelto sulla misura, non a occhio: la soglia oltre la
+				    quale non si taglia piu' e' 1.155 (SF Pro Display) e 1.082
+				    (Roboto, il fallback Android), quindi 1.2 ha margine su entrambi
+				    costando 2,55px per riga. leading-snug (1.375) risolveva anche,
+				    ma a 5,5px per riga cambiava il ritmo tipografico.
+				    Stesso difetto e stessa correzione in
+				    components/map/MiniEventCard.tsx. */}
+				<h3 className="m-0 line-clamp-2 font-display text-base leading-[1.2] font-semibold tracking-[-0.01em] text-balance text-foreground">
 					{title}
 				</h3>
 				<p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
