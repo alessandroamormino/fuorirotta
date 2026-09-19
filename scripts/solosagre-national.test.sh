@@ -153,7 +153,12 @@ echo ""
 echo "Sezione 2: interrogazione dal vivo di www.solosagre.it per tutte e 20 le regioni"
 echo "(rispettando SOLOSAGRE_CRAWL_DELAY_MS=5000ms fra una richiesta e la successiva)"
 
-crawl_delay_ms="$(cd "${repo_root}" && npx tsx -e 'import { SOLOSAGRE_CRAWL_DELAY_MS } from "./lib/scrapers/solosagre"; console.log(SOLOSAGRE_CRAWL_DELAY_MS)')"
+# String(...), mai il numero nudo (fix Rule 3, 19-01): console.log colora i
+# numeri con codici ANSI quando lo stdout supporta i colori o FORCE_COLOR e
+# impostata, anche senza un TTY — il regex ^[0-9]+$ sotto falliva su un
+# valore corretto ma colorato, difetto preesistente scoperto in questa
+# sessione perche' l'ambiente aveva FORCE_COLOR impostata.
+crawl_delay_ms="$(cd "${repo_root}" && npx tsx -e 'import { SOLOSAGRE_CRAWL_DELAY_MS } from "./lib/scrapers/solosagre"; console.log(String(SOLOSAGRE_CRAWL_DELAY_MS))')"
 [[ "${crawl_delay_ms}" =~ ^[0-9]+$ ]] || fail "impossibile leggere SOLOSAGRE_CRAWL_DELAY_MS da lib/scrapers/solosagre.ts"
 sleep_seconds="$(awk -v ms="${crawl_delay_ms}" 'BEGIN { printf "%.3f", ms / 1000 }')"
 

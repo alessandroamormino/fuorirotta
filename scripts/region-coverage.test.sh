@@ -92,8 +92,13 @@ psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
 # (o un piano futuro) rimisura la costante, questo gate segue senza bisogno
 # di essere toccato — resta comunque una prova della soglia SECCA, agli
 # ESATTI due estremi (==soglia, ==soglia+1), non un valore a piacere.
+# String(...), mai il numero nudo (fix Rule 3, 19-01): console.log colora i
+# numeri con codici ANSI quando lo stdout supporta i colori o FORCE_COLOR e
+# impostata, anche senza un TTY — il regex ^[0-9]+$ sotto falliva su un
+# valore corretto ma colorato, un difetto preesistente scoperto solo in
+# questa sessione perche' l'ambiente aveva FORCE_COLOR impostata.
 coverage_threshold="$(bash scripts/dev-db.sh npx tsx -e '
-import("./lib/coverage/liveRegions").then((m) => { console.log(m.COVERAGE_THRESHOLD); process.exit(0) })
+import("./lib/coverage/liveRegions").then((m) => { console.log(String(m.COVERAGE_THRESHOLD)); process.exit(0) })
 ' 2>&1)"
 [[ "${coverage_threshold}" =~ ^[0-9]+$ ]] || fail "impossibile leggere COVERAGE_THRESHOLD da lib/coverage/liveRegions.ts: ${coverage_threshold}"
 

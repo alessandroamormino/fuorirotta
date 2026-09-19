@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Gate dell'adattatore Alto Adige (Fase 19, 19-01 Task 2/3): self-check
-# dell'adattatore + soglia di adozione D-01/D-02, tutto sulla fixture salvata
-# in lib/scrapers/__fixtures__/altoadige-events.json — MAI sulla rete. La
-# sezione S3 (categorizzazione D-11/D-12) e' aggiunta dal Task 3 dello
-# stesso piano, non da un file separato: l'idioma del progetto e' un gate
-# per AREA, non un file per asserzione.
+# Gate dell'adattatore Alto Adige (Fase 19, 19-01 Task 2+3): self-check
+# dell'adattatore, soglia di adozione D-01/D-02, categorizzazione D-11/D-12
+# — tutto sulla fixture salvata in
+# lib/scrapers/__fixtures__/altoadige-events.json, MAI sulla rete. Un gate
+# per AREA (l'"adattatore Alto Adige" nel suo complesso), non un file per
+# asserzione — stesso idioma degli altri 18 gate del progetto.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -87,9 +87,63 @@ else
   fi
 fi
 
+# --- S3: categorizzazione D-11/D-12 -------------------------------------------
+# La quota di eventi fuori da 'Altro' e' misurata sulla fixture e la soglia
+# e' scritta qui insieme al valore osservato e alla data di misura, mai
+# stimata (D-12).
+CATEGORY_NON_ALTRO_THRESHOLD_PCT=70
+# Misurato il 2026-09-19 sulla fixture (151 item, finestra
+# 2026-09-19..2027-12-31): 116/151 = 76.82% fuori da 'Altro' con le regole
+# testuali + tag di lib/scrapers/altoadige.ts (deriveAltoAdigeCategory) e
+# lib/scrapers/sources.ts (categoryMap dell'entry altoadige). Non puo'
+# scendere sotto il 70% (D-12): se la misura finale scendesse li, e
+# l'euristica a essere debole, non la soglia a dover scendere.
+
+set +e
+s3_output="$(npx tsx -e '
+(async () => {
+  const fs = await import("fs")
+  const m = await import("./lib/scrapers/altoadige")
+  const taxonomy = await import("./lib/categories/taxonomy")
+  const envelope = JSON.parse(fs.readFileSync("lib/scrapers/__fixtures__/altoadige-events.json", "utf-8"))
+  const items = envelope.items ?? []
+  let nonAltro = 0
+  for (const item of items) {
+    const raw = m.deriveAltoAdigeCategory(item)
+    const resolved = taxonomy.canonicalizeCategory("altoadige", raw)
+    if (resolved !== "Altro") nonAltro++
+  }
+  const pct = (nonAltro / items.length) * 100
+  // JSON.stringify produce sempre una stringa: console.log non la colora mai
+  // (a differenza di un numero nudo, colorato con codici ANSI quando lo
+  // stdout supporta i colori o FORCE_COLOR e impostata, anche se non e un
+  // TTY) — evita il parsing rotto gia incontrato con un numero grezzo.
+  console.log(JSON.stringify({ total: items.length, nonAltro, pct }))
+})().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
+' 2>&1)"
+s3_status=$?
+set -e
+
+if [[ ${s3_status} -ne 0 ]]; then
+  fail "S3: impossibile misurare la quota fuori da 'Altro' — ${s3_output}"
+else
+  # Un solo processo node, tutti i campi come String(...) esplicito: un
+  # numero nudo passato a console.log verrebbe colorato con codici ANSI
+  # quando lo stdout supporta i colori (o FORCE_COLOR e impostata), anche
+  # senza un TTY — una stringa non viene mai colorata (stesso problema gia
+  # risolto sopra in S2).
+  s3_fields="$(node -e "const d=JSON.parse(process.argv[1]); console.log([String(d.total), String(d.nonAltro), d.pct.toFixed(2), String(Math.floor(d.pct))].join(' '))" "${s3_output}")"
+  read -r s3_total s3_non_altro s3_pct s3_pct_floor <<<"${s3_fields}"
+  if [[ "${s3_pct_floor}" =~ ^[0-9]+$ ]] && [[ "${s3_pct_floor}" -ge "${CATEGORY_NON_ALTRO_THRESHOLD_PCT}" ]]; then
+    ok "S3: ${s3_non_altro}/${s3_total} eventi (${s3_pct}%) fuori da 'Altro', soglia >= ${CATEGORY_NON_ALTRO_THRESHOLD_PCT}%"
+  else
+    fail "S3: solo ${s3_non_altro}/${s3_total} eventi (${s3_pct}%) fuori da 'Altro', sotto la soglia di ${CATEGORY_NON_ALTRO_THRESHOLD_PCT}%"
+  fi
+fi
+
 echo ""
 if [[ ${#failures[@]} -eq 0 ]]; then
-  echo "PASS: gate adattatore Alto Adige (self-check S1, soglia di adozione D-02 S2)"
+  echo "PASS: gate adattatore Alto Adige (self-check S1, soglia di adozione D-02 S2, categorizzazione D-11/D-12 S3)"
   exit 0
 else
   echo "FAIL: gate adattatore Alto Adige — ${#failures[@]} sezione/i rossa/e"
