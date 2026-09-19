@@ -136,5 +136,68 @@ echo "S2 OK: con un lock gia' occupato il job esce diverso da zero, scrive scrap
 
 release_test_lock >/dev/null
 
-echo "PASS: lock di manutenzione (D-13/WR-01) — S1..S2 verdi"
+# --- S3 (WR-03): il job blocca OGNI regione DICHIARATA (getRegions()), non --
+# solo quelle vive (getLiveRegions()). Senza questa sezione una regressione a
+# getLiveRegions() nella sola acquireAllRegionLocks() resterebbe invisibile:
+# S1/S2 sopra derivano il proprio set di regioni da getLiveRegions(), quindi
+# non toccano mai una regione dichiarata-ma-non-viva. Qui si pre-occupa il
+# lock di una regione dichiarata ma NON viva (come farebbe un altro processo,
+# es. il suo cron notturno per-regione, SCHED-01) e si osserva che il job la
+# rifiuti esplicitamente per nome — se il job tornasse a leggere solo le
+# regioni vive, non tenterebbe nemmeno di bloccarla e girerebbe a esito 0.
+get_declared_regions() {
+  bash scripts/dev-db.sh npx tsx -e '
+(async () => {
+  const { getRegions } = await import("./lib/scrapers/sources")
+  console.log(getRegions().slice().sort().join(","))
+  process.exit(0)
+})().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
+' 2>/dev/null
+}
+
+declared_regions_csv="$(get_declared_regions)"
+[[ -n "${declared_regions_csv}" ]] || fail "S3 setup: getRegions() non ha restituito alcuna regione dichiarata"
+IFS=',' read -r -a declared_regions <<< "${declared_regions_csv}"
+
+declared_not_live=""
+for r in "${declared_regions[@]}"; do
+  is_live=0
+  for lr in "${live_regions[@]}"; do
+    [[ "${r}" == "${lr}" ]] && is_live=1 && break
+  done
+  if [[ "${is_live}" -eq 0 ]]; then
+    declared_not_live="${r}"
+    break
+  fi
+done
+[[ -n "${declared_not_live}" ]] || fail "S3 setup: nessuna regione dichiarata-ma-non-viva trovata sul Postgres locale — il gate non puo' provare la distinzione senza almeno una"
+
+echo "S3: regione dichiarata-ma-non-viva scelta per la contesa: ${declared_not_live}"
+
+export LOCK_TEST_REGION="${declared_not_live}"
+psql_dev "DELETE FROM region_locks WHERE region = '${declared_not_live}'" >/dev/null 2>&1 || true
+
+s3_pre_acquire="$(acquire_test_lock)"
+[[ "${s3_pre_acquire}" == "true" ]] || fail "S3 setup: impossibile pre-occupare il lock su '${declared_not_live}' come farebbe un altro processo (risultato: '${s3_pre_acquire}')"
+
+s3_exit=0
+s3_output="$(bash scripts/dev-db.sh npx tsx scripts/maintenance-job.ts 2>&1)" || s3_exit=$?
+[[ "${s3_exit}" -ne 0 ]] || fail "S3: il job e' uscito con codice 0 pur avendo trovato occupato il lock di '${declared_not_live}' (dichiarata ma non viva) — se leggesse ancora solo getLiveRegions() (regressione pre-9f31b19) non tenterebbe nemmeno di bloccarla"
+
+echo "${s3_output}" | grep -q "${declared_not_live}" || fail "S3: il job e' uscito con errore, ma il messaggio non nomina '${declared_not_live}' — non e' provato che il fallimento venga dal tentativo di bloccare QUESTA regione (output: ${s3_output})"
+
+# Rollback completo: nessun lock proprio lasciato su NESSUNA regione dichiarata
+# diversa da quella pre-occupata da questo test.
+for r in "${declared_regions[@]}"; do
+  if [[ "${r}" == "${declared_not_live}" ]]; then
+    continue
+  fi
+  leftover="$(psql_dev "SELECT count(*) FROM region_locks WHERE region = '${r}'")"
+  [[ "${leftover}" == "0" ]] || fail "S3: il job ha lasciato un lock sulla regione dichiarata '${r}' dopo il fallimento su '${declared_not_live}' — il rollback non copre tutte le regioni dichiarate"
+done
+
+release_test_lock >/dev/null
+echo "S3 OK: il job tenta di bloccare una regione dichiarata-ma-non-viva ('${declared_not_live}'), fallisce nominandola per esteso, e rilascia tutto cio' che aveva gia' preso su ogni altra regione dichiarata"
+
+echo "PASS: lock di manutenzione (D-13/WR-01/WR-03) — S1..S3 verdi"
 exit 0
