@@ -1,0 +1,29 @@
+{
+  "_fixtureNote": "Fase 19, sonda D-01/D-04 su Sicilia: BOCCIATA su entrambi i canali verificati il 2026-09-19.",
+  "canale1_siciliahub_googlesheets": {
+    "url": "http://spreadsheets.google.com/tq?tqx=out:csv&tq=select%20A%2CB%2CC%2CD%2CE%2CF%2CG&key=1ckmE1W3eSROW5w7UFRDpeEkvLmQL0Jk8wDKovG7zeKE&gid=2138858557",
+    "httpStatus": 200,
+    "rawResponse": "\"id\",\"testo\",\"href\",\"data\",\"longitude\",\"latitude\",\"luogo\"\n\"#N/A\",\"\",\"\",\"\",\"\",\"\",\"\"",
+    "verdict": "morto: HTTP 200 ma la riga dati e' '#N/A' su tutte le colonne — lo stesso pattern-trappola di dati.toscana.it (200 con Record: [])",
+    "alsoTried": "https://docs.google.com/spreadsheets/d/1ckmE1W3eSROW5w7UFRDpeEkvLmQL0Jk8wDKovG7zeKE/gviz/tq?tqx=out:csv -> stesso risultato (#N/A); /edit del foglio risponde con testo 'not found'"
+  },
+  "canale2_dati_regione_sicilia_ckan": {
+    "url": "https://dati.regione.sicilia.it/api/3/action/package_search?q=eventi",
+    "packageFound": "eventi (Assessorato Beni Culturali, NON Assessorato Turismo — organizzazione diversa da quella cercata)",
+    "resourceUrl": "https://dati.regione.sicilia.it/download/dataset/eventi/filesystem/eventi_json_rsd.zip",
+    "recordCount": 49,
+    "format": "JSON Lines (non un array JSON valido, un oggetto per riga)",
+    "frequency_declared": "ANNUAL",
+    "metadata_modified": "2022-06-30T05:25:27",
+    "mostRecentRecordDate": "2022-06-24",
+    "verdict": "morto: dataset congelato dal 2022, 0 eventi futuri, e comunque non e' la fonte istituzionale cercata (Assessorato Turismo)",
+    "sampleRecord": {
+      "citta": "Palermo",
+      "id": 4554,
+      "titolo": "A sett'anni dagli scavi di Luigi Bernabò Brea. Nuove scoperte nel territorio di Calascibetta tra contrada Realmese e Cozzo S. Giuseppe",
+      "dataInizio": "2022-06-24",
+      "provincia": "Palermo"
+    }
+  },
+  "institutionalSourceNotFound": "Cercata la pagina propria dell'Assessorato Turismo, Sport e Spettacolo (come richiesto prima di fidarsi della ripubblicazione): l'articolo Medium di Andrea Borruso (opendatasicilia) descrive la fonte originale come una pagina/API che restituisce 'created_time, id, testo' — la stessa forma dei campi della Facebook Graph API per post pubblici di una Pagina, non un endpoint open-data proprio. Nessun endpoint JSON/CKAN diretto dell'Assessorato Turismo e' stato trovato: ne' su dati.regione.sicilia.it (1 solo dataset 'eventi', ed e' di un altro assessorato) ne' su visitsicily.info (portale WordPress, categoria 'evento' come pagina HTML, nessuna licenza aperta dichiarata, nessuna API scoperta in questa sessione)."
+}

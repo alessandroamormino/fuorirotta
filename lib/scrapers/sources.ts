@@ -202,7 +202,94 @@ export const SOURCE_META: SourceMeta[] = [
       categoryMap: {
         Sagra: 'Sagre e feste'
       }
-    }))
+    })),
+  {
+    // Alto Adige / Open Data Hub Sudtirol (Fase 19, 19-01). Posizionata DOPO
+    // lo spread SoloSagre, non prima: 'trentino-alto-adige' come stringa di
+    // regione compare gia' dentro il blocco generato sopra (VALID_REGION_SLUGS
+    // include quello slug), e getRegions() deduplica per PRIMA occorrenza —
+    // metterla prima avrebbe spostato 'trentino-alto-adige' in testa
+    // all'elenco, cambiando l'ordine delle righe generate da
+    // scripts/generate-crontab.ts (byte-identico richiesto dal piano) e
+    // rompendo l'asserzione S1 di scripts/region-scoping.test.sh.
+    //
+    // Nessun campo di categoria strutturato nel payload
+    // (Topics/TopicRIDs/ClassificationRID vuoti su 300/300, 19-RESEARCH.md):
+    // categoryMap sotto copre SOLO i ODHTags/SmgTags osservati nella fixture
+    // (16% di copertura sul campione) — il grosso della categorizzazione
+    // (D-11) avviene dal titolo dentro lib/scrapers/altoadige.ts
+    // (deriveAltoAdigeCategory), non qui. I 7 nomi canonici sono mappati 1:1
+    // su se stessi perche' quella funzione puo' restituire direttamente un
+    // nome canonico (derivato dal titolo): canonicalizeCategory li fa
+    // comunque passare per questa mappa, quindi devono trovarcisi.
+    id: 'altoadige',
+    region: 'trentino-alto-adige',
+    type: 'json',
+    url: 'https://tourism.api.opendatahub.com/v1/Event',
+    // trustRank: 1 — unica fonte "ricca" per questa regione, nessuna altra
+    // sorgente dedicata con cui comporre a lettura (D-14: SoloSagre resta
+    // la sorgente nazionale complementare, non concorrente).
+    trustRank: 1,
+    categoryMap: {
+      'Sagre e feste': 'Sagre e feste',
+      'Musica e spettacolo': 'Musica e spettacolo',
+      'Arte e cultura': 'Arte e cultura',
+      'Fiere e mercati': 'Fiere e mercati',
+      'Sport e outdoor': 'Sport e outdoor',
+      'Food & Wine': 'Food & Wine',
+      'Altro': 'Altro',
+      // Tag di puro marketing (D-11): non dicono nulla sulla natura
+      // dell'evento, mappano a 'Altro' esplicitamente — un contenuto
+      // informativo dichiarato, non un default silenzioso.
+      'regionale top event': 'Altro',
+      'regional top event': 'Altro', // variante osservata senza 'e' finale
+      'topevent': 'Altro',
+      'TopEvent': 'Altro', // variante con maiuscola osservata nella fixture
+      'eventi super': 'Altro',
+      'top-event-winter': 'Altro',
+      'top-event-autumn': 'Altro',
+      'event-winter': 'Altro',
+      'event-summer': 'Altro',
+      'winter-event': 'Altro',
+      'greenevent': 'Altro',
+      'traditions-event': 'Altro',
+      '3_zinnen_herbst': 'Altro',
+      // Tag di localita' (promo per zona turistica, non categoria evento)
+      'event_meran': 'Altro',
+      'events meran pro': 'Altro',
+      'events dolomiten pro': 'Altro',
+      'event_klausen': 'Altro',
+      'events brixen pro': 'Altro',
+      // Tag con segnale reale sulla natura dell'evento, i 6 piu' frequenti
+      // della fixture (regionale top event 17, topevent 7, eventi super 5,
+      // mercatini nei dintorni 5, event-sport 4, gare podistiche 4 — misurati
+      // 2026-09-19) piu' gli altri tag categorizzabili osservati:
+      'mercatini nei dintorni': 'Fiere e mercati',
+      'eventi_visite_guidate_mercatini': 'Fiere e mercati',
+      'dolomiten_weihnachtsmaerkte': 'Fiere e mercati',
+      'bauernmarkt': 'Fiere e mercati',
+      'maerkte': 'Fiere e mercati',
+      'event-sport': 'Sport e outdoor',
+      'gare podistiche': 'Sport e outdoor',
+      'aktiv-events': 'Sport e outdoor',
+      'eventi fondo': 'Sport e outdoor',
+      'rad-event': 'Sport e outdoor',
+      'eventi bici da corsa': 'Sport e outdoor',
+      'eventi mtb': 'Sport e outdoor',
+      'gare di coppa del mondo': 'Sport e outdoor',
+      'genuss-events': 'Food & Wine',
+      'event-genuss': 'Food & Wine',
+      'törggeleveranstaltungen': 'Food & Wine',
+      'eventi gastronomici autunno': 'Food & Wine',
+      'wein-event': 'Food & Wine',
+      'veranstaltungen wein': 'Food & Wine',
+      'event_krampus': 'Sagre e feste',
+      'transumanza': 'Sagre e feste',
+      'kultur-events': 'Arte e cultura',
+      'kultur fuerungen': 'Arte e cultura',
+      'eventi musicali': 'Musica e spettacolo'
+    }
+  }
 ]
 
 /**

@@ -1,0 +1,88 @@
+{
+  "_fixtureNote": "Fase 19, sonda D-01/D-04 su Trentino (dati.trentino.it): BOCCIATA. package_search?q=title:eventi restituisce 11 dataset, uno per comunita' di valle (nessun dataset 'Eventi del Comune di Trento' risulta oggi nel catalogo — cercato con q=eventi, q=trento, q=organization:comune-di-trento: assente in tutti e tre). I resource JSON di TUTTI i dataset campionati sono vivi (HTTP 200) ma contengono solo un archivio storico: date piu' recenti osservate 2015-2019, nessuna riga con data futura al 2026-09-19. Verificato il 2026-09-19 con curl diretto sui resource url del CKAN (non sulla documentazione).",
+  "packageSearchCount": 11,
+  "datasetsProbed": [
+    {
+      "name": "eventi-del-comunita-rotaliana-koenigsberg",
+      "totalCount": 592,
+      "topRecordFrom_time": "2014-05-11T00:00:00+02:00",
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-delle-giudicarie",
+      "totalCount": 85,
+      "topRecordFrom_time": "2016-01-25T16:49:00+01:00",
+      "note": "il record piu' recente in assoluto fra i 5 mostrati era 2019-05-06 (Stati Generali della Montagna), comunque passato",
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-della-paganella",
+      "totalCount": 133,
+      "topRecordFrom_time": "2015-03-14T16:00:00+01:00",
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-magnifica-comunita-degli-altipiani-cimbri",
+      "totalCount": 164,
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-valsugana-e-tesino",
+      "totalCount": 798,
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-valsugana-e-bersntol",
+      "totalCount": 1024,
+      "note": "campionato per intero: pagina 1 (30 record piu' recenti) va da 2015-05-02 a 2014-07-19; pagina finale (offset 990) va da 2015-02-16 a 2014-12-20 — ordine cronologico decrescente, tutto l'archivio e' 2014-2015",
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-della-valle-di-sole",
+      "totalCount": 43,
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-della-valle-dei-laghi",
+      "totalCount": 15,
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-della-val-di-cembra",
+      "totalCount": 48,
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comun-general-de-fascia",
+      "totalCount": 243,
+      "license_id": "cc-by"
+    },
+    {
+      "name": "eventi-del-comunita-territoriale-della-val-di-fiemme",
+      "totalCount": 1,
+      "license_id": "cc-by"
+    }
+  ],
+  "sampleRecordsAltaValsuganaBersntol_page1_first5": [
+    {
+      "from_time": "2015-05-02T00:00:00+02:00",
+      "titolo": "Musica e... avanguardie"
+    },
+    {
+      "from_time": "2015-04-30T00:00:00+02:00",
+      "titolo": "Orfeo ed Euridice"
+    },
+    {
+      "from_time": "2015-04-18T00:00:00+02:00",
+      "titolo": "Musica e... libertà"
+    },
+    {
+      "from_time": "2015-04-11T00:00:00+02:00",
+      "titolo": "Ai migranti"
+    },
+    {
+      "from_time": "2015-04-03T00:00:00+02:00",
+      "titolo": "Lampa lampa"
+    }
+  ]
+}

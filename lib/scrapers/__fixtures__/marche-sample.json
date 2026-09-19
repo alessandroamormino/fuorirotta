@@ -1,0 +1,81 @@
+{
+  "_fixtureNote": "Fase 19, sonda D-01/D-04 su Marche: BOCCIATA. package_search?q=title:\"Eventi culturali\" restituisce 47 dataset comunali (IODL v2.0), metadata_modified identico su tutti a 2024-07-12 (batch di pubblicazione unico, non aggiornamenti indipendenti). Campionati 9 file risorsa JSON reali (incluso il piu' grande, Camerino con 25 record) il 2026-09-19: 0 EVENTI FUTURI su 60 record totali osservati. Le risorse sono file statici su WordPress comunale (wp-content/blogs.dir/.../files/json/...), non endpoint vivi — confermato il rischio 'seconda Puglia' di 19-RESEARCH-SORGENTI.md.",
+  "packageSearchCount": 47,
+  "metadataModifiedAllSamples": "2024-07-12 (batch unico)",
+  "resourcesProbed": [
+    {
+      "comune": "Visso",
+      "url": "https://www.comune.visso.mc.it/wp-content/blogs.dir/62/files/json/C_M078_dataset_eventi-culturali_1696576386.json",
+      "recordCount": 1,
+      "futureCount": 0,
+      "dateRange": "2023-10-15 -> 2023-10-15"
+    },
+    {
+      "comune": "Tolentino",
+      "recordCount": 1,
+      "futureCount": 0,
+      "dateRange": "2024-03-25 -> 2024-03-25"
+    },
+    {
+      "comune": "Sarnano",
+      "recordCount": 1,
+      "futureCount": 0,
+      "dateRange": "2024-03-21 -> 2024-03-21"
+    },
+    {
+      "comune": "San Severino Marche",
+      "recordCount": 1,
+      "futureCount": 0,
+      "dateRange": "2024-05-24 -> 2024-05-24"
+    },
+    {
+      "comune": "Camerino",
+      "recordCount": 25,
+      "futureCount": 0,
+      "dateRange": "2024-04-25 -> 2024-10-27",
+      "note": "il dataset comunale piu' grande fra quelli campionati, e comunque interamente nel passato"
+    },
+    {
+      "comune": "Corridonia",
+      "recordCount": 3,
+      "futureCount": 0,
+      "dateRange": "2024-05-11 -> 2024-05-25"
+    },
+    {
+      "comune": "Cingoli",
+      "recordCount": 2,
+      "futureCount": 0,
+      "dateRange": "2024-03-16 -> 2024-06-30"
+    },
+    {
+      "comune": "Civitanova Marche",
+      "httpStatus": 404,
+      "note": "URL del catalogo non risolve piu' (dominio turismo.comune.civitanova.mc.it)"
+    },
+    {
+      "comune": "Pollenza",
+      "recordCount": 1,
+      "futureCount": 0,
+      "dateRange": "2024-07-12 -> 2024-07-12"
+    }
+  ],
+  "totalRecordsObserved": 35,
+  "totalFutureEventsObserved": 0,
+  "sampleRawRecordVisso": [
+    {
+      "Comune": "Visso",
+      "Titolo": "Territori forti e fluidi- Di visioni e di concretezze",
+      "Descrizione": "Giornate itineranti per scoprire e vivere il territorio",
+      "Immagine": "https://www.comune.visso.mc.it/wp-content/blogs.dir/62/files/Territorifortiefluidi-150x150.png",
+      "Locandina evento": "https://www.comune.visso.mc.it/wp-content/blogs.dir/62/files/Locandina-Visso.jpg",
+      "Costi": "Gratuito",
+      "Tipologia evento": "",
+      "Organizzatore": "",
+      "Url": "https://www.comune.visso.mc.it/?post_type=eventi-cms&#038;p=50422",
+      "Latitudine": "",
+      "Longitudine": "",
+      "Inizio": "2023-10-15 09:00:00",
+      "Termine": "2023-10-15 23:59:00"
+    }
+  ]
+}
