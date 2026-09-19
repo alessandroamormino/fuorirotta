@@ -37,11 +37,27 @@ export function EventCacheProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Save cache to sessionStorage whenever it changes
+  // Save cache to sessionStorage whenever it changes.
+  //
+  // Il try/catch non e' difensivo per abitudine: senza, un
+  // QuotaExceededError su setItem esce da questo effect e React porta giu'
+  // l'intera pagina con "Application error: a client-side exception has
+  // occurred" — schermata bianca, niente lista, niente mappa. Il ramo di
+  // lettura sopra si proteggeva gia'; la scrittura no.
+  // Riprodotto in Chrome il 2026-09-20 sul catalogo locale post-Alto Adige
+  // (~19.000 eventi futuri): la quota di sessionStorage e' ~5MB per origine
+  // e un paio di risposte con i mapEvents al completo la saturano. Con i
+  // ~1.700 eventi di produzione capitava di rado; dopo il rilascio della
+  // Fase 19 diventerebbe ordinario.
+  // La cache e' solo un'ottimizzazione: se non ci sta, si butta via e si
+  // rifa' un fetch. Sempre meglio di una pagina bianca.
   useEffect(() => {
-    if (cache.size > 0) {
-      const cacheObj = Object.fromEntries(cache.entries());
-      sessionStorage.setItem('eventCache', JSON.stringify(cacheObj));
+    if (cache.size === 0) return;
+    try {
+      sessionStorage.setItem('eventCache', JSON.stringify(Object.fromEntries(cache.entries())));
+    } catch (e) {
+      console.warn('[EventCache] cache non salvata, si prosegue senza:', e);
+      try { sessionStorage.removeItem('eventCache'); } catch { /* niente da fare */ }
     }
   }, [cache]);
 
