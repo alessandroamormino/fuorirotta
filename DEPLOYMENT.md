@@ -139,6 +139,8 @@ server {
 
 ### Automated Scraping via Crontab
 
+**Adding a source to an already-scheduled region adds no crontab row.** The schedulable unit is the region, not the source: `trentino-alto-adige` has carried its `5 4 * * *` line since Phase 14, and Phase 19 (`altoadige.ts`) hangs a second source off that same line via `getSourcesByRegion`. For a release like that, skip the "Install it as a BLOCK" procedure below entirely — there is nothing to install — and run only step 4's `--check` to confirm the installed block still matches the registry. Proven by `scripts/crontab-generate.test.sh` S10 (asserts exactly one `trentino-alto-adige` line).
+
 The crontab is no longer a single hand-written line: it is the output of `scripts/generate-crontab.ts`, which reads `REGION_SCHEDULES` from `lib/scrapers/sources.ts` (Phase 14, D-09). Adding a region to the registry means one file to touch; the crontab lines that region needs are regenerated, not hand-edited.
 
 **1. Generate the lines, on the host checkout — NOT inside the container.** The final `runner` stage of the `Dockerfile` copies only `public`, `.next/standalone`, `.next/static`, `node_modules/.prisma` and `prisma/`. It contains neither `scripts/` nor `lib/` nor the devDependencies `tsx` needs to import raw TypeScript, so `docker compose exec … npx tsx scripts/generate-crontab.ts` fails immediately with a missing-file error. This is the same "maintenance scripts live outside the image" rule that `npx prisma migrate deploy` (§Migrations) and `scripts/cron-maintenance.sh` already follow: run it from the same git checkout that `docker compose` itself runs from.
