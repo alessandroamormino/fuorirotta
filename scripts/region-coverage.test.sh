@@ -7,13 +7,16 @@
 #
 # S1/S2 usano uno slug/sorgente di prova dedicati (__test_coverage_region__,
 # __test_coverage_source__), mai un dato reale: nessuna riga esistente viene
-# toccata, stesso idioma di scripts/region-lock.test.sh. S3/S7 (Fase 15,
-# 15-03-PLAN.md) leggono invece i dati REALI gia' nel Postgres locale —
-# lombardia ed emilia-romagna devono essere state ingerite localmente prima
-# di lanciare questo gate (bash scripts/dev-db.sh npx tsx -e con runRegion(),
-# vedi 15-03-SUMMARY.md); Puglia non e' asserita da nessuna parte, perche'
-# l'host resta bloccato dal difetto TLS verificato in 15-RESEARCH.md. Richiede
-# il Postgres locale (scripts/dev-db.sh, D-17) — mai il database di produzione.
+# toccata, stesso idioma di scripts/region-lock.test.sh. S3/S7/S26 (Fase 15,
+# 15-03-PLAN.md; Fase 19, 19-02-PLAN.md dopo la ricalibrazione D-07) leggono
+# invece i dati REALI gia' nel Postgres locale — lombardia, emilia-romagna e
+# trentino-alto-adige devono essere state ingerite localmente prima di
+# lanciare questo gate: lombardia/emilia-romagna via `bash scripts/dev-db.sh
+# npx tsx -e` con runRegion() (vedi 15-03-SUMMARY.md), trentino-alto-adige via
+# `npm run scrape:local -- --region trentino-alto-adige` (vedi
+# 19-01-SUMMARY.md). Puglia non e' asserita da nessuna parte, perche' l'host
+# resta bloccato dal difetto TLS verificato in 15-RESEARCH.md. Richiede il
+# Postgres locale (scripts/dev-db.sh, D-17) — mai il database di produzione.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -139,12 +142,17 @@ echo "S2 OK: $((coverage_threshold + 1)) eventi futuri (== COVERAGE_THRESHOLD + 
 
 psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
 
-# --- S3: getLiveRegions() su DATI REALI (Fase 15, D-14) — lombardia ed
-# emilia-romagna devono comparire dopo l'ingestione locale di 15-03-PLAN.md.
-# Puglia NON viene asserita qui: l'host resta bloccato dal difetto TLS
-# verificato (15-RESEARCH.md Pitfall 2), quindi non e' mai stata ingerita in
-# questo ambiente — asserirla qui la farebbe fallire per un motivo di rete
-# che questo gate non ha modo di risolvere, non per un difetto del segnale.
+# --- S3: getLiveRegions() su DATI REALI (Fase 15, D-14; Fase 19, D-07) —
+# lombardia e trentino-alto-adige devono comparire dopo l'ingestione locale
+# di 19-01-PLAN.md. emilia-romagna (5 eventi futuri canonici, misurato in
+# 19-02-PLAN.md) e' invece asserita ASSENTE: COVERAGE_THRESHOLD e' stato
+# ricalibrato a 10 (D-07) proprio perche' 5 sta sotto quel valore — la
+# conseguenza voluta della ricalibrazione, provata come comportamento invece
+# che restare una frase nel commento della costante. Puglia NON viene
+# asserita qui: l'host resta bloccato dal difetto TLS verificato
+# (15-RESEARCH.md Pitfall 2), quindi non e' mai stata ingerita in questo
+# ambiente — asserirla qui la farebbe fallire per un motivo di rete che
+# questo gate non ha modo di risolvere, non per un difetto del segnale.
 s3_output="$(bash scripts/dev-db.sh npx tsx -e '
 (async () => {
   const { getLiveRegions } = await import("./lib/coverage/liveRegions")
@@ -154,8 +162,9 @@ s3_output="$(bash scripts/dev-db.sh npx tsx -e '
 })().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
 ' 2>&1)"
 printf '%s' "${s3_output}" | grep -q '"lombardia"' || fail "S3: getLiveRegions() non contiene 'lombardia' sui dati reali: ${s3_output}"
-printf '%s' "${s3_output}" | grep -q '"emilia-romagna"' || fail "S3: getLiveRegions() non contiene 'emilia-romagna' sui dati reali (ingestione mancante o sotto soglia?): ${s3_output}"
-echo "S3 OK: getLiveRegions() su dati reali contiene lombardia ed emilia-romagna: ${s3_output}"
+printf '%s' "${s3_output}" | grep -q '"trentino-alto-adige"' || fail "S3: getLiveRegions() non contiene 'trentino-alto-adige' sui dati reali (ingestione mancante? vedi 19-01-SUMMARY.md): ${s3_output}"
+printf '%s' "${s3_output}" | grep -q '"emilia-romagna"' && fail "S3: getLiveRegions() contiene ancora 'emilia-romagna' sui dati reali, ma con COVERAGE_THRESHOLD=${coverage_threshold} dovrebbe essersi spenta (D-07): ${s3_output}"
+echo "S3 OK: getLiveRegions() su dati reali contiene lombardia e trentino-alto-adige, e non contiene piu' emilia-romagna: ${s3_output}"
 
 # --- Setup comune di prova per S9/S10 (soglia secca sulla provincia, D-10) -
 # Un comune di prova dedicato (mai un comune reale): getLiveProvinces() legge
@@ -245,15 +254,28 @@ http_code6="$(curl -s -o "${resp6}" -w '%{http_code}' --max-time 15 "http://127.
 grep -qi "noindex" "${resp6}" || fail "S6: /molise risponde 200 ma il corpo non contiene 'noindex'"
 echo "S6 OK: GET /molise (regione ISTAT reale, non coperta) risponde 200 con noindex"
 
-# --- S7: /emilia-romagna (regione ISTAT reale, ORA viva dopo 15-03-PLAN.md)
+# --- S7: /trentino-alto-adige (regione ISTAT reale, viva dopo 19-01-PLAN.md)
 # -> 200 SENZA noindex — la stessa regione di S3, ma sul contratto HTTP di
 # ROLL-06 invece che sul segnale grezzo di ROLL-03. D-11: nessuna differenza
 # di stato URL rispetto a prima dell'accensione, solo il contenuto cambia.
 resp7="${tmp_dir}/resp7.html"
-http_code7="$(curl -s -o "${resp7}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/emilia-romagna")"
-[[ "${http_code7}" == "200" ]] || fail "S7: atteso 200 su /emilia-romagna (regione ora viva), ottenuto ${http_code7}"
-grep -qi "noindex" "${resp7}" && fail "S7: /emilia-romagna e' viva (S3) ma la pagina porta ancora 'noindex'"
-echo "S7 OK: GET /emilia-romagna (regione ISTAT reale, ora viva) risponde 200 senza noindex"
+http_code7="$(curl -s -o "${resp7}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/trentino-alto-adige")"
+[[ "${http_code7}" == "200" ]] || fail "S7: atteso 200 su /trentino-alto-adige (regione viva), ottenuto ${http_code7}"
+grep -qi "noindex" "${resp7}" && fail "S7: /trentino-alto-adige e' viva (S3) ma la pagina porta ancora 'noindex'"
+echo "S7 OK: GET /trentino-alto-adige (regione ISTAT reale, viva) risponde 200 senza noindex"
+
+# --- S26: /emilia-romagna (regione ISTAT reale, spenta dalla ricalibrazione
+# D-07, Fase 19) -> 200 CON noindex — l'altra direzione del contratto HTTP
+# che S7 prova per trentino-alto-adige. D-11 (Fase 15): una regione ISTAT
+# reale non coperta risponde SEMPRE 200+noindex, mai 404, mai un redirect —
+# lo stesso contratto che S6 gia' verifica su /molise, ora provato anche sul
+# caso "era viva, si e' spenta per una ricalibrazione della soglia" invece
+# che solo sul caso "non e' mai stata coperta".
+resp26="${tmp_dir}/resp26.html"
+http_code26="$(curl -s -o "${resp26}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/emilia-romagna")"
+[[ "${http_code26}" == "200" ]] || fail "S26: atteso 200 su /emilia-romagna (regione ora spenta da D-07), ottenuto ${http_code26}"
+grep -qi "noindex" "${resp26}" || fail "S26: /emilia-romagna e' spenta (S3) ma la pagina non porta 'noindex'"
+echo "S26 OK: GET /emilia-romagna (regione ISTAT reale, spenta da D-07) risponde 200 con noindex"
 
 # --- S15: /lombardia/bergamo (provincia viva, dati reali) -> 200, con
 # almeno un link a un evento reale nel corpo. Dato reale (come S3/S6/S7):
@@ -411,5 +433,5 @@ echo "S14 OK: due generazioni consecutive della sitemap producono lo stesso ordi
 
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) + cablaggio su app/HomeClient.tsx e sulla vista mappa mobile (ROLL-04 closure) — S1..S25 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) + cablaggio su app/HomeClient.tsx e sulla vista mappa mobile (ROLL-04 closure) + ricalibrazione COVERAGE_THRESHOLD (D-07, Fase 19) — S1..S26 verdi"
 exit 0
