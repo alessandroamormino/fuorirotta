@@ -45,3 +45,4 @@ next-env.d.ts
 .claude/
 # MCP config locale: contiene chiavi API, non va in git
 .mcp.json
+.ingest-sweep/
