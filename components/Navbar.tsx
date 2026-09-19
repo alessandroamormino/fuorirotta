@@ -40,6 +40,17 @@ interface NavbarProps {
 	// sotto 1024px e non viene mai ridisegnata, solo nascosta da 1024px in su
 	// quando questa prop e' passata. Assente (home): comportamento invariato.
 	searchBackHref?: string;
+	/**
+	 * Solo sotto lg: fa scorrere via la barra verso l'alto. Il genitore la
+	 * possiede perche' la direzione dello scorrimento si legge sullo scroller
+	 * di <main> (la pagina non scorre: vedi HomeClient), non su window — e
+	 * perche' lo stesso booleano governa anche il bordo superiore di <main>,
+	 * che deve salire insieme alla barra, altrimenti nasconderla lascerebbe
+	 * una fascia vuota invece di restituire spazio alla lista.
+	 * Il nome non e' `hidden`: quello e' un attributo DOM reale, e una prop
+	 * omonima su un componente si legge come tale a colpo d'occhio.
+	 */
+	collapsed?: boolean;
 }
 
 export default function Navbar({
@@ -48,6 +59,7 @@ export default function Navbar({
 	onSearch,
 	onPanelOpenChange,
 	searchBackHref,
+	collapsed = false,
 }: NavbarProps) {
 	const { filters, setFilters, search, radius, panels, destinations } =
 		useNavbarSearch({ filters: controlledFilters, onFiltersChange, onSearch });
@@ -229,7 +241,31 @@ export default function Navbar({
 				// correzione aveva toccato un solo contributo su due. Ora il gap ha un
 				// solo proprietario: questi 12px. lg:py-3 li sovrascrive entrambi a
 				// desktop, dove il conto torna uguale.
-				className="fixed top-2 left-0 right-0 z-50 px-4 pt-4 pb-3 sm:px-[18px] lg:sticky lg:top-0 lg:z-[60] lg:px-[22px] lg:py-3 topbar-desktop"
+				className={cn(
+					"fixed top-2 left-0 right-0 z-50 px-4 pt-4 pb-3 sm:px-[18px] lg:sticky lg:top-0 lg:z-[60] lg:px-[22px] lg:py-3 topbar-desktop",
+					// -(100% + 0.5rem) e non -100%: `top-2` sono 8px, e translate
+					// del solo 100% lascerebbe scoperto proprio quel filo di barra.
+					// lg:translate-y-0 perche' a desktop la barra e' sticky e
+					// nasconderla romperebbe il calcolo di --topbar-h su cui si
+					// appoggiano mappa e dettaglio.
+					"transition-transform duration-200 ease-out motion-reduce:transition-none lg:translate-y-0",
+					// Underscore = spazio, la forma canonica di Tailwind per i valori
+					// arbitrari (anche la grafia senza underscore genera la stessa
+					// regola, ma questa e' quella documentata).
+					// Se un giorno lo verifichi in un browser: Tailwind v4 emette la
+					// proprieta' `translate`, NON `transform`. Leggere
+					// getComputedStyle(nav).transform restituisce "none" a barra
+					// nascosta e sembra un difetto che non c'e'.
+					// Misurato in Chrome a 414px il 2026-09-20: a barra scorsa via
+					// translate vale `0px calc(-100% - 8px)` e nav.getBoundingClientRect().bottom
+					// e' esattamente 0 — gli 8px di top-2 sono compresi.
+					collapsed && "-translate-y-[calc(100%_+_0.5rem)]"
+				)}
+				// Fuori dall'ordine di tabulazione quando e' scorsa via: una
+				// pillola di ricerca invisibile ma ancora focalizzabile manderebbe
+				// il focus da tastiera fuori schermo.
+				aria-hidden={collapsed || undefined}
+				inert={collapsed}
 			>
 				<div className="mx-auto w-full max-w-[1760px]">
 					<div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-4 lg:gap-6 lg:grid lg:grid-cols-[1fr_minmax(0,720px)_1fr] lg:items-center lg:gap-4">

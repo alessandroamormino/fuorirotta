@@ -65,6 +65,24 @@ const MAX_PAGE_SLOTS = PAGE_WINDOW_SLOTS;
 // catalogo (oggi 1.971 eventi = 165 pagine).
 const MAX_RESTORED_PAGE = 1000;
 
+// Ripristino della posizione di lettura al ritorno dal dettaglio.
+// SCROLL_SAVE_MS: cadenza massima di scrittura in sessionStorage durante lo
+// scroll (setItem e' sincrono sul thread principale).
+// MAX_RESTORED_SCROLL_PX: stesso trattamento di MAX_LOADED_COUNT e
+// MAX_RESTORED_PAGE — sessionStorage e' scrivibile da qualunque script sulla
+// stessa origine, un valore manomesso non deve diventare uno scrollTop
+// arbitrario. 500.000px sono ~12.000 card, oltre il tetto di MAX_LOADED_COUNT.
+const SCROLL_SAVE_MS = 200;
+const MAX_RESTORED_SCROLL_PX = 500_000;
+
+// Navbar mobile che si nasconde scorrendo. THRESHOLD: sotto questa quota la
+// barra resta sempre visibile (il rimbalzo elastico di iOS la farebbe
+// sfarfallare a scrollTop ~0). DELTA: quanto bisogna scendere in un colpo
+// perche' si nasconda — la risalita invece la riporta subito, a qualunque
+// delta, com'e' stato chiesto.
+const NAV_HIDE_THRESHOLD_PX = 80;
+const NAV_HIDE_DELTA_PX = 6;
+
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
 	loading: () => (
@@ -232,6 +250,24 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const [showTopBlur, setShowTopBlur] = useState(false);
 	const [showBottomBlur, setShowBottomBlur] = useState(false);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+	// Vero quando l'utente ha chiesto un raggio ma nessuna posizione e'
+	// disponibile: i risultati a schermo NON sono filtrati per distanza e
+	// vanno dichiarati tali (vedi fetchEvents).
+	const [radiusUnfiltered, setRadiusUnfiltered] = useState(false);
+
+	// Posizione di lettura: `restoredScrollRef` porta il valore letto da
+	// sessionStorage fino all'effect che lo applica (le card ripristinate non
+	// esistono ancora al mount), `lastScrollSaveRef` limita la cadenza di
+	// scrittura, `lastScrollTopRef` da' la direzione dello scorrimento alla
+	// navbar mobile.
+	const restoredScrollRef = useRef(0);
+	const lastScrollSaveRef = useRef(0);
+	const lastScrollTopRef = useRef(0);
+	const [navHidden, setNavHidden] = useState(false);
+	// isDesktopSurface e' dichiarato piu' sotto (effect della media query): il
+	// valore derivato vive accanto al JSX che lo usa, vedi navCollapsed nel
+	// corpo del render.
 
 	const [navHeight, setNavHeight] = useState(112);
 	useEffect(() => {
@@ -401,23 +437,60 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [mobileView]);
 
-	useEffect(() => {
-		if (navigator.geolocation) {
+	// Una sola acquisizione di posizione per vita della pagina, condivisa fra
+	// l'effect di mount e chi ne ha bisogno SUBITO: la ricerca per raggio.
+	//
+	// Segnalazione utente 2026-09-19 ("da Erba, raggio 20 km, compaiono eventi
+	// di Brescia"): la causa non e' la precisione del GPS ma una corsa. Qui
+	// c'era un getCurrentPosition senza opzioni — timeout infinito, nessuna
+	// cache — e chi cercava "entro 20 km" prima che il fix arrivasse partiva
+	// con userLocation ancora null. Il ramo che costruisce i parametri (sotto,
+	// in fetchEvents) ometteva allora lat, lng E radius INSIEME: il server
+	// riceveva una richiesta senza raggio, rispondeva con l'intera regione, e
+	// la UI continuava a dichiarare "20 km". Lo stesso accadeva a ogni ritorno
+	// dal dettaglio, dove HomeClient si rimonta e userLocation riparte da null
+	// mentre i filtri (raggio compreso) vengono ripristinati da sessionStorage.
+	const locationRequestRef = useRef<Promise<{ lat: number; lng: number } | null> | null>(null);
+	const requestUserLocation = useCallback(() => {
+		if (locationRequestRef.current) return locationRequestRef.current;
+		locationRequestRef.current = new Promise<{ lat: number; lng: number } | null>((resolve) => {
+			if (!navigator.geolocation) {
+				resolve(null);
+				return;
+			}
 			navigator.geolocation.getCurrentPosition(
 				(position) => {
-					setUserLocation({
+					const coords = {
 						lat: position.coords.latitude,
 						lng: position.coords.longitude,
-					});
+					};
+					setUserLocation(coords);
+					resolve(coords);
 				},
 				(error) => {
 					if (process.env.APP_DEBUG === "true") {
 						console.log("Geolocation not enabled:", error);
 					}
-				}
+					// Un permesso negato non si ritenta da solo (il browser
+					// risponderebbe no all'istante per tutta la sessione); un
+					// timeout si': la prossima ricerca per raggio ha diritto a un
+					// secondo tentativo invece di restare senza filtro per sempre.
+					if (error.code === error.TIMEOUT) locationRequestRef.current = null;
+					resolve(null);
+				},
+				// timeout finito: meglio sapere in 10s che non abbiamo una
+				// posizione, che restare in attesa indefinita mentre la ricerca
+				// per raggio gira senza raggio. maximumAge accetta un fix recente
+				// invece di forzarne uno nuovo a ogni ritorno sulla home.
+				{ enableHighAccuracy: true, timeout: 10000, maximumAge: 5 * 60 * 1000 }
 			);
-		}
+		});
+		return locationRequestRef.current;
 	}, []);
+
+	useEffect(() => {
+		requestUserLocation();
+	}, [requestUserLocation]);
 
 	useEffect(() => {
 		fetch('/api/events/clusters')
@@ -547,6 +620,17 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		const parsedCurrentPage = savedCurrentPage ? Number.parseInt(savedCurrentPage, 10) : NaN;
 		if (Number.isInteger(parsedCurrentPage) && parsedCurrentPage >= 1) {
 			restoredPageRef.current = Math.min(parsedCurrentPage, MAX_RESTORED_PAGE);
+		}
+
+		// Posizione di lettura, stessa forma di validazione del ripristino di
+		// currentPage qui sopra. Non applicata qui: al mount la lista ha al
+		// massimo le card SSR, e assegnare scrollTop ora lo farebbe troncare a
+		// zero. Resta nel ref finche' l'effect dedicato non trova la lista
+		// abbastanza alta.
+		const savedScrollTop = sessionStorage.getItem("listScrollTop");
+		const parsedScrollTop = savedScrollTop ? Number.parseInt(savedScrollTop, 10) : NaN;
+		if (Number.isInteger(parsedScrollTop) && parsedScrollTop > 0) {
+			restoredScrollRef.current = Math.min(parsedScrollTop, MAX_RESTORED_SCROLL_PX);
 		}
 
 		// Da qui in poi il ripristino e' completo: gli effect di persistenza
@@ -728,16 +812,30 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			// corso — alternativa sui due valori, non un secondo percorso di
 			// rete. /api/events non guadagna un parametro nuovo: lat/lng/radius
 			// sono gia' pubblici, li usa gia' "nelle vicinanze" dalla Fase 9.
+			// Una ricerca per raggio senza origine non e' una ricerca per raggio
+			// piu' larga: e' una ricerca senza filtro. Prima lat/lng/radius
+			// cadevano insieme in silenzio e il server rispondeva con tutta la
+			// regione mentre la pillola diceva ancora "20 km". Ora, se il raggio
+			// e' richiesto e la posizione non c'e' ancora, si aspetta il fix
+			// (con il timeout di requestUserLocation, non all'infinito); se
+			// davvero non arriva, la richiesta parte senza raggio MA lo stato
+			// sotto lo dichiara, invece di far passare l'intera regione per
+			// "quello che c'e' entro 20 km".
+			let radiusUnfiltered = false;
 			if (area) {
 				params.append("lat", area.lat.toString());
 				params.append("lng", area.lng.toString());
 				params.append("radius", area.radiusKm.toString());
-			} else if (userLocation) {
-				params.append("lat", userLocation.lat.toString());
-				params.append("lng", userLocation.lng.toString());
-				if (filters.radius) {
-					params.append("radius", filters.radius.toString());
+			} else {
+				const origin = userLocation ?? (filters.radius ? await requestUserLocation() : null);
+				if (origin) {
+					params.append("lat", origin.lat.toString());
+					params.append("lng", origin.lng.toString());
+					if (filters.radius) {
+						params.append("radius", filters.radius.toString());
+					}
 				}
+				radiusUnfiltered = Boolean(filters.radius) && !origin;
 			}
 
 			params.append("limit", limit.toString());
@@ -748,6 +846,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			// Risposta superata da un fetchEvents piu' recente: ignorala, non
 			// toccare lo stato (che appartiene gia' alla richiesta corrente).
 			if (requestId !== requestIdRef.current) return;
+
+			// Dopo la guardia, non prima: e' lo stato della richiesta che sta
+			// davvero per essere mostrata.
+			setRadiusUnfiltered(radiusUnfiltered);
 
 			if (!response.ok) {
 				// WR-01: lista vuota, totale azzerato, mappa invariata — SOLO per
@@ -956,11 +1058,65 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
 		setShowTopBlur(scrollTop >= 10);
 		setShowBottomBlur(scrollHeight - scrollTop - clientHeight >= 10);
+
+		// Posizione di lettura persistita per il ritorno dal dettaglio: senza,
+		// loadedCount veniva ripristinato (sessanta card tornavano) ma la lista
+		// ripartiva da scrollTop 0, e ritrovare il punto voleva dire riscorrere
+		// tutto. Scritta al piu' ogni SCROLL_SAVE_MS invece che a ogni evento di
+		// scroll: setItem e' lavoro sincrono sul thread principale, e a 60
+		// eventi al secondo si sente su un telefono lento.
+		if (!hydratedRef.current) return;
+		const now = Date.now();
+		if (now - lastScrollSaveRef.current < SCROLL_SAVE_MS) return;
+		lastScrollSaveRef.current = now;
+		sessionStorage.setItem("listScrollTop", String(Math.round(scrollTop)));
+
+		// Navbar mobile che si nasconde scorrendo in giu' e ricompare al primo
+		// accenno di scorrimento in su. Sotto la soglia resta sempre visibile:
+		// nascondere la barra nei primi pixel la farebbe sfarfallare sul
+		// rimbalzo elastico di iOS.
+		const previous = lastScrollTopRef.current;
+		lastScrollTopRef.current = scrollTop;
+		if (scrollTop <= NAV_HIDE_THRESHOLD_PX) {
+			setNavHidden(false);
+		} else if (scrollTop - previous > NAV_HIDE_DELTA_PX) {
+			setNavHidden(true);
+		} else if (previous - scrollTop > 0) {
+			setNavHidden(false);
+		}
 	};
 
 	useEffect(() => {
 		handleScroll();
 	}, [events]);
+
+	// La mappa non ha lo scroller della lista: se la barra e' stata nascosta
+	// scorrendo e poi si passa alla mappa, nessuno scroll la riporterebbe piu'
+	// indietro e resterebbe nascosta per sempre. Il cambio di vista la
+	// ripristina, e azzera anche la direzione, cosi' il primo scroll dopo il
+	// ritorno alla lista non si confronta con una quota di un'altra sessione.
+	useEffect(() => {
+		setNavHidden(false);
+		lastScrollTopRef.current = scrollContainerRef.current?.scrollTop ?? 0;
+	}, [mobileView]);
+
+	// Applica la posizione ripristinata appena la lista e' abbastanza alta da
+	// contenerla. Non al mount: al mount le card ripristinate non sono ancora
+	// arrivate (il ripristino oltre una pagina passa da un fetch dedicato) e
+	// scrollTop verrebbe silenziosamente troncato a zero.
+	useEffect(() => {
+		const target = restoredScrollRef.current;
+		if (!target || loading || pageLoading) return;
+		const el = scrollContainerRef.current;
+		if (!el || events.length === 0) return;
+		const max = el.scrollHeight - el.clientHeight;
+		if (max <= 0) return;
+		// Non ci siamo ancora ma altre card stanno per arrivare: aspetta il
+		// prossimo giro invece di atterrare a meta' strada.
+		if (max < target && loadedCount < total) return;
+		el.scrollTop = Math.min(target, max);
+		restoredScrollRef.current = 0;
+	}, [events, loading, pageLoading, loadedCount, total]);
 
 	// D-07: bersaglio unico dell'IntersectionObserver e bottone reale (un solo
 	// nodo, non un sentinel separato — 12-RESEARCH.md Pattern 3).
@@ -1000,6 +1156,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 			event.resolvedLongitude
 		);
 	};
+
+	// Barra scorsa via: solo sotto lg, dove e' `fixed` e nasconderla restituisce
+	// spazio. Da lg in su e' sticky e regge il calcolo di --topbar-h su cui si
+	// appoggiano il riquadro mappa e la pagina di dettaglio.
+	const navCollapsed = navHidden && !isDesktopSurface;
 
 	// D-07: "l'ambito corrente (la destinazione se impostata, altrimenti
 	// l'etichetta di default)" — intestazione della lista, Task 2.
@@ -1061,11 +1222,15 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 
 	return (
 		<div className="min-h-screen bg-background">
+			{/* navCollapsed e' mobile-only: a lg la barra e' sticky e regge il
+			    calcolo di --topbar-h, e renderla inert mentre resta visibile
+			    sarebbe un difetto di accessibilita' tutto nuovo. */}
 			<Navbar
 				filters={draftFilters}
 				onFiltersChange={setDraftFilters}
 				onSearch={handleSearch}
 				onPanelOpenChange={handlePanelOpenChange}
+				collapsed={navCollapsed}
 			/>
 
 			<main
@@ -1075,8 +1240,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				// aveva scelto il contrario di proposito; l'utente lo ha
 				// ribaltato per la sola HOME (dettaglio: 12-10-PLAN.md:22 resta
 				// valida, quella pagina scorre ancora come pagina).
-				className="fixed left-0 right-0 bottom-0 overflow-hidden"
-				style={{ top: navHeight }}
+				className="fixed left-0 right-0 bottom-0 overflow-hidden transition-[top] duration-200 ease-out motion-reduce:transition-none"
+				// Il bordo superiore sale insieme alla barra: senza, nasconderla
+				// lascerebbe una fascia vuota invece di restituire alla lista lo
+				// spazio che occupava — che e' esattamente il motivo per cui la si
+				// nasconde. Stessa durata e stessa curva della transizione di
+				// <nav>, cosi' le due si muovono come una cosa sola.
+				style={{ top: navCollapsed ? 0 : navHeight }}
 				// D-11: fuori portata da Tab e dal puntatore finche' il
 				// pannello desktop resta aperto (T-17-09).
 				inert={navPanelOpen}
@@ -1247,6 +1417,21 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 												</span>
 												<span className="text-xs text-muted-foreground">{listScopeLabel}</span>
 											</div>
+
+											{/* Il filtro per distanza e' stato chiesto ma non
+											    applicato: dirlo e' l'unica alternativa onesta a
+											    far passare l'intera regione per "quello che c'e'
+											    entro N km". */}
+											{radiusUnfiltered && (
+												<p
+													role="status"
+													className="mb-3 rounded-lg bg-muted px-3 py-2 text-xs text-foreground-secondary"
+												>
+													Non riesco a leggere la tua posizione: questi risultati{" "}
+													<strong className="font-medium">non sono filtrati per distanza</strong>.
+													Controlla i permessi di localizzazione, oppure cerca un comune.
+												</p>
+											)}
 
 											{events.length === 0 ? (
 												<div className="py-16 text-center">
