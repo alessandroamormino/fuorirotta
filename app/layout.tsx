@@ -16,7 +16,7 @@ const SITE_URL = (
 
 export const metadata: Metadata = {
 	title: {
-		default: "Fuorirotta — Eventi, Sagre e Feste in Lombardia",
+		default: "Fuorirotta",
 		template: "%s | Fuorirotta",
 	},
 	description:
