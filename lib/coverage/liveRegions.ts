@@ -20,32 +20,50 @@ import { prisma } from '../prisma'
 import { istatRegionToSlug } from '../scrapers/regionSlug'
 
 /**
- * Ri-misurato dal vivo sul Postgres locale il 2026-09-17, DOPO l'ingestione
- * di Emilia-Romagna e Puglia (15-03-PLAN.md, comando: `SELECT region,
- * count(*) FROM events WHERE date_start >= now() AND canonical_event_id IS
- * NULL GROUP BY region`):
+ * Ri-misurato dal vivo sul Postgres locale il 2026-09-19, DOPO l'ingestione
+ * dell'Alto Adige (19-01-SUMMARY.md, comando: `SELECT region, count(*) FROM
+ * events WHERE date_start >= now() AND canonical_event_id IS NULL AND
+ * region IS NOT NULL GROUP BY region ORDER BY count DESC`):
  *
- *   lombardia:       1.806 eventi futuri canonici
- *   emilia-romagna:      6 eventi futuri canonici (bash scripts/dev-db.sh
- *                        npx tsx -e "runRegion('emilia-romagna')", dati reali)
- *   puglia:              0 — non ingerita: l'host resta bloccato dal difetto
- *                        TLS verificato in 15-RESEARCH.md Pitfall 2 e
- *                        riverificato in questa sessione (identico
- *                        UNABLE_TO_VERIFY_LEAF_SIGNATURE), non un problema di
- *                        questa fase (T-15-02 vieta di aggirarlo)
+ *   trentino-alto-adige: 17.449 eventi futuri canonici
+ *   lombardia:            1.647 eventi futuri canonici
+ *   toscana:                  7 eventi futuri canonici
+ *   emilia-romagna:            5 eventi futuri canonici
+ *   umbria:                    3 eventi futuri canonici
+ *   piemonte:                  3 eventi futuri canonici
+ *   campania:                  2 eventi futuri canonici
+ *   lazio:                     2 eventi futuri canonici
+ *   veneto:                    2 eventi futuri canonici
+ *   liguria:                   1 evento futuro canonico
  *
- * Emilia-Romagna, la piu' povera fra le regioni EFFETTIVAMENTE ingerite oggi,
- * ha 6 eventi futuri. 2 sta abbondantemente sotto quel numero (un terzo) e
- * abbondantemente sopra una manciata di righe residue — una manciata di
- * eventi finiti in una regione per un errore di aggancio non deve mai
- * sembrare una sorgente viva. Nessuna isteresi, nessuna finestra di grazia
- * (D-02): una regione con esattamente 2 eventi futuri NON e' viva, con 3 lo
- * e'. Puglia resta a 0 e quindi fuori da getLiveRegions() finche' l'host non
- * torna raggiungibile — non e' un difetto di questa costante, e' il segnale
- * che funziona esattamente come D-01 lo vuole: una sorgente morta si spegne
- * da sola.
+ * Regola di scelta (D-07, Fase 19): il valore deve stare sopra il massimo
+ * osservato fra le regioni servite dalla sola SoloSagre — al momento della
+ * ricerca le piu' ricche erano toscana 7, piemonte 3, umbria 3, confermate
+ * identiche dalla misura di oggi — con un margine dichiarato. Adottata la
+ * proposta di 19-RESEARCH.md: COVERAGE_THRESHOLD = 10, quasi il doppio del
+ * massimo osservato (7), cosi' un rumore SoloSagre-only non puo' sembrare
+ * una fonte viva nemmeno con qualche evento residuo in piu' di quelli
+ * misurati oggi.
+ *
+ * Regioni che passano da viva (soglia precedente, 2) a spenta (soglia
+ * nuova, 10) per effetto di questo cambio, nominate per iscritto prima del
+ * deploy come richiesto da D-07:
+ *
+ *   - toscana        (7 eventi futuri canonici, sola SoloSagre)
+ *   - emilia-romagna (5 eventi futuri canonici, fonte "ricca" adottata in
+ *                     Fase 15 ma mai arrivata al volume promesso — vedi
+ *                     19-CONTEXT.md "Deferred Ideas", riconsiderazione
+ *                     rimandata a una fase futura)
+ *   - umbria         (3 eventi futuri canonici, sola SoloSagre)
+ *   - piemonte       (3 eventi futuri canonici, sola SoloSagre)
+ *
+ * Nessuna isteresi, nessuna finestra di grazia (D-02, Fase 15): una regione
+ * con esattamente 10 eventi futuri NON e' viva, con 11 lo e'. Le pagine
+ * delle quattro regioni sopra passano da indicizzabili a `200 + noindex`
+ * (Fase 15 D-11) — conseguenza voluta del segnale di copertura che funziona
+ * come progettato, non una rimozione (19-02-PLAN.md).
  */
-export const COVERAGE_THRESHOLD = 2
+export const COVERAGE_THRESHOLD = 10
 
 export async function getLiveRegions(): Promise<Set<string>> {
   const today = new Date()
