@@ -82,24 +82,36 @@ echo "S1 OK: ricalcolo in ${s1_ms}ms su ${s1_features} feature, entro il tetto d
 
 # --- S2: caso vuoto — zero eventi futuri, nessuna eccezione, righe ---------
 # ripristinate esattamente com'erano
+# Il confine e' date_trunc('day', now() AT TIME ZONE 'UTC'), NON now(): e' il
+# `today` di computeClusterData() (lib/clusterCache.ts, today.setUTCHours(0,0,0,0)).
+# Con now() questa sezione spostava solo gli eventi ANCORA a venire e lasciava
+# in piedi quelli datati oggi a un'ora gia' passata — che computeClusterData()
+# invece conta eccome. Il "caso vuoto" non era quindi vuoto, e l'asserzione
+# "0 feature" falliva su un prodotto corretto. Latente finche' il catalogo
+# locale non ha avuto eventi datati oggi: si e' manifestato con l'ingest
+# dell'Alto Adige (274 righe, 2026-09-19).
 before_count="$(docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
   psql -U fuorirotta -d fuorirotta_dev -tAc \
-  "SELECT count(*) FROM events WHERE date_start >= now() AND canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
+  "SELECT count(*) FROM events WHERE date_start >= date_trunc('day', now() AT TIME ZONE 'UTC') AND canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
 
 cat > "${tmp_js}" <<'JS'
 (async () => {
   const { prisma } = await import('../lib/prisma')
   const { computeClusterData } = await import('../lib/clusterCache')
 
-  // Sposta ogni evento futuro con coordinate risolte 100 anni nel passato,
-  // cosi' il filtro `dateStart >= oggi` di computeClusterData() non incontra
-  // nulla. RETURNING id cattura ESATTAMENTE le righe toccate, non un
-  // intervallo di date che potrebbe includere righe che questo gate non ha
-  // mai spostato.
+  // Sposta 100 anni nel passato ogni evento che computeClusterData()
+  // conterebbe, cosi' il suo filtro non incontra nulla. Il confine e' lo
+  // STESSO che usa lei — date_trunc('day', now() AT TIME ZONE 'UTC'), cioe'
+  // il `today` di lib/clusterCache.ts — e non now(): con now() restavano in
+  // piedi gli eventi datati oggi a un'ora gia' passata, che lei conta, e il
+  // "caso vuoto" non era vuoto.
+  // RETURNING id cattura ESATTAMENTE le righe toccate, non un intervallo di
+  // date che potrebbe includere righe che questo gate non ha mai spostato.
   const affected = await prisma.$queryRaw`
     UPDATE events
     SET date_start = date_start - interval '100 years'
-    WHERE date_start >= now() AND canonical_event_id IS NULL
+    WHERE date_start >= date_trunc('day', now() AT TIME ZONE 'UTC')
+      AND canonical_event_id IS NULL
       AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL
     RETURNING id
   `
@@ -140,9 +152,12 @@ s2_exit=0
 s2_output="$(bash scripts/dev-db.sh npx tsx "${tmp_js}" 2>&1)" || s2_exit=$?
 echo "${s2_output}" | grep -q '^OK$' || fail "S2 (caso vuoto): ${s2_output}"
 
+# Stesso confine di before_count qui sopra e dell'UPDATE: due conteggi che si
+# confrontano devono contare la stessa cosa, altrimenti la differenza misura
+# il disallineamento fra le due query invece di un ripristino mancato.
 after_count="$(docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
   psql -U fuorirotta -d fuorirotta_dev -tAc \
-  "SELECT count(*) FROM events WHERE date_start >= now() AND canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
+  "SELECT count(*) FROM events WHERE date_start >= date_trunc('day', now() AT TIME ZONE 'UTC') AND canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
 [[ "${before_count}" == "${after_count}" ]] || fail "S2: il conteggio degli eventi futuri prima/dopo il caso vuoto non torna (${before_count} vs ${after_count}) — il ripristino non ha funzionato"
 
 echo "S2 OK: a zero eventi futuri computeClusterData() restituisce una FeatureCollection vuota senza eccezioni; righe ripristinate esattamente (${before_count} invariato)"
