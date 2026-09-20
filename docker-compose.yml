@@ -1,13 +1,15 @@
 services:
   fuorirotta-frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        DATABASE_URL: ${DATABASE_URL}
-        DIRECT_URL: ${DIRECT_URL}
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-        NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN}
+    # L'immagine si COSTRUISCE in CI (.github/workflows/build.yml) e si
+    # pubblica su GHCR: il server non compila piu'. FUORIROTTA_IMAGE la
+    # sceglie, ed e' scripts/deploy.sh a valorizzarla — il default serve solo
+    # a non lasciare il file senza senso se qualcuno lancia `docker compose
+    # up` a mano.
+    # Perche' non si costruisce piu' qui: un'immagine ricostruita dallo stesso
+    # commit NON e' la stessa immagine (npm ci risolve pacchetti che cambiano,
+    # node:20-alpine e' un tag mobile), quindi "ricostruisco al bisogno" non
+    # e' un piano di rollback. Serve conservare l'artefatto.
+    image: ${FUORIROTTA_IMAGE:-ghcr.io/alessandroamormino/fuorirotta:latest}
     container_name: fuorirotta-frontend
     ports:
       - "3000:3000"

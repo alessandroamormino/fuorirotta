@@ -1,0 +1,44 @@
+# Rilascio a comando: nessun deploy automatico al merge.
+#
+# Il salto vero e' da venti comandi a uno, non da uno a zero — e restare noi a
+# decidere QUANDO costa niente. La logica sta tutta in scripts/deploy.sh, che
+# e' anche cio' che si lancia a mano via SSH se Actions non risponde.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versione da rilasciare (es. v2.1.0 oppure sha-33b20e4). Per tornare indietro, una versione precedente.'
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-produzione
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Chiave host da un secret, non da ssh-keyscan al volo: fidarsi della
+      # prima risposta ad ogni esecuzione aprirebbe una finestra di
+      # man-in-the-middle su una sessione che ha root sul server.
+      - name: Preparare SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/stdin ~/.ssh/id_deploy <<< "${{ secrets.DEPLOY_SSH_KEY }}"
+          install -m 644 /dev/stdin ~/.ssh/known_hosts <<< "${{ secrets.DEPLOY_KNOWN_HOSTS }}"
+
+      - name: Rilascio
+        run: |
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash /opt/docker/fuori-rotta/fuorirotta/scripts/deploy.sh '${{ inputs.version }}'"
+
+      - name: Cosa c'e' in produzione adesso
+        if: always()
+        run: |
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cat /opt/docker/fuori-rotta/fuorirotta/.deployed" >> "$GITHUB_STEP_SUMMARY"

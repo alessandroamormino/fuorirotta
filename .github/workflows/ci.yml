@@ -1,0 +1,43 @@
+# Gate che girano su qualunque macchina, senza database e senza dev server.
+#
+# Perche' non gira `npm test` intero: 13 dei 32 gate vogliono il Postgres
+# locale (scripts/dev-db.sh) e alcuni un catalogo REALE gia' ingerito —
+# `check:region-coverage` asserisce che lombardia, trentino-alto-adige e lazio
+# siano vive sui dati veri. Su un runner vuoto passerebbero per vacuita', che
+# e' peggio che non eseguirli. Restano in `npm run test:local`, e `npm test`
+# continua a eseguirli entrambi: nessun gate e' stato tolto dalla catena, solo
+# diviso in due meta' che non si sovrappongono.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # postinstall esegue gia' `prisma generate`: senza, tsc non conosce i
+      # tipi del client e fallisce.
+      - run: npm ci
+
+      # Non bloccante di proposito: il repo ha 47 problemi PREESISTENTI (8
+      # errori) in file che questa pipeline non ha scritto. Il risultato resta
+      # visibile nel log; quando gli 8 errori saranno risolti, togliere questa
+      # riga e far fallire il job.
+      - name: Lint (non bloccante, debito preesistente)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Gate senza database
+        run: npm run test:ci

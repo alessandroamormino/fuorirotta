@@ -1,0 +1,105 @@
+# Costruisce l'immagine e la pubblica su GHCR.
+#
+# Perche' esiste: fino al 2026-09-20 l'immagine si costruiva SUL SERVER e i
+# "backup" di rollback erano `docker tag`, cioe' secondi NOMI degli stessi byte
+# sulla stessa macchina. Un disco morto o un `docker image prune -a` se li
+# portava via tutti insieme. E ricostruire lo stesso commit non restituisce la
+# stessa immagine: `npm ci` risolve pacchetti che cambiano e `node:20-alpine`
+# e' un tag mobile. Per poter tornare indietro bisogna conservare
+# l'ARTEFATTO, non la ricetta — ed e' cio' che fa questo workflow.
+#
+# Le credenziali NON finiscono nell'immagine pubblicata: ARG/ENV vivono solo
+# nello stage `builder`, mentre lo stage `runner` riparte da `FROM base` e non
+# li eredita. `.dockerignore` esclude gia' `.env*` e `.git`.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # serve alla Release sui tag
+      packages: write   # serve alla push su GHCR
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guardia: un segreto mancante non deve produrre un'immagine costruita
+      # con una stringa vuota al posto di un URL. Meglio fallire qui che
+      # scoprirlo in produzione.
+      - name: Segreti e variabili richiesti
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          NEXT_PUBLIC_MAPBOX_TOKEN: ${{ secrets.NEXT_PUBLIC_MAPBOX_TOKEN }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+        run: |
+          missing=0
+          for k in DATABASE_URL DIRECT_URL NEXT_PUBLIC_MAPBOX_TOKEN NEXT_PUBLIC_APP_URL; do
+            if [ -z "${!k}" ]; then echo "manca: $k"; missing=1; fi
+          done
+          [ "$missing" = "0" ] || { echo "Vedi DEPLOYMENT.md, sezione 'Secrets and variables the workflows need'."; exit 1; }
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # sha-<commit> su ogni push di main: ogni commit ha un artefatto
+      # durevole fuori dalla macchina. vX.Y.Z e latest solo sui tag.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      # `next build` interroga il database in prerendering (la home e'
+      # statica con revalidate 5m), quindi il build ha bisogno delle
+      # credenziali vere — le stesse che finora leggeva dal .env del server.
+      - uses: docker/build-push-action@v6
+        id: push
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            DIRECT_URL=${{ secrets.DIRECT_URL }}
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_MAPBOX_TOKEN=${{ secrets.NEXT_PUBLIC_MAPBOX_TOKEN }}
+
+      # Il digest e' l'unico identificatore immutabile: i tag si spostano.
+      - name: Riepilogo
+        run: |
+          echo "### Immagine pubblicata" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "digest: ${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release (solo sui tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            Immagine: `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
+            Digest: `${{ steps.push.outputs.digest }}`
+
+            Rilascio: workflow **Deploy** -> `Run workflow` -> versione `${{ github.ref_name }}`.
