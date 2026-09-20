@@ -9,12 +9,12 @@
 # __test_coverage_source__), mai un dato reale: nessuna riga esistente viene
 # toccata, stesso idioma di scripts/region-lock.test.sh. S3/S7/S26 (Fase 15,
 # 15-03-PLAN.md; Fase 19, 19-02-PLAN.md dopo la ricalibrazione D-07) leggono
-# invece i dati REALI gia' nel Postgres locale — lombardia, emilia-romagna e
-# trentino-alto-adige devono essere state ingerite localmente prima di
-# lanciare questo gate: lombardia/emilia-romagna via `bash scripts/dev-db.sh
-# npx tsx -e` con runRegion() (vedi 15-03-SUMMARY.md), trentino-alto-adige via
-# `npm run scrape:local -- --region trentino-alto-adige` (vedi
-# 19-01-SUMMARY.md). Puglia non e' asserita da nessuna parte, perche' l'host
+# invece i dati REALI gia' nel Postgres locale — lombardia, trentino-alto-adige
+# e lazio devono essere state ingerite localmente prima di lanciare questo
+# gate: lombardia via `bash scripts/dev-db.sh npx tsx -e` con runRegion()
+# (vedi 15-03-SUMMARY.md), trentino-alto-adige via `npm run scrape:local --
+# --region trentino-alto-adige` (vedi 19-01-SUMMARY.md), lazio via `npm run
+# scrape:local -- --region lazio` (adattatore Roma, 2026-09-20). Puglia non e' asserita da nessuna parte, perche' l'host
 # resta bloccato dal difetto TLS verificato in 15-RESEARCH.md. Richiede il
 # Postgres locale (scripts/dev-db.sh, D-17) — mai il database di produzione.
 set -euo pipefail
@@ -142,17 +142,53 @@ echo "S2 OK: $((coverage_threshold + 1)) eventi futuri (== COVERAGE_THRESHOLD + 
 
 psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
 
+# --- S8: un evento IN CORSO conta quanto uno futuro (2026-09-20). Righe
+# sintetiche con date_start nel PASSATO e date_end nel FUTURO: con la regola
+# precedente (`date_start >= oggi`) il conteggio per la regione di prova
+# sarebbe ZERO e l'asserzione fallirebbe, quindi questo blocco non e' vacuo —
+# e' la prova della regola nuova, e non dipende da quali dati reali siano
+# stati ingeriti ne' da che giorno sia oggi. La stessa finestra che
+# app/api/events/route.ts usa per MOSTRARE gli eventi (bugfix 2026-09-10).
+psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, region, canonical_category) SELECT '${test_source}', 'c' || gs, 'Evento di prova in corso', now() - interval '30 days', now() + interval '30 days', '${test_region}', 'Altro' FROM generate_series(1, $((coverage_threshold + 1))) AS gs" >/dev/null
+
+s8_output="$(bash scripts/dev-db.sh npx tsx -e '
+(async () => {
+  const { getLiveRegions } = await import("./lib/coverage/liveRegions")
+  const live = await getLiveRegions()
+  console.log(live.has(process.env.COVERAGE_TEST_REGION as string) ? "true" : "false")
+  process.exit(0)
+})().catch((err) => { console.error("ERROR: " + err.message); process.exit(1) })
+' 2>&1)"
+[[ "${s8_output}" == "true" ]] || fail "S8: $((coverage_threshold + 1)) eventi IN CORSO (iniziati un mese fa, finiscono fra un mese) non rendono viva la regione di prova — il segnale di copertura conta di nuovo i soli dateStart futuri, e diverge da cio' che /api/events mostra: ${s8_output}"
+echo "S8 OK: $((coverage_threshold + 1)) eventi in corso (date_start nel passato, date_end nel futuro) -> regione di prova viva"
+
+psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
+
 # --- S3: getLiveRegions() su DATI REALI (Fase 15, D-14; Fase 19, D-07) —
 # lombardia e trentino-alto-adige devono comparire dopo l'ingestione locale
-# di 19-01-PLAN.md. emilia-romagna (5 eventi futuri canonici, misurato in
-# 19-02-PLAN.md) e' invece asserita ASSENTE: COVERAGE_THRESHOLD e' stato
-# ricalibrato a 10 (D-07) proprio perche' 5 sta sotto quel valore — la
-# conseguenza voluta della ricalibrazione, provata come comportamento invece
-# che restare una frase nel commento della costante. Puglia NON viene
-# asserita qui: l'host resta bloccato dal difetto TLS verificato
-# (15-RESEARCH.md Pitfall 2), quindi non e' mai stata ingerita in questo
-# ambiente — asserirla qui la farebbe fallire per un motivo di rete che
-# questo gate non ha modo di risolvere, non per un difetto del segnale.
+# di 19-01-PLAN.md.
+#
+# 2026-09-20: qui c'era l'asserzione opposta su emilia-romagna (ASSENTE con 5
+# eventi futuri). Non vale piu', e non perche' la soglia sia cambiata: la
+# FINESTRA e' cambiata. getLiveRegions() conta ora gli eventi DISPONIBILI (in
+# corso o futuri), la stessa finestra che /api/events usa per mostrarli —
+# prima contava i soli `dateStart >= oggi` e dichiarava spenta una regione
+# che la mappa mostrava piena. Misurato sul Postgres locale quel giorno:
+# emilia-romagna 10 -> 25, lazio 8 -> 37. Entrambe passano sopra soglia.
+#
+# lazio e' asserita PRESENTE apposta: e' il caso che prova la regola nuova
+# sui dati reali, perche' l'adattatore Roma porta soprattutto mostre e
+# rassegne gia' cominciate (8 eventi che iniziano dopo oggi, 37 disponibili).
+# Con la regola vecchia sarebbe spenta.
+#
+# veneto e' asserita ASSENTE: regione ISTAT reale, con eventi in catalogo (7
+# disponibili) ma sotto COVERAGE_THRESHOLD — la soglia secca provata nella
+# direzione bassa sui dati reali, non solo sui sintetici di S1.
+#
+# Puglia NON viene asserita qui: l'host resta bloccato dal difetto TLS
+# verificato (15-RESEARCH.md Pitfall 2), quindi non e' mai stata ingerita in
+# questo ambiente — asserirla qui la farebbe fallire per un motivo di rete
+# che questo gate non ha modo di risolvere, non per un difetto del segnale.
 s3_output="$(bash scripts/dev-db.sh npx tsx -e '
 (async () => {
   const { getLiveRegions } = await import("./lib/coverage/liveRegions")
@@ -163,8 +199,9 @@ s3_output="$(bash scripts/dev-db.sh npx tsx -e '
 ' 2>&1)"
 printf '%s' "${s3_output}" | grep -q '"lombardia"' || fail "S3: getLiveRegions() non contiene 'lombardia' sui dati reali: ${s3_output}"
 printf '%s' "${s3_output}" | grep -q '"trentino-alto-adige"' || fail "S3: getLiveRegions() non contiene 'trentino-alto-adige' sui dati reali (ingestione mancante? vedi 19-01-SUMMARY.md): ${s3_output}"
-printf '%s' "${s3_output}" | grep -q '"emilia-romagna"' && fail "S3: getLiveRegions() contiene ancora 'emilia-romagna' sui dati reali, ma con COVERAGE_THRESHOLD=${coverage_threshold} dovrebbe essersi spenta (D-07): ${s3_output}"
-echo "S3 OK: getLiveRegions() su dati reali contiene lombardia e trentino-alto-adige, e non contiene piu' emilia-romagna: ${s3_output}"
+printf '%s' "${s3_output}" | grep -q '"lazio"' || fail "S3: getLiveRegions() non contiene 'lazio' sui dati reali — o manca l'ingestione di Roma, o la finestra e' tornata a contare i soli dateStart futuri: ${s3_output}"
+printf '%s' "${s3_output}" | grep -q '"veneto"' && fail "S3: getLiveRegions() contiene 'veneto', che ha eventi in catalogo ma sotto COVERAGE_THRESHOLD=${coverage_threshold}: ${s3_output}"
+echo "S3 OK: getLiveRegions() su dati reali contiene lombardia, trentino-alto-adige e lazio, e non contiene veneto: ${s3_output}"
 
 # --- Setup comune di prova per S9/S10 (soglia secca sulla provincia, D-10) -
 # Un comune di prova dedicato (mai un comune reale): getLiveProvinces() legge
@@ -264,18 +301,19 @@ http_code7="$(curl -s -o "${resp7}" -w '%{http_code}' --max-time 15 "http://127.
 grep -qi "noindex" "${resp7}" && fail "S7: /trentino-alto-adige e' viva (S3) ma la pagina porta ancora 'noindex'"
 echo "S7 OK: GET /trentino-alto-adige (regione ISTAT reale, viva) risponde 200 senza noindex"
 
-# --- S26: /emilia-romagna (regione ISTAT reale, spenta dalla ricalibrazione
-# D-07, Fase 19) -> 200 CON noindex — l'altra direzione del contratto HTTP
-# che S7 prova per trentino-alto-adige. D-11 (Fase 15): una regione ISTAT
-# reale non coperta risponde SEMPRE 200+noindex, mai 404, mai un redirect —
-# lo stesso contratto che S6 gia' verifica su /molise, ora provato anche sul
-# caso "era viva, si e' spenta per una ricalibrazione della soglia" invece
-# che solo sul caso "non e' mai stata coperta".
+# --- S26: /veneto (regione ISTAT reale, con eventi in catalogo ma sotto
+# soglia) -> 200 CON noindex — l'altra direzione del contratto HTTP che S7
+# prova per trentino-alto-adige. D-11 (Fase 15): una regione ISTAT reale non
+# coperta risponde SEMPRE 200+noindex, mai 404, mai un redirect. Diverso da
+# S6 (/molise, zero eventi): qui la regione ha dei dati, solo non abbastanza
+# — il caso piu' facile da rompere per sbaglio.
+# 2026-09-20: era /emilia-romagna, che con la finestra "in corso o futuri" e'
+# tornata viva (vedi S3).
 resp26="${tmp_dir}/resp26.html"
-http_code26="$(curl -s -o "${resp26}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/emilia-romagna")"
-[[ "${http_code26}" == "200" ]] || fail "S26: atteso 200 su /emilia-romagna (regione ora spenta da D-07), ottenuto ${http_code26}"
-grep -qi "noindex" "${resp26}" || fail "S26: /emilia-romagna e' spenta (S3) ma la pagina non porta 'noindex'"
-echo "S26 OK: GET /emilia-romagna (regione ISTAT reale, spenta da D-07) risponde 200 con noindex"
+http_code26="$(curl -s -o "${resp26}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/veneto")"
+[[ "${http_code26}" == "200" ]] || fail "S26: atteso 200 su /veneto (regione reale sotto soglia), ottenuto ${http_code26}"
+grep -qi "noindex" "${resp26}" || fail "S26: /veneto e' sotto soglia (S3) ma la pagina non porta 'noindex'"
+echo "S26 OK: GET /veneto (regione ISTAT reale con eventi ma sotto soglia) risponde 200 con noindex"
 
 # --- S15: /lombardia/bergamo (provincia viva, dati reali) -> 200, con
 # almeno un link a un evento reale nel corpo. Dato reale (come S3/S6/S7):
@@ -289,8 +327,8 @@ echo "S15 OK: GET /lombardia/bergamo (provincia viva) risponde 200 con almeno un
 
 # --- S16: /emilia-romagna/ferrara (provincia esistente, oggi sotto soglia)
 # -> 200 + noindex. D-11: mai 404, mai redirect per una provincia reale non
-# ancora coperta. Dato reale: emilia-romagna ha solo bologna sopra soglia
-# oggi (6 eventi futuri totali, S3/S7).
+# ancora coperta. Dato reale: in emilia-romagna solo bologna e' sopra soglia
+# (14 eventi disponibili, misurato il 2026-09-20); ferrara resta sotto.
 resp16="${tmp_dir}/resp16.html"
 http_code16="$(curl -s -o "${resp16}" -w '%{http_code}' --max-time 15 "http://127.0.0.1:${port}/emilia-romagna/ferrara")"
 [[ "${http_code16}" == "200" ]] || fail "S16: atteso 200 su /emilia-romagna/ferrara (provincia reale, non coperta), ottenuto ${http_code16}"
@@ -433,5 +471,5 @@ echo "S14 OK: due generazioni consecutive della sitemap producono lo stesso ordi
 
 stop_server
 
-echo "PASS: segnale di copertura (ROLL-03) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) + cablaggio su app/HomeClient.tsx e sulla vista mappa mobile (ROLL-04 closure) + ricalibrazione COVERAGE_THRESHOLD (D-07, Fase 19) — S1..S26 verdi"
+echo "PASS: segnale di copertura (ROLL-03) + finestra 'in corso o futuri' allineata a /api/events (S8, 2026-09-20) + pagine /[regione]/[provincia] (ROLL-06) + sitemap province (ROLL-05) + indicatore di copertura /api/events (ROLL-04, Fase 15 piano 04) + cablaggio su app/HomeClient.tsx e sulla vista mappa mobile (ROLL-04 closure) — S1..S26 verdi"
 exit 0
