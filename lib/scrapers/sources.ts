@@ -322,6 +322,54 @@ export const SOURCE_META: SourceMeta[] = [
       Altro: 'Altro'
     }
   },
+  {
+    // Comune di Torino — eventi.comune.torino.it (2026-09-20).
+    // Base giuridica: art. 52 comma 2 CAD (dati di una PA senza licenza
+    // espressa = aperti). robots.txt vieta solo /wp-admin/ e non dichiara
+    // Crawl-delay; /wp-json/ e' consentito.
+    // In FONDO a SOURCE_META di proposito: l'ordine di questo array e' un
+    // contratto (getRegions/crontab/scoping ci dipendono) e piemonte e' gia'
+    // introdotta piu' su da solosagre — inserirla altrove la sposterebbe.
+    // Nessuna riga di crontab nuova: piemonte ha gia' la sua dalla Fase 15.
+    id: 'torino',
+    region: 'piemonte',
+    type: 'html',
+    url: 'https://eventi.comune.torino.it/wp-json/wp/v2/event',
+    trustRank: 2,
+    // Categorie osservate sulla fixture reale (100 record): Mostra 22,
+    // Varie 15, Musica 12, Festival 4, Danza 4, Laboratorio 3, Teatro 2,
+    // Sport 1, Fiera 1, Cinema 1. "Varie" e' il segnaposto della sorgente e
+    // mappa onestamente ad 'Altro' invece di inventare una categoria.
+    categoryMap: {
+      Mostra: 'Arte e cultura',
+      Musica: 'Musica e spettacolo',
+      Festival: 'Musica e spettacolo',
+      Danza: 'Musica e spettacolo',
+      Teatro: 'Musica e spettacolo',
+      Cinema: 'Musica e spettacolo',
+      Laboratorio: 'Arte e cultura',
+      Conferenza: 'Arte e cultura',
+      Libri: 'Arte e cultura',
+      // Emerse dall'ingest REALE, non dalla fixture di 100 record: la
+      // fixture e' un campione, il registro delle categorie no.
+      Lettura: 'Arte e cultura',
+      Formazione: 'Arte e cultura',
+      Sport: 'Sport e outdoor',
+      Fiera: 'Fiere e mercati',
+      Mercato: 'Fiere e mercati',
+      Varie: 'Altro',
+      // Ripiego dal titolo (lib/categories/fromTitle.ts) quando la sorgente
+      // non dichiara nulla: produce nomi canonici, che vanno comunque
+      // mappati 1:1 — lezione dell'adattatore Firenze.
+      'Sagre e feste': 'Sagre e feste',
+      'Musica e spettacolo': 'Musica e spettacolo',
+      'Arte e cultura': 'Arte e cultura',
+      'Fiere e mercati': 'Fiere e mercati',
+      'Sport e outdoor': 'Sport e outdoor',
+      'Food & Wine': 'Food & Wine',
+      Altro: 'Altro'
+    }
+  },
 ]
 
 /**

@@ -258,7 +258,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   const again = transformFirenzeFeatures(features, { dateFrom: '2026-09-19' })
   check(
     'i sourceId sono deterministici fra due esecuzioni',
-    again.map((e) => e.sourceId).join(' ') === events.map((e) => e.sourceId).join(' ')
+    JSON.stringify(again.map((e) => e.sourceId)) === JSON.stringify(events.map((e) => e.sourceId))
   )
 
   check(
