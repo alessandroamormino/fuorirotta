@@ -31,9 +31,16 @@ cd "${repo_root}"
 
 WITH_INLOMBARDIA=false
 ONLY=""
+# Tetto per fonte, ATTIVO per default: questo script gira sul Postgres di
+# sviluppo, dove riversare il catalogo intero di ogni fonte nuova rende il
+# database illeggibile e le prove lente. La produzione non usa questo script
+# (usa il crontab per regione, senza --limit): li' si legge tutto.
+# --limit 0 toglie il tetto, per quando si vuole misurare il volume reale.
+LIMIT=50
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-inlombardia) WITH_INLOMBARDIA=true; shift ;;
+    --limit) LIMIT="${2:-50}"; shift 2 ;;
     --only) ONLY="${2:-}"; shift 2 ;;
     *) echo "Argomento sconosciuto: $1" >&2; exit 2 ;;
   esac
@@ -66,6 +73,7 @@ report="${log_dir}/report-${stamp}.tsv"
 printf "sorgente\tregione\tesito\tsecondi\tsalvati\taggiornati\tfuturi_dopo\n" > "${report}"
 
 echo "Giro di ingest — ${#JOBS[@]} sorgenti, log in ${log_dir}/"
+echo "Tetto per fonte: $([[ "${LIMIT}" == "0" ]] && echo "NESSUNO" || echo "${LIMIT} eventi") — solo prove locali, la produzione legge tutto."
 echo "Interrompibile in qualunque momento: gli upsert sono idempotenti."
 echo ""
 
@@ -84,10 +92,12 @@ for job in "${JOBS[@]}"; do
   echo "──> ${etichetta}"
   out="${log_dir}/${src}${reg:+-${reg}}.log"
   t0=$(date +%s)
+  limit_args=()
+  [[ "${LIMIT}" != "0" ]] && limit_args=(--limit "${LIMIT}")
   if [[ -n "${reg}" ]]; then
-    bash scripts/dev-db.sh npx tsx lib/scrapers/runner.ts "${src}" --region "${reg}" > "${out}" 2>&1
+    bash scripts/dev-db.sh npx tsx lib/scrapers/runner.ts "${src}" --region "${reg}" "${limit_args[@]+"${limit_args[@]}"}" > "${out}" 2>&1
   else
-    bash scripts/dev-db.sh npx tsx lib/scrapers/runner.ts "${src}" > "${out}" 2>&1
+    bash scripts/dev-db.sh npx tsx lib/scrapers/runner.ts "${src}" "${limit_args[@]+"${limit_args[@]}"}" > "${out}" 2>&1
   fi
   rc=$?
   t1=$(date +%s)

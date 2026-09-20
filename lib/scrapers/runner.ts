@@ -241,7 +241,7 @@ async function recordScrapeRuns(results: ScrapeResult[], startedAt: Date): Promi
   }
 }
 
-// Run directly: npx tsx lib/scrapers/runner.ts [source] [--region <slug>] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
+// Run directly: npx tsx lib/scrapers/runner.ts [source] [--region <slug>] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--limit N]
 //
 // WR-02 (Fase 15 review): "solosagre" da solo NON basta piu' a identificare
 // una sorgente unica — SRC-04 lo condivide fra 20 regioni. `--region <slug>`
@@ -260,6 +260,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   const params: ScrapeParams = {}
   let sourceId: string | null = null
   let regionSlug: string | null = null
+  let eventLimit: number | null = null
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--from' && args[i + 1]) {
@@ -270,6 +271,21 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
       i++
     } else if (args[i] === '--region' && args[i + 1]) {
       regionSlug = args[i + 1]
+      i++
+    } else if (args[i] === '--limit' && args[i + 1]) {
+      // Tetto per le PROVE in locale: tiene il Postgres di sviluppo leggibile
+      // invece di riversarci l'intero catalogo di ogni fonte nuova. Il cron di
+      // produzione non lo passa mai, quindi in produzione legge tutto quello
+      // che la fonte espone — nessun limite implicito, mai.
+      // Tronca a valle dello scrape, non a monte: la richiesta di rete e'
+      // gia' partita e l'adattatore resta puro. Non risparmia banda, risparmia
+      // righe in tabella, che e' il problema che deve risolvere.
+      const parsed = Number.parseInt(args[i + 1], 10)
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        console.error(`[Scraper] --limit richiede un intero positivo, ricevuto "${args[i + 1]}".`)
+        process.exit(1)
+      }
+      eventLimit = parsed
       i++
     } else if (!args[i].startsWith('--')) {
       sourceId = args[i]
@@ -309,8 +325,13 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
       const result: ScrapeResult = { ...adapterResult, region: entry.region }
       logMetrics([result])
       await recordScrapeRuns([result], startedAt)
-      if (result.events.length > 0) {
-        const { saved, skipped } = await saveEvents(result.events, entry.region)
+      let toSave = result.events
+      if (eventLimit !== null && toSave.length > eventLimit) {
+        console.log(`[Scraper] --limit ${eventLimit}: salvo ${eventLimit} eventi su ${toSave.length} trovati (prova locale, NON e' il comportamento di produzione).`)
+        toSave = toSave.slice(0, eventLimit)
+      }
+      if (toSave.length > 0) {
+        const { saved, skipped } = await saveEvents(toSave, entry.region)
         console.log(`[Scraper] Done. ${saved} new events saved, ${skipped} skipped.`)
       } else {
         console.log('[Scraper] No events found.')
