@@ -79,7 +79,13 @@ output2="$(npx tsx scripts/generate-crontab.ts)"
 [[ "${output}" == "${output2}" ]] || fail "S4: due invocazioni consecutive producono output diverso"
 
 region_lines="$(printf '%s\n' "${output}" | grep -E 'cron-scrape\.sh' || true)"
-expected_region_order="$(npx tsx -e "import('./lib/scrapers/runner').then(m => console.log(m.getRegions().join(',')))")"
+# Node 20 (i runner di CI e i container node:20-alpine del server) NON
+# riconosce gli export nominati dei moduli che tsx compila in CommonJS: il
+# namespace di `await import()` porta il solo `default`. Node 24, quello di
+# sviluppo, li espone entrambi. Da qui `m.default ?? m`, che e' corretto su
+# tutte e due — misurato il 2026-09-20, dopo che la CI ha fatto cadere questo
+# gate su Ubuntu mentre sul Mac era verde.
+expected_region_order="$(npx tsx -e "import('./lib/scrapers/runner').then(mod => { const m = mod.default ?? mod; console.log(m.getRegions().join(',')) })")"
 actual_region_order="$(printf '%s\n' "${region_lines}" | sed -E 's#.*cron-scrape\.sh ([a-z-]+) .*#\1#' | paste -sd, -)"
 [[ "${actual_region_order}" == "${expected_region_order}" ]] || fail "S4: ordine delle righe regione (${actual_region_order}) diverso dall'ordine di dichiarazione di SOURCE_REGISTRY (${expected_region_order})"
 echo "ok  S4: output byte-identico su due invocazioni, ordine righe regione = ordine di dichiarazione"

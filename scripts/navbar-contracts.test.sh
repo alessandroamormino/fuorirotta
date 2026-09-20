@@ -39,6 +39,14 @@
 #         il listener manuale su document rimosso da T-09-13 non torni.
 set -euo pipefail
 
+# Tabulazione letterale. NON si scrive `\t` dentro un pattern di grep/sed: BSD
+# (macOS) la interpreta come tabulazione, GNU (Linux, e i runner di CI) come la
+# lettera `t`. Il gate girava solo su macOS e il difetto e' rimasto latente
+# finche' la CI non l'ha eseguito su Ubuntu: `grep '^\treturn ($'` non trovava
+# nulla, usciva 1, e con `set -euo pipefail` lo script moriva in silenzio dopo
+# l'ultimo `ok` — senza stampare alcun messaggio di fallimento.
+TAB="$(printf '\t')"
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 repo_root="$(cd -- "${script_dir}/.." >/dev/null 2>&1 && pwd -P)"
 cd "${repo_root}"
@@ -225,7 +233,7 @@ echo "ok  T-17-01: le guardie di tipo sul ripristino (radius/comuneId/comuneIsta
 # 5. D-08, regola unica: clearMobile chiama resetFilters, senza un proprio
 # azzeramento duplicato. Verificato sull'intervallo di righe della funzione,
 # non sull'intero file.
-clearmobile_body="$(sed -n '/const clearMobile = () => {/,/^\t};$/p' lib/hooks/useNavbarSearch.ts)"
+clearmobile_body="$(sed -n "/const clearMobile = () => {/,/^${TAB}};\$/p" lib/hooks/useNavbarSearch.ts)"
 [[ -n "${clearmobile_body}" ]] \
   || fail "D-08: clearMobile non trovata in lib/hooks/useNavbarSearch.ts"
 echo "${clearmobile_body}" | grep -q 'resetFilters()' \
@@ -314,7 +322,7 @@ echo "ok  D-09: app/layout.tsx e components/navbar/MobileSearchOverlay.tsx non i
 # solo con l'aspetto sbagliato). Isola il blocco `className ?? ...` e
 # filtra i commenti prima di cercare "fixed", perche' il commento che spiega
 # la regola nomina la parola legittimamente.
-default_classname_block="$(sed -n '/className ??/,/^\t\t\t}/p' components/ui/ThemeToggle.tsx | grep -vE '^[[:space:]]*(//|\*|/\*)')"
+default_classname_block="$(sed -n "/className ??/,/^${TAB}${TAB}${TAB}}/p" components/ui/ThemeToggle.tsx | grep -vE '^[[:space:]]*(//|\*|/\*)')"
 [[ -n "${default_classname_block}" ]] \
   || fail "D-09: non trovo piu' il blocco del default className in components/ui/ThemeToggle.tsx — il gate non puo' verificarlo"
 if echo "${default_classname_block}" | grep -qE '\bfixed\b'; then
@@ -572,7 +580,7 @@ echo "ok  D-19: ${searchbar_trigger} dichiara la variante mobile con il badge de
 #    seconda riga sul ramo "desktop" del componente condiviso. L'ultimo
 #    `return (` del file e' il ramo desktop (il ramo mobile ritorna prima e
 #    dentro l'if, piu' in alto nel file).
-desktop_return_line="$(grep -n '^\treturn ($' "${searchbar_trigger}" | tail -1 | cut -d: -f1)"
+desktop_return_line="$(grep -n "^${TAB}return (\$" "${searchbar_trigger}" | tail -1 | cut -d: -f1)"
 [[ -n "${desktop_return_line}" ]] \
   || fail "D-19: non trovo piu' il return del ramo desktop in ${searchbar_trigger} — il gate non puo' verificarlo"
 desktop_branch="$(sed -n "${desktop_return_line},\$p" "${searchbar_trigger}")"
