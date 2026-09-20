@@ -289,7 +289,39 @@ export const SOURCE_META: SourceMeta[] = [
       'kultur fuerungen': 'Arte e cultura',
       'eventi musicali': 'Musica e spettacolo'
     }
-  }
+  },
+  {
+    // Comune di Firenze — "Eventi a Firenze" (2026-09-20).
+    // Base giuridica: CC-BY 4.0 dichiarata su dati.toscana.it; anche senza,
+    // varrebbe l'art. 52 comma 2 CAD (dati di una PA, aperti per default).
+    // La regione e' toscana, non "firenze": il dataset copre l'area
+    // metropolitana (Fiesole, Scandicci, Sesto Fiorentino, Bagno a Ripoli...)
+    // e l'unita' schedulabile del progetto resta la REGIONE — toscana ha gia'
+    // la sua riga di crontab dalla Fase 15, questa sorgente ci si aggancia
+    // senza aggiungerne una (stessa dinamica di altoadige, gate S10 di
+    // scripts/crontab-generate.test.sh).
+    id: 'firenze',
+    region: 'toscana',
+    type: 'json',
+    url: 'https://data.comune.fi.it/datastore/download.php?id=6289',
+    trustRank: 2,
+    // La sorgente NON dichiara categorie: arrivano da
+    // lib/categories/fromTitle.ts, che produce gia' nomi CANONICI.
+    // Vanno comunque mappati 1:1 qui: canonicalizeCategory() risolve SEMPRE
+    // attraverso categoryMap e con la mappa vuota faceva cadere in 'Altro'
+    // anche un nome canonico perfetto. Scoperto da una prova di ingest reale,
+    // non dal tipo — "Arte e cultura" -> fallback Altro. Stessa forma della
+    // mappa di altoadige, che i nomi canonici li dichiara per lo stesso motivo.
+    categoryMap: {
+      'Sagre e feste': 'Sagre e feste',
+      'Musica e spettacolo': 'Musica e spettacolo',
+      'Arte e cultura': 'Arte e cultura',
+      'Fiere e mercati': 'Fiere e mercati',
+      'Sport e outdoor': 'Sport e outdoor',
+      'Food & Wine': 'Food & Wine',
+      Altro: 'Altro'
+    }
+  },
 ]
 
 /**

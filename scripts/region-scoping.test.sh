@@ -131,19 +131,20 @@ s2_output="$(npx tsx -e '
   // propri (emiliaromagnaturismo.it, osservatorio.dms.puglia.it), distinti
   // dai tre host lombardi: 5 gruppi. Fase 19 (19-01, Alto Adige): un sesto
   // host proprio, tourism.api.opendatahub.com, distinto da tutti i
-  // precedenti — 6 gruppi adesso, non piu 5. Questa asserzione segue il
-  // numero reale di host distinti dichiarati in SOURCE_META, aggiornata ad
-  // ogni sorgente nuova che porta un host proprio.
+  // precedenti — 6 gruppi. 2026-09-20 (Comune di Firenze): settimo host,
+  // data.comune.fi.it — 7 gruppi adesso. Questa asserzione segue il numero
+  // reale di host distinti dichiarati in SOURCE_META, aggiornata ad ogni
+  // sorgente nuova che porta un host proprio.
   const real = m.groupSourcesByHost(SOURCE_REGISTRY)
-  if (real.length !== 6) {
-    throw new Error("registry reale atteso 6 gruppi (host distinti), ottenuto " + real.length)
+  if (real.length !== 7) {
+    throw new Error("registry reale atteso 7 gruppi (host distinti), ottenuto " + real.length)
   }
 })().catch((err) => { console.error("FAIL: " + err.message); process.exit(1) })
 ' 2>&1)" && s2_code=0 || s2_code=$?
 if [[ "${s2_code}" -ne 0 ]]; then
   fail "S2 (groupSourcesByHost): ${s2_output}"
 fi
-echo "S2 OK: due entry sullo stesso host in un solo gruppo, host diversi in gruppi separati; registry reale = 6 gruppi"
+echo "S2 OK: due entry sullo stesso host in un solo gruppo, host diversi in gruppi separati; registry reale = 7 gruppi"
 
 # --- Dev server effimero per S3/S4/S5, Postgres locale reale (D-17) ---------
 export CRON_SECRET="${secret}"
