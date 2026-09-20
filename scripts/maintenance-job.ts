@@ -57,6 +57,7 @@
  * ogni regione dichiarata nel registry (getRegions()), non solo quelle vive.
  */
 import { backfillEvents } from '../lib/territorial/backfill'
+import { purgeConcludedEvents, RETENTION_DAYS } from '../lib/retention/purge'
 import { dedupeEvents } from '../lib/dedup/dedupe'
 import { truncateError } from '../lib/scrapers/health'
 import { prisma } from '../lib/prisma'
@@ -64,6 +65,22 @@ import { getRegions } from '../lib/scrapers/sources'
 import { acquireRegionLock, releaseRegionLock } from '../lib/scrapers/regionLock'
 
 async function runMaintenance(): Promise<{ eventCount: number }> {
+  // D-RET-01 — PRIMA di backfill e dedup, non dopo, e per due motivi distinti:
+  //   1. correttezza: dedupeEvents() ricalcola la cache dei cluster al proprio
+  //      termine (D-07). Cancellare DOPO lascerebbe nella cache eventi che non
+  //      esistono piu' fino alla notte successiva.
+  //   2. costo: backfill e dedup sono due passate whole-table. Togliere prima
+  //      le righe morte e' lavoro che non viene fatto due volte.
+  // Fino a questa riga nessun percorso del progetto cancellava un evento: il
+  // database era un secchio che si riempie e basta.
+  const purgeReport = await purgeConcludedEvents()
+  console.log(
+    `[Maintenance] Retention: ${purgeReport.deleted} eventi conclusi prima del ${purgeReport.cutoff.toISOString().slice(0, 10)} cancellati definitivamente (finestra di grazia: ${RETENTION_DAYS} giorni)` +
+      (purgeReport.keptAsCanonical > 0
+        ? `; ${purgeReport.keptAsCanonical} risparmiati perche' ancora canonici per un evento vivo.`
+        : '.')
+  )
+
   const backfillReport = await backfillEvents()
   console.log(
     `[Maintenance] Backfill territoriale: ${backfillReport.updated} agganciati/aggiornati, ${backfillReport.unchanged} invariati su ${backfillReport.scanned} eventi (no_input: ${backfillReport.byStep.no_input}).`

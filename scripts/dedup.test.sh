@@ -142,23 +142,42 @@ else
   # variabile e falliva con "unbound variable" non appena schema_ready
   # diventava 1 (10-02). La "label" del valore non era comunque mai letta nel
   # corpo del loop: la chiave da sola basta.
-  known_groups=(
-    "sagra della brusadela|2419|2026-08-22"
-    "sagra del gorgonzola a lomello|2372|2026-08-27"
-    "sagra del luccio in salsa|2623|2026-09-03"
-  )
-  for key in "${known_groups[@]}"; do
-    frammento="${key%%|*}"
-    rest="${key#*|}"
-    comune="${rest%%|*}"
-    giorno="${rest#*|}"
-    n="$(psql_dev "SELECT count(*) FROM events WHERE canonical_event_id IS NULL AND comune_id = ${comune} AND date_start::date = '${giorno}' AND lower(title) LIKE '%${frammento}%'")"
-    if [[ "${n}" != "1" ]]; then
-      fail "S4: gruppo '${frammento}' (comune ${comune}, ${giorno}) ha ${n} righe canoniche non fuse, atteso 1"
-    else
-      ok "S4: gruppo '${frammento}' (comune ${comune}, ${giorno}) ha esattamente 1 riga canonica"
-    fi
-  done
+  # I gruppi si SCOPRONO dai dati correnti, non si inchiodano nel gate.
+  #
+  # Qui c'erano tre gruppi con date fisse (22/08, 27/08, 03/09 2026). Hanno
+  # funzionato finche' nessun percorso del progetto cancellava un evento;
+  # dall'introduzione della retention (lib/retention/purge.ts, D-RET-01) quegli
+  # eventi sono conclusi e cancellati, e il gate falliva su tre gruppi che non
+  # esistono piu'. Qualunque data scritta a mano qui finisce prima o poi dietro
+  # la soglia di retention: il difetto non era la retention, era la data fissa.
+  #
+  # L'asserzione non cambia: in un gruppo di duplicati (stesso comune, stesso
+  # giorno, stesso titolo) deve restare ESATTAMENTE una riga canonica.
+  # I titoli DEGENERI sono esclusi dalla selezione: la sorgente altoadige
+  # pubblica 339 eventi il cui titolo e' letteralmente "..." (verificato il
+  # 2026-09-20), che sono eventi DIVERSI accomunati solo da un titolo vuoto.
+  # Raggrupparli come duplicati misurerebbe una promessa che il dedup non fa
+  # — la sua regola confronta titoli normalizzati, e "..." normalizza a nulla.
+  # Almeno 6 caratteri alfanumerici: un titolo vero, non un segnaposto.
+  mapfile_groups="$(psql_dev "SELECT comune_id || '|' || date_start::date || '|' || replace(lower(title), '|', ' ') FROM events WHERE comune_id IS NOT NULL AND length(regexp_replace(title, '[^[:alnum:]]', '', 'g')) >= 6 GROUP BY comune_id, date_start::date, lower(title) HAVING count(*) > 1 ORDER BY count(*) DESC LIMIT 3")"
+
+  if [[ -z "${mapfile_groups//[[:space:]]/}" ]]; then
+    fail "S4: nessun gruppo di duplicati presente nel database — l'asserzione non e' stata esercitata (prova di non-vacuita'), il dedup non e' verificabile su questi dati"
+  else
+    while IFS= read -r key; do
+      [[ -z "${key//[[:space:]]/}" ]] && continue
+      comune="${key%%|*}"
+      rest="${key#*|}"
+      giorno="${rest%%|*}"
+      titolo="${rest#*|}"
+      n="$(psql_dev "SELECT count(*) FROM events WHERE canonical_event_id IS NULL AND comune_id = ${comune} AND date_start::date = '${giorno}' AND lower(title) = \$\$${titolo}\$\$")"
+      if [[ "${n}" != "1" ]]; then
+        fail "S4: gruppo '${titolo:0:40}' (comune ${comune}, ${giorno}) ha ${n} righe canoniche non fuse, atteso 1"
+      else
+        ok "S4: gruppo '${titolo:0:40}' (comune ${comune}, ${giorno}) ha esattamente 1 riga canonica"
+      fi
+    done <<< "${mapfile_groups}"
+  fi
 
   fused_total="$(psql_dev "SELECT count(*) FROM events WHERE canonical_event_id IS NOT NULL")"
   if [[ "${fused_total}" -lt 10 ]]; then
