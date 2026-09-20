@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 import type { Event as PrismaEvent } from '@prisma/client';
 import { composeEvent, groupMembersByCanonical } from './dedup/compose';
+import { romeMidnightUTC, todayInRome } from './dateWindow';
 
 interface ClusterCacheData {
   geojson: GeoJSON.FeatureCollection;
@@ -9,19 +10,25 @@ interface ClusterCacheData {
 }
 
 /**
- * Compute GeoJSON FeatureCollection from all future events with coordinates.
- * This is the data Mapbox needs for client-side clustering.
+ * GeoJSON dei pin della mappa: gli eventi DISPONIBILI (in corso o futuri) con
+ * coordinate risolte. E' cio' che Mapbox raggruppa lato client.
+ *
+ * 2026-09-20: prima erano i soli `dateStart >= oggi`, e la mappa mostrava
+ * quindi MENO eventi della lista — /api/events usa la semantica di overlap
+ * dal bugfix del 2026-09-10, quindi una mostra aperta fino a dicembre era in
+ * lista ma senza pin. Misurato sul Postgres locale: 18.769 pin contro 19.291
+ * eventi disponibili con coordinate. Stessa finestra e stesso confine di
+ * /api/events e di lib/coverage/liveRegions.ts: una regola sola.
  */
 export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
-  const today = new Date();
-  // UTC, non ora locale del processo: il Postgres locale gira in UTC (vedi
-  // docker-compose.dev.yml) e la verifica TERR-07 confronta questo conteggio
-  // con `date_trunc('day', now())`, che usa il timezone di sessione del DB.
-  // Con setHours() (ora locale) il confine "oggi" si sfasa di 1-2h rispetto
-  // al DB a seconda dell'ora legale, includendo/escludendo eventi diversi
-  // vicino a mezzanotte — bug scoperto eseguendo la verifica del piano 06-01
-  // contro dati reali (2269 vs 2249 eventi).
-  today.setUTCHours(0, 0, 0, 0);
+  // Mezzanotte di OGGI a Roma come istante UTC, non `setUTCHours(0,0,0,0)`:
+  // le colonne sono `@db.Timestamp(6)` e portano mezzanotte LOCALE scritta
+  // come cifre UTC, quindi il confine UTC sbagliava di 1-2 ore secondo l'ora
+  // legale (lib/dateWindow.ts spiega la misura che lo ha dimostrato). Il
+  // vecchio commento qui giustificava l'UTC con l'allineamento alla verifica
+  // TERR-07 di scripts/territorial-backfill.test.sh: era la verifica a dover
+  // seguire il prodotto, non il contrario, ed ora legge il confine da qui.
+  const windowStart = romeMidnightUTC(todayInRome());
 
   // Il punto usato dalla mappa e' quello materializzato dal backfill territoriale
   // (resolvedLatitude/resolvedLongitude), non le colonne di sorgente: include il
@@ -34,7 +41,12 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
   // ricalcolerebbe comunque la cache sulle righe membro).
   const events = await prisma.event.findMany({
     where: {
-      dateStart: { gte: today },
+      // COALESCE(dateEnd, dateStart) >= windowStart, scritto come OR esplicito
+      // perche' Prisma non ha COALESCE nei filtri e dateEnd e' nullable.
+      OR: [
+        { dateEnd: { gte: windowStart } },
+        { AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
+      ],
       resolvedLatitude: { not: null },
       resolvedLongitude: { not: null },
       canonicalEventId: null,

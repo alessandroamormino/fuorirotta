@@ -322,11 +322,26 @@ else
     # altrimenti questa sezione confronterebbe un totale pre-dedup con una cache
     # correttamente post-dedup — non e' la mappa ad essere rotta, e' questa riga
     # di verifica che va aggiornata alla nuova definizione corretta.
-    expected_count="$(psql_dev "SELECT count(*) FROM events WHERE date_start >= date_trunc('day', now()) AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL AND canonical_event_id IS NULL")"
+    # 2026-09-20: il confine NON si ridigita piu' qui. Prima era
+    # date_trunc('day', now()), cioe' una terza definizione di "oggi" accanto
+    # a quelle del prodotto, e computeClusterData() conta ora gli eventi
+    # DISPONIBILI (in corso o futuri), non i soli dateStart futuri. Il confine
+    # si legge da lib/dateWindow.ts, la stessa funzione che usano
+    # lib/clusterCache.ts, lib/coverage/liveRegions.ts e /api/events: se
+    # cambia, questa riga segue da sola. Nessun apostrofo dentro il blocco
+    # npx tsx -e, chiuderebbe la stringa shell.
+    window_start="$(npx tsx -e '
+import { romeMidnightUTC, todayInRome } from "./lib/dateWindow"
+console.log(romeMidnightUTC(todayInRome()).toISOString())
+' 2>/dev/null | tail -1)"
+    if [[ ! "${window_start}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]; then
+      fail "TERR-07: impossibile leggere l inizio finestra da lib/dateWindow.ts: ${window_start}"
+    fi
+    expected_count="$(psql_dev "SELECT count(*) FROM events WHERE (date_end >= '${window_start}'::timestamp OR (date_end IS NULL AND date_start >= '${window_start}'::timestamp)) AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL AND canonical_event_id IS NULL")"
     if [[ "${feature_count}" != "${expected_count}" ]]; then
-      fail "TERR-07: il numero di feature nel GeoJSON (${feature_count}) e' diverso dagli eventi futuri canonici con coordinate risolte non nulle (${expected_count})"
+      fail "TERR-07: il numero di feature nel GeoJSON (${feature_count}) e' diverso dagli eventi canonici DISPONIBILI (in corso o futuri) con coordinate risolte non nulle (${expected_count})"
     else
-      ok "TERR-07: il numero di feature nel GeoJSON coincide con gli eventi futuri risolti (${feature_count})"
+      ok "TERR-07: il numero di feature nel GeoJSON coincide con gli eventi disponibili risolti (${feature_count})"
     fi
 
     # Corretto in 06-02: questa sezione nasce in 06-01 quando D-11 non esisteva

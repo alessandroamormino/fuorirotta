@@ -80,38 +80,52 @@ s1_features="$(echo "${s1_output}" | grep '^FEATURES=' | cut -d= -f2)"
 [[ "${s1_ms}" -le "${CAP_MS}" ]] || fail "S1: ricalcolo della cache dei cluster in ${s1_ms}ms sul volume locale corrente (${s1_features} feature), sopra il tetto di ${CAP_MS}ms"
 echo "S1 OK: ricalcolo in ${s1_ms}ms su ${s1_features} feature, entro il tetto di ${CAP_MS}ms (margine ~100x il baseline osservato)"
 
-# --- S2: caso vuoto — zero eventi futuri, nessuna eccezione, righe ---------
+# --- S2: caso vuoto — zero eventi disponibili, nessuna eccezione, righe ---
 # ripristinate esattamente com'erano
-# Il confine e' date_trunc('day', now() AT TIME ZONE 'UTC'), NON now(): e' il
-# `today` di computeClusterData() (lib/clusterCache.ts, today.setUTCHours(0,0,0,0)).
-# Con now() questa sezione spostava solo gli eventi ANCORA a venire e lasciava
-# in piedi quelli datati oggi a un'ora gia' passata — che computeClusterData()
-# invece conta eccome. Il "caso vuoto" non era quindi vuoto, e l'asserzione
-# "0 feature" falliva su un prodotto corretto. Latente finche' il catalogo
-# locale non ha avuto eventi datati oggi: si e' manifestato con l'ingest
-# dell'Alto Adige (274 righe, 2026-09-19).
+#
+# 2026-09-20: questa sezione ridigitava il confine di computeClusterData() in
+# SQL, e ogni volta che il prodotto cambiava definizione di "evento da
+# mappare" il gate falliva su un prodotto corretto — e' gia' successo con
+# date_trunc('day', now()) contro il confine UTC (Alto Adige, 2026-09-19), e
+# sarebbe successo di nuovo ora che il filtro conta anche gli eventi IN CORSO
+# (date_end nel futuro): spostare il solo date_start li lascerebbe tutti in
+# piedi, e il "caso vuoto" non sarebbe vuoto.
+#
+# La ridigitazione e' sparita: si spostano di 100 anni ENTRAMBE le date di
+# OGNI riga candidata a un pin, senza alcun filtro di data. Nessun confine da
+# tenere allineato, e per costruzione computeClusterData() non puo' trovare
+# nulla qualunque finestra usi. Le righe toccate si catturano con RETURNING
+# id e si ripristinano una per una, successo o fallimento.
+# Il ripristino si verifica sulle DATE, non sul numero di righe candidate:
+# quello non cambia quando una data slitta, quindi confrontarlo prima/dopo
+# non proverebbe nulla. Le righe spostate di un secolo sono riconoscibili per
+# quello che sono, e devono essere zero sia prima sia dopo.
+shift_probe="SELECT count(*) FROM events WHERE date_start < now() - interval '50 years' OR date_end < now() - interval '50 years'"
 before_count="$(docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
   psql -U fuorirotta -d fuorirotta_dev -tAc \
-  "SELECT count(*) FROM events WHERE date_start >= date_trunc('day', now() AT TIME ZONE 'UTC') AND canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
+  "SELECT count(*) FROM events WHERE canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
+shifted_before="$(docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
+  psql -U fuorirotta -d fuorirotta_dev -tAc "${shift_probe}")"
+[[ "${shifted_before}" == "0" ]] || fail "S2: ${shifted_before} righe risultano gia' spostate di un secolo PRIMA di iniziare — una run precedente non ha ripristinato"
 
 cat > "${tmp_js}" <<'JS'
 (async () => {
   const { prisma } = await import('../lib/prisma')
   const { computeClusterData } = await import('../lib/clusterCache')
 
-  // Sposta 100 anni nel passato ogni evento che computeClusterData()
-  // conterebbe, cosi' il suo filtro non incontra nulla. Il confine e' lo
-  // STESSO che usa lei — date_trunc('day', now() AT TIME ZONE 'UTC'), cioe'
-  // il `today` di lib/clusterCache.ts — e non now(): con now() restavano in
-  // piedi gli eventi datati oggi a un'ora gia' passata, che lei conta, e il
-  // "caso vuoto" non era vuoto.
+  // Sposta 100 anni nel passato ENTRAMBE le date di ogni riga che potrebbe
+  // produrre un pin — canonica, con coordinate risolte — senza filtrare per
+  // data. Nessun confine ridigitato qui, quindi nessun confine da tenere
+  // allineato a lib/clusterCache.ts: qualunque finestra usi, non trova nulla.
+  // date_end compreso, altrimenti un evento IN CORSO resterebbe dentro la
+  // finestra (COALESCE(date_end, date_start)) e il caso vuoto non sarebbe vuoto.
   // RETURNING id cattura ESATTAMENTE le righe toccate, non un intervallo di
   // date che potrebbe includere righe che questo gate non ha mai spostato.
   const affected = await prisma.$queryRaw`
     UPDATE events
-    SET date_start = date_start - interval '100 years'
-    WHERE date_start >= date_trunc('day', now() AT TIME ZONE 'UTC')
-      AND canonical_event_id IS NULL
+    SET date_start = date_start - interval '100 years',
+        date_end = date_end - interval '100 years'
+    WHERE canonical_event_id IS NULL
       AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL
     RETURNING id
   `
@@ -135,7 +149,7 @@ cat > "${tmp_js}" <<'JS'
     // riga toccata da questo gate resta spostata di 100 anni.
     if (affected.length > 0) {
       const ids = affected.map((r) => r.id)
-      await prisma.$executeRaw`UPDATE events SET date_start = date_start + interval '100 years' WHERE id = ANY(${ids})`
+      await prisma.$executeRaw`UPDATE events SET date_start = date_start + interval '100 years', date_end = date_end + interval '100 years' WHERE id = ANY(${ids})`
     }
   }
 
@@ -152,15 +166,18 @@ s2_exit=0
 s2_output="$(bash scripts/dev-db.sh npx tsx "${tmp_js}" 2>&1)" || s2_exit=$?
 echo "${s2_output}" | grep -q '^OK$' || fail "S2 (caso vuoto): ${s2_output}"
 
-# Stesso confine di before_count qui sopra e dell'UPDATE: due conteggi che si
-# confrontano devono contare la stessa cosa, altrimenti la differenza misura
-# il disallineamento fra le due query invece di un ripristino mancato.
+# Stesso predicato di before_count qui sopra e dell'UPDATE: due conteggi che
+# si confrontano devono contare la stessa cosa, altrimenti la differenza
+# misura il disallineamento fra le due query invece di un ripristino mancato.
 after_count="$(docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
   psql -U fuorirotta -d fuorirotta_dev -tAc \
-  "SELECT count(*) FROM events WHERE date_start >= date_trunc('day', now() AT TIME ZONE 'UTC') AND canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
-[[ "${before_count}" == "${after_count}" ]] || fail "S2: il conteggio degli eventi futuri prima/dopo il caso vuoto non torna (${before_count} vs ${after_count}) — il ripristino non ha funzionato"
+  "SELECT count(*) FROM events WHERE canonical_event_id IS NULL AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL")"
+[[ "${before_count}" == "${after_count}" ]] || fail "S2: il numero di righe candidate a un pin e' cambiato durante il caso vuoto (${before_count} vs ${after_count})"
+shifted_after="$(docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
+  psql -U fuorirotta -d fuorirotta_dev -tAc "${shift_probe}")"
+[[ "${shifted_after}" == "0" ]] || fail "S2: ${shifted_after} righe sono rimaste spostate di un secolo dopo il caso vuoto — il ripristino non ha funzionato"
 
-echo "S2 OK: a zero eventi futuri computeClusterData() restituisce una FeatureCollection vuota senza eccezioni; righe ripristinate esattamente (${before_count} invariato)"
+echo "S2 OK: a zero eventi disponibili computeClusterData() restituisce una FeatureCollection vuota senza eccezioni; ${before_count} righe candidate, nessuna rimasta spostata"
 
 echo "PASS: ricalcolo cache dei cluster (ROLL-07) — S1..S2 verdi"
 exit 0
