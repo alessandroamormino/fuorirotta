@@ -370,6 +370,55 @@ export const SOURCE_META: SourceMeta[] = [
       Altro: 'Altro'
     }
   },
+  {
+    // Comune di Roma — www.comune.roma.it (2026-09-20).
+    // Base giuridica: art. 52 comma 2 CAD (dati di una PA senza licenza
+    // espressa = aperti). Il sito non serve un robots.txt (302 verso l'SSO):
+    // nessuna regola, nessun Crawl-delay — la pausa fra le schede e'
+    // volontaria.
+    // In FONDO a SOURCE_META di proposito: l'ordine di questo array e' un
+    // contratto (getRegions/crontab/scoping ci dipendono) e lazio e' gia'
+    // introdotta piu' su da solosagre — inserirla altrove la sposterebbe.
+    // Nessuna riga di crontab nuova: lazio ha gia' la sua dalla Fase 15.
+    id: 'roma',
+    region: 'lazio',
+    type: 'html',
+    url: 'https://www.comune.roma.it/web/it/eventi.page',
+    trustRank: 2,
+    // Categorie dei marker della mappa, misurate sulle 31 schede reali del
+    // 2026-09-20: Arte 11, Eventi 10, Musica 7, Cinema e Teatro 4, Progetti
+    // 3, Ambiente 2, Iniziative 1, Bambini 1. "Eventi", "Iniziative" e
+    // "Progetti" sono contenitori che non dicono nulla sul tipo di evento
+    // (sotto "Eventi" stanno mostre, teatro e festival insieme): l'adattatore
+    // li tratta come categoria assente e ripiega sul titolo, quindi qui
+    // restano mappati ad 'Altro' solo come rete di sicurezza.
+    categoryMap: {
+      Arte: 'Arte e cultura',
+      Musica: 'Musica e spettacolo',
+      'Cinema e Teatro': 'Musica e spettacolo',
+      Danza: 'Musica e spettacolo',
+      Teatro: 'Musica e spettacolo',
+      Cinema: 'Musica e spettacolo',
+      Mostre: 'Arte e cultura',
+      Cultura: 'Arte e cultura',
+      Sport: 'Sport e outdoor',
+      Ambiente: 'Sport e outdoor',
+      Bambini: 'Altro',
+      Sociale: 'Altro',
+      Eventi: 'Altro',
+      Iniziative: 'Altro',
+      Progetti: 'Altro',
+      // Ripiego dal titolo (lib/categories/fromTitle.ts): produce nomi
+      // canonici, che vanno comunque mappati 1:1 — lezione di Firenze.
+      'Sagre e feste': 'Sagre e feste',
+      'Musica e spettacolo': 'Musica e spettacolo',
+      'Arte e cultura': 'Arte e cultura',
+      'Fiere e mercati': 'Fiere e mercati',
+      'Sport e outdoor': 'Sport e outdoor',
+      'Food & Wine': 'Food & Wine',
+      Altro: 'Altro'
+    }
+  },
 ]
 
 /**

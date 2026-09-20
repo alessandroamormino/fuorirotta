@@ -132,20 +132,21 @@ s2_output="$(npx tsx -e '
   // dai tre host lombardi: 5 gruppi. Fase 19 (19-01, Alto Adige): un sesto
   // host proprio, tourism.api.opendatahub.com, distinto da tutti i
   // precedenti — 6 gruppi. 2026-09-20: settimo host data.comune.fi.it
-  // (Comune di Firenze), ottavo eventi.comune.torino.it (Comune di Torino)
-  // — 8 gruppi adesso. Questa asserzione segue il numero
+  // (Comune di Firenze), ottavo eventi.comune.torino.it (Comune di Torino),
+  // nono www.comune.roma.it (Comune di Roma) — 9 gruppi adesso.
+  // Questa asserzione segue il numero
   // reale di host distinti dichiarati in SOURCE_META, aggiornata ad ogni
   // sorgente nuova che porta un host proprio.
   const real = m.groupSourcesByHost(SOURCE_REGISTRY)
-  if (real.length !== 8) {
-    throw new Error("registry reale atteso 8 gruppi (host distinti), ottenuto " + real.length)
+  if (real.length !== 9) {
+    throw new Error("registry reale atteso 9 gruppi (host distinti), ottenuto " + real.length)
   }
 })().catch((err) => { console.error("FAIL: " + err.message); process.exit(1) })
 ' 2>&1)" && s2_code=0 || s2_code=$?
 if [[ "${s2_code}" -ne 0 ]]; then
   fail "S2 (groupSourcesByHost): ${s2_output}"
 fi
-echo "S2 OK: due entry sullo stesso host in un solo gruppo, host diversi in gruppi separati; registry reale = 8 gruppi"
+echo "S2 OK: due entry sullo stesso host in un solo gruppo, host diversi in gruppi separati; registry reale = 9 gruppi"
 
 # --- Dev server effimero per S3/S4/S5, Postgres locale reale (D-17) ---------
 export CRON_SECRET="${secret}"
