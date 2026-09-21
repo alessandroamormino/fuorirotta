@@ -63,9 +63,21 @@ export async function fetchWithRetry(
             continue
           }
 
-          // Don't retry 4xx errors (client errors)
-          if (response.status >= 400 && response.status < 500) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          // Qualunque risposta di errore che arriva qui va SOLLEVATA: i 4xx
+          // subito (non si ritentano), e i 5xx che hanno esaurito i
+          // tentativi del ramo sopra.
+          //
+          // Prima il 5xx esaurito cadeva fuori da entrambi i rami e veniva
+          // RESTITUITO come se fosse andato bene. Il chiamante ci faceva
+          // sopra `response.json()` e otteneva "Unexpected end of JSON
+          // input" — un messaggio che non nomina ne' l'host ne' il codice.
+          // E' costato tre giri di diagnosi il 2026-09-21 su un banale
+          // `HTTP 500` di eventi.comune.torino.it.
+          //
+          // `>= 400` e non `!response.ok` secco: i 3xx qui non arrivano
+          // (fetch segue i redirect da solo) e restituirli resta lecito.
+          if (response.status >= 400) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText} (${url})`)
           }
         }
 

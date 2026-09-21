@@ -76,13 +76,28 @@ else
   fi
 fi
 
-# --- S4: il tetto di pagine esiste ------------------------------------------
+# --- S4: il tetto esiste ED e' abbastanza ampio ------------------------------
 # La sorgente dichiara ~6.750 elementi ma i futuri sono poche decine: senza
-# tetto un errore di arresto scaricherebbe 68 pagine ogni notte.
-if grep -qE 'TORINO_MAX_PAGES = [0-9]+' lib/scrapers/torino.ts; then
-  ok "S4: esiste un tetto di pagine ($(grep -oE 'TORINO_MAX_PAGES = [0-9]+' lib/scrapers/torino.ts | head -1))"
+# tetto un errore di arresto scaricherebbe l archivio ogni notte.
+#
+# 2026-09-21: non basta piu' che il tetto ESISTA. Da quando per_page e' sceso a
+# 20 (la sorgente va in HTTP 500 sulle risposte grandi) un tetto espresso in
+# pagine varrebbe un quinto della portata di prima, e l adattatore si
+# fermerebbe dentro il buco misurato perdendo la coda dei futuri — in
+# silenzio. Qui si verifica la PORTATA in pubblicazioni, non la presenza di
+# una costante. Il 1200 e' scritto a mano: leggerlo dal modulo lo renderebbe
+# vero per costruzione.
+reach="$(npx tsx -e '
+import { TORINO_MAX_PAGES, TORINO_PER_PAGE } from "./lib/scrapers/torino"
+console.log(String(TORINO_MAX_PAGES * TORINO_PER_PAGE))
+' 2>&1 | grep -E '^[0-9]+$' | tail -1)"
+
+if [[ -z "${reach}" ]]; then
+  fail "S4: impossibile leggere la portata da lib/scrapers/torino.ts"
+elif [[ "${reach}" -ge 1200 ]]; then
+  ok "S4: portata di ${reach} pubblicazioni (soglia 1200)"
 else
-  fail "S4: nessun tetto di pagine — l archivio storico verrebbe scaricato per intero"
+  fail "S4: portata di sole ${reach} pubblicazioni, sotto le 1200 misurate come necessarie — la coda dei futuri verrebbe persa"
 fi
 
 echo ""
