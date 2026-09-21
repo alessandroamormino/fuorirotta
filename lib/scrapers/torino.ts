@@ -36,28 +36,54 @@ import { join } from 'path'
 
 export const TORINO_API = 'https://eventi.comune.torino.it/wp-json/wp/v2/event'
 
-/** Il massimo che l'API accetta per pagina. */
-const TORINO_PER_PAGE = 100
+/**
+ * 20, non il massimo che l'API accetterebbe: la sorgente va in **HTTP 500 con
+ * corpo vuoto** sulle risposte grandi. Misurato dal server di produzione il
+ * 2026-09-21, dopo che l'adattatore ha fallito due notti di fila:
+ *
+ *   per_page=5   -> 200,  28 KB
+ *   per_page=20  -> 200, 132 KB   <- otto pagine su otto, 125-198 KB
+ *   per_page=50  -> 500, 0 byte
+ *   per_page=100 -> 500, 0 byte
+ *
+ * E' un errore fatale di PHP lato loro (torna in 1,4s con corpo vuoto), non
+ * un timeout. Non e' nemmeno una soglia netta: a `per_page=100` la pagina 5
+ * ha risposto 200 con 665 KB mentre 1, 2, 3, 4 e 6 davano 500. Da qui il
+ * valore basso E la tolleranza alle pagine cadute nel ciclo sotto: la
+ * sorgente e' instabile, non solo limitata. Quando la fixture e' stata
+ * catturata, il 2026-09-19, `per_page=100` funzionava ancora.
+ */
+export const TORINO_PER_PAGE = 20
 
 /**
- * Tetto difensivo: 12 pagine = 1.200 pubblicazioni piu' recenti, ben oltre le
- * 6 in cui i futuri si esauriscono. Indipendente dall'arresto anticipato
- * sotto — se quello non scattasse per un cambio di comportamento della
- * sorgente, questo impedisce comunque di scaricare l'intero archivio.
+ * I due tetti sono in PUBBLICAZIONI, non in pagine, di proposito.
+ *
+ * Erano "12 pagine" e "3 pagine a secco" tarati su pagine da 100. Abbassare
+ * `TORINO_PER_PAGE` a 20 lasciandoli in pagine avrebbe significato leggere
+ * 240 pubblicazioni invece di 1.200 e arrendersi dopo 60 vuote invece di 300
+ * — cioe' fermarsi DENTRO il buco che la misura reale documenta (39, 16, 8,
+ * 0, 0, 3 futuri sulle prime sei pagine da 100) e perdere la coda, in
+ * silenzio. In pubblicazioni il ragionamento non va rifatto la prossima volta
+ * che la sorgente cambia idea sulla dimensione massima.
  */
-export const TORINO_MAX_PAGES = 12
+export const TORINO_MAX_RECORDS = 1200
+const TORINO_EMPTY_RECORDS_BEFORE_STOP = 300
+
+/** Derivati, mai digitati a mano: e' il punto dei due tetti qui sopra. */
+export const TORINO_MAX_PAGES = Math.ceil(TORINO_MAX_RECORDS / TORINO_PER_PAGE)
+const TORINO_EMPTY_PAGES_BEFORE_STOP = Math.ceil(
+  TORINO_EMPTY_RECORDS_BEFORE_STOP / TORINO_PER_PAGE
+)
 
 /**
- * Le pagine si ordinano per data di PUBBLICAZIONE decrescente, non per data
- * evento (che l'API non conosce), quindi i futuri non sono tutti in testa: la
- * misura reale ha dato 39, 16, 8, 0, 0, 3. Fermarsi al primo buco perderebbe
- * quei 3. Tre pagine consecutive a secco sono il compromesso fra "non
- * scaricare l'archivio" e "non perdere la coda".
+ * Quante pagine consecutive cadute prima di arrendersi. Con sessanta pagine
+ * da tentare, insistere su una sorgente davvero giu' significherebbe due
+ * minuti di richieste inutili ad ogni giro notturno.
  */
-const TORINO_EMPTY_PAGES_BEFORE_STOP = 3
+const TORINO_MAX_FAIL_STREAK = 5
 
 /** Pausa volontaria fra le pagine: il sito non dichiara un Crawl-delay. */
-const TORINO_PAGE_DELAY_MS = 1000
+const TORINO_PAGE_DELAY_MS = 500
 
 export interface TorinoRecord {
   id?: number
@@ -76,14 +102,43 @@ export async function scrapeTorino(params: ScrapeParams = {}): Promise<AdapterRe
     const events: ScrapedEvent[] = []
     const seen = new Set<string>()
     let emptyStreak = 0
+    let okPages = 0
+    let failedPages = 0
+    let failStreak = 0
 
     for (let page = 1; page <= TORINO_MAX_PAGES; page++) {
       if (page > 1) await sleep(TORINO_PAGE_DELAY_MS)
 
       const url = `${TORINO_API}?per_page=${TORINO_PER_PAGE}&page=${page}&orderby=date&order=desc`
-      const response = await fetchWithRetry(url)
-      const records = (await response.json()) as TorinoRecord[]
+
+      let records: TorinoRecord[]
+      try {
+        const response = await fetchWithRetry(url)
+        records = (await response.json()) as TorinoRecord[]
+      } catch (pageError) {
+        // Una pagina caduta NON butta via le precedenti. Prima il try/catch
+        // stava attorno all'intero ciclo, quindi un solo HTTP 500 azzerava
+        // anche cio' che era gia' stato raccolto — con una sorgente che va in
+        // 500 a caso (vedi TORINO_PER_PAGE) e sessanta pagine da scaricare,
+        // era la differenza fra funzionare quasi sempre e non funzionare mai.
+        failedPages++
+        failStreak++
+        console.warn(
+          `[torino] pagina ${page} saltata: ${pageError instanceof Error ? pageError.message : pageError}`
+        )
+        // Una pagina caduta e' SCONOSCIUTA, non vuota: non tocca emptyStreak,
+        // o un tratto di 500 farebbe credere all'arresto anticipato di essere
+        // arrivato in fondo all'archivio.
+        if (failStreak >= TORINO_MAX_FAIL_STREAK) {
+          console.warn(`[torino] ${failStreak} pagine consecutive cadute: mi fermo qui`)
+          break
+        }
+        continue
+      }
+      failStreak = 0
+
       if (!Array.isArray(records) || records.length === 0) break
+      okPages++
 
       const pageEvents = transformTorinoRecords(records, params)
       let added = 0
@@ -97,6 +152,22 @@ export async function scrapeTorino(params: ScrapeParams = {}): Promise<AdapterRe
       emptyStreak = added === 0 ? emptyStreak + 1 : 0
       if (emptyStreak >= TORINO_EMPTY_PAGES_BEFORE_STOP) break
       if (records.length < TORINO_PER_PAGE) break
+    }
+
+    // Nessuna pagina letta = la sorgente e' giu', e va detto. Qualche pagina
+    // persa su molte riuscite NON e' un fallimento: il raccolto ridotto si
+    // vede da solo nel conteggio di scrape_runs, che e' cio' che
+    // computeSourceHealth confronta con la propria baseline.
+    if (okPages === 0) {
+      return {
+        events: [],
+        source: 'torino',
+        duration: Date.now() - startTime,
+        error: `nessuna pagina leggibile: ${failedPages} cadute su ${TORINO_MAX_PAGES} tentate`
+      }
+    }
+    if (failedPages > 0) {
+      console.warn(`[torino] ${okPages} pagine lette, ${failedPages} saltate`)
     }
 
     return { events, source: 'torino', duration: Date.now() - startTime }
@@ -219,6 +290,24 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   }
 
   check('la fixture porta record', fixture.length > 0, `trovati ${fixture.length}`)
+
+  // La trappola dell'abbassamento di per_page: i tetti sono in PUBBLICAZIONI e
+  // le pagine si derivano. Se qualcuno tornasse a scriverli in pagine, o
+  // abbassasse ancora per_page senza rifare il conto, la portata crollerebbe
+  // in SILENZIO — e l'adattatore si fermerebbe dentro il buco misurato (39,
+  // 16, 8, 0, 0, 3 futuri sulle prime sei pagine da 100) perdendo la coda.
+  // I due numeri qui sono scritti a mano apposta: se coincidessero per
+  // costruzione con quelli del modulo, l'asserzione non proverebbe nulla.
+  check(
+    'la portata resta di almeno 1.200 pubblicazioni',
+    TORINO_MAX_PAGES * TORINO_PER_PAGE >= 1200,
+    `${TORINO_MAX_PAGES} pagine x ${TORINO_PER_PAGE} = ${TORINO_MAX_PAGES * TORINO_PER_PAGE}`
+  )
+  check(
+    'l arresto anticipato tollera almeno 300 pubblicazioni a secco',
+    TORINO_EMPTY_PAGES_BEFORE_STOP * TORINO_PER_PAGE >= 300,
+    `${TORINO_EMPTY_PAGES_BEFORE_STOP} pagine x ${TORINO_PER_PAGE} = ${TORINO_EMPTY_PAGES_BEFORE_STOP * TORINO_PER_PAGE}`
+  )
 
   // Finestra ancorata al giorno di cattura della fixture (2026-09-19), non a
   // "oggi": altrimenti il gate darebbe un numero diverso ogni giorno e
