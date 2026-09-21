@@ -243,8 +243,8 @@ The script exits:
 
 ### Deploying Updates
 
-Since 2026-09-20 the image is **built in CI and published to GHCR**; the server no longer
-compiles. One command releases, and the same command rolls back.
+One command releases, and the same command rolls back. Everything runs **on this machine**:
+nothing outside has access to the server or to the database.
 
 **Configuration-only change** (rotating `CRON_SECRET`, changing a URL): edit `.env`, then
 recreate the container on the image already deployed:
@@ -253,21 +253,31 @@ recreate the container on the image already deployed:
 cd /opt/docker/fuori-rotta/fuorirotta && FUORIROTTA_IMAGE="$(grep -m1 '^image=' .deployed | cut -d= -f2-)" docker compose up -d --no-build
 ```
 
-**Code release**: GitHub -> Actions -> **Deploy** -> `Run workflow`, and give it the version
-(`v2.1.0`, or `sha-33b20e4` for a commit that was never tagged). Or the same thing by hand:
+**Code release**:
 
 ```bash
 bash /opt/docker/fuori-rotta/fuorirotta/scripts/deploy.sh v2.1.0
 ```
 
-`scripts/deploy.sh` is the whole procedure and the only copy of it: pull the image (and stop
-there if the registry does not have it, leaving production untouched), align the checkout to the
-matching git ref, `prisma generate` + `migrate deploy`, swap the container, then verify —
-`/api/monitoring` must answer 200 **and** `/api/events` must return at least one event. If either
-check fails it puts the previous image and the previous checkout back and exits non-zero. What is
-running is recorded in `.deployed` (image, digest, git sha, timestamp).
+`scripts/deploy.sh` is the whole procedure and the only copy of it, in this order:
 
-**Rollback is not a separate path**: run the same workflow with an earlier version. An emergency
+1. align the checkout to that git ref (tag or commit) — migrations, one-off scripts, the
+   crontab generator and the cron scripts are **not** inside the image, so the checkout must
+   match what gets built;
+2. `prisma generate` + `migrate deploy` — **before** the build, because the Dockerfile runs
+   `next build`, which queries the database while prerendering. The old container stays up the
+   whole time;
+3. build, tagged with the version;
+4. **push to GHCR, before the swap** — if it fails, nothing has changed yet. It fails rather
+   than warning: a release you cannot undo is exactly what this script exists to prevent.
+   `SKIP_PUSH=1` for a deliberately local release;
+5. swap, then verify — `/api/monitoring` must answer 200 **and** `/api/events` must return at
+   least one event. If either fails it restores the previous image (pulling it back from GHCR
+   if it is no longer on this disk) and the previous checkout, and exits non-zero;
+6. record what is actually running in `.deployed` (image, digest, git sha, timestamp), and warn
+   if the installed crontab has drifted from the registry.
+
+**Rollback is not a separate path**: run the same command with an earlier version. An emergency
 path only ever exercised in emergencies is a path that does not work.
 
 Two things it deliberately does not do:
@@ -275,56 +285,51 @@ Two things it deliberately does not do:
 - **Undo migrations.** They are forward-only. This is why the project's migrations are additive
   (a new nullable column, never a `DROP`): old code keeps working against a newer schema. A
   destructive migration breaks that property and must be released in two separate steps.
-- **Run one-off backfills.** They belong to a specific release, not to every release. Declare them
-  in the Release notes and run them by hand *before* the swap.
+- **Run one-off backfills.** They belong to a specific release, not to every release. Declare
+  them in the Release notes and run them by hand *before* the swap.
 
-### Images, tags and what a rollback actually needs
+### Why the image goes to GHCR even though it is built here
 
 `docker tag` does not copy anything — it gives a second **name** to the same bytes on the same
 machine. Before 2026-09-20 every rollback image lived only on this VM: one dead disk, or one
 `docker image prune -a`, and they were all gone together. Nor is "I can rebuild it" a plan:
 rebuilding the same commit does **not** produce the same image, because `npm ci` resolves
 packages that move and `node:20-alpine` is a mutable tag. A rollback needs the preserved
-artifact, not the recipe — which is what GHCR now holds.
+artifact, and preserved somewhere else.
 
-Published tags, all pointing at the same build:
+One-time setup on this host — a GitHub token with `write:packages` and nothing else, pointing
+**outward**:
 
-| tag | when | use |
-|---|---|---|
-| `sha-<short>` | every push to `main` | every commit has a durable artifact |
-| `vX.Y.Z` | git tag `v*` | what you release |
-| `latest` | git tag `v*` | convenience only — never release by it |
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <utente> --password-stdin
+```
 
-Tags move; a `sha256:` digest does not. `.deployed` records the digest, so "what was running
-yesterday at 20:00" has an exact answer.
+That is the only credential in the whole pipeline, it can publish packages and nothing more,
+and it is revocable from GitHub in one click. **GitHub holds no secret of ours**: no SSH key
+into this host, no database URL. The deliberate trade is that CI does not verify the image
+builds — it runs lint, typecheck and the 19 portable gates, and the build is verified by
+actually running it here.
 
-### Secrets and variables the workflows need
+### Releases
 
-Repository secrets:
+Tag and publish from any checkout, no secrets needed:
 
-| name | used by | what it is |
-|---|---|---|
-| `DATABASE_URL` | Build | `next build` prerenders the homepage and queries the database |
-| `DIRECT_URL` | Build | same, session pooler (port 5432) |
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | Build | baked into the client bundle — it is public by nature, so restrict it by domain in Mapbox |
-| `DEPLOY_SSH_KEY` | Deploy | private key of a key pair authorised on this host |
-| `DEPLOY_KNOWN_HOSTS` | Deploy | output of `ssh-keyscan <host>`, so the runner does not trust the first answer it gets |
-| `DEPLOY_USER`, `DEPLOY_HOST` | Deploy | where to connect |
+```bash
+git tag -a v2.1.0 -m "..." && git push origin v2.1.0 && gh release create v2.1.0 --generate-notes
+```
 
-Repository variable: `NEXT_PUBLIC_APP_URL` (`https://fuori-rotta.it`).
-
-The build credentials do **not** end up in the published image: `ARG`/`ENV` live only in the
-`builder` stage, and `runner` starts again from `FROM base`. `.dockerignore` already excludes
-`.env*` and `.git`.
+Then release that tag with `deploy.sh v2.1.0`. `.deployed` on the host records the digest, so
+"what was running yesterday at 20:00" has an exact answer — tags move, digests do not.
 
 ### Tests: two halves, both still in `npm test`
 
 `npm run test:ci` is the 19 gates that need nothing but a checkout — they run on every push in
-Actions. `npm run test:local` is the 13 that need the local Postgres, and some of them need a
-**real ingested catalogue**: `check:region-coverage` asserts that lombardia, trentino-alto-adige
-and lazio are live on real data. On an empty runner those would pass vacuously, which is worse
-than not running them, so they stay local. `npm test` is still both halves, in the same order as
-before — no gate was dropped, the chain was split in two that do not overlap.
+GitHub Actions (`.github/workflows/ci.yml`), with no secrets. `npm run test:local` is the 13
+that need the local Postgres, and some of them need a **real ingested catalogue**:
+`check:region-coverage` asserts that lombardia, trentino-alto-adige and lazio are live on real
+data. On an empty runner those would pass vacuously, which is worse than not running them, so
+they stay local. `npm test` is still both halves, in the same order as before — no gate was
+dropped, the chain was split in two that do not overlap.
 
 Lint is reported in CI but does **not** fail the job: 47 problems (8 errors) predate this
 pipeline. When those are fixed, remove `continue-on-error` from `.github/workflows/ci.yml`.
