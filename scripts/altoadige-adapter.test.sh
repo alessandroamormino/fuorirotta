@@ -55,7 +55,9 @@ set +e
 s2_output="$(npx tsx -e '
 (async () => {
   const fs = await import("fs")
-  const m = await import("./lib/scrapers/altoadige")
+  // Vedi la nota in scripts/crontab-generate.test.sh: su Node 20 il
+  // namespace porta il solo `default`.
+  const modAltoadige = await import("./lib/scrapers/altoadige"); const m = modAltoadige.default ?? modAltoadige
   const envelope = JSON.parse(fs.readFileSync("lib/scrapers/__fixtures__/altoadige-events.json", "utf-8"))
   const items = envelope.items ?? []
   // Stessa finestra fissata in chiaro del self-check del modulo: mai la data
@@ -103,8 +105,10 @@ set +e
 s3_output="$(npx tsx -e '
 (async () => {
   const fs = await import("fs")
-  const m = await import("./lib/scrapers/altoadige")
-  const taxonomy = await import("./lib/categories/taxonomy")
+  // Vedi la nota in scripts/crontab-generate.test.sh: su Node 20 il
+  // namespace porta il solo `default`.
+  const modAltoadige = await import("./lib/scrapers/altoadige"); const m = modAltoadige.default ?? modAltoadige
+  const modTaxonomy = await import("./lib/categories/taxonomy"); const taxonomy = modTaxonomy.default ?? modTaxonomy
   const envelope = JSON.parse(fs.readFileSync("lib/scrapers/__fixtures__/altoadige-events.json", "utf-8"))
   const items = envelope.items ?? []
   let nonAltro = 0

@@ -8,6 +8,18 @@ services:
         DIRECT_URL: ${DIRECT_URL}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
         NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN}
+    # `build:` E `image:` insieme: compose costruisce e poi TAGGA il risultato
+    # con questo nome. E' cio' che permette a scripts/deploy.sh di dare ad ogni
+    # rilascio un tag proprio e di spingerlo su GHCR.
+    #
+    # Perche' un tag per rilascio e non solo `latest`: `docker tag` non copia
+    # nulla, da' un secondo NOME agli stessi byte sulla stessa macchina — i
+    # rollback vivevano tutti su questo disco. E ricostruire lo stesso commit
+    # NON produce la stessa immagine (`npm ci` risolve pacchetti che cambiano,
+    # `node:20-alpine` e' un tag mobile), quindi "ricostruisco al bisogno" non
+    # e' un piano di rollback: bisogna conservare l'artefatto, e conservarlo
+    # altrove.
+    image: ${FUORIROTTA_IMAGE:-ghcr.io/alessandroamormino/fuorirotta:latest}
     container_name: fuorirotta-frontend
     ports:
       - "3000:3000"
