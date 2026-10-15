@@ -243,23 +243,17 @@ export default function Navbar({
 				// desktop, dove il conto torna uguale.
 				className={cn(
 					"fixed top-2 left-0 right-0 z-50 px-4 pt-4 pb-3 sm:px-[18px] lg:sticky lg:top-0 lg:z-[60] lg:px-[22px] lg:py-3 topbar-desktop",
-					// -(100% + 0.5rem) e non -100%: `top-2` sono 8px, e translate
-					// del solo 100% lascerebbe scoperto proprio quel filo di barra.
-					// lg:translate-y-0 perche' a desktop la barra e' sticky e
-					// nasconderla romperebbe il calcolo di --topbar-h su cui si
-					// appoggiano mappa e dettaglio.
-					"transition-transform duration-200 ease-out motion-reduce:transition-none lg:translate-y-0",
-					// Underscore = spazio, la forma canonica di Tailwind per i valori
-					// arbitrari (anche la grafia senza underscore genera la stessa
-					// regola, ma questa e' quella documentata).
-					// Se un giorno lo verifichi in un browser: Tailwind v4 emette la
-					// proprieta' `translate`, NON `transform`. Leggere
-					// getComputedStyle(nav).transform restituisce "none" a barra
-					// nascosta e sembra un difetto che non c'e'.
-					// Misurato in Chrome a 414px il 2026-09-20: a barra scorsa via
-					// translate vale `0px calc(-100% - 8px)` e nav.getBoundingClientRect().bottom
-					// e' esattamente 0 — gli 8px di top-2 sono compresi.
-					collapsed && "-translate-y-[calc(100%_+_0.5rem)]"
+					// Scorre via insieme alla lista, pixel per pixel: --nav-offset lo
+					// scrive HomeClient a ogni evento di scroll (0..altezza della
+					// barra, top-2 compresi). Nessuna transizione: legata al dito,
+					// un'animazione la farebbe rincorrere lo scroll. Fuori dalla
+					// home la variabile non c'e' e vale 0. lg:translate-y-0 perche'
+					// a desktop la barra e' sticky e nasconderla romperebbe il
+					// calcolo di --topbar-h su cui si appoggiano mappa e dettaglio.
+					// Tailwind v4 emette la proprieta' `translate`, NON `transform`:
+					// getComputedStyle(nav).transform resta "none" anche a barra
+					// scorsa via, e sembra un difetto che non c'e'.
+					"-translate-y-[var(--nav-offset,0px)] lg:translate-y-0",
 				)}
 				// Fuori dall'ordine di tabulazione quando e' scorsa via: una
 				// pillola di ricerca invisibile ma ancora focalizzabile manderebbe

@@ -75,13 +75,15 @@ const MAX_RESTORED_PAGE = 1000;
 const SCROLL_SAVE_MS = 200;
 const MAX_RESTORED_SCROLL_PX = 500_000;
 
-// Navbar mobile che si nasconde scorrendo. THRESHOLD: sotto questa quota la
-// barra resta sempre visibile (il rimbalzo elastico di iOS la farebbe
-// sfarfallare a scrollTop ~0). DELTA: quanto bisogna scendere in un colpo
-// perche' si nasconda — la risalita invece la riporta subito, a qualunque
-// delta, com'e' stato chiesto.
-const NAV_HIDE_THRESHOLD_PX = 80;
-const NAV_HIDE_DELTA_PX = 6;
+// Intestazione mobile sopra la lista: chip (34px) + gap-3 (12) + ViewSwitch
+// (h-9 + p-0.5 = 40) + pb-3 (12) = 98px sotto la barra. Altezze fisse nei due
+// componenti: se una cambia, cambia questo numero — la lista scorrerebbe
+// sotto la riga mancante, o lascerebbe un vuoto.
+const MOBILE_HEADER_BELOW_NAV_PX = 98;
+// A barra del tutto scorsa via le chip restano a questa distanza dal bordo,
+// non incollate. Sta dentro il pb-3 trasparente della barra: la pillola
+// e' gia' fuori schermo.
+const MOBILE_HEADER_TOP_GAP_PX = 8;
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -267,6 +269,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	const lastScrollSaveRef = useRef(0);
 	const lastScrollTopRef = useRef(0);
 	const [navHidden, setNavHidden] = useState(false);
+	// Quanto la barra mobile e' scorsa via, 0..navHeight-8, legato 1:1 allo
+	// scroll. Scritto come variabile CSS sul contenitore radice, mai come
+	// stato: uno setState per evento di scroll ridisegnerebbe la home intera
+	// a ogni frame. navHidden resta stato solo per inert/aria-hidden, e
+	// cambia solo agli estremi.
+	const navOffsetRef = useRef(0);
+	const rootRef = useRef<HTMLDivElement>(null);
 	// isDesktopSurface e' dichiarato piu' sotto (effect della media query): il
 	// valore derivato vive accanto al JSX che lo usa, vedi navCollapsed nel
 	// corpo del render.
@@ -276,8 +285,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		const measure = () => {
 			const nav = document.getElementById("main-navbar");
 			if (!nav) return;
+			// + l'offset corrente: rect.bottom include il translate, e a barra
+			// (anche solo in parte) scorsa via misurerebbe meno della barra.
 			const rect = nav.getBoundingClientRect();
-			setNavHeight(rect.bottom);
+			setNavHeight(rect.bottom + navOffsetRef.current);
 		};
 		measure();
 		const ro = new ResizeObserver(measure);
@@ -1023,7 +1034,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		// cambio di vista la ripristina, e azzera anche la direzione, cosi' il
 		// primo scroll dopo il ritorno alla lista non si confronta con una
 		// quota di un'altra sessione.
-		setNavHidden(false);
+		setNavOffset(0);
 		lastScrollTopRef.current = scrollContainerRef.current?.scrollTop ?? 0;
 		// Task 3: anche il ritorno alla vista lista azzera la ricerca
 		// sull'area, cosi' la lista non resta silenziosamente ristretta a
@@ -1057,9 +1068,29 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
+	const setNavOffset = (next: number) => {
+		const maxOffset = navHeight - MOBILE_HEADER_TOP_GAP_PX;
+		const offset = Math.min(Math.max(next, 0), maxOffset);
+		if (offset === navOffsetRef.current) return;
+		navOffsetRef.current = offset;
+		rootRef.current?.style.setProperty("--nav-offset", `${offset}px`);
+		setNavHidden(offset >= maxOffset);
+	};
+
 	const handleScroll = () => {
 		if (!scrollContainerRef.current) return;
-		const { scrollTop } = scrollContainerRef.current;
+		const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+
+		// Navbar mobile che scorre via insieme alla lista, pixel per pixel, e
+		// torna allo stesso modo risalendo. PRIMA del limitatore di cadenza
+		// sotto: valutata solo ogni SCROLL_SAVE_MS confrontava quote vecchie
+		// di 200ms, e la barra rispondeva in ritardo e a scatti. La quota e'
+		// stretta dentro [0, max] cosi' il rimbalzo elastico di iOS, in cima
+		// e in fondo, non la fa sfarfallare.
+		const clamped = Math.min(Math.max(scrollTop, 0), Math.max(scrollHeight - clientHeight, 0));
+		const previous = lastScrollTopRef.current;
+		lastScrollTopRef.current = clamped;
+		if (!isDesktopSurface) setNavOffset(navOffsetRef.current + clamped - previous);
 
 		// Posizione di lettura persistita per il ritorno dal dettaglio: senza,
 		// loadedCount veniva ripristinato (sessanta card tornavano) ma la lista
@@ -1072,25 +1103,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 		if (now - lastScrollSaveRef.current < SCROLL_SAVE_MS) return;
 		lastScrollSaveRef.current = now;
 		sessionStorage.setItem("listScrollTop", String(Math.round(scrollTop)));
-
-		// Navbar mobile che si nasconde scorrendo in giu' e ricompare al primo
-		// accenno di scorrimento in su. Sotto la soglia resta sempre visibile:
-		// nascondere la barra nei primi pixel la farebbe sfarfallare sul
-		// rimbalzo elastico di iOS.
-		const previous = lastScrollTopRef.current;
-		lastScrollTopRef.current = scrollTop;
-		if (scrollTop <= NAV_HIDE_THRESHOLD_PX) {
-			setNavHidden(false);
-		} else if (scrollTop - previous > NAV_HIDE_DELTA_PX) {
-			setNavHidden(true);
-		} else if (previous - scrollTop > 0) {
-			setNavHidden(false);
-		}
 	};
-
-	useEffect(() => {
-		handleScroll();
-	}, [events]);
 
 	// Applica la posizione ripristinata appena la lista e' abbastanza alta da
 	// contenerla. Non al mount: al mount le card ripristinate non sono ancora
@@ -1207,7 +1220,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 	}, [selectedEventId, events]);
 
 	return (
-		<div className="min-h-screen bg-background">
+		<div ref={rootRef} className="min-h-screen bg-background">
 			{/* navCollapsed e' mobile-only: a lg la barra e' sticky e regge il
 			    calcolo di --topbar-h, e renderla inert mentre resta visibile
 			    sarebbe un difetto di accessibilita' tutto nuovo. */}
@@ -1226,13 +1239,19 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				// aveva scelto il contrario di proposito; l'utente lo ha
 				// ribaltato per la sola HOME (dettaglio: 12-10-PLAN.md:22 resta
 				// valida, quella pagina scorre ancora come pagina).
-				className="fixed left-0 right-0 bottom-0 overflow-hidden transition-[top] duration-200 ease-out motion-reduce:transition-none"
-				// Il bordo superiore sale insieme alla barra: senza, nasconderla
-				// lascerebbe una fascia vuota invece di restituire alla lista lo
-				// spazio che occupava — che e' esattamente il motivo per cui la si
-				// nasconde. Stessa durata e stessa curva della transizione di
-				// <nav>, cosi' le due si muovono come una cosa sola.
-				style={{ top: navCollapsed ? 0 : navHeight }}
+				// A mobile <main> parte dal bordo dello schermo e non si muove
+				// piu': prima saliva di tutta l'altezza della barra quando questa
+				// si nascondeva, e la lista sotto il dito saltava di ~110px. Ora
+				// la lista scorre SOTTO l'intestazione (barra, chip, Lista/Mappa)
+				// e l'intestazione scorre via con lei. A lg la barra e' sticky e
+				// <main> resta sotto, come prima.
+				className="fixed left-0 right-0 bottom-0 top-0 overflow-hidden lg:top-[var(--nav-h)]"
+				style={
+					{
+						"--nav-h": `${navHeight}px`,
+						"--header-h": `${navHeight + MOBILE_HEADER_BELOW_NAV_PX}px`,
+					} as React.CSSProperties
+				}
 				// D-11: fuori portata da Tab e dal puntatore finche' il
 				// pannello desktop resta aperto (T-17-09).
 				inert={navPanelOpen}
@@ -1251,7 +1270,13 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				    a mobile (fondo dell'intera colonna), ma a desktop scende a lg:pb-2:
 				    e' l'unico proprietario dello spazio sotto la paginazione da quando
 				    il piede e' andato a pb-0, e 16px erano troppi. */}
-				<div className="mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-0 lg:pt-3 pb-4 lg:pb-2 h-full flex flex-col gap-3">
+				<div className="relative mx-auto w-full max-w-[1760px] px-4 sm:px-[18px] lg:px-[22px] pt-0 lg:pt-3 pb-4 lg:pb-2 h-full flex flex-col gap-3">
+					{/* Intestazione mobile: sovrapposta alla lista, opaca, e
+					    traslata insieme alla barra (--nav-offset). Lo spazio sotto la
+					    barra (pt) e' suo, cosi' copre anche la fascia dietro la
+					    pillola trasparente. A lg `contents` la toglie dal layout e
+					    chip e interruttori tornano figli diretti della colonna. */}
+					<div className="absolute inset-x-0 top-0 z-10 flex flex-col gap-3 bg-background px-4 sm:px-[18px] pt-[var(--nav-h)] pb-3 -translate-y-[var(--nav-offset,0px)] lg:contents">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
@@ -1271,6 +1296,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					    comando del contenuto. */}
 					<div className="hidden lg:flex lg:justify-center lg:mt-6 lg:mb-4">
 						<ViewSwitch variant="desktop" value={desktopView} onChange={setDesktopView} />
+					</div>
 					</div>
 
 					<div
@@ -1363,7 +1389,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								// insieme, si annullano come prima). La mappa comincia a 1325:
 								// restano 12px di margine. A sinistra 8px bastano: li' non c'e'
 								// scrollbar, solo l'anello da 2px da non tagliare.
-								className="h-full overflow-y-auto pl-2 -ml-2 pr-5 -mr-5 [scrollbar-gutter:stable]"
+								// pt: a mobile la lista comincia sotto l'intestazione
+								// sovrapposta e ci scorre sotto; scroll-pt tiene le card
+								// raggiunte da tastiera fuori da quella fascia.
+								className="h-full overflow-y-auto pl-2 -ml-2 pr-5 -mr-5 [scrollbar-gutter:stable] pt-[var(--header-h)] scroll-pt-[var(--header-h)] lg:pt-0 lg:scroll-pt-0"
 							>
 								{/* pageLoading accanto a loading, non solo loading: al cambio
 								    pagina si vuole LO STESSO spinner grande del primo
@@ -1641,7 +1670,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 							id={VIEW_SWITCH_PANEL_ID.map}
 							role="tabpanel"
 							aria-labelledby={VIEW_SWITCH_TAB_ID.map}
-							className="relative flex-1 min-w-0 lg:hidden"
+							className="relative flex-1 min-w-0 mt-[var(--header-h)] lg:hidden"
 						>
 							<EventsMap
 								events={mapEvents}
