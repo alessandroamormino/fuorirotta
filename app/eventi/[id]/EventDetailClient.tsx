@@ -27,6 +27,7 @@ import {
 	X,
 } from "lucide-react";
 import { cn, decodeHtmlEntities, htmlToPlainText } from "@/lib/utils";
+import { useIsDesktopSurface } from "@/lib/hooks/useBrowserState";
 
 const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 	ssr: false,
@@ -118,14 +119,18 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
 	const [loading, setLoading] = useState(!initialEvent);
-	const [heroLoaded, setHeroLoaded] = useState(false);
+	// L'id dell'evento la cui immagine hero ha finito di caricare: cambiando
+	// evento il confronto torna falso da solo, senza un effect di reset.
+	const [heroLoadedId, setHeroLoadedId] = useState<Event["id"] | null>(null);
+	const heroLoaded = event !== null && heroLoadedId === event.id;
 	const [barScrolled, setBarScrolled] = useState(false);
 	const [navSheetOpen, setNavSheetOpen] = useState(false);
 	const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-	// D-8 (12-10): predicato a 1024px, popolato dall'effect piu' sotto — regge
-	// prima dell'hydratazione col ripiego "falso" (ramo mobile), coerente con
-	// l'SSR dove window non esiste.
-	const [isDesktopSurface, setIsDesktopSurface] = useState(false);
+	// D-8 (12-10): predicato a 1024px, lo stesso di HomeClient — "falso" (ramo
+	// mobile) lato server e prima dell'hydratazione, dove window non esiste.
+	// Decide quale delle due istanze di EventsMap (colonna laterale o blocco
+	// "Dove si trova") monta davvero: mai entrambe.
+	const isDesktopSurface = useIsDesktopSurface();
 	// "Nelle vicinanze" (Task 3, 12-10): fino a 3 eventi reali, mai l'evento
 	// corrente. Ripiego vuoto — sotto 1 elemento la sezione non renderizza
 	// affatto (decisione utente 2026-09-08), nessuna copy di stato vuoto.
@@ -148,33 +153,28 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const h1Ref = useRef<HTMLHeadingElement>(null);
 
 	useEffect(() => {
-		// Se abbiamo già i dati dal server (SSR), non richiedere
+		// Se abbiamo già i dati dal server (SSR), non richiedere. Senza
+		// initialEvent `loading` parte gia' a true (useState(!initialEvent)).
 		if (initialEvent || !params.id) return;
-		fetchEvent(params.id as string);
-	}, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-	const fetchEvent = async (id: string) => {
-		setLoading(true);
-		try {
-			const response = await fetch(`/api/events/${id}`);
-			if (response.ok) {
-				const data = await response.json();
-				setEvent(data);
-			} else {
+		let cancelled = false;
+		fetch(`/api/events/${params.id as string}`)
+			.then((response) => {
 				// Nessun rimando automatico: lo stato "Evento non trovato" e'
 				// un ramo raggiungibile, non una tappa di passaggio verso "/".
-				console.error("Event not found");
-			}
-		} catch (error) {
-			console.error("Error fetching event:", error);
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	useEffect(() => {
-		setHeroLoaded(false);
-	}, [event?.id]);
+				if (!response.ok) throw new Error("Event not found");
+				return response.json();
+			})
+			.then((data: Event) => {
+				if (!cancelled) setEvent(data);
+			})
+			.catch((error) => console.error("Error fetching event:", error))
+			.finally(() => {
+				if (!cancelled) setLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Titolo in barra solo dopo che l'H1 e' uscito dalla vista (mai lo
 	// stesso testo due volte a schermo) — IntersectionObserver, non un
@@ -204,20 +204,6 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 				}
 			}
 		);
-	}, []);
-
-	// D-8 (12-10): stesso predicato a 1024px che 12-09 usa in app/HomeClient.tsx
-	// — stessa stringa di media query, una sola verita' condivisa col CSS, mai
-	// una larghezza letta a mano. Dichiarato qui e non estratto in un hook
-	// condiviso: due call site non giustificano l'estrazione, che si fa quando
-	// compare il terzo. Decide quale delle due istanze di EventsMap (colonna
-	// laterale o blocco "Dove si trova") monta davvero: mai entrambe.
-	useEffect(() => {
-		const mq = window.matchMedia("(min-width: 1024px)");
-		setIsDesktopSurface(mq.matches);
-		const handleChange = (e: MediaQueryListEvent) => setIsDesktopSurface(e.matches);
-		mq.addEventListener("change", handleChange);
-		return () => mq.removeEventListener("change", handleChange);
 	}, []);
 
 	// "Nelle vicinanze" (Task 3, 12-10): solo desktop (la sezione non esiste
@@ -496,7 +482,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										alt={decodeHtmlEntities(event.title)}
 										loading="eager"
 										decoding="async"
-										onLoad={() => setHeroLoaded(true)}
+										onLoad={() => setHeroLoadedId(event.id)}
 										className="block w-full h-auto object-contain max-h-[46dvh] lg:max-h-[50dvh]"
 									/>
 								</div>

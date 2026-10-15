@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import type { Event as PrismaEvent } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decodeHtmlEntities } from "@/lib/utils";
-import { Event } from "@/lib/types";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
 import EventDetailClient from "./EventDetailClient";

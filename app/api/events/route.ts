@@ -24,7 +24,6 @@ import { getLiveRegions } from "@/lib/coverage/liveRegions";
 import { istatRegionToSlug } from "@/lib/scrapers/regionSlug";
 import type { CoverageMessageVariant } from "@/components/CoverageMessage";
 import { Prisma, Event as PrismaEvent } from "@prisma/client";
-import { Event } from "@/lib/types";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent, groupMembersByCanonical } from "@/lib/dedup/compose";
@@ -39,6 +38,31 @@ import { compareByWindowRelevance } from "@/lib/eventOrdering";
 // rami raggio/non-raggio: applicarla a un solo percorso riprodurrebbe
 // esattamente il difetto che WR-01 ha gia' corretto su questo stesso file per
 // search/cities.
+// Forma leggera di un evento per la mappa, identica nei due rami (con e senza
+// raggio). resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
+// davvero (D-09/D-14, Fase 6).
+function toMapEvent(e: PrismaEvent) {
+	return {
+		id: e.id,
+		latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
+		longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
+		resolvedLatitude: e.resolvedLatitude ? parseFloat(e.resolvedLatitude.toString()) : null,
+		resolvedLongitude: e.resolvedLongitude ? parseFloat(e.resolvedLongitude.toString()) : null,
+		coordinateSource: e.coordinateSource,
+		title: e.title,
+		dateStart: e.dateStart,
+		locationName: e.locationName,
+		category: e.canonicalCategory,
+		imageUrl: e.imageUrl,
+		source: e.source,
+		sourceId: e.sourceId,
+	};
+}
+
+type EventWithComune = Prisma.EventGetPayload<{
+	include: { comune: { select: { name: true; provinceCode: true } } };
+}>;
+
 async function withComposedFields<T extends PrismaEvent>(
 	events: T[]
 ): Promise<T[]> {
@@ -262,7 +286,7 @@ export async function GET(request: NextRequest) {
 					"[Cache] Reading from database (data refreshed via the per-region cron scrape)"
 				);
 			}
-		} catch (cacheError: any) {
+		} catch {
 			console.warn("[Cache] Check failed, proceeding with database query");
 		}
 
@@ -276,7 +300,7 @@ export async function GET(request: NextRequest) {
 		// sotto) perche' sono due percorsi di codice distinti che altrimenti
 		// erediterebbero il filtro solo uno dei due — esattamente il difetto che
 		// WR-01 ha gia' corretto in Fase 9 su questo stesso file per search/cities.
-		const where: any = {
+		const where: Prisma.EventWhereInput = {
 			canonicalEventId: null,
 		};
 
@@ -370,9 +394,9 @@ export async function GET(request: NextRequest) {
 		}
 
 		// GESTIONE FILTRO RAGGIO
-		let events: any[];
+		let events: EventWithComune[];
 		let total: number;
-		let mapEvents: any[];
+		let mapEvents: ReturnType<typeof toMapEvent>[];
 
 		if (lat && lng && radius) {
 			// Con filtro raggio: fetch TUTTI gli eventi, filtra in memoria, poi pagina
@@ -433,25 +457,7 @@ export async function GET(request: NextRequest) {
 			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
 			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
 			// al solo centroide del comune non avrebbero nessun punto da leggere.
-			mapEvents = composedFilteredEvents.map((e) => ({
-				id: e.id,
-				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
-				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
-				resolvedLatitude: e.resolvedLatitude
-					? parseFloat(e.resolvedLatitude.toString())
-					: null,
-				resolvedLongitude: e.resolvedLongitude
-					? parseFloat(e.resolvedLongitude.toString())
-					: null,
-				coordinateSource: e.coordinateSource,
-				title: e.title,
-				dateStart: e.dateStart,
-				locationName: e.locationName,
-				category: e.canonicalCategory,
-				imageUrl: e.imageUrl,
-				source: e.source,
-				sourceId: e.sourceId,
-			}));
+			mapEvents = composedFilteredEvents.map(toMapEvent);
 		} else {
 			// Senza filtro raggio: Prisma non sa esprimere GREATEST(dateStart,
 			// windowStart) in orderBy (lib/eventOrdering.ts), quindi l'ordine
@@ -498,25 +504,7 @@ export async function GET(request: NextRequest) {
 			// accettabile al volume attuale (~2.700 eventi).
 			const composedMapEvents = await withComposedFields(allMatchingEvents);
 
-			mapEvents = composedMapEvents.map((e) => ({
-				id: e.id,
-				latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
-				longitude: e.longitude ? parseFloat(e.longitude.toString()) : null,
-				resolvedLatitude: e.resolvedLatitude
-					? parseFloat(e.resolvedLatitude.toString())
-					: null,
-				resolvedLongitude: e.resolvedLongitude
-					? parseFloat(e.resolvedLongitude.toString())
-					: null,
-				coordinateSource: e.coordinateSource,
-				title: e.title,
-				dateStart: e.dateStart,
-				locationName: e.locationName,
-				category: e.canonicalCategory,
-				imageUrl: e.imageUrl,
-				source: e.source,
-				sourceId: e.sourceId,
-			}));
+			mapEvents = composedMapEvents.map(toMapEvent);
 		}
 
 		// ========== INDICATORE DI COPERTURA (D-06/D-07) ==========

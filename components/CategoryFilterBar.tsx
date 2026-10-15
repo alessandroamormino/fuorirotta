@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CANONICAL_CATEGORIES } from "@/lib/categories/taxonomy";
 
@@ -83,11 +83,11 @@ export default function CategoryFilterBar({
 	// alla posizione sbagliata dopo un riordino che non cambia pero' la
 	// selezione (l'unico caso in cui l'effect sotto si risincronizza).
 	const [focusedValue, setFocusedValue] = useState(items[activeIndex]?.value);
-
-	useEffect(() => {
+	const [prevActiveIndex, setPrevActiveIndex] = useState(activeIndex);
+	if (activeIndex !== prevActiveIndex) {
+		setPrevActiveIndex(activeIndex);
 		setFocusedValue(items[activeIndex]?.value);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [activeIndex]);
+	}
 
 	const focusedIndexRaw = items.findIndex((item) => item.value === focusedValue);
 	// Se il chip a fuoco e' sparito (es. cambio di elenco categorie), ricadi

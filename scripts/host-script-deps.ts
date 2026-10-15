@@ -26,7 +26,7 @@
  * Exit: 0 pulito, 1 se uno script host raggiunge un pacchetto proibito.
  */
 import { readFileSync, existsSync, statSync } from 'fs'
-import { join, dirname, resolve as resolvePath, relative } from 'path'
+import { join, dirname, resolve as resolvePath } from 'path'
 
 const ROOT = resolvePath(__dirname, '..')
 const EXTS = ['.ts', '.tsx', '.js', '.mjs', '.cjs']

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Menu, Map as MapIcon, Columns2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useIsDark } from "@/lib/hooks/useBrowserState";
 
 export type MobileView = "list" | "map";
 // 12-08/D-3: sovrainsieme desktop dei due stati mobili — "split" e' il terzo
@@ -83,23 +84,16 @@ export default function ViewSwitch<V extends ViewValue = MobileView>({
 	// prefers-color-scheme, non sulla classe .dark che l'utente sceglie a
 	// mano) — stesso pattern gia' in EventsMap.tsx/ThemeToggle.tsx per
 	// qualunque resa che deve differire per tema: letta dal DOM, non da CSS.
-	const [isDark, setIsDark] = useState(false);
-	useEffect(() => {
-		// Sync da document.documentElement.classList (l'anti-FOUC script l'ha
-		// gia' applicata prima del mount) — stesso pattern di ThemeToggle.tsx.
-		setIsDark(document.documentElement.classList.contains("dark"));
-		const handleThemeChange = (event: Event) => {
-			const detail = (event as CustomEvent<{ isDark: boolean }>).detail;
-			setIsDark(!!detail?.isDark);
-		};
-		window.addEventListener("theme-change", handleThemeChange);
-		return () => window.removeEventListener("theme-change", handleThemeChange);
-	}, []);
+	const isDark = useIsDark();
 
+	// Il focus da tastiera segue la selezione quando questa cambia da fuori:
+	// riallineato durante il render, non in un effect (un render in meno).
 	const [focusedValue, setFocusedValue] = useState<V>(value);
-	useEffect(() => {
+	const [prevValue, setPrevValue] = useState<V>(value);
+	if (value !== prevValue) {
+		setPrevValue(value);
 		setFocusedValue(value);
-	}, [value]);
+	}
 
 	const focusedIndexRaw = TABS.findIndex((tab) => tab.value === focusedValue);
 	const focusedIndex = focusedIndexRaw === -1 ? 0 : focusedIndexRaw;

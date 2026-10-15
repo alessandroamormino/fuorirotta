@@ -7,7 +7,7 @@
  * CategoryFilterBar.tsx) e deve restare sicuro nel bundle browser — il
  * self-check vive separato in lib/categories/taxonomy.selfcheck.ts.
  */
-import { getSourceMetaById, SOURCE_META } from '../scrapers/sources'
+import { getSourceMetaById } from '../scrapers/sources'
 import { decodeHtmlEntities } from '../utils'
 
 // I 7 nomi canonici, in ordine di volume misurato (D-01). 'Altro' e' sempre

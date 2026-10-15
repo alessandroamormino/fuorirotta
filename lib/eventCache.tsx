@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useRef, ReactNode } from 'react';
 import { Event } from './types';
 
 interface EventCacheData {
@@ -22,57 +22,51 @@ const EventCacheContext = createContext<EventCacheContextType | undefined>(undef
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minuti
 
 export function EventCacheProvider({ children }: { children: ReactNode }) {
-  const [cache, setCache] = useState<Map<string, EventCacheData>>(new Map());
+  // Un ref e non uno stato: la cache non si disegna, si consulta. Da stato,
+  // ogni scrittura ridisegnava tutti i consumer del context; e il caricamento
+  // da sessionStorage stava in un effect del provider, che React esegue DOPO
+  // quelli dei figli — al primo mount HomeClient la trovava sempre vuota.
+  // Ora si carica alla prima lettura, sempre lato client (handler ed effect).
+  const cacheRef = useRef<Map<string, EventCacheData> | null>(null);
 
-  // Load cache from sessionStorage on mount
-  useEffect(() => {
-    const savedCache = sessionStorage.getItem('eventCache');
-    if (savedCache) {
+  const cache = (): Map<string, EventCacheData> => {
+    if (cacheRef.current === null) {
+      cacheRef.current = new Map();
       try {
-        const parsed = JSON.parse(savedCache);
-        setCache(new Map(Object.entries(parsed)));
+        const savedCache = sessionStorage.getItem('eventCache');
+        if (savedCache) cacheRef.current = new Map(Object.entries(JSON.parse(savedCache)));
       } catch (e) {
         console.error('Failed to load cache:', e);
       }
     }
-  }, []);
+    return cacheRef.current;
+  };
 
-  // Save cache to sessionStorage whenever it changes.
-  //
   // Il try/catch non e' difensivo per abitudine: senza, un
-  // QuotaExceededError su setItem esce da questo effect e React porta giu'
+  // QuotaExceededError su setItem esce dal chiamante e React porta giu'
   // l'intera pagina con "Application error: a client-side exception has
-  // occurred" — schermata bianca, niente lista, niente mappa. Il ramo di
-  // lettura sopra si proteggeva gia'; la scrittura no.
+  // occurred" — schermata bianca, niente lista, niente mappa.
   // Riprodotto in Chrome il 2026-09-20 sul catalogo locale post-Alto Adige
   // (~19.000 eventi futuri): la quota di sessionStorage e' ~5MB per origine
-  // e un paio di risposte con i mapEvents al completo la saturano. Con i
-  // ~1.700 eventi di produzione capitava di rado; dopo il rilascio della
-  // Fase 19 diventerebbe ordinario.
+  // e un paio di risposte con i mapEvents al completo la saturano.
   // La cache e' solo un'ottimizzazione: se non ci sta, si butta via e si
   // rifa' un fetch. Sempre meglio di una pagina bianca.
-  useEffect(() => {
-    if (cache.size === 0) return;
+  const persist = () => {
     try {
-      sessionStorage.setItem('eventCache', JSON.stringify(Object.fromEntries(cache.entries())));
+      sessionStorage.setItem('eventCache', JSON.stringify(Object.fromEntries(cache().entries())));
     } catch (e) {
       console.warn('[EventCache] cache non salvata, si prosegue senza:', e);
       try { sessionStorage.removeItem('eventCache'); } catch { /* niente da fare */ }
     }
-  }, [cache]);
+  };
 
   const getCachedEvents = (queryKey: string): EventCacheData | null => {
-    const cached = cache.get(queryKey);
+    const cached = cache().get(queryKey);
     if (!cached) return null;
 
-    const now = Date.now();
-    if (now - cached.timestamp > CACHE_DURATION) {
-      // Cache expired
-      setCache(prev => {
-        const newCache = new Map(prev);
-        newCache.delete(queryKey);
-        return newCache;
-      });
+    if (Date.now() - cached.timestamp > CACHE_DURATION) {
+      cache().delete(queryKey);
+      persist();
       return null;
     }
 
@@ -80,15 +74,13 @@ export function EventCacheProvider({ children }: { children: ReactNode }) {
   };
 
   const setCachedEvents = (queryKey: string, data: Omit<EventCacheData, 'timestamp'>) => {
-    setCache(prev => new Map(prev).set(queryKey, {
-      ...data,
-      timestamp: Date.now()
-    }));
+    cache().set(queryKey, { ...data, timestamp: Date.now() });
+    persist();
   };
 
   const clearCache = () => {
-    setCache(new Map());
-    sessionStorage.removeItem('eventCache');
+    cacheRef.current = new Map();
+    try { sessionStorage.removeItem('eventCache'); } catch { /* niente da fare */ }
   };
 
   return (

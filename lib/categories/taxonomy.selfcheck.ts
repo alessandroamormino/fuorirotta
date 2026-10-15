@@ -9,7 +9,6 @@
  */
 import {
   CANONICAL_CATEGORIES,
-  FALLBACK_CATEGORY,
   canonicalizeCategory,
   orderCategories,
   type CanonicalCategory
