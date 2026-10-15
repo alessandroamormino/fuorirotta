@@ -60,38 +60,31 @@
     "test:local": "bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && bash scripts/dedup.test.sh && bash scripts/category-taxonomy.test.sh && npm run check:region-lock && npm run check:detail-cache && npm run check:region-scoping && npm run check:region-coverage && npm run check:maintenance-locks && npm run check:source-disambiguation && npm run check:cluster-volume && npm run check:retention-purge"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^6.1.0",
     "@prisma/client": "^6.1.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-popover": "^1.1.23",
-    "@tailwindcss/typography": "^0.5.19",
-    "@types/leaflet": "^1.9.21",
     "cheerio": "^1.2.0",
     "date-fns": "^4.1.0",
     "domhandler": "^5.0.3",
     "framer-motion": "^12.23.26",
     "he": "^1.2.0",
-    "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
     "mapbox-gl": "^3.17.0",
-    "next": "16.1.1",
-    "pg": "^8.16.3",
+    "next": "16.4.1",
     "prisma": "^6.1.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "react-leaflet": "^5.0.0"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/geojson": "^7946.0.16",
     "@types/he": "^1.2.3",
     "@types/node": "^20",
-    "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.2.3",
     "eslint": "^9",
-    "eslint-config-next": "16.1.1",
-    "exceljs": "^4.4.0",
+    "eslint-config-next": "16.4.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -29,6 +29,7 @@
 import { writeFileSync } from 'fs'
 import path from 'path'
 import { normalizeComuneName } from '../lib/territorial/normalize'
+import { parseIstatCsv } from './seed-comuni'
 
 const ENDPOINT = 'https://query.wikidata.org/sparql'
 const USER_AGENT = 'fuorirotta-seed/1.0 (https://fuori-rotta.it; contatto via repository GitHub)'
@@ -178,17 +179,9 @@ async function main() {
   // scarta nulla (nessun falso positivo, solo un alias ridondante in piu').
   const italianNameByIstat = new Map<string, string>()
   try {
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    await wb.xlsx.readFile(path.join(REPO_ROOT, 'data/Elenco-comuni-italiani.xlsx'))
-    const ws = wb.worksheets[0]
-    for (let r = 2; r <= ws.rowCount; r++) {
-      const code = String(ws.getRow(r).getCell(5).value ?? '').padStart(6, '0')
-      const name = ws.getRow(r).getCell(7).value
-      if (code && code !== '000000' && typeof name === 'string') italianNameByIstat.set(code, name)
-    }
+    for (const r of parseIstatCsv(path.join(REPO_ROOT, 'data/elenco-comuni-istat.csv'))) italianNameByIstat.set(r.istatCode, r.name)
   } catch {
-    console.log('[FetchWikidata] data/Elenco-comuni-italiani.xlsx non trovato, dedup contro il nome italiano saltato')
+    console.log('[FetchWikidata] data/elenco-comuni-istat.csv non trovato, dedup contro il nome italiano saltato')
   }
 
   const aliasRows = buildAliasRows(combined, italianNameByIstat)

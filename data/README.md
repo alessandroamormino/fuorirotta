@@ -5,10 +5,10 @@ Provenienza, licenza e data di scarico di ogni file sotto `data/`, scritto
 Task 1 di `06-03-PLAN.md`). Nessun dataset con licenza non dichiarata o non
 verificabile entra qui — vedi la sezione "Sorgente scartata" in fondo.
 
-## `Elenco-comuni-italiani.xlsx`
+## `elenco-comuni-istat.csv`
 
-- **Cosa contiene:** anagrafica ufficiale dei comuni italiani — codice ISTAT,
-  denominazione, provincia, regione, ripartizione geografica.
+- **Cosa contiene:** anagrafica ufficiale dei comuni italiani, ridotta alle
+  colonne usate: `istat_code,name,region_code,region_name,province_name,province_code`.
 - **Fonte:** ISTAT — https://www.istat.it/storage/codici-unita-amministrative/Elenco-comuni-italiani.xlsx
   (pagina di riferimento: https://www.istat.it/classificazione/codici-dei-comuni-delle-province-e-delle-regioni/)
 - **Licenza:** Creative Commons Attribuzione 4.0 (CC BY 4.0) — dichiarata su
@@ -17,16 +17,21 @@ verificabile entra qui — vedi la sezione "Sorgente scartata" in fondo.
   Commons – Attribuzione – versione 4.0."), verificata in questa sessione con
   link diretto a `creativecommons.org/licenses/by/4.0/deed.it`.
 - **Data di scarico:** 2026-08-18
-- **Rigenerazione:**
-  `curl -o data/Elenco-comuni-italiani.xlsx https://www.istat.it/storage/codici-unita-amministrative/Elenco-comuni-italiani.xlsx`
-- **Uso:** `npx tsx scripts/seed-comuni.ts --istat data/Elenco-comuni-italiani.xlsx [...]`
+- **Formato:** fino al 2026-10-15 qui c'era l'xlsx originale, letto con
+  `exceljs` (fermo dal 2024, con dipendenze vulnerabili). E' stato convertito una
+  volta con il vecchio parser, e il CSV e' stato verificato identico riga per
+  riga e campo per campo (7.894 comuni). L'xlsx resta nella storia git.
+- **Rigenerazione:** ISTAT pubblica gli stessi dati anche in CSV
+  (`Elenco-comuni-italiani.csv`, separatore `;`, codifica latin1): vanno
+  ridotti alle sei colonne sopra, con `istat_code` a 6 cifre.
+- **Uso:** `npx tsx scripts/seed-comuni.ts --istat data/elenco-comuni-istat.csv [...]`
 
 ## `Variazioni-amministrative-e-territoriali-dei-comuni-Anni-1991-2025.xlsx`
 
 - **Cosa contiene:** **non** un elenco riga-per-riga di variazioni di codice
   (rinomini, fusioni, riassegnazioni provinciali con codice-prima/codice-dopo)
   come assunto in fase di ricerca (RESEARCH.md Assumption A3). Ispezionato con
-  `--inspect` in questa sessione: e' una tabella di **statistiche aggregate**
+  `--inspect` (flag rimosso il 2026-10-15 insieme a exceljs): e' una tabella di **statistiche aggregate**
   — conteggi di variazioni per tipologia, regione e periodo (es. "Piemonte:
   17 fusioni, 1 scorporo, ... nel periodo 1991-2025"), su 5 fogli per
   intervallo di anni. Nessun codice ISTAT individuale compare nel file.

@@ -6,7 +6,7 @@
  * - `--csv <path>` (06-01): un unico CSV con tutte le colonne, usato dal
  *   tracer e dal gate (`scripts/territorial-backfill.test.sh`, sezione
  *   TERR-05). Invariato in questo piano.
- * - `--istat <path.xlsx>` [+ `--coordinates <path.csv>`] [+ `--reconcile
+ * - `--istat <path.csv>` [+ `--coordinates <path.csv>`] [+ `--reconcile
  *   <path.csv>`] [+ `--dry-run`] (06-03): seed nazionale. L'anagrafica ISTAT
  *   e' la lista autoritativa delle righe; le coordinate sono un arricchimento
  *   opzionale che si unisce su `istat_code`; il reimport riconcilia le
@@ -14,10 +14,6 @@
  * - `--aliases <path.csv>` (06-03): aggiorna SOLO la colonna `aliases` dei
  *   comuni gia' presenti, senza toccare le altre colonne — cosi' un reimport
  *   `--istat` successivo non deve ripetere gli alias per non perderli.
- * - `--inspect <path.xlsx>`: stampa fogli/intestazione/prime righe di un file
- *   XLSX ed esce, senza toccare il database. Le colonne dei parser sotto sono
- *   state scritte SOLO dopo aver eseguito questo comando sui file reali
- *   (vedi 06-03-SUMMARY.md per l'output).
  *
  * Scrittura sempre in upsert su `istatCode` (D-02): un codice gia' presente
  * aggiorna la riga esistente, mai un secondo insert — cio' che preserva
@@ -39,7 +35,6 @@ import path from 'path'
 import { prisma } from '../lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { normalizeComuneName } from '../lib/territorial/normalize'
-import type ExcelJS from 'exceljs'
 
 export type ComuneSeedRow = {
   istatCode: string
@@ -293,62 +288,35 @@ export type IstatRow = {
 }
 
 /**
- * `data/Elenco-comuni-italiani.xlsx` (ISTAT, CC BY 4.0). Colonne verificate
- * con `--inspect` (vedi 06-03-SUMMARY.md per l'output reale incollato):
- * A=Codice Regione, E=Codice Comune formato alfanumerico (istat_code),
- * G=Denominazione in italiano, K=Denominazione Regione, L=Denominazione
- * dell'Unita' territoriale sovracomunale (provincia), O=Sigla automobilistica
- * (province_code, es. 'MI' — stesso formato del fixture del tracer 06-01).
- * Nessun nome di colonna dedotto a memoria (RESEARCH.md Assumption A5).
+ * `data/elenco-comuni-istat.csv`: l'anagrafica ISTAT (CC BY 4.0) ridotta alle
+ * sei colonne che servono, convertita una volta dall'xlsx originale con il
+ * vecchio parser e verificata riga per riga contro di esso (vedi data/README.md).
  */
-/**
- * Alcune celle del foglio ISTAT (es. "Valle d'Aosta/Vallée d'Aoste") usano
- * rich text con piu' porzioni in font diversi (il corsivo sul nome francese):
- * `.value` in quel caso non e' una stringa ma `{ richText: [{text}, ...] }`.
- * `String(...)` su quell'oggetto produrrebbe '[object Object]' — verificato
- * dal vivo sul database dopo il primo seed ('region_name' errato per la
- * Valle d'Aosta, corretto qui prima di ri-seminare (Rule 1)).
- */
-function cellText(value: ExcelJS.CellValue): string {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'object' && 'richText' in value) {
-    return (value.richText as { text: string }[]).map(part => part.text).join('')
-  }
-  return String(value)
-}
-
-export async function parseIstatXlsx(rawPath: string): Promise<IstatRow[]> {
-  const resolvedPath = resolveRepoPath(rawPath)
-  const ExcelJS = (await import('exceljs')).default
-  const wb = new ExcelJS.Workbook()
-  await wb.xlsx.readFile(resolvedPath)
-  const ws = wb.worksheets[0]
-  if (!ws) throw new Error(`nessun foglio trovato in ${rawPath}`)
+export function parseIstatCsv(rawPath: string): IstatRow[] {
+  const lines = readTextLines(rawPath)
+  const header = lines[0].split(',').map(c => c.trim())
+  const cols = ['istat_code', 'name', 'region_code', 'region_name', 'province_name', 'province_code']
+  const missing = cols.filter(c => !header.includes(c))
+  if (missing.length > 0) throw new Error(`${rawPath}: colonne mancanti: ${missing.join(', ')}`)
+  const idx = (name: string) => header.indexOf(name)
 
   const rows: IstatRow[] = []
   const seen = new Set<string>()
-  for (let r = 2; r <= ws.rowCount; r++) {
-    const row = ws.getRow(r)
-    const rawCode = row.getCell('E').value
-    if (rawCode === null || rawCode === undefined || cellText(rawCode).trim() === '') continue
-
-    // I fogli di calcolo trasformano '001001' in '1001': padStart difensivo
-    // anche se in questo file la colonna e' gia' formattata come testo.
-    const istatCode = cellText(rawCode).trim().padStart(6, '0')
-    if (seen.has(istatCode)) {
-      throw new Error(`${rawPath} riga ${r}: istat_code duplicato nel file sorgente: '${istatCode}'`)
-    }
+  lines.slice(1).forEach((line, i) => {
+    const f = line.split(',').map(v => v.trim())
+    if (f.length !== header.length) throw new Error(`${rawPath} riga ${i + 2}: numero di colonne diverso dall'intestazione`)
+    const istatCode = f[idx('istat_code')].padStart(6, '0')
+    if (seen.has(istatCode)) throw new Error(`${rawPath} riga ${i + 2}: istat_code duplicato nel file sorgente: '${istatCode}'`)
     seen.add(istatCode)
-
     rows.push({
       istatCode,
-      name: cellText(row.getCell('G').value).trim(),
-      regionCode: cellText(row.getCell('A').value).trim(),
-      regionName: cellText(row.getCell('K').value).trim(),
-      provinceName: cellText(row.getCell('L').value).trim(),
-      provinceCode: cellText(row.getCell('O').value).trim(),
+      name: f[idx('name')],
+      regionCode: f[idx('region_code')],
+      regionName: f[idx('region_name')],
+      provinceName: f[idx('province_name')],
+      provinceCode: f[idx('province_code')],
     })
-  }
+  })
   if (rows.length === 0) throw new Error(`${rawPath}: nessuna riga dati trovata`)
   return rows
 }
@@ -459,24 +427,6 @@ export async function applyAliases(aliasesByIstat: Map<string, string[]>): Promi
   return { updated, missing }
 }
 
-/** `--inspect <path.xlsx>`: fogli, intestazione, prime 3 righe dati. Nessuna scrittura. */
-export async function inspectXlsx(rawPath: string): Promise<void> {
-  const resolvedPath = resolveRepoPath(rawPath)
-  const ExcelJS = (await import('exceljs')).default
-  const wb = new ExcelJS.Workbook()
-  await wb.xlsx.readFile(resolvedPath)
-
-  console.log(`\n=== ${rawPath} ===`)
-  console.log(`Fogli: ${wb.worksheets.map(ws => `'${ws.name}' (${ws.rowCount} righe, ${ws.columnCount} colonne)`).join(', ')}`)
-
-  const ws = wb.worksheets[0]
-  console.log(`\n-- Primo foglio: '${ws.name}' --`)
-  console.log('Intestazione (riga 1):', JSON.stringify(ws.getRow(1).values))
-  for (let r = 2; r <= Math.min(4, ws.rowCount); r++) {
-    console.log(`Riga dati ${r - 1}:`, JSON.stringify(ws.getRow(r).values))
-  }
-}
-
 // --- CLI ---------------------------------------------------------------------------------------
 
 type Args = {
@@ -485,7 +435,6 @@ type Args = {
   coordinates?: string
   aliases?: string
   reconcile?: string
-  inspect?: string
   dryRun: boolean
 }
 
@@ -500,7 +449,6 @@ function parseArgs(argv: string[]): Args {
     coordinates: valueOf('--coordinates'),
     aliases: valueOf('--aliases'),
     reconcile: valueOf('--reconcile'),
-    inspect: valueOf('--inspect'),
     dryRun: argv.includes('--dry-run'),
   }
 }
@@ -508,14 +456,9 @@ function parseArgs(argv: string[]): Args {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
 
-  if (args.inspect) {
-    await inspectXlsx(args.inspect)
-    return
-  }
-
   if (!args.csv && !args.istat && !args.aliases) {
     throw new Error(
-      'uso: npx tsx scripts/seed-comuni.ts --csv <path> | --istat <path.xlsx> [--coordinates <path>] [--reconcile <path>] [--dry-run] | --aliases <path.csv> | --inspect <path.xlsx>'
+      'uso: npx tsx scripts/seed-comuni.ts --csv <path> | --istat <path.csv> [--coordinates <path>] [--reconcile <path>] [--dry-run] | --aliases <path.csv>'
     )
   }
 
@@ -530,7 +473,7 @@ async function main() {
   }
 
   if (args.istat) {
-    const istatRows = await parseIstatXlsx(args.istat)
+    const istatRows = parseIstatCsv(args.istat)
     const coordinates = args.coordinates ? parseCoordinatesCsv(args.coordinates) : new Map<string, { latitude: number; longitude: number }>()
     const reconcileMap = args.reconcile ? parseReconcileCsv(args.reconcile) : undefined
 

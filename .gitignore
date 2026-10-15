@@ -46,3 +46,6 @@ next-env.d.ts
 # MCP config locale: contiene chiavi API, non va in git
 .mcp.json
 .ingest-sweep/
+
+# Scritto e riscritto da next dev/build 16.4+, non e' nostro
+AGENTS.md

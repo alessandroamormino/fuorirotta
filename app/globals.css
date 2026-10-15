@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@plugin "@tailwindcss/typography";
 
 :root {
   /* Neutri (D-01b) — famiglia fredda del prototipo mobile adottato.
