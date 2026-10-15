@@ -15,11 +15,13 @@ on:
 
 jobs:
   gate:
-    runs-on: ubuntu-latest
+    # Versione fissa: ubuntu-latest cambia sotto i piedi (Ubuntu 26 dal
+    # 2026-10-19). Si aggiorna a mano, quando si sceglie di farlo.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -28,13 +30,10 @@ jobs:
       # tipi del client e fallisce.
       - run: npm ci
 
-      # Non bloccante di proposito: il repo ha 47 problemi PREESISTENTI (8
-      # errori) in file che questa pipeline non ha scritto. Il risultato resta
-      # visibile nel log; quando gli 8 errori saranno risolti, togliere questa
-      # riga e far fallire il job.
-      - name: Lint (non bloccante, debito preesistente)
-        run: npm run lint
-        continue-on-error: true
+      # Bloccante: zero errori e zero warning. --max-warnings 0 perche' un
+      # warning tollerato oggi e' il debito che nessuno guarda domani.
+      - name: Lint
+        run: npm run lint -- --max-warnings 0
 
       - name: Typecheck
         run: npx tsc --noEmit

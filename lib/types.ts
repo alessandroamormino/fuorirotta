@@ -1,5 +1,4 @@
 import { Event as PrismaEvent } from '@prisma/client'
-import { Decimal } from '@prisma/client/runtime/library'
 
 // Converti Decimal in number per i campi coordinate
 export type Event = Omit<

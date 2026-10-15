@@ -29,7 +29,7 @@ export interface MapViewportChange {
 
 interface EventsMapProps {
 	events: Event[];
-	initialGeoJSON?: GeoJSON.FeatureCollection;
+	initialGeoJSON?: GeoJSON.FeatureCollection | null;
 	onEventClick?: (event: Event) => void;
 	mapId?: string;
 	disablePopups?: boolean;

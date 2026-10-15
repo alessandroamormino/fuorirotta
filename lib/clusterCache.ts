@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import type { Event as PrismaEvent } from '@prisma/client';
+import type { Event as PrismaEvent, Prisma } from '@prisma/client';
 import { composeEvent, groupMembersByCanonical } from './dedup/compose';
 import { romeMidnightUTC, todayInRome } from './dateWindow';
 
@@ -137,13 +137,13 @@ export async function updateClusterCache(): Promise<void> {
   await prisma.mapClusterCache.upsert({
     where: { id: 'default' },
     update: {
-      geojson: geojson as any,
+      geojson: geojson as unknown as Prisma.InputJsonValue,
       eventCount: geojson.features.length,
       computedAt: new Date(),
     },
     create: {
       id: 'default',
-      geojson: geojson as any,
+      geojson: geojson as unknown as Prisma.InputJsonValue,
       eventCount: geojson.features.length,
       computedAt: new Date(),
     },
