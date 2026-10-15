@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useIsDark } from "@/lib/hooks/useBrowserState";
 import { Sun, Moon } from "lucide-react";
 
 /**
@@ -12,12 +12,7 @@ import { Sun, Moon } from "lucide-react";
  * contenitore, mai fluttuare fuori da esso.
  */
 export default function ThemeToggle({ className }: { className?: string }) {
-	const [isDark, setIsDark] = useState(false);
-
-	useEffect(() => {
-		// eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the DOM class the anti-FOUC script already applied, never from localStorage/render, per D-01
-		setIsDark(document.documentElement.classList.contains("dark"));
-	}, []);
+	const isDark = useIsDark();
 
 	const toggleTheme = () => {
 		const next = !isDark;
@@ -27,8 +22,8 @@ export default function ThemeToggle({ className }: { className?: string }) {
 		} catch {
 			// localStorage unavailable (private browsing) — theme stays session-only
 		}
+		// Annunciato a useIsDark (e a chi ascolta), che rilegge la classe.
 		window.dispatchEvent(new CustomEvent("theme-change", { detail: { isDark: next } }));
-		setIsDark(next);
 	};
 
 	return (
