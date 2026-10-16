@@ -100,21 +100,22 @@ function buildIconImageMatch(): unknown[] {
 // selezionato si INVERTE (fondo --background, icona --foreground) invece di
 // passare a --primary: con --primary diventato nero, un pin selezionato nero
 // fra pin neri sarebbe indistinguibile.
+// Sempre un'espressione "case", anche senza selezione (id -1 non matcha mai):
+// passare da un colore costante a un'espressione sul dato fa crashare il
+// disegno dei cerchi di Mapbox 3.33 ("reading 'r'" in setUniforms) finche' i
+// tile non sono ricostruiti — React lo mostrava come 7 errori a ogni hover.
 function buildCircleColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
-	if (selectedEventId == null) return colors.foreground;
-	return ["case", ["==", ["get", "id"], selectedEventId], colors.background, colors.foreground];
+	return ["case", ["==", ["get", "id"], selectedEventId ?? -1], colors.background, colors.foreground];
 }
 
 function buildIconColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
-	if (selectedEventId == null) return colors.background;
-	return ["case", ["==", ["get", "id"], selectedEventId], colors.foreground, colors.background];
+	return ["case", ["==", ["get", "id"], selectedEventId ?? -1], colors.foreground, colors.background];
 }
 
 function buildStrokeColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
 	// Il pin selezionato e' chiaro: un anello --surface lo farebbe sparire sul
 	// fondo mappa, quindi prende --foreground.
-	if (selectedEventId == null) return colors.surface;
-	return ["case", ["==", ["get", "id"], selectedEventId], colors.foreground, colors.surface];
+	return ["case", ["==", ["get", "id"], selectedEventId ?? -1], colors.foreground, colors.surface];
 }
 
 // Registra le 7 icone di categoria come immagini SDF (una volta per ciclo di
@@ -132,12 +133,26 @@ function registerCategoryIcons(map: mapboxgl.Map) {
 		);
 		const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
 
-		map.loadImage(dataUrl, (error, image) => {
-			if (error || !image) return;
-			if (!map.hasImage(imageId)) {
-				map.addImage(imageId, image, { sdf: true });
-			}
-		});
+		// NON map.loadImage(): decodifica con createImageBitmap, che sugli SVG
+		// fallisce ("The source image could not be decoded", verificato in
+		// Chrome il 2026-10-16) — e l'errore finiva in un return silenzioso:
+		// le icone non venivano mai registrate, i pin restavano cerchi vuoti,
+		// Chrome avvisava "could not be loaded" e Firefox lanciava "can't access
+		// property r". Un <img> l'SVG lo sa leggere ovunque: lo si rasterizza su
+		// un canvas e si passano a Mapbox i pixel gia' pronti.
+		const size = CATEGORY_ICON_SOURCE_PX;
+		const img = new Image(size, size);
+		img.onload = () => {
+			if (map.hasImage(imageId)) return;
+			const canvas = document.createElement("canvas");
+			canvas.width = size;
+			canvas.height = size;
+			const ctx = canvas.getContext("2d");
+			if (!ctx) return;
+			ctx.drawImage(img, 0, 0, size, size);
+			map.addImage(imageId, ctx.getImageData(0, 0, size, size), { sdf: true });
+		};
+		img.src = dataUrl;
 	});
 }
 

@@ -27,7 +27,7 @@ import type { Prisma, Event as PrismaEvent } from "@/lib/generated/prisma/client
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent, groupMembersByCanonical } from "@/lib/dedup/compose";
-import { romeMidnightUTC, todayInRome, nextDateStr } from "@/lib/dateWindow";
+import { romeMidnightUTC, todayInRome, nextDateStr, availableEventsWhere } from "@/lib/dateWindow";
 import { compareByWindowRelevance } from "@/lib/eventOrdering";
 
 // Helper per convertire Decimal in number
@@ -338,12 +338,7 @@ export async function GET(request: NextRequest) {
 		// un evento in corso e' disponibile — ma cambia cosa mostra la home e
 		// ogni conteggio con essa: app/api/categories/route.ts e' aggiornato
 		// nello stesso commit per restare d'accordo (vedi commento li').
-		andGroups.push({
-			OR: [
-				{ dateEnd: { gte: windowStart } },
-				{ AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
-			],
-		});
+		andGroups.push(availableEventsWhere(windowStart));
 
 		if (search) {
 			andGroups.push({

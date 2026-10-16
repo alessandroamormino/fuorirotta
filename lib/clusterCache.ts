@@ -1,7 +1,7 @@
 import { prisma } from './prisma';
 import type { Event as PrismaEvent, Prisma } from './generated/prisma/client';
 import { composeEvent, groupMembersByCanonical } from './dedup/compose';
-import { romeMidnightUTC, todayInRome } from './dateWindow';
+import { availableEventsWhere, windowStartToday } from './dateWindow';
 
 interface ClusterCacheData {
   geojson: GeoJSON.FeatureCollection;
@@ -28,7 +28,7 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
   // vecchio commento qui giustificava l'UTC con l'allineamento alla verifica
   // TERR-07 di scripts/territorial-backfill.test.sh: era la verifica a dover
   // seguire il prodotto, non il contrario, ed ora legge il confine da qui.
-  const windowStart = romeMidnightUTC(todayInRome());
+  const windowStart = windowStartToday();
 
   // Il punto usato dalla mappa e' quello materializzato dal backfill territoriale
   // (resolvedLatitude/resolvedLongitude), non le colonne di sorgente: include il
@@ -41,12 +41,8 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
   // ricalcolerebbe comunque la cache sulle righe membro).
   const events = await prisma.event.findMany({
     where: {
-      // COALESCE(dateEnd, dateStart) >= windowStart, scritto come OR esplicito
-      // perche' Prisma non ha COALESCE nei filtri e dateEnd e' nullable.
-      OR: [
-        { dateEnd: { gte: windowStart } },
-        { AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
-      ],
+      // In corso o futuri: la regola unica di lib/dateWindow.ts.
+      ...availableEventsWhere(windowStart),
       resolvedLatitude: { not: null },
       resolvedLongitude: { not: null },
       canonicalEventId: null,
