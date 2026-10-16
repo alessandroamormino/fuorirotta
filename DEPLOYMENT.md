@@ -447,6 +447,23 @@ Test the alert channel deliberately (most dead man's switch providers, e.g. heal
 curl -fsS --max-time 10 --retry 3 "$HEALTHCHECK_URL/fail"
 ```
 
+### Alerting: a source that dies silently
+
+The switch above has two blind spots: it pings when the scrape is *accepted*, not when it
+*succeeds*, and twenty regions share it — so one dead source never turns it red. Puglia stayed
+down for weeks that way, and on 2026-10-16 `roma` was `failed` with 0 events and nothing rang.
+
+`scripts/cron-health.sh` closes it. At 05:00 UTC, after the last nightly scrape, it reads
+`/api/monitoring` from the container (`127.0.0.1:3000`) and its `summary` field — computed by
+`summarizeHealth` in `lib/scrapers/health.ts`: every source that is `failed` or `degraded`, one
+readable line each. Then it pings `HEALTHCHECK_SOURCES_URL`: success when all is well, `/fail`
+otherwise **with the list in the ping body**, which healthchecks.io puts in the alert email
+(`roma (lazio): fallita — fetch failed`). `insufficient_history` does not alarm: it is the absence
+of a verdict, and a failed last run is already `failed` by precedence.
+
+Create the check with a **1 day** period (and a couple of hours of grace): it then also alarms if
+this job itself stops running. Add `HEALTHCHECK_SOURCES_URL=...` to the host `.env`.
+
 ### Cron health baseline (measured 2026-08-08)
 
 Read from `/var/log/fuorirotta-cron.log`, which the previous crontab line had been appending raw response bodies to since **2026-03-23 20:00 UTC**:

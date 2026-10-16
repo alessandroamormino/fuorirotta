@@ -140,6 +140,30 @@ export function computeSourceHealth(source: string, region: string, runs: RunRec
   }
 }
 
+/**
+ * Riepilogo per l'allarme giornaliero (scripts/cron-health.sh): una riga
+ * leggibile per ogni sorgente che chiede attenzione, finita tale e quale
+ * nella mail di allarme.
+ *
+ * Contano 'failed' e 'degraded'. 'insufficient_history' no: e' l'assenza di
+ * un giudizio, non un problema — e un'ultima esecuzione fallita e' gia'
+ * 'failed' per precedenza, quindi non sfugge.
+ *
+ * Esiste perche' il dead man's switch del cron dice solo che il cron e'
+ * PARTITO, ed e' condiviso da venti regioni: il 2026-10-16 roma era 'failed'
+ * con 0 eventi e nessun allarme era scattato.
+ */
+export function summarizeHealth(sources: SourceHealth[]): { ok: boolean; problems: string[] } {
+  const problems = sources
+    .filter(s => s.status === 'failed' || s.status === 'degraded')
+    .map(s =>
+      s.status === 'failed'
+        ? `${s.source} (${s.region}): fallita — ${s.lastRun.error ?? 'errore senza messaggio'}`
+        : `${s.source} (${s.region}): ${s.lastRun.eventCount} eventi contro una media di ${Math.round(s.baseline?.avgEventCount ?? 0)}`
+    )
+  return { ok: problems.length === 0, problems }
+}
+
 // Self-check minimale delle diramazioni di stato: `npx tsx lib/scrapers/health.ts`.
 // Non un framework di test, solo un demo() con assert che fallisce rumorosamente se la
 // precedenza di stato o il confronto di anomalia si rompono.
@@ -197,6 +221,21 @@ if (require.main === module) {
   const long = 'x'.repeat(600)
   const truncated = truncateError(long)
   console.assert(truncated !== null && truncated.length === MAX_ERROR_LENGTH + 1 && truncated.endsWith('…'), 'stringa lunga deve troncare a 500 char + ellissi')
+
+  // summarizeHealth: failed e degraded finiscono nell'allarme, il resto no
+  const degradedForSummary = computeSourceHealth('s', 'r', [run(10), ...Array(HEALTH_WINDOW_SIZE).fill(null).map(() => run(100))])
+  const summary = summarizeHealth([
+    healthy,
+    oneRun,
+    computeSourceHealth('roma', 'lazio', [run(0, 'fetch failed'), ...Array(HEALTH_WINDOW_SIZE).fill(null).map(() => run(39))]),
+    degradedForSummary,
+  ])
+  console.assert(summary.ok === false, 'atteso ok=false con una sorgente fallita')
+  console.assert(summary.problems.length === 2, 'attese 2 righe: fallita e degradata, non healthy ne\' insufficient_history')
+  console.assert(summary.problems[0] === 'roma (lazio): fallita — fetch failed', `riga della fallita inattesa: ${summary.problems[0]}`)
+  console.assert(summary.problems[1] === 's (r): 10 eventi contro una media di 100', `riga della degradata inattesa: ${summary.problems[1]}`)
+  const allGood = summarizeHealth([healthy, oneRun])
+  console.assert(allGood.ok === true && allGood.problems.length === 0, 'atteso ok=true senza fallite ne\' degradate')
 
   console.log('[health.ts] self-check OK')
 }
