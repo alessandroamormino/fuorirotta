@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { decodeHtmlEntities } from "@/lib/utils";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
+import { eventDays } from "@/lib/eventDays";
 import EventDetailClient from "./EventDetailClient";
 
 const BASE_URL = (
@@ -122,8 +123,13 @@ export default async function EventDetailPage({
 				description: composedEvent.description
 					? decodeHtmlEntities(composedEvent.description.replace(/<[^>]*>/g, "")).slice(0, 500)
 					: undefined,
-				startDate: composedEvent.dateStart.toISOString(),
-				endDate: composedEvent.dateEnd?.toISOString(),
+				// Giorni di calendario (YYYY-MM-DD, ISO 8601 valido per schema.org):
+				// l'istante 23:59:59.999Z dei dati in formato UTC, letto da Google,
+				// sarebbe il giorno dopo a Roma.
+				startDate: eventDays(composedEvent.dateStart, composedEvent.dateEnd).startDay,
+				endDate: composedEvent.dateEnd
+					? eventDays(composedEvent.dateStart, composedEvent.dateEnd).endDay
+					: undefined,
 				url: `${BASE_URL}/eventi/${eventId}`,
 				...(composedEvent.imageUrl ? { image: composedEvent.imageUrl } : {}),
 				location: composedEvent.locationName

@@ -40,8 +40,6 @@ export function romeCalendarDate(value: string | Date): Date {
   return new Date(y, m - 1, d)
 }
 
-const toMidnight = romeCalendarDate
-
 /** Differenza in giorni di calendario fra due date gia' a mezzanotte locale. */
 function dayDiff(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / MS_PER_DAY)
@@ -64,11 +62,31 @@ export function formatEventRange(dateStart: string | Date, dateEnd?: string | Da
   return `${startLabel} – ${format(dayToLocalDate(endDay), 'd MMM', { locale: it })}`
 }
 
+/** Il giorno di calendario "YYYY-MM-DD" di `now` a Roma. */
+const romeDay = (now: Date): string => romeDayFormat.format(now)
+
+/**
+ * Vero quando l'ultimo giorno dell'evento (eventDays) e' gia' passato a Roma.
+ * Unica definizione di "concluso": la usano il badge qui sotto e il gate del
+ * calendario (piano 20-05), cosi' il bottone sparisce esattamente quando il
+ * badge dice "Concluso".
+ */
+export function isEventOver(
+  dateStart: string | Date,
+  dateEnd?: string | Date | null,
+  now: Date = new Date()
+): boolean {
+  return eventDays(dateStart, dateEnd).endDay < romeDay(now)
+}
+
 /**
  * I sei rami del contratto (12-UI-SPEC.md, sezione "Badge di stato"):
  * Oggi / In corso / Domani / Fra N giorni / Concluso / il range formattato
  * oltre i 7 giorni — quest'ultimo e' il testo `dd MMM` che oggi la card
  * espone gia', diventato il badge stesso invece di un secondo elemento.
+ *
+ * Giorni confrontati come stringhe "YYYY-MM-DD" (eventDays): l'ordine
+ * lessicografico e' quello cronologico e non c'e' fuso che lo sposti.
  *
  * `now` esiste per rendere la funzione testabile senza congelare
  * l'orologio: il default e' `new Date()`.
@@ -78,17 +96,16 @@ export function eventStatus(
   dateEnd?: string | Date | null,
   now: Date = new Date()
 ): EventStatus {
-  const today = toMidnight(now)
-  const start = toMidnight(dateStart)
-  // dateEnd nullo -> dateStart fa anche da fine (evento di un solo giorno).
-  const end = dateEnd != null ? toMidnight(dateEnd) : start
-  const days = dayDiff(start, today)
+  const today = romeDay(now)
+  const { startDay } = eventDays(dateStart, dateEnd)
+  const days = dayDiff(dayToLocalDate(startDay), dayToLocalDate(today))
 
   if (days === 0) return { label: 'Oggi', tone: 'live' }
-  if (start < today && end >= today) return { label: 'In corso', tone: 'live' }
+  if (isEventOver(dateStart, dateEnd, now)) return { label: 'Concluso', tone: 'later' }
+  // Qui startDay != oggi e l'evento non e' finito: se e' iniziato e' in corso.
+  if (startDay < today) return { label: 'In corso', tone: 'live' }
   if (days === 1) return { label: 'Domani', tone: 'soon' }
   if (days > 1 && days <= 7) return { label: `Fra ${days} giorni`, tone: 'soon' }
-  if (end < today) return { label: 'Concluso', tone: 'later' }
   return { label: formatEventRange(dateStart, dateEnd), tone: 'later' }
 }
 
@@ -169,6 +186,52 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   assertCheck(
     range('2026-10-31T00:00:00.000Z', '2026-11-01T23:59:59.999Z') === '31 ott – 1 nov',
     `formato UTC, cambio mese: atteso "31 ott – 1 nov", ottenuto "${range('2026-10-31T00:00:00.000Z', '2026-11-01T23:59:59.999Z')}"`
+  )
+
+  // Badge e isEventOver sul formato UTC di produzione. Il difetto vivo:
+  // concerto del 15 ottobre (15T00:00Z / 15T23:59:59.999Z), il 16 il badge
+  // diceva "In corso" perche' la fine veniva letta come 16 a Roma.
+  const prodOne = ['2026-10-15T00:00:00.000Z', '2026-10-15T23:59:59.999Z'] as const
+  const at = (iso: string) => new Date(iso)
+  assertCheck(
+    eventStatus(prodOne[0], prodOne[1], at('2026-10-16T10:00:00.000Z')).label === 'Concluso',
+    `formato UTC, giorno dopo: atteso Concluso, ottenuto ${eventStatus(prodOne[0], prodOne[1], at('2026-10-16T10:00:00.000Z')).label}`
+  )
+  assertCheck(
+    eventStatus(prodOne[0], prodOne[1], at('2026-10-15T20:00:00.000Z')).label === 'Oggi',
+    'formato UTC, la sera stessa: atteso Oggi'
+  )
+  // 23:30 UTC del 15 = 01:30 del 16 a Roma: l'evento e' finito.
+  assertCheck(
+    eventStatus(prodOne[0], prodOne[1], at('2026-10-15T23:30:00.000Z')).label === 'Concluso',
+    'formato UTC, 01:30 del giorno dopo a Roma: atteso Concluso'
+  )
+  // Fine a mezzanotte UTC e fine nulla: un giorno solo, nel giorno stesso e' Oggi.
+  assertCheck(
+    eventStatus('2026-10-15T00:00:00.000Z', '2026-10-15T00:00:00.000Z', at('2026-10-15T12:00:00.000Z')).label === 'Oggi',
+    'formato UTC, fine a mezzanotte, nel giorno: atteso Oggi'
+  )
+  assertCheck(
+    eventStatus('2026-10-15T00:00:00.000Z', null, at('2026-10-15T12:00:00.000Z')).label === 'Oggi',
+    'formato UTC, fine nulla, nel giorno: atteso Oggi'
+  )
+  // Intervallo UTC in corso il secondo giorno, concluso il terzo.
+  assertCheck(
+    eventStatus('2026-10-18T00:00:00.000Z', '2026-10-19T23:59:59.999Z', at('2026-10-19T10:00:00.000Z')).label === 'In corso',
+    'formato UTC, intervallo, secondo giorno: atteso In corso'
+  )
+  assertCheck(
+    eventStatus('2026-10-18T00:00:00.000Z', '2026-10-19T23:59:59.999Z', at('2026-10-20T10:00:00.000Z')).label === 'Concluso',
+    'formato UTC, intervallo, terzo giorno: atteso Concluso'
+  )
+  assertCheck(
+    isEventOver(prodOne[0], prodOne[1], at('2026-10-16T10:00:00.000Z')) &&
+      !isEventOver(prodOne[0], prodOne[1], at('2026-10-15T20:00:00.000Z')),
+    'isEventOver: vero il giorno dopo, falso nel giorno'
+  )
+  assertCheck(
+    isEventOver(romeStart(-3), romeEnd(-3), NOW) && !isEventOver(romeStart(0), romeEnd(0), NOW),
+    'isEventOver, formato Roma: vero per un evento di tre giorni fa, falso per oggi'
   )
 
   if (failures > 0) {

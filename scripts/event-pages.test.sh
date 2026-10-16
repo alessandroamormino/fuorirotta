@@ -128,6 +128,14 @@ fetch_page "${F2}"
 fetch_page "${F3}"
 fetch_page "${F4}"
 
+# --- S1: un giorno, formato UTC: riga Quando col giorno lungo, non il vecchio intervallo
+page="${tmp_dir}/page-${F1}.html"
+grep -qF "28 marzo 2027" "${page}" || fail "S1: la riga Quando di F1 non contiene '28 marzo 2027'"
+if grep -qF "28 mar – 29 mar" "${page}"; then
+  fail "S1: F1 mostra ancora '28 mar – 29 mar' (un giorno letto come due)"
+fi
+echo "ok  S1: F1 (formato UTC, un giorno) mostra 28 marzo 2027 e non un intervallo"
+
 # --- S2: intervallo UTC, "Quando" mostra 10 apr – 11 apr, non il vecchio 12 --
 page="${tmp_dir}/page-${F2}.html"
 grep -qF "10 apr – 11 apr" "${page}" || fail "S2: la riga Quando di F2 non contiene '10 apr – 11 apr'"
@@ -135,3 +143,17 @@ if grep -qF "10 apr – 12 apr" "${page}"; then
   fail "S2: F2 mostra ancora '10 apr – 12 apr' (la fine 23:59:59.999Z letta come giorno dopo)"
 fi
 echo "ok  S2: F2 (formato UTC, intervallo) mostra 10 apr – 11 apr"
+
+# --- S3: un giorno, formato Roma (22:00Z -> 21:59:59.999Z) ------------------
+grep -qF "21 aprile 2027" "${tmp_dir}/page-${F3}.html" || fail "S3: la riga Quando di F3 non contiene '21 aprile 2027'"
+echo "ok  S3: F3 (formato Roma, un giorno) mostra 21 aprile 2027"
+
+# --- S4: fine a mezzanotte UTC ----------------------------------------------
+grep -qF "12 maggio 2027" "${tmp_dir}/page-${F4}.html" || fail "S4: la riga Quando di F4 non contiene '12 maggio 2027'"
+echo "ok  S4: F4 (fine a mezzanotte UTC) mostra 12 maggio 2027"
+
+# --- S5: dati strutturati: giorni di calendario, non istanti ----------------
+page="${tmp_dir}/page-${F1}.html"
+grep -qF '"startDate":"2027-03-28"' "${page}" || fail "S5: il JSON-LD di F1 non ha startDate 2027-03-28"
+grep -qF '"endDate":"2027-03-28"' "${page}" || fail "S5: il JSON-LD di F1 non ha endDate 2027-03-28"
+echo "ok  S5: JSON-LD di F1 con startDate e endDate 2027-03-28"

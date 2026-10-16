@@ -14,6 +14,7 @@ import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 import { eventStatus, formatEventRange, romeCalendarDate } from "@/lib/eventStatus";
+import { eventDays } from "@/lib/eventDays";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { MOTION_FAST, EASE_STANDARD } from "@/lib/motion";
 import {
@@ -366,9 +367,10 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	}
 
 	const status = eventStatus(event.dateStart, event.dateEnd);
-	const isMultiDay =
-		event.dateEnd != null &&
-		romeCalendarDate(event.dateEnd).getTime() !== romeCalendarDate(event.dateStart).getTime();
+	// Un solo giorno o piu' di uno lo decide eventDays, valido per entrambi i
+	// formati con cui le sorgenti salvano le date (lib/eventDays.ts).
+	const days = eventDays(event.dateStart, event.dateEnd);
+	const isMultiDay = days.startDay !== days.endDay;
 	const hasCoords = event.latitude != null && event.longitude != null;
 	const distanceKm =
 		userLocation && event.resolvedLatitude != null && event.resolvedLongitude != null
