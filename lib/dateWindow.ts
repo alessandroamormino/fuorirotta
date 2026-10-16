@@ -67,6 +67,33 @@ export function nextDateStr(dateStr: string): string {
 	return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
+/**
+ * Inizio della finestra "disponibili": mezzanotte di OGGI a Roma.
+ */
+export function windowStartToday(): Date {
+	return romeMidnightUTC(todayInRome());
+}
+
+/**
+ * Evento DISPONIBILE = in corso o futuro: COALESCE(dateEnd, dateStart) >=
+ * inizio finestra, scritto come OR esplicito perche' Prisma non ha COALESCE
+ * nei filtri e dateEnd e' nullable.
+ *
+ * L'unica definizione del progetto. Prima del 2026-10-16 ce n'erano due
+ * copie (copertura e mappa) e tre pagine — home, regione, provincia — ancora
+ * su `dateStart >= oggi`: una mostra gia' cominciata spariva da quelle pagine
+ * mentre lista e mappa la mostravano. Ogni superficie che dice "eventi"
+ * passa da qui.
+ */
+export function availableEventsWhere(windowStart: Date = windowStartToday()) {
+	return {
+		OR: [
+			{ dateEnd: { gte: windowStart } },
+			{ AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
+		],
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Self-check: `npx tsx lib/dateWindow.ts`
 //

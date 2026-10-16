@@ -9,6 +9,8 @@ import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Breadcrumb from "@/components/Breadcrumb";
 import CoverageMessage from "@/components/CoverageMessage";
+import { availableEventsWhere, windowStartToday } from "@/lib/dateWindow";
+import { compareByWindowRelevance } from "@/lib/eventOrdering";
 
 const BASE_URL = (
 	process.env.NEXT_PUBLIC_SITE_URL ||
@@ -33,16 +35,18 @@ const getRegionData = cache(async (regione: string): Promise<RegionPageData | nu
 		return { displayName, isLive: false, events: [] };
 	}
 
-	const today = new Date();
-	today.setUTCHours(0, 0, 0, 0);
-
-	// ROLL-06: eventi futuri canonici della regione, ordinati per data
-	// crescente e, a parita' di data, per id crescente.
+	// ROLL-06: eventi canonici DISPONIBILI della regione — in corso o futuri,
+	// la regola unica di lib/dateWindow.ts, come lista e mappa. Prima qui era
+	// `dateStart >= oggi` (con la mezzanotte UTC, non di Roma): una mostra gia'
+	// cominciata spariva da questa pagina mentre la mappa la mostrava.
+	// Stesso ordine della lista (lib/eventOrdering.ts): un evento in corso
+	// conta da oggi, cosi' in cima non finiscono le mostre aperte da mesi.
+	const windowStart = windowStartToday();
 	const rows = await prisma.event.findMany({
-		where: { region: regione, dateStart: { gte: today }, canonicalEventId: null },
-		orderBy: [{ dateStart: "asc" }, { id: "asc" }],
+		where: { region: regione, canonicalEventId: null, ...availableEventsWhere(windowStart) },
 		include: { comune: { select: { name: true, provinceCode: true } } },
 	});
+	rows.sort(compareByWindowRelevance(windowStart));
 
 	return { displayName, isLive: true, events: rows.map(serializeEvent) };
 });

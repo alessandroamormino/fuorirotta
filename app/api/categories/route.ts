@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CANONICAL_CATEGORIES, orderCategories } from "@/lib/categories/taxonomy";
-import { romeMidnightUTC, todayInRome } from "@/lib/dateWindow";
+import { availableEventsWhere } from "@/lib/dateWindow";
 
 export async function GET() {
 	try {
@@ -16,15 +16,11 @@ export async function GET() {
 		// eventi in corso che la lista di default ora mostra, o viceversa
 		// includerebbe piu' del total). Una sola query raggruppata sostituisce
 		// la vecchia forma N+1 (un findMany distinct + un count per valore).
-		const windowStart = romeMidnightUTC(todayInRome());
 		const grouped = await prisma.event.groupBy({
 			by: ["canonicalCategory"],
 			where: {
 				canonicalEventId: null,
-				OR: [
-					{ dateEnd: { gte: windowStart } },
-					{ AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
-				],
+				...availableEventsWhere(),
 			},
 			_count: true,
 		});

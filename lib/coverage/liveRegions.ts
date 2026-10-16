@@ -18,7 +18,7 @@
  */
 import { prisma } from '../prisma'
 import { istatRegionToSlug } from '../scrapers/regionSlug'
-import { romeMidnightUTC, todayInRome } from '../dateWindow'
+import { availableEventsWhere, windowStartToday } from '../dateWindow'
 
 /**
  * Ri-misurato dal vivo sul Postgres locale il 2026-09-19, DOPO l'ingestione
@@ -66,50 +66,21 @@ import { romeMidnightUTC, todayInRome } from '../dateWindow'
  */
 export const COVERAGE_THRESHOLD = 10
 
-/**
- * Inizio della finestra di copertura: mezzanotte di OGGI a Roma, come istante
- * UTC. La stessa che usa app/api/events/route.ts, e per la stessa ragione
- * (lib/dateWindow.ts): `date_start`/`date_end` sono `@db.Timestamp(6)` e
- * portano mezzanotte LOCALE scritta come cifre UTC, quindi un
- * `setUTCHours(0,0,0,0)` sbaglia il confronto di 1-2 ore secondo l'ora
- * legale. Era esattamente cio' che faceva questo file prima del 2026-09-20.
- */
-function coverageWindowStart(): Date {
-  return romeMidnightUTC(todayInRome())
-}
-
-/**
- * "Disponibile" = in corso o futuro, cioe' COALESCE(dateEnd, dateStart) >=
- * inizio finestra, scritto come OR esplicito perche' Prisma non ha COALESCE
- * nei filtri e `dateEnd` e' nullable.
- *
- * 2026-09-20: prima qui c'era `dateStart >= oggi`, e cioe' il segnale di
- * copertura contava una cosa DIVERSA da quella che l'API mostra
- * (app/api/events/route.ts, bugfix 2026-09-10, semantica di overlap). Una
- * regione fatta soprattutto di mostre e rassegne gia' cominciate risultava
- * spenta mentre la mappa la mostrava piena — misurato sul Postgres locale:
- * lazio 8 contro 37, emilia-romagna 10 contro 25, toscana 74 contro 158. Le
- * due regole ora sono la stessa regola, e il numero pubblicato e' il numero
- * che si vede.
- *
- * Il prezzo: il predicato su `date_end` non e' coperto da
- * `idx_events_region_date_start`. E' lo stesso prezzo che /api/events paga
- * gia' ad ogni richiesta, su un ordine di grandezza in piu' di righe lette.
- */
-function availableWindow(windowStart: Date) {
-  return [
-    { dateEnd: { gte: windowStart } },
-    { AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] }
-  ]
-}
+// La finestra "in corso o futuri" e' quella di lib/dateWindow.ts
+// (availableEventsWhere): la stessa di lista, mappa e pagine. 2026-09-20: prima
+// qui c'era `dateStart >= oggi`, e una regione fatta di mostre gia' cominciate
+// risultava spenta mentre la mappa la mostrava piena — misurato sul Postgres
+// locale: lazio 8 contro 37, emilia-romagna 10 contro 25, toscana 74 contro 158.
+// Il prezzo: il predicato su `date_end` non e' coperto da
+// `idx_events_region_date_start`, lo stesso che /api/events paga gia'.
 
 export async function getLiveRegions(): Promise<Set<string>> {
-  const windowStart = coverageWindowStart()
+  const windowStart = windowStartToday()
 
   const rows = await prisma.event.groupBy({
     by: ['region'],
     where: {
-      OR: availableWindow(windowStart),
+      ...availableEventsWhere(windowStart),
       canonicalEventId: null,
       region: { not: null }
     },
@@ -171,7 +142,7 @@ export async function getProvinceDirectory(): Promise<ProvinceRef[]> {
 
 /**
  * `getLiveRegions()` un livello piu' sotto: STESSA `COVERAGE_THRESHOLD` e
- * STESSA finestra "in corso o futuro" (vedi availableWindow), non una
+ * STESSA finestra "in corso o futuro" (availableEventsWhere, qui in SQL), non una
  * seconda costante ne' una seconda regola (D-10). Nessuna cache in processo, nessuna
  * materializzazione: una query ad ogni chiamata (D-04), un JOIN sull'indice
  * su `comune_id` invece di un secondo GROUP BY su `region` — gli eventi non
@@ -182,7 +153,7 @@ export async function getProvinceDirectory(): Promise<ProvinceRef[]> {
  * `getLiveRegions()`, che non dipende da `comune_id`.
  */
 export async function getLiveProvinces(): Promise<Set<string>> {
-  const windowStart = coverageWindowStart()
+  const windowStart = windowStartToday()
 
   const rows = await prisma.$queryRaw<{ provinceCode: string; count: number }[]>`
     SELECT c.province_code AS "provinceCode", count(*)::int AS count

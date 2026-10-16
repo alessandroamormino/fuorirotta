@@ -9,6 +9,8 @@ import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Breadcrumb from "@/components/Breadcrumb";
 import CoverageMessage from "@/components/CoverageMessage";
+import { availableEventsWhere, windowStartToday } from "@/lib/dateWindow";
+import { compareByWindowRelevance } from "@/lib/eventOrdering";
 
 const BASE_URL = (
 	process.env.NEXT_PUBLIC_SITE_URL ||
@@ -44,21 +46,19 @@ const getProvinceData = cache(
 			return { regionName, province, isLive: false, events: [] };
 		}
 
-		const today = new Date();
-		today.setUTCHours(0, 0, 0, 0);
-
-		// ROLL-06: eventi futuri canonici della provincia, ordinati per data
-		// crescente e, a parita' di data, per id crescente (stesso contratto
-		// della pagina regione).
+		// ROLL-06: eventi canonici DISPONIBILI della provincia (in corso o
+		// futuri) nello stesso ordine della lista — stesso contratto della
+		// pagina regione, vedi il commento li'.
+		const windowStart = windowStartToday();
 		const rows = await prisma.event.findMany({
 			where: {
 				comune: { provinceCode: province.provinceCode },
-				dateStart: { gte: today },
 				canonicalEventId: null,
+				...availableEventsWhere(windowStart),
 			},
-			orderBy: [{ dateStart: "asc" }, { id: "asc" }],
 			include: { comune: { select: { name: true, provinceCode: true } } },
 		});
+		rows.sort(compareByWindowRelevance(windowStart));
 
 		return { regionName, province, isLive: true, events: rows.map(serializeEvent) };
 	}
