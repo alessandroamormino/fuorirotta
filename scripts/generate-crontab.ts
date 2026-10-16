@@ -22,7 +22,7 @@ import { readFileSync } from 'fs'
 // SOLO lib/scrapers/sources.ts, mai registry.ts ne' runner.ts: quelli tirano
 // dentro i tre adattatori -> cheerio -> undici@7, che richiede il global `File`
 // aggiunto in Node 20. L'host di produzione gira Node 18.19.1 (l'immagine
-// Docker no, e' node:20-alpine), e con l'import precedente questo script
+// Docker no, e' node:24-alpine), e con l'import precedente questo script
 // moriva la' con "ReferenceError: File is not defined". Il gate
 // scripts/host-script-deps.ts impedisce che l'import pesante rientri.
 import { getRegions, REGION_SCHEDULES, MAINTENANCE_SCHEDULE } from '../lib/scrapers/sources'

@@ -6,7 +6,7 @@
  * Perche' esiste: il 2026-09-15, durante il deploy della fase 14,
  * `npx tsx scripts/generate-crontab.ts` e' morto sull'host con
  * `ReferenceError: File is not defined`. L'host gira Node 18.19.1; l'immagine
- * Docker gira node:20-alpine. `cheerio` tira `undici@7`, che usa il global
+ * Docker gira node:24-alpine. `cheerio` tira `undici@7`, che usa il global
  * `File`, aggiunto a Node in v20. La catena era
  *   generate-crontab.ts -> registry.ts -> solosagre.ts -> cheerio -> undici
  * e la stessa catena passava per scripts/maintenance-job.ts
@@ -40,7 +40,7 @@ const EXTS = ['.ts', '.tsx', '.js', '.mjs', '.cjs']
 const HOST_SCRIPTS = ['scripts/generate-crontab.ts']
 
 /**
- * Script che girano DENTRO node:20-alpine col checkout montato
+ * Script che girano DENTRO node:24-alpine col checkout montato
  * (scripts/cron-maintenance.sh, e la procedura per n1-proof in DEPLOYMENT.md).
  * Elencati qui per documentazione e per il controllo di completezza sotto: NON
  * sono soggetti ai vincoli di HOST_SCRIPTS, perche' nel container il Node e' 20
@@ -59,7 +59,7 @@ const FORBIDDEN = ['undici', 'cheerio']
  * Prisma e' proibito negli script host per una ragione diversa dalla versione
  * di Node, scoperta sull'host il 2026-09-15: node_modules/.prisma/client
  * contiene il query engine per linux-musl-openssl-3.0.x, generato dentro
- * l'immagine (node:20-alpine). L'host e' Debian, e un import di Prisma li'
+ * l'immagine (node:24-alpine). L'host e' Debian, e un import di Prisma li'
  * fallisce con "could not locate the Query Engine for runtime
  * debian-openssl-3.0.x". Non e' risolvibile aggiornando Node: e' la libc.
  * Chi tocca il database gira nel container, punto.
@@ -166,17 +166,17 @@ for (const script of HOST_SCRIPTS) {
 }
 
 for (const script of CONTAINER_SCRIPTS) {
-  console.log(`ok  ${script} (container node:20-alpine — nessun vincolo)`)
+  console.log(`ok  ${script} (container node:24-alpine — nessun vincolo)`)
 }
 
 if (failed) {
   console.error('')
-  console.error("L'host gira Node 18.19.1 e Debian; l'immagine e' node:20-alpine e l'engine")
+  console.error("L'host gira Node 18.19.1 e Debian; l'immagine e' node:24-alpine e l'engine")
   console.error('Prisma sul disco e\' musl. Due vie d\'uscita:')
   console.error('  - se lo script legge solo METADATI: importa lib/scrapers/sources.ts, che non')
   console.error('    tira dentro ne\' scraper ne\' Prisma;')
   console.error('  - se lo script tocca il DATABASE: spostalo in CONTAINER_SCRIPTS e invocalo')
-  console.error('    dentro node:20-alpine col checkout montato, come scripts/cron-maintenance.sh.')
+  console.error('    dentro node:24-alpine col checkout montato, come scripts/cron-maintenance.sh.')
   process.exit(1)
 }
 

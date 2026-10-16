@@ -79,7 +79,7 @@ output2="$(npx tsx scripts/generate-crontab.ts)"
 [[ "${output}" == "${output2}" ]] || fail "S4: due invocazioni consecutive producono output diverso"
 
 region_lines="$(printf '%s\n' "${output}" | grep -E 'cron-scrape\.sh' || true)"
-# Node 20 (i runner di CI e i container node:20-alpine del server) NON
+# Node 20 (CI e container del server fino a ottobre 2026, oggi Node 24) NON
 # riconosce gli export nominati dei moduli che tsx compila in CommonJS: il
 # namespace di `await import()` porta il solo `default`. Node 24, quello di
 # sviluppo, li espone entrambi. Da qui `m.default ?? m`, che e' corretto su

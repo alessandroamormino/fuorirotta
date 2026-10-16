@@ -7,7 +7,7 @@
 # route da autenticare, quindi non legge il segreto del cron ne'
 # NEXT_PUBLIC_APP_URL.
 #
-# DOVE gira il job: dentro node:20-alpine col checkout montato, non sull'host
+# DOVE gira il job: dentro node:24-alpine col checkout montato, non sull'host
 # e non dentro l'immagine dell'app. Le tre opzioni e perche' restano due:
 #   - immagine dell'app: lo stage "runner" del Dockerfile copia solo
 #     .next/standalone, .next/static, node_modules/.prisma e prisma/ — niente
@@ -18,7 +18,7 @@
 #     "could not locate the Query Engine for runtime debian-openssl-3.0.x"
 #     (l'engine sul disco e' musl, generato dentro l'immagine; l'host e'
 #     Debian). La seconda non si risolve aggiornando Node: e' la libc.
-#   - container node:20-alpine col checkout montato: Node 20 e libc musl,
+#   - container node:24-alpine col checkout montato: Node 24 e libc musl,
 #     cioe' esattamente l'ambiente per cui node_modules e' stato costruito.
 #     E' anche la regola gia' in uso nel progetto per gli script di
 #     manutenzione sul database (DEPLOYMENT.md).
@@ -72,17 +72,17 @@ fi
 
 timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# Il job Node gira DENTRO node:20-alpine col checkout montato, non sull'host.
+# Il job Node gira DENTRO node:24-alpine col checkout montato, non sull'host.
 # Due ragioni, entrambe misurate sull'host reale il 2026-09-15:
 #
 #  1. node_modules/.prisma/client contiene il query engine per
 #     linux-musl-openssl-3.0.x (generato dentro l'immagine, che e'
-#     node:20-alpine). L'host e' Debian: eseguire qui il job fallisce con
+#     node:24-alpine). L'host e' Debian: eseguire qui il job fallisce con
 #     "Prisma Client could not locate the Query Engine for runtime
 #     debian-openssl-3.0.x". Aggiungere un secondo binaryTarget significherebbe
 #     tenere due engine in sync per sempre; usare il container usa l'engine che
 #     e' gia' sul disco, quello giusto.
-#  2. L'host gira Node 18.19.1, l'immagine node:20. Diverse dipendenze
+#  2. L'host gira Node 18.19.1, l'immagine node:24. Diverse dipendenze
 #     richiedono >= 20.
 #
 # E' anche la regola gia' in uso nel progetto per gli script di manutenzione
@@ -95,7 +95,7 @@ timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 if docker run --rm \
   -v "${root_dir}:/app" -w /app \
   -e DATABASE_URL="${database_url}" \
-  node:20-alpine \
+  node:24-alpine \
   npx --yes tsx scripts/maintenance-job.ts; then
   status_word="ok"
 else

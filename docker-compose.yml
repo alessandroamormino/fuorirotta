@@ -16,7 +16,7 @@ services:
     # nulla, da' un secondo NOME agli stessi byte sulla stessa macchina — i
     # rollback vivevano tutti su questo disco. E ricostruire lo stesso commit
     # NON produce la stessa immagine (`npm ci` risolve pacchetti che cambiano,
-    # `node:20-alpine` e' un tag mobile), quindi "ricostruisco al bisogno" non
+    # `node:24-alpine` e' un tag mobile), quindi "ricostruisco al bisogno" non
     # e' un piano di rollback: bisogna conservare l'artefatto, e conservarlo
     # altrove.
     image: ${FUORIROTTA_IMAGE:-ghcr.io/alessandroamormino/fuorirotta:latest}

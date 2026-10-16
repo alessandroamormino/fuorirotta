@@ -9,7 +9,7 @@
  * query in piu' in lettura, sui soli gruppi realmente fusi (vedi
  * groupMembersByCanonical() e i chiamanti in app/api/events/).
  */
-import type { Event as PrismaEvent } from '@prisma/client'
+import type { Event as PrismaEvent } from '../generated/prisma/client'
 import { SOURCE_META } from '../scrapers/sources'
 
 // Campi componibili: quelli su cui una sorgente puo' essere piu' o meno
