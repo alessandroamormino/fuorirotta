@@ -118,6 +118,11 @@ export function buildComuneIndex(comuni: ComuneRow[]): ComuneIndex {
 type SourceStrategy = 'location_name' | 'address_then_location_name'
 const SOURCE_STRATEGY: Record<string, SourceStrategy> = {
   'in-lombardia': 'address_then_location_name',
+  // location_name e' la sede ("Musei Reali"), address finisce col comune
+  // ("Piazza Reale, 1 - Torino"). NON 'Torino' fisso come roma.ts: la
+  // sorgente pubblica anche l'area metropolitana (Grugliasco, Moncalieri),
+  // misurato sui 38 indirizzi distinti del catalogo il 2026-10-16.
+  torino: 'address_then_location_name',
 }
 
 function namesToTry(input: ResolveInput): string[] {
