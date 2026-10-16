@@ -13,7 +13,7 @@ import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
-import { eventStatus, formatEventRange } from "@/lib/eventStatus";
+import { eventStatus, formatEventRange, romeCalendarDate } from "@/lib/eventStatus";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { MOTION_FAST, EASE_STANDARD } from "@/lib/motion";
 import {
@@ -368,7 +368,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	const status = eventStatus(event.dateStart, event.dateEnd);
 	const isMultiDay =
 		event.dateEnd != null &&
-		new Date(event.dateEnd).toDateString() !== new Date(event.dateStart).toDateString();
+		romeCalendarDate(event.dateEnd).getTime() !== romeCalendarDate(event.dateStart).getTime();
 	const hasCoords = event.latitude != null && event.longitude != null;
 	const distanceKm =
 		userLocation && event.resolvedLatitude != null && event.resolvedLongitude != null
@@ -527,7 +527,7 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 										value={
 											isMultiDay
 												? formatEventRange(event.dateStart, event.dateEnd)
-												: format(new Date(event.dateStart), "EEEE dd MMMM yyyy", { locale: it })
+												: format(romeCalendarDate(event.dateStart), "EEEE dd MMMM yyyy", { locale: it })
 										}
 									/>
 

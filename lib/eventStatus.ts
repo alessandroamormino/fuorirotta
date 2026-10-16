@@ -23,21 +23,22 @@ export interface EventStatus {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
+const romeDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' })
+
 /**
- * Normalizza a mezzanotte locale. Punto unico in cui l'algoritmo del
- * prototipo si distingue da un banale confronto di timestamp: due istanti
- * nello stesso giorno di calendario ma a ore diverse devono confrontarsi
- * uguali. E' anche l'origine del mismatch di idratazione che la card
- * tampona con suppressHydrationWarning sui nodi che portano il testo del
- * badge (il valore reso lato server e quello lato client possono divergere
- * se la pagina resta aperta a cavallo di mezzanotte) — tampone documentato,
- * non un difetto da chiudere in questa fase.
+ * Il giorno di calendario A ROMA dell'istante, come mezzanotte locale del
+ * processo che gira. Gli scraper scrivono mezzanotte di Roma (2 settembre =
+ * 2026-09-01T22:00Z, vedi lib/dateWindow.ts): `setHours(0)` sul server in UTC
+ * dava "1 set", nel browser a Roma "2 set" — React #418 su ogni card in
+ * produzione (2026-10-16). Le cifre di Roma, rimesse in un Date locale, si
+ * formattano e si confrontano uguali in qualunque fuso.
  */
-function toMidnight(value: string | Date): Date {
-  const d = new Date(value)
-  d.setHours(0, 0, 0, 0)
-  return d
+export function romeCalendarDate(value: string | Date): Date {
+  const [y, m, d] = romeDayFormat.format(new Date(value)).split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
+
+const toMidnight = romeCalendarDate
 
 /** Differenza in giorni di calendario fra due date gia' a mezzanotte locale. */
 function dayDiff(a: Date, b: Date): number {
@@ -51,10 +52,10 @@ function dayDiff(a: Date, b: Date): number {
  * non due copie da tenere allineate.
  */
 export function formatEventRange(dateStart: string | Date, dateEnd?: string | Date | null): string {
-  const start = new Date(dateStart)
-  const end = dateEnd != null ? new Date(dateEnd) : start
+  const start = toMidnight(dateStart)
+  const end = dateEnd != null ? toMidnight(dateEnd) : start
   const startLabel = format(start, 'd MMM', { locale: it })
-  if (toMidnight(start).getTime() === toMidnight(end).getTime()) {
+  if (start.getTime() === end.getTime()) {
     return startLabel
   }
   return `${startLabel} – ${format(end, 'd MMM', { locale: it })}`
@@ -124,6 +125,14 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     'un evento che parte oggi e finisce fra un mese deve restare Oggi, non In corso'
   )
   console.assert(eventStatus(at(-5), null).label === 'Concluso', 'dateEnd nullo usa dateStart come fine')
+
+  // React #418 (2026-10-16): mezzanotte di Roma del 2/9 scritta come cifre UTC
+  // del 1/9 sera (evento 22720). Deve dire "2 set" in QUALUNQUE fuso: lancia
+  // il self-check anche con TZ=UTC, il fuso del container in produzione.
+  console.assert(
+    formatEventRange('2026-09-01T22:00:00.000Z', '2026-09-02T21:59:59.999Z') === '2 set',
+    `atteso "2 set" anche fuori da Roma, ottenuto "${formatEventRange('2026-09-01T22:00:00.000Z', '2026-09-02T21:59:59.999Z')}"`
+  )
 
   console.log('[eventStatus.ts] self-check OK')
 }
