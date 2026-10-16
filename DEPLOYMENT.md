@@ -162,6 +162,7 @@ Example output at the time of writing (all 20 ISTAT regions — SoloSagre genera
 # supporta CRON_TZ (verificato 2026-09-15). 03:17 UTC = 05:17 in Italia
 # d'estate, 04:17 d'inverno.
 
+*/5 * * * * /opt/docker/fuori-rotta/fuorirotta/scripts/auto-deploy.sh >> /var/log/fuorirotta-deploy.log 2>&1
 17 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh lombardia >> /var/log/fuorirotta-cron.log 2>&1
 20 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh emilia-romagna >> /var/log/fuorirotta-cron.log 2>&1
 23 3 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh puglia >> /var/log/fuorirotta-cron.log 2>&1
@@ -259,14 +260,19 @@ cd /opt/docker/fuori-rotta/fuorirotta && FUORIROTTA_IMAGE="$(grep -m1 '^image=' 
 bash /opt/docker/fuori-rotta/fuorirotta/scripts/deploy.sh v2.1.0
 ```
 
+Normally you do not type this: publishing a release does it for you (see §Releases). It is the
+manual path, and the rollback path.
+
 `scripts/deploy.sh` is the whole procedure and the only copy of it, in this order:
 
 1. align the checkout to that git ref (tag or commit) — migrations, one-off scripts, the
    crontab generator and the cron scripts are **not** inside the image, so the checkout must
    match what gets built;
-2. `prisma generate` + `migrate deploy` — **before** the build, because the Dockerfile runs
-   `next build`, which queries the database while prerendering. The old container stays up the
-   whole time;
+2. `npm ci` + `prisma migrate deploy` inside `node:24-alpine` with the checkout mounted —
+   never on the host (Node 18; Prisma 7 needs >= 20.19). `npm ci` also realigns the checkout's
+   `node_modules` and generated client, which the maintenance cron uses. **Before** the build,
+   because the Dockerfile runs `next build`, which queries the database while prerendering. The
+   old container stays up the whole time;
 3. build, tagged with the version;
 4. **push to GHCR, before the swap** — if it fails, nothing has changed yet. It fails rather
    than warning: a release you cannot undo is exactly what this script exists to prevent.
@@ -310,16 +316,42 @@ into this host, no database URL. The deliberate trade is that CI does not verify
 builds — it runs lint, typecheck and the 19 portable gates, and the build is verified by
 actually running it here.
 
-### Releases
+### Releases: a release IS a deploy
 
-Tag and publish from any checkout, no secrets needed:
+From the Mac, on an up-to-date `main`:
 
 ```bash
-git tag -a v2.1.0 -m "..." && git push origin v2.1.0 && gh release create v2.1.0 --generate-notes
+npm run release 2.3.0
 ```
 
-Then release that tag with `deploy.sh v2.1.0`. `.deployed` on the host records the digest, so
-"what was running yesterday at 20:00" has an exact answer — tags move, digests do not.
+`scripts/release.sh` refuses unless `main` is clean and equal to `origin/main`, **CI on that
+commit is green**, and the version is higher than the last tag. Then it tags and publishes the
+GitHub Release.
+
+Within 5 minutes the server picks it up on its own: `scripts/auto-deploy.sh` runs from the
+crontab (`*/5`), asks the public GitHub API for the latest release, and runs `deploy.sh` if it
+is newer than `.deployed`. It is the ArgoCD "pull" model without Kubernetes: GitHub never
+reaches into this machine and holds no secret. Rules:
+
+- **forward only** — a manual rollback (`deploy.sh` with an older tag) is not undone on the
+  next tick; you go forward again with a NEW release;
+- **a failed release is not retried** — `deploy.sh` has already rolled back; the tag is written
+  to `.auto-deploy-failed` and skipped, so a broken release does not rebuild every 5 minutes.
+  Fix it with a new release;
+- **one deploy at a time** — `deploy.sh` holds `/var/lock/fuorirotta-deploy.lock`, shared by
+  manual and automatic runs;
+- **silent when idle** — it logs only when it acts, to `/var/log/fuorirotta-deploy.log`:
+
+```bash
+tail -f /var/log/fuorirotta-deploy.log
+```
+
+Alert: set `HEALTHCHECK_DEPLOY_URL` in the host `.env` (a healthchecks.io-style check with a
+long period, e.g. one year). Success pings it, failure pings `/fail` — so the only thing that
+ever alarms is a failed release.
+
+`.deployed` on the host records the digest, so "what was running yesterday at 20:00" has an
+exact answer — tags move, digests do not.
 
 ### Tests: two halves, both still in `npm test`
 

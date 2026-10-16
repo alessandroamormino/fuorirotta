@@ -54,6 +54,11 @@ die() { echo "[deploy] ERRORE: $*" >&2; exit 1; }
 
 [[ -f "${ROOT}/.env" ]] || die "manca ${ROOT}/.env"
 
+# Un deploy alla volta, manuale o automatico (scripts/auto-deploy.sh): due
+# build e due swap intrecciati lascerebbero .deployed a dire il falso.
+exec 9>/var/lock/fuorirotta-deploy.lock
+flock -n 9 || die "un altro deploy e' gia' in corso"
+
 # --- 1. Stato attuale, quello a cui si torna se qualcosa va storto ----------
 PREV_IMAGE=""
 if [[ -f "${STATE_FILE}" ]]; then

@@ -71,6 +71,13 @@ fi
 # filtrano i commenti e le righe vuote, restano solo le voci pianificate.
 last_cron_line="$(printf '%s\n' "${output}" | grep -vE '^\s*(#|$)' | tail -1)"
 [[ "${last_cron_line}" == *"cron-maintenance.sh"* ]] || fail "S3: la riga del job consolidato non e' l'ultima voce pianificata del blocco"
+
+# S6: il rilascio automatico e' pianificato. Senza questa riga un release
+# pubblicato resterebbe fermo su GitHub, e nessuno lo noterebbe finche' non
+# cerca la funzione nuova in produzione.
+if ! printf '%s\n' "${output}" | grep -qE '^\*/5 \* \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/auto-deploy\.sh >> /var/log/fuorirotta-deploy\.log 2>&1$'; then
+  fail "S6: riga attesa per auto-deploy.sh assente o mal formata"
+fi
 echo "ok  S3: riga del job consolidato presente, pianificata dopo l'ultima regione"
 
 # --- S4: ordine stabile -------------------------------------------------------
