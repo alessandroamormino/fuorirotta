@@ -132,12 +132,26 @@ function registerCategoryIcons(map: mapboxgl.Map) {
 		);
 		const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
 
-		map.loadImage(dataUrl, (error, image) => {
-			if (error || !image) return;
-			if (!map.hasImage(imageId)) {
-				map.addImage(imageId, image, { sdf: true });
-			}
-		});
+		// NON map.loadImage(): decodifica con createImageBitmap, che sugli SVG
+		// fallisce ("The source image could not be decoded", verificato in
+		// Chrome il 2026-10-16) — e l'errore finiva in un return silenzioso:
+		// le icone non venivano mai registrate, i pin restavano cerchi vuoti,
+		// Chrome avvisava "could not be loaded" e Firefox lanciava "can't access
+		// property r". Un <img> l'SVG lo sa leggere ovunque: lo si rasterizza su
+		// un canvas e si passano a Mapbox i pixel gia' pronti.
+		const size = CATEGORY_ICON_SOURCE_PX;
+		const img = new Image(size, size);
+		img.onload = () => {
+			if (map.hasImage(imageId)) return;
+			const canvas = document.createElement("canvas");
+			canvas.width = size;
+			canvas.height = size;
+			const ctx = canvas.getContext("2d");
+			if (!ctx) return;
+			ctx.drawImage(img, 0, 0, size, size);
+			map.addImage(imageId, ctx.getImageData(0, 0, size, size), { sdf: true });
+		};
+		img.src = dataUrl;
 	});
 }
 
