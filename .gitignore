@@ -49,3 +49,6 @@ next-env.d.ts
 
 # Scritto e riscritto da next dev/build 16.4+, non e' nostro
 AGENTS.md
+
+# Client Prisma generato (prisma generate, anche in postinstall)
+/lib/generated/

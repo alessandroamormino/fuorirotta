@@ -14,7 +14,7 @@
  *    Prisma finivano nel bundle client, e il self-check CommonJS di
  *    connectionLimit.ts ci e' arrivato dietro, uccidendo la homepage
  *    (ReferenceError: module is not defined).
- *  - Sull'HOST di produzione (Node 18.19.1, mentre l'immagine e' node:20-alpine):
+ *  - Sull'HOST di produzione (Node 18.19.1, mentre l'immagine e' node:24-alpine):
  *    scripts/generate-crontab.ts e scripts/maintenance-job.ts si schiantavano con
  *    `ReferenceError: File is not defined` — undici@7 richiede il global `File`,
  *    aggiunto in Node 20. Il job di manutenzione notturno non sarebbe mai partito.

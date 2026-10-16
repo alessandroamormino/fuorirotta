@@ -4,14 +4,19 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
+// Prisma 7: il client si genera nel progetto, non piu' in node_modules.
+// moduleFormat "cjs" perche' il repository non e' "type": "module" e gli
+// script girano con tsx in CommonJS (cron di manutenzione, seed, gate).
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "../lib/generated/prisma"
+  moduleFormat = "cjs"
 }
 
+// Gli URL non stanno piu' qui: la CLI li legge da prisma.config.ts, il
+// client li riceve dall'adapter in lib/prisma.ts.
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 model Event {

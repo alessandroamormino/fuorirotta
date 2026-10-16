@@ -8,9 +8,9 @@
  * terminale dell'host rovina le stringhe lunghe incollate (2026-09-16:
  * un sed spezzato a meta' ha azzerato il crontab, certbot compreso).
  *
- * Uso, sull'host, dentro node:20-alpine col checkout montato — l'engine
+ * Uso, sull'host, dentro node:24-alpine col checkout montato — l'engine
  * Prisma in node_modules e' compilato per musl:
- *   docker run --rm -v $PWD:/app -w /app -e DATABASE_URL="$DB" node:20-alpine npx --yes tsx scripts/rls-check.ts
+ *   docker run --rm -v $PWD:/app -w /app -e DATABASE_URL="$DB" node:24-alpine npx --yes tsx scripts/rls-check.ts
  */
 import { prisma } from '../lib/prisma'
 

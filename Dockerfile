@@ -1,6 +1,8 @@
 # Dockerfile per Fuorirotta Frontend (Next.js)
 
-FROM node:20-alpine AS base
+# Node 24 (LTS attiva): Node 20 e' a fine vita da aprile 2026, e Prisma 7
+# vuole almeno 20.19.
+FROM node:24-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -10,6 +12,7 @@ WORKDIR /app
 # Install dependencies
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npm ci
 
 # Rebuild the source code only when needed
@@ -28,7 +31,8 @@ ENV DIRECT_URL=$DIRECT_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_MAPBOX_TOKEN=$NEXT_PUBLIC_MAPBOX_TOKEN
 
-# Generate Prisma Client
+# Generate Prisma Client (Prisma 7: in lib/generated/prisma, non in
+# node_modules — Next lo compila nel bundle del server come il resto di lib/)
 RUN npx prisma generate
 
 # Build Next.js app
@@ -47,7 +51,6 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
 
 USER nextjs

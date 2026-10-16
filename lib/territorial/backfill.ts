@@ -27,7 +27,7 @@ import { prisma } from '../prisma'
 import { buildComuneIndex, resolveComune, type ComuneRow, type MatchStep } from './resolve'
 import { updateClusterCache } from '../clusterCache'
 import { PRISMA_BATCH_SIZE } from '../scrapers/connectionLimit'
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '../generated/prisma/client'
 
 export type BackfillReport = {
   scanned: number

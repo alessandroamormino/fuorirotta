@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import type { Event as PrismaEvent } from "@prisma/client";
+import type { Event as PrismaEvent } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decodeHtmlEntities } from "@/lib/utils";
 import { serializeEvent } from "@/lib/serializeEvent";

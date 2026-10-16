@@ -1,4 +1,4 @@
-import type { Event as PrismaEvent } from '@prisma/client'
+import type { Event as PrismaEvent } from './generated/prisma/client'
 import type { Event } from './types'
 
 /**

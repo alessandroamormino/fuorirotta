@@ -60,7 +60,8 @@
     "test:local": "bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && bash scripts/dedup.test.sh && bash scripts/category-taxonomy.test.sh && npm run check:region-lock && npm run check:detail-cache && npm run check:region-scoping && npm run check:region-coverage && npm run check:maintenance-locks && npm run check:source-disambiguation && npm run check:cluster-volume && npm run check:retention-purge"
   },
   "dependencies": {
-    "@prisma/client": "^6.1.0",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-popover": "^1.1.23",
     "cheerio": "^1.2.0",
@@ -71,7 +72,7 @@
     "lucide-react": "^0.562.0",
     "mapbox-gl": "^3.17.0",
     "next": "16.4.1",
-    "prisma": "^6.1.0",
+    "prisma": "^7.10.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
@@ -79,7 +80,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/geojson": "^7946.0.16",
     "@types/he": "^1.2.3",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.2.3",

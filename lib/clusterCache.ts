@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import type { Event as PrismaEvent, Prisma } from '@prisma/client';
+import type { Event as PrismaEvent, Prisma } from './generated/prisma/client';
 import { composeEvent, groupMembersByCanonical } from './dedup/compose';
 import { romeMidnightUTC, todayInRome } from './dateWindow';
 

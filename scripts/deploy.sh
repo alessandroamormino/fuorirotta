@@ -19,7 +19,7 @@
 # copia nulla, da' un secondo NOME agli stessi byte su questo disco. Prima del
 # 2026-09-20 tutti i rollback vivevano qui, e un `docker image prune -a` se li
 # sarebbe portati via insieme. Nemmeno "tanto ricostruisco dal sorgente" e' un
-# piano: `npm ci` risolve pacchetti che cambiano e `node:20-alpine` e' un tag
+# piano: `npm ci` risolve pacchetti che cambiano e `node:24-alpine` e' un tag
 # mobile, quindi ricostruire lo stesso commit NON da' la stessa immagine. Per
 # tornare indietro serve l'artefatto conservato, e conservato altrove.
 #
@@ -75,15 +75,18 @@ git -c advice.detachedHead=false checkout --quiet --detach "${VERSION}" \
   || die "ref git non trovato: ${VERSION}"
 log "checkout su $(git rev-parse --short HEAD)"
 
-# --- 3. Migrazioni, PRIMA del build ----------------------------------------
-# `prisma generate` sul checkout serve ai container laterali (manutenzione,
-# backfill) che montano questa cartella e usano il client che sta qui.
-# Sempre prisma@6.1.0 esplicito: `npx prisma` liscio prende la 7, che ha
-# rimosso `url` dal blocco datasource e fallisce con P1012.
-log "prisma generate"
-npx --yes prisma@6.1.0 generate >/dev/null
+# --- 3. Dipendenze del checkout e migrazioni, PRIMA del build ---------------
+# Dentro node:24-alpine, mai sull'host: l'host gira Node 18 e Prisma 7 vuole
+# almeno 20.19. Stesso container del cron di manutenzione, che monta questa
+# cartella e usa il node_modules e il client generato (lib/generated) che
+# stanno qui: `npm ci` li riallinea alla versione, e il postinstall rigenera
+# il client. La CLI di Prisma legge .env tramite prisma.config.ts (dotenv
+# toglie da se' le virgolette) e migra su DIRECT_URL.
+in_node() { docker run --rm -v "${ROOT}:/app" -w /app node:24-alpine "$@"; }
+log "npm ci sul checkout (node:24-alpine)"
+in_node npm ci --no-audit --no-fund >/dev/null
 log "migrate deploy"
-npx --yes prisma@6.1.0 migrate deploy
+in_node npx prisma migrate deploy
 
 # --- 4. Build, taggato con la versione -------------------------------------
 # Le credenziali le legge compose dal .env di questa cartella, come sempre.
@@ -118,6 +121,10 @@ rollback() {
     FUORIROTTA_IMAGE="${PREV_IMAGE}" docker compose up -d --no-build || true
   fi
   git -c advice.detachedHead=false checkout --quiet --detach "${PREV_GIT}" || true
+  # Il checkout torna indietro: anche node_modules e il client generato,
+  # altrimenti il cron di manutenzione girerebbe codice vecchio su un client
+  # nuovo.
+  in_node npm ci --no-audit --no-fund >/dev/null || true
   die "$1 — rollback eseguito, controlla i log del container"
 }
 

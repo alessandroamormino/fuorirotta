@@ -33,7 +33,7 @@
 import { readFileSync, existsSync, statSync } from 'fs'
 import path from 'path'
 import { prisma } from '../lib/prisma'
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '../lib/generated/prisma/client'
 import { normalizeComuneName } from '../lib/territorial/normalize'
 
 export type ComuneSeedRow = {

@@ -29,7 +29,7 @@ crontab (daily, one line per region, staggered)
 
 crontab (daily, after the last region)
   -> scripts/cron-maintenance.sh
-  -> node:20-alpine container
+  -> node:24-alpine container
   -> scripts/maintenance-job.ts   (territorial backfill -> dedup -> cluster cache)
   -> PostgreSQL
   -> /api/events -> Frontend
@@ -54,7 +54,7 @@ Three categories matter because they are read at different times by different pr
 
 | Variable | Category | Description |
 |----------|----------|--------------|
-| `DIRECT_URL` | Build-only, baked into the image | Direct PostgreSQL connection used by `npx prisma generate` at build time |
+| `DIRECT_URL` | Migrations | Direct PostgreSQL connection (port 5432, session pooler). Read by `prisma.config.ts`, so every Prisma CLI command (`migrate deploy`, `migrate status`) uses it — never `DATABASE_URL`, whose transaction pooler breaks DDL and advisory locks |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Build-only, baked into the image | Public Mapbox token, inlined into the client bundle during `next build` |
 | `DATABASE_URL` | Runtime, in the container | PostgreSQL connection URL (with connection pooling if applicable); also passed at build time for `prisma generate` |
 | `NEXT_PUBLIC_APP_URL` | Runtime, in the container | App base URL (e.g., `https://fuori-rotta.it`); also passed at build time |
@@ -294,7 +294,7 @@ Two things it deliberately does not do:
 machine. Before 2026-09-20 every rollback image lived only on this VM: one dead disk, or one
 `docker image prune -a`, and they were all gone together. Nor is "I can rebuild it" a plan:
 rebuilding the same commit does **not** produce the same image, because `npm ci` resolves
-packages that move and `node:20-alpine` is a mutable tag. A rollback needs the preserved
+packages that move and `node:24-alpine` is a mutable tag. A rollback needs the preserved
 artifact, and preserved somewhere else.
 
 One-time setup on this host — a GitHub token with `write:packages` and nothing else, pointing
@@ -346,17 +346,21 @@ The database is managed by Prisma. Key models:
 
 ### Migrations
 
-**Production:**
+**Production:** `scripts/deploy.sh` runs them, inside `node:24-alpine` with the
+checkout mounted — never on the host (Node 18; Prisma 7 needs >= 20.19):
 ```bash
-npx prisma migrate deploy
+docker run --rm -v "$PWD:/app" -w /app node:24-alpine npx prisma migrate deploy
 ```
+Prisma 7 no longer reads `.env` by itself: `prisma.config.ts` loads it with
+dotenv and points the CLI at `DIRECT_URL`.
 
 **Development (quick schema sync):**
 ```bash
 npx prisma db push
 ```
 
-**Generate Prisma Client:**
+**Generate Prisma Client** (into `lib/generated/prisma`, gitignored; `npm ci`
+already does it via `postinstall`):
 ```bash
 npx prisma generate
 ```
