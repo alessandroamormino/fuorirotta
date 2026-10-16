@@ -23,7 +23,7 @@ import { acquireRegionLock, releaseRegionLock } from "@/lib/scrapers/regionLock"
 import { getLiveRegions } from "@/lib/coverage/liveRegions";
 import { istatRegionToSlug } from "@/lib/scrapers/regionSlug";
 import type { CoverageMessageVariant } from "@/components/CoverageMessage";
-import { Prisma, Event as PrismaEvent } from "@/lib/generated/prisma/client";
+import type { Prisma, Event as PrismaEvent } from "@/lib/generated/prisma/client";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent, groupMembersByCanonical } from "@/lib/dedup/compose";

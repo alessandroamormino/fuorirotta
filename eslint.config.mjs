@@ -23,7 +23,28 @@ const eslintConfig = defineConfig([
       // superficie della CVE critica chiusa con Next 16.4.1. Vedi il
       // commento in next.config.ts.
       "@next/next/no-img-element": "off",
+      // Il client Prisma 7 generato e' solo per Node: un import di VALORE da
+      // un file che finisce nel bundle del browser lo trascina li' e la home
+      // esplode al caricamento ("i is undefined", 2026-10-16, da lib/types.ts).
+      // I tipi si importano ovunque con `import type`; i valori solo da
+      // lib/prisma.ts, qui sotto.
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/generated/prisma/*"],
+              allowTypeImports: true,
+              message: "Solo `import type` dal client generato; i valori passano da lib/prisma.ts.",
+            },
+          ],
+        },
+      ],
     },
+  },
+  {
+    files: ["lib/prisma.ts"],
+    rules: { "@typescript-eslint/no-restricted-imports": "off" },
   },
 ]);
 
