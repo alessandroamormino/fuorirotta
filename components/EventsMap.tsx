@@ -100,21 +100,22 @@ function buildIconImageMatch(): unknown[] {
 // selezionato si INVERTE (fondo --background, icona --foreground) invece di
 // passare a --primary: con --primary diventato nero, un pin selezionato nero
 // fra pin neri sarebbe indistinguibile.
+// Sempre un'espressione "case", anche senza selezione (id -1 non matcha mai):
+// passare da un colore costante a un'espressione sul dato fa crashare il
+// disegno dei cerchi di Mapbox 3.33 ("reading 'r'" in setUniforms) finche' i
+// tile non sono ricostruiti — React lo mostrava come 7 errori a ogni hover.
 function buildCircleColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
-	if (selectedEventId == null) return colors.foreground;
-	return ["case", ["==", ["get", "id"], selectedEventId], colors.background, colors.foreground];
+	return ["case", ["==", ["get", "id"], selectedEventId ?? -1], colors.background, colors.foreground];
 }
 
 function buildIconColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
-	if (selectedEventId == null) return colors.background;
-	return ["case", ["==", ["get", "id"], selectedEventId], colors.foreground, colors.background];
+	return ["case", ["==", ["get", "id"], selectedEventId ?? -1], colors.foreground, colors.background];
 }
 
 function buildStrokeColorExpression(colors: ThemeColors, selectedEventId: number | null | undefined): unknown {
 	// Il pin selezionato e' chiaro: un anello --surface lo farebbe sparire sul
 	// fondo mappa, quindi prende --foreground.
-	if (selectedEventId == null) return colors.surface;
-	return ["case", ["==", ["get", "id"], selectedEventId], colors.foreground, colors.surface];
+	return ["case", ["==", ["get", "id"], selectedEventId ?? -1], colors.foreground, colors.surface];
 }
 
 // Registra le 7 icone di categoria come immagini SDF (una volta per ciclo di
