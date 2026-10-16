@@ -57,7 +57,8 @@
     "check:radius-geolocation": "bash scripts/radius-geolocation.test.sh",
     "check:cluster-volume": "bash scripts/cluster-volume.test.sh",
     "test:ci": "bash scripts/cron-scrape.test.sh && bash scripts/design-tokens.test.sh && npm run check:no-regex-parsing && bash scripts/registry-parity.test.sh && npm run check:navbar && npm run check:restyle && npm run check:crontab-generate && npm run check:connection-limit && npm run check:browser-bundle && npm run check:host-script-deps && npm run check:emiliaromagna && npm run check:puglia && npm run check:altoadige && npm run check:firenze && npm run check:torino && npm run check:roma && npm run check:solosagre-national && npm run check:refresh-lock-single-release && npm run check:radius-geolocation",
-    "test:local": "bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && bash scripts/dedup.test.sh && bash scripts/category-taxonomy.test.sh && npm run check:region-lock && npm run check:detail-cache && npm run check:region-scoping && npm run check:region-coverage && npm run check:maintenance-locks && npm run check:source-disambiguation && npm run check:cluster-volume && npm run check:retention-purge"
+    "test:local": "bash scripts/territorial-backfill.test.sh && npm run check:monitoring && npm run check:comuni && bash scripts/dedup.test.sh && bash scripts/category-taxonomy.test.sh && npm run check:region-lock && npm run check:detail-cache && npm run check:region-scoping && npm run check:region-coverage && npm run check:maintenance-locks && npm run check:source-disambiguation && npm run check:cluster-volume && npm run check:retention-purge",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

@@ -30,6 +30,12 @@ import { getRegions, REGION_SCHEDULES, MAINTENANCE_SCHEDULE } from '../lib/scrap
 const SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh'
 const MAINTENANCE_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh'
 const LOG_PATH = '/var/log/fuorirotta-cron.log'
+// Rilascio automatico (scripts/auto-deploy.sh): ogni 5 minuti chiede a GitHub
+// l'ultima release. Log a parte: i rilasci sono rari e vanno trovati subito,
+// non in mezzo a ventuno scrape al giorno.
+const AUTO_DEPLOY_SCHEDULE = '*/5 * * * *'
+const AUTO_DEPLOY_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/auto-deploy.sh'
+const DEPLOY_LOG_PATH = '/var/log/fuorirotta-deploy.log'
 
 /**
  * Gli orari di REGION_SCHEDULES sono in UTC, e il crontab lo dichiara in chiaro
@@ -75,6 +81,7 @@ const HEADER = [
  */
 export function generate(): string {
   const lines = [...HEADER, '']
+  lines.push(`${AUTO_DEPLOY_SCHEDULE} ${AUTO_DEPLOY_SCRIPT_PATH} >> ${DEPLOY_LOG_PATH} 2>&1`)
   for (const region of getRegions()) {
     const schedule = REGION_SCHEDULES[region]
     if (!schedule) {
