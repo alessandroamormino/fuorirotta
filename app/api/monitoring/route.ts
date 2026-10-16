@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SOURCE_META } from '@/lib/scrapers/sources'
-import { computeSourceHealth, HEALTH_WINDOW_SIZE, type RunRecord, type SourceHealth } from '@/lib/scrapers/health'
+import { computeSourceHealth, summarizeHealth, HEALTH_WINDOW_SIZE, type RunRecord, type SourceHealth } from '@/lib/scrapers/health'
 
 /**
  * GET /api/monitoring (MON-01)
@@ -60,11 +60,16 @@ export async function GET() {
             }))
           )
 
-    const allSources = [...sources, maintenanceHealth]
+    const allSources = [...sources, maintenanceHealth].filter(
+      (source): source is SourceHealth => source !== null
+    )
 
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
-      sources: allSources.filter((source): source is SourceHealth => source !== null)
+      // Gia' pronto per l'allarme giornaliero (scripts/cron-health.sh), che
+      // cosi' non deve ricalcolare niente in bash.
+      summary: summarizeHealth(allSources),
+      sources: allSources
     })
   } catch (error) {
     // Il messaggio dell'eccezione resta solo nei log: puo' contenere l'URL di connessione

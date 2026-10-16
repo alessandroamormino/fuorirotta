@@ -36,6 +36,10 @@ const LOG_PATH = '/var/log/fuorirotta-cron.log'
 const AUTO_DEPLOY_SCHEDULE = '*/5 * * * *'
 const AUTO_DEPLOY_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/auto-deploy.sh'
 const DEPLOY_LOG_PATH = '/var/log/fuorirotta-deploy.log'
+// Allarme sulla salute delle sorgenti (scripts/cron-health.sh): dopo l'ultimo
+// scrape notturno (04:14 UTC) e prima della manutenzione, che resta l'ultima.
+const HEALTH_SCHEDULE = '0 5 * * *'
+const HEALTH_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-health.sh'
 
 /**
  * Gli orari di REGION_SCHEDULES sono in UTC, e il crontab lo dichiara in chiaro
@@ -91,6 +95,7 @@ export function generate(): string {
     }
     lines.push(`${schedule} ${SCRIPT_PATH} ${region} >> ${LOG_PATH} 2>&1`)
   }
+  lines.push(`${HEALTH_SCHEDULE} ${HEALTH_SCRIPT_PATH} >> ${LOG_PATH} 2>&1`)
   lines.push(`${MAINTENANCE_SCHEDULE} ${MAINTENANCE_SCRIPT_PATH} >> ${LOG_PATH} 2>&1`)
   lines.push(BLOCK_END)
   return lines.join('\n') + '\n'

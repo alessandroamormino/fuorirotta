@@ -78,6 +78,12 @@ last_cron_line="$(printf '%s\n' "${output}" | grep -vE '^\s*(#|$)' | tail -1)"
 if ! printf '%s\n' "${output}" | grep -qE '^\*/5 \* \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/auto-deploy\.sh >> /var/log/fuorirotta-deploy\.log 2>&1$'; then
   fail "S6: riga attesa per auto-deploy.sh assente o mal formata"
 fi
+
+# S7: l'allarme sulle sorgenti e' pianificato, dopo gli scrape notturni.
+# Senza, una sorgente morta torna a poter restare giu' per settimane.
+if ! printf '%s\n' "${output}" | grep -qE '^0 5 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-health\.sh >> /var/log/fuorirotta-cron\.log 2>&1$'; then
+  fail "S7: riga attesa per cron-health.sh assente o mal formata"
+fi
 echo "ok  S3: riga del job consolidato presente, pianificata dopo l'ultima regione"
 
 # --- S4: ordine stabile -------------------------------------------------------
