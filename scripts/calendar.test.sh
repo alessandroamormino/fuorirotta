@@ -28,6 +28,7 @@ FILES=(
   lib/eventDays.ts
   lib/eventStatus.ts
   lib/calendar/ics.ts
+  lib/calendar/links.ts
 )
 
 cd "${repo_root}"
