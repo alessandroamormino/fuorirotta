@@ -9,9 +9,13 @@ import { OgCard, ogCardContent } from "@/lib/og/card";
 const TEXT = "text/plain; charset=utf-8";
 
 // Bricolage Grotesque Regular e Bold (TTF statici, repo ateliertriay/bricolage) (public/fonts, licenza OFL accanto).
-// Non dipendono dalla richiesta: si leggono una volta sola, a livello di modulo.
+// Non dipendono dalla richiesta: si leggono una volta sola, alla prima richiesta
+// e dentro il try del GET (un top-level await farebbe fallire l'import del
+// modulo, fuori dal catch e dal 500 pensato). Se la lettura fallisce la promise
+// non resta in cache: la richiesta dopo riprova.
 const fontFile = (name: string) => readFile(join(process.cwd(), "public", "fonts", name));
-const [bricolageRegular, bricolageBold] = await Promise.all([fontFile("BricolageGrotesque-Regular.ttf"), fontFile("BricolageGrotesque-Bold.ttf")]);
+let fonts: Promise<[Buffer, Buffer]> | null = null;
+const loadFonts = () => (fonts ??= Promise.all([fontFile("BricolageGrotesque-Regular.ttf"), fontFile("BricolageGrotesque-Bold.ttf")]));
 
 // La card Open Graph degli eventi senza immagine (SHARE-01). Sta fuori da
 // /api/ perche' robots.txt lo vieta ai crawler. Anonima: non legge cookie ne'
@@ -35,6 +39,7 @@ export async function GET(
 		const result = await getComposedEvent(Number(id));
 		if (result.status !== "ok") return notFound();
 
+		const [bricolageRegular, bricolageBold] = await loadFonts();
 		return new ImageResponse(OgCard(ogCardContent(result.event, todayInRome())), {
 			width: 1200,
 			height: 630,
@@ -48,6 +53,7 @@ export async function GET(
 			headers: { 'cache-control': 'public, max-age=86400' },
 		});
 	} catch (error) {
+		fonts = null;
 		console.error("Error rendering og card:", error);
 		return new Response("Errore interno", { status: 500, headers: { "content-type": TEXT } });
 	}

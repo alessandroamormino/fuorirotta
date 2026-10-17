@@ -47,4 +47,14 @@ ${out}"
   done
 done
 
+# WR-03: la route della card non legge i font con un top-level await (farebbe
+# fallire l'import del modulo fuori dal catch del GET). Guardia sul sorgente:
+# nessuna riga a colonna 0 con "await".
+og_route="app/eventi/[id]/og/route.tsx"
+[[ -f "${og_route}" ]] || fail "${og_route} non trovato (guardia WR-03)"
+if grep -nE '^(const|let|var|await) .*await |^await ' "${og_route}"; then
+  fail "${og_route}: top-level await (i font vanno letti dentro il try del GET)"
+fi
+echo "ok  ${og_route} nessun top-level await"
+
 echo "Riepilogo: ${runs} esecuzioni dei self-check, tutte verdi"
