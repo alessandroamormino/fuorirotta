@@ -113,12 +113,13 @@ export default function ShareButton({
 			</button>
 			<span
 				aria-hidden="true"
-				className={`pointer-events-none absolute z-10 rounded-pill bg-foreground text-sm font-medium text-background motion-reduce:transition-none ${
+				className={`pointer-events-none absolute z-10 bg-foreground text-sm font-medium text-background motion-reduce:transition-none ${
 					isPopup ? "right-full top-1/2 mr-2 -translate-y-1/2" : "bottom-full right-0 mb-2"
 				} ${
+					// w-max: un absolute senza larghezza si stringe al pulsante (48px su mobile), una parola per riga
 					state === "failed"
-						? "h-auto max-w-[240px] whitespace-normal px-4 py-2"
-						: "flex h-8 items-center whitespace-nowrap px-4"
+						? "h-auto w-max max-w-[240px] whitespace-normal rounded-lg px-4 py-2"
+						: "flex h-8 items-center whitespace-nowrap rounded-pill px-4"
 				}`}
 				style={{
 					boxShadow: "var(--elev-raised)",
