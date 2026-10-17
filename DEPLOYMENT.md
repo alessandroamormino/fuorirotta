@@ -507,17 +507,33 @@ text too.
 
 ### nginx access-log rotation (14 days)
 
-The privacy text says nginx access logs (IP, user agent, requested address) are kept about 14 days. The
-official `nginx` image writes them to stdout, so the Docker `json-file` log is what has to be bounded, and
-that rotation is by **size**, not by time. Measure the daily volume first (read-only), then size
-`max-size` x `max-file` to cover about 14 days:
+The privacy text says nginx access logs (IP, user agent, requested address) are kept about 14 days. On the
+server the nginx container does **not** log to stdout (`docker logs nginx` is empty): `access.log` and
+`error.log` are real files in the bind mount `/opt/docker/nginx/logs` -> `/var/log/nginx`, so the Docker
+`json-file` options do nothing for them; the host's `logrotate` does the job. `/etc/logrotate.d/nginx-docker`:
 
-```bash
-docker logs nginx --since 24h 2>&1 | wc -c
+```
+/opt/docker/nginx/logs/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    copytruncate
+}
 ```
 
-Set `logging: {driver: json-file, options: {max-size: ..., max-file: ...}}` for nginx in the compose file
-that runs it on the server and recreate that container. Until this is done the logs are unbounded.
+`copytruncate` copies the file and truncates it in place, because nginx keeps the file open and would keep
+writing to the renamed one otherwise (no reload or signal needed). Check the file without rotating anything:
+
+```bash
+logrotate -d /etc/logrotate.d/nginx-docker
+```
+
+Applied on 2026-10-17: `access.log` (about 350 MB since 2026-03-23) was truncated once by hand, then the
+rule above installed; the first real rotation happens the following night.
 
 ## Database
 
