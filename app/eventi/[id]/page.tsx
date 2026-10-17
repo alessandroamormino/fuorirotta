@@ -174,7 +174,10 @@ export default async function EventDetailPage({
 					}}
 				/>
 			)}
-			<EventDetailClient initialEvent={serializedEvent} />
+			<EventDetailClient
+				initialEvent={serializedEvent}
+				canonicalUrl={isNaN(eventId) ? undefined : `${BASE_URL}/eventi/${eventId}`}
+			/>
 		</>
 	);
 }

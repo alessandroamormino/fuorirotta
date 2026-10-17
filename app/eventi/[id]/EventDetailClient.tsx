@@ -12,6 +12,7 @@ import Navbar from "@/components/Navbar";
 import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
+import ShareButton from "@/components/ShareButton";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 import { eventStatus, formatEventRange, romeCalendarDate } from "@/lib/eventStatus";
 import { eventDays } from "@/lib/eventDays";
@@ -41,6 +42,8 @@ const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 
 interface EventDetailClientProps {
 	initialEvent?: Event | null;
+	/** URL canonico dell'evento, deciso dal server (stesso valore di alternates.canonical). */
+	canonicalUrl?: string;
 }
 
 /**
@@ -115,7 +118,7 @@ function MobileDetailBar({ title, scrolled, onBack }: { title: string; scrolled:
 	);
 }
 
-export default function EventDetailClient({ initialEvent }: EventDetailClientProps) {
+export default function EventDetailClient({ initialEvent, canonicalUrl }: EventDetailClientProps) {
 	const params = useParams();
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
@@ -589,6 +592,21 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 											}
 										/>
 									)}
+								</div>
+
+								{/* Azioni secondarie (D-04): "Naviga" resta l'unico controllo
+								    pieno nero. Fuori dalla colonna laterale, quindi presenti
+								    anche senza coordinate. */}
+								<div className="mb-6 flex gap-2">
+									<ShareButton
+										presentation="detail"
+										eventId={event.id}
+										title={event.title}
+										dateStart={event.dateStart}
+										dateEnd={event.dateEnd}
+										place={event.comune?.name ?? event.locationName}
+										url={canonicalUrl}
+									/>
 								</div>
 
 								{event.description && (

@@ -254,3 +254,8 @@ if (n !== 1) { console.error("END:VEVENT: " + n); process.exit(1) }
 if (lines.some(l => l.startsWith("ATTENDEE"))) { console.error("riga ATTENDEE iniettata"); process.exit(1) }
 ' "${tmp_dir}/ics-f7.b" || fail "S13: il titolo di F7 ha iniettato righe nel .ics"
 echo "ok  S13: titolo con CR LF + END:VEVENT -> un solo END:VEVENT, nessuna riga iniettata"
+
+# --- S14: la pagina di F1 ha "Condividi evento" e il messaggio di stato sr-only ---
+grep -qF "Condividi evento" "${page}" || fail "S14: la pagina di F1 non contiene 'Condividi evento'"
+grep -qE 'role="status"[^>]*sr-only|sr-only[^>]*role="status"' "${page}" || fail "S14: manca l'elemento role=\"status\" sr-only"
+echo "ok  S14: la pagina di F1 ha 'Condividi evento' e il role=status sr-only"
