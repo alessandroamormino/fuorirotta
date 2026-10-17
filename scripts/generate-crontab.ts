@@ -40,6 +40,12 @@ const DEPLOY_LOG_PATH = '/var/log/fuorirotta-deploy.log'
 // scrape notturno (04:14 UTC) e prima della manutenzione, che resta l'ultima.
 const HEALTH_SCHEDULE = '0 5 * * *'
 const HEALTH_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-health.sh'
+// Backup cifrato giornaliero (scripts/cron-backup.sh, D-18). 12:30 UTC: dopo la
+// manutenzione delle 11:00 (che nel giorno peggiore, la domenica, finisce ben
+// prima) e lontano da ogni scrape (03:17-04:14) e dal controllo salute (05:00).
+// Lo slot non coincide con nessuna voce di REGION_SCHEDULES: lo prova S11.
+const BACKUP_SCHEDULE = '30 12 * * *'
+const BACKUP_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-backup.sh'
 
 /**
  * Gli orari di REGION_SCHEDULES sono in UTC, e il crontab lo dichiara in chiaro
@@ -79,7 +85,7 @@ const HEADER = [
  * Genera l'intero contenuto del crontab: intestazione di commento che dichiara
  * il fuso, riga vuota, poi una riga per regione
  * (ordine di dichiarazione di SOURCE_META via getRegions(), D-04/S4),
- * poi la riga del job consolidato. Nessun algoritmo di scaglionamento
+ * poi la riga del job consolidato e quella del backup (D-18). Nessun algoritmo di scaglionamento
  * automatico qui: a N=1 non c'e' nulla da distribuire, gli orari sono
  * dichiarati a mano in REGION_SCHEDULES (D-11).
  */
@@ -97,6 +103,7 @@ export function generate(): string {
   }
   lines.push(`${HEALTH_SCHEDULE} ${HEALTH_SCRIPT_PATH} >> ${LOG_PATH} 2>&1`)
   lines.push(`${MAINTENANCE_SCHEDULE} ${MAINTENANCE_SCRIPT_PATH} >> ${LOG_PATH} 2>&1`)
+  lines.push(`${BACKUP_SCHEDULE} ${BACKUP_SCRIPT_PATH} >> ${LOG_PATH} 2>&1`)
   lines.push(BLOCK_END)
   return lines.join('\n') + '\n'
 }

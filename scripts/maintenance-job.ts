@@ -58,6 +58,7 @@
  */
 import { backfillEvents } from '../lib/territorial/backfill'
 import { purgeConcludedEvents, RETENTION_DAYS } from '../lib/retention/purge'
+import { AUTH_RATE_LIMIT_RETENTION_HOURS, purgeAuthRows } from '../lib/retention/purgeAuth'
 import { dedupeEvents } from '../lib/dedup/dedupe'
 import { truncateError } from '../lib/scrapers/health'
 import { prisma } from '../lib/prisma'
@@ -79,6 +80,15 @@ async function runMaintenance(): Promise<{ eventCount: number }> {
       (purgeReport.keptAsCanonical > 0
         ? `; ${purgeReport.keptAsCanonical} risparmiati perche' ancora canonici per un evento vivo.`
         : '.')
+  )
+
+  // AUTH-08 / D-15: i contatori di rate limit (indirizzi IP) vivono al massimo
+  // AUTH_RATE_LIMIT_RETENTION_HOURS, la durata che /privacy dichiara; sessioni
+  // e stati di accesso solo se gia' scaduti. Tabelle tiny, nessun ordine da
+  // rispettare rispetto a backfill e dedup.
+  const authReport = await purgeAuthRows()
+  console.log(
+    `[Maintenance] Account: ${authReport.rateLimitDeleted} righe di rate limit oltre ${AUTH_RATE_LIMIT_RETENTION_HOURS} ore, ${authReport.sessionsDeleted} sessioni scadute, ${authReport.verificationsDeleted} stati di accesso scaduti cancellati.`
   )
 
   const backfillReport = await backfillEvents()

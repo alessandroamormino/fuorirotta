@@ -74,6 +74,12 @@
   --elev-ring: 0 0 0 1px var(--border);
   --elev-raised: 0 12px 32px rgba(0, 0, 0, 0.08);
 
+  /* Pulsante "Continua con Google" (21-UI-SPEC): colori fissati dalle linee
+     guida del marchio per tema; il "G" a colori e' public/images/google-g.svg. */
+  --google-btn-bg: #ffffff;
+  --google-btn-border: #747775;
+  --google-btn-fg: #1f1f1f;
+
   /* Tipografia (D-03b) — stack di SISTEMA: nessun @font-face, nessun
      self-hosting, nessun webfont (licenza Apple). Su Apple rende SF Pro,
      altrove cade sul fallback. */
@@ -198,6 +204,10 @@
   --elev-ring: 0 0 0 1px var(--border);
   --elev-raised: 0 0 0 1px #2a2a2c, 0 12px 32px rgba(0, 0, 0, 0.6);
 
+  --google-btn-bg: #131314;
+  --google-btn-border: #8e918f;
+  --google-btn-fg: #e3e3e3;
+
   --font-display:
     "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,
     sans-serif;
@@ -304,6 +314,16 @@ html {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Comparsa dell'avviso (components/account/NoticeHost.tsx): solo opacita'. */
+@keyframes noticeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

@@ -9,6 +9,7 @@ import { Event } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Breadcrumb from "@/components/Breadcrumb";
 import CoverageMessage from "@/components/CoverageMessage";
+import Footer from "@/components/Footer";
 import { availableEventsWhere, windowStartToday } from "@/lib/dateWindow";
 import { compareByWindowRelevance } from "@/lib/eventOrdering";
 
@@ -132,7 +133,25 @@ export default async function ProvinciaPage({
 		// D-05/D-06: il testo vive in CoverageMessage, un punto solo, riusato
 		// identico dalla pagina regione.
 		return (
-			<main className="mx-auto max-w-3xl px-4 py-16">
+			<>
+				<main className="mx-auto max-w-3xl px-4 py-16">
+					<script
+						type="application/ld+json"
+						dangerouslySetInnerHTML={{
+							__html: JSON.stringify(breadcrumbLd).replace(/</g, "\\u003c"),
+						}}
+					/>
+					<Breadcrumb items={breadcrumbItems} />
+					<CoverageMessage variant="region-not-covered" title={data.province.provinceName} />
+				</main>
+				<Footer />
+			</>
+		);
+	}
+
+	return (
+		<>
+			<main className="mx-auto max-w-6xl px-4 py-8">
 				<script
 					type="application/ld+json"
 					dangerouslySetInnerHTML={{
@@ -140,31 +159,19 @@ export default async function ProvinciaPage({
 					}}
 				/>
 				<Breadcrumb items={breadcrumbItems} />
-				<CoverageMessage variant="region-not-covered" title={data.province.provinceName} />
+				<h1 className="font-display text-2xl font-semibold text-foreground">
+					Eventi in provincia di {data.province.provinceName}
+				</h1>
+				<p className="mt-1 text-muted-foreground">
+					{data.events.length} {data.events.length === 1 ? "evento in programma" : "eventi in programma"}
+				</p>
+				<div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+					{data.events.map((event) => (
+						<EventCard key={event.id} event={event} />
+					))}
+				</div>
 			</main>
-		);
-	}
-
-	return (
-		<main className="mx-auto max-w-6xl px-4 py-8">
-			<script
-				type="application/ld+json"
-				dangerouslySetInnerHTML={{
-					__html: JSON.stringify(breadcrumbLd).replace(/</g, "\\u003c"),
-				}}
-			/>
-			<Breadcrumb items={breadcrumbItems} />
-			<h1 className="font-display text-2xl font-semibold text-foreground">
-				Eventi in provincia di {data.province.provinceName}
-			</h1>
-			<p className="mt-1 text-muted-foreground">
-				{data.events.length} {data.events.length === 1 ? "evento in programma" : "eventi in programma"}
-			</p>
-			<div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-				{data.events.map((event) => (
-					<EventCard key={event.id} event={event} />
-				))}
-			</div>
-		</main>
+			<Footer />
+		</>
 	);
 }

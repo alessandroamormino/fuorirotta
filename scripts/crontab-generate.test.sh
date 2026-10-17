@@ -15,6 +15,8 @@
 #   S10: aggiungere una sorgente a una regione gia' pianificata (Fase 19,
 #        altoadige su trentino-alto-adige) non aggiunge una riga di
 #        crontab — la riga resta esattamente una, all'orario di Fase 15
+#   S11: una sola riga per il backup cifrato (cron-backup.sh, D-18), in uno
+#        slot diverso da ogni regione e dalla manutenzione
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -66,11 +68,11 @@ echo "ok  S2: riga per lombardia presente con schedule/percorso/argomento/log co
 if ! printf '%s\n' "${output}" | grep -qE '^0 11 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance\.sh >> /var/log/fuorirotta-cron\.log 2>&1$'; then
   fail "S3: riga attesa per cron-maintenance.sh assente o mal formata"
 fi
-# Ultima riga di CRON (non l'ultima riga in assoluto: da quando il generatore
-# possiede un blocco delimitato, l'ultima e' il marcatore di chiusura). Si
-# filtrano i commenti e le righe vuote, restano solo le voci pianificate.
-last_cron_line="$(printf '%s\n' "${output}" | grep -vE '^\s*(#|$)' | tail -1)"
-[[ "${last_cron_line}" == *"cron-maintenance.sh"* ]] || fail "S3: la riga del job consolidato non e' l'ultima voce pianificata del blocco"
+# Ultima riga di CRON prima del backup (D-18, 21-08: il backup e' l'ultima voce
+# del blocco, la manutenzione la penultima). Si filtrano commenti e righe
+# vuote, restano solo le voci pianificate.
+last_cron_line="$(printf '%s\n' "${output}" | grep -vE '^\s*(#|$)' | grep -v 'cron-backup\.sh' | tail -1)"
+[[ "${last_cron_line}" == *"cron-maintenance.sh"* ]] || fail "S3: la riga del job consolidato non e' l'ultima voce pianificata del blocco (backup escluso)"
 
 # S6: il rilascio automatico e' pianificato. Senza questa riga un release
 # pubblicato resterebbe fermo su GitHub, e nessuno lo noterebbe finche' non
@@ -249,5 +251,19 @@ trentino_lines="$(printf '%s\n' "${output}" | grep -cE '^[0-9].*cron-scrape\.sh 
 printf '%s\n' "${output}" | grep -qE '^5 4 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape\.sh trentino-alto-adige >> /var/log/fuorirotta-cron\.log 2>&1$' \
   || fail "S10: la riga di trentino-alto-adige non porta l'orario 5 4 * * * assegnato dalla Fase 15"
 echo "ok  S10: aggiungere altoadige a trentino-alto-adige non ha aggiunto righe di crontab — esattamente 1 riga, orario 5 4 * * * invariato"
+
+# --- S11: il backup cifrato e' pianificato una volta sola, senza collisioni ---
+#
+# D-18: senza la riga, il backup esiste ma non gira. Le coppie minuto/ora delle
+# regioni e della manutenzione sono tutte nel blocco: lo slot del backup deve
+# differire da ognuna (altrimenti il dump gira insieme a uno scrape).
+backup_lines="$(printf '%s\n' "${output}" | grep -cE '^[0-9].*cron-backup\.sh' || true)"
+[[ "${backup_lines}" -eq 1 ]] || fail "S11: attesa esattamente 1 riga per cron-backup.sh, trovate ${backup_lines}"
+backup_line="$(printf '%s\n' "${output}" | grep -E '^[0-9].*cron-backup\.sh')"
+printf '%s\n' "${backup_line}" | grep -qE ' >> /var/log/fuorirotta-cron\.log 2>&1$' || fail "S11: la riga del backup non scrive sul log del cron"
+backup_slot="$(printf '%s\n' "${backup_line}" | awk '{print $1" "$2}')"
+other_slots="$(printf '%s\n' "${output}" | grep -E '^[0-9].*(cron-scrape|cron-maintenance)\.sh' | awk '{print $1" "$2}')"
+printf '%s\n' "${other_slots}" | grep -qxF "${backup_slot}" && fail "S11: lo slot del backup (${backup_slot}) coincide con una regione o con la manutenzione"
+echo "ok  S11: una sola riga per cron-backup.sh, slot ${backup_slot} diverso da ogni regione e dalla manutenzione"
 
 echo "PASS: generatore di crontab (SCHED-02), fuso dichiarato in chiaro (D-12 rivisto), ordine stabile, --check dimostrato capace di fallire (D-09), una sorgente in piu' su una regione esistente non duplica la riga (Fase 19)"

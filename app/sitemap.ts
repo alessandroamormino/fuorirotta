@@ -70,6 +70,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 			changeFrequency: "daily",
 			priority: 1,
 		},
+		// Pagine legali (ACCT-04): statiche, indicizzabili, pubbliche anche con
+		// l'accesso spento.
+		{
+			url: `${baseUrl}/privacy`,
+			lastModified: new Date(),
+			changeFrequency: "monthly",
+			priority: 0.2,
+		},
+		{
+			url: `${baseUrl}/cookie`,
+			lastModified: new Date(),
+			changeFrequency: "monthly",
+			priority: 0.2,
+		},
 		...events.map((event) => ({
 			url: `${baseUrl}/eventi/${event.id}`,
 			lastModified: event.updatedAt,

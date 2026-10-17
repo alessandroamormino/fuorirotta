@@ -270,22 +270,27 @@ echo "ok  D-07: l'asserzione 1 e' dimostrata capace di fallire su un useState<Se
 
 # --- D-09/D-10 (Fase 17): un solo montaggio del toggle, logo in flusso -------
 #
-# D-09  il toggle tema ha una sola posizione dichiarata, dentro la barra —
-#       nessun secondo montaggio flottante (app/layout.tsx) ne' nell'overlay
-#       mobile (MobileSearchOverlay.tsx).
+# D-09  il toggle tema sta dentro la barra (e, dalla Fase 21, nella testata
+#       minima delle pagine senza barra) — nessun montaggio flottante
+#       (app/layout.tsx) ne' nell'overlay mobile (MobileSearchOverlay.tsx).
 # D-10  il logo esce dal posizionamento assoluto ed entra nel flusso della
 #       riga a tre fratelli flex.
 
-# 1. Un solo montaggio reso a utente, e deve stare in components/Navbar.tsx.
+# 1. Esattamente due montaggi resi a utente: components/Navbar.tsx e, dalla
+# Fase 21, components/SiteHeader.tsx (la testata minima delle pagine senza la
+# navbar di ricerca - /account, /accedi, /privacy, /cookie - e' il secondo
+# montaggio legittimo, 21-UI-SPEC Superficie 8). Qualunque altro posto fallisce.
 # app/dev/ (vetrina dei componenti) e' escluso di proposito: non e' prodotto.
 theme_toggle_all="$(grep -rn '<ThemeToggle' app components --include='*.tsx' || true)"
-theme_toggle_prod="$(printf '%s\n' "${theme_toggle_all}" | grep -v '^app/dev/' || true)"
+theme_toggle_prod="$(printf '%s\n' "${theme_toggle_all}" | grep -v '^app/dev/' | grep '<ThemeToggle' || true)"
 theme_toggle_prod_count="$(printf '%s\n' "${theme_toggle_prod}" | grep -c '<ThemeToggle' || true)"
-[[ "${theme_toggle_prod_count}" -eq 1 ]] \
-  || fail "D-09: trovati ${theme_toggle_prod_count} montaggi di <ThemeToggle fuori da app/dev/ (atteso esattamente 1)"
+[[ "${theme_toggle_prod_count}" -eq 2 ]] \
+  || fail "D-09: trovati ${theme_toggle_prod_count} montaggi di <ThemeToggle fuori da app/dev/ (attesi esattamente 2: Navbar e SiteHeader)"
 printf '%s\n' "${theme_toggle_prod}" | grep -q '^components/Navbar\.tsx:' \
-  || fail "D-09: l'unico montaggio di ThemeToggle non e' in components/Navbar.tsx"
-echo "ok  D-09: un solo montaggio di ThemeToggle reso a utente, in components/Navbar.tsx"
+  || fail "D-09: manca il montaggio di ThemeToggle in components/Navbar.tsx"
+printf '%s\n' "${theme_toggle_prod}" | grep -q '^components/SiteHeader\.tsx:' \
+  || fail "D-09: manca il montaggio di ThemeToggle in components/SiteHeader.tsx"
+echo "ok  D-09: due montaggi di ThemeToggle reso a utente, in components/Navbar.tsx e components/SiteHeader.tsx"
 
 # 2. Nome accessibile che dichiara l'azione, non lo stato — entrambi i temi.
 grep -q 'Passa al tema scuro' components/ui/ThemeToggle.tsx \
