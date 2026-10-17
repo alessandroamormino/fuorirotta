@@ -18,11 +18,13 @@
 //   rate <ip> | rate --no-ip            UN POST a /api/auth/sign-in/social in QUESTO
 //                                       processo (auth.handler), con X-Real-IP <ip>
 //                                       o senza; stampa lo stato HTTP
+//   registry-tables                     stampa le tabelle di USER_DATA_REGISTRY, una per riga
 //   cleanup                             cancella gli utenti @fixture.invalid
 //                                       (la cascata porta via sessioni e account)
 import { makeSignature } from 'better-auth/crypto'
 import { getAuth } from '../lib/auth'
 import { prisma } from '../lib/prisma'
+import { USER_DATA_REGISTRY } from '../lib/userData/registry'
 
 const FIXTURE_DOMAIN = '@fixture.invalid'
 
@@ -148,6 +150,9 @@ async function main(): Promise<void> {
       if (args[0] === '--no-ip') await rate(undefined)
       else if (args.length >= 1 && args[1] !== '--no-ip') await rate(args[0])
       else fail('uso: rate <ip> | rate --no-ip')
+      break
+    case 'registry-tables':
+      for (const entry of USER_DATA_REGISTRY) console.log(entry.table)
       break
     case 'cleanup':
       await cleanup()

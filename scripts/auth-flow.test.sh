@@ -434,3 +434,100 @@ for bad in "${long_id}" 'a%2Fb' '%2e%2e%2f%2e%2e' 'x.y'; do
 done
 [[ "$(session_count "${a_user}")" == "1" && "$(session_count "${b_user}")" == "1" ]] || fail "S28: un id non valido ha cancellato una riga"
 echo "ok  S28: un id di 65 caratteri, con barra codificata, con '..' o con un punto -> 404, nessuna riga toccata"
+
+# --- S29-S35: esportazione e cancellazione dell'account (ACCT-02, ACCT-03) ----------------
+ua_b_only='BOnlyAgent/9.9 (fixture b-only)'
+read -r x_user x_cookie x_token <<<"$(helper mint s29-a@fixture.invalid 'Anna Esporta' 0 "${ua_mac}" --fake-tokens | tail -n 1)"
+x_cookie_hdr="Cookie: fuorirotta.session_token=${x_cookie}"
+helper session "${x_user}" 3 "${ua_iphone}" >/dev/null
+read -r y_user y_cookie y_token <<<"$(helper mint s29-b@fixture.invalid 'Bruno Altro' 0 "${ua_b_only}" --fake-tokens | tail -n 1)"
+rome_today="$(node -e 'process.stdout.write(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date()))')"
+
+code="$(call s29 GET /api/v1/me/export 198.51.100.61 -H "${x_cookie_hdr}")"
+[[ "${code}" == "200" ]] || fail "S29: GET export: atteso 200, ottenuto ${code} ($(head -c 300 "${tmp_dir}/s29.b"))"
+[[ "$(header s29 content-disposition)" == "attachment; filename=\"fuorirotta-dati-${rome_today}.json\"" ]] \
+  || fail "S29: content-disposition atteso attachment con fuorirotta-dati-${rome_today}.json, ottenuto '$(header s29 content-disposition)'"
+[[ "$(header s29 content-type)" == "application/json; charset=utf-8" ]] || fail "S29: content-type inatteso '$(header s29 content-type)'"
+no_store s29 S29
+[[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j).sort().join()')" == "exportedAt,format,linkedAccounts,profile,sessions" ]] \
+  || fail "S29: chiavi di primo livello inattese: $(json_get "${tmp_dir}/s29.b" 'Object.keys(j).join()')"
+[[ "$(json_get "${tmp_dir}/s29.b" 'j.format === 1 && !Number.isNaN(Date.parse(j.exportedAt))')" == "true" ]] || fail "S29: format o exportedAt inattesi"
+[[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j.profile).sort().join() + "|" + j.profile.name + "|" + j.profile.email')" == "createdAt,email,emailVerified,name|Anna Esporta|s29-a@fixture.invalid" ]] \
+  || fail "S29: profilo inatteso: $(json_get "${tmp_dir}/s29.b" 'j.profile')"
+[[ "$(json_get "${tmp_dir}/s29.b" 'j.linkedAccounts.length + "|" + Object.keys(j.linkedAccounts[0]).sort().join() + "|" + j.linkedAccounts[0].provider')" == "1|createdAt,provider,providerAccountId|google" ]] \
+  || fail "S29: linkedAccounts inattesi: $(json_get "${tmp_dir}/s29.b" 'j.linkedAccounts')"
+[[ "$(json_get "${tmp_dir}/s29.b" 'j.sessions.length + "|" + j.sessions.filter((s) => s.current).length + "|" + j.sessions.every((s) => typeof s.device === "string" && s.device.length > 0)')" == "2|1|true" ]] \
+  || fail "S29: sessioni inattese (attese 2, una sola corrente, tutte con device): $(json_get "${tmp_dir}/s29.b" 'j.sessions')"
+[[ "$(json_get "${tmp_dir}/s29.b" 'j.sessions.map((s) => s.device).join()')" == "Chrome su Mac,Safari su iPhone" ]] || fail "S29: ordine o device delle sessioni inattesi: $(json_get "${tmp_dir}/s29.b" 'j.sessions.map((s) => s.device)')"
+echo "ok  S29: export 200, attachment fuorirotta-dati-${rome_today}.json, private no-store; profile, linkedAccounts (1), sessions (2, una sola current, con device)"
+
+node -e '
+const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+const secrets = process.argv.slice(2);
+const bad = [];
+(function walk(v, path) {
+  if (Array.isArray(v)) return v.forEach((x, i) => walk(x, path + "[" + i + "]"));
+  if (v && typeof v === "object") {
+    for (const [k, x] of Object.entries(v)) {
+      if (/token|password|secret|image/i.test(k)) bad.push("chiave " + path + "." + k);
+      walk(x, path + "." + k);
+    }
+    return;
+  }
+  if (typeof v === "string" && (secrets.some((s) => v.includes(s)) || /fake-/.test(v))) bad.push("valore in " + path);
+})(j, "$");
+if (bad.length) { console.error(bad.join("; ")); process.exit(1) }
+' "${tmp_dir}/s29.b" "${x_token}" "${x_cookie}" || fail "S30: l'export contiene una chiave o un valore segreto"
+echo "ok  S30: nessuna chiave /token|password|secret|image/i, nessun valore uguale al token di sessione, nessun token finto di Google"
+
+for needle in 's29-b@fixture.invalid' "fixture-${y_user}" "${y_user}" 'BOnlyAgent' 'Bruno Altro' "${y_token}"; do
+  if grep -qF "${needle}" "${tmp_dir}/s29.b"; then fail "S31: l'export di A contiene un dato di B: '${needle}'"; fi
+done
+code="$(call s31 GET /api/v1/me/export 198.51.100.62 -H "Cookie: fuorirotta.session_token=${y_cookie}")"
+[[ "${code}" == "200" ]] || fail "S31: export di B: atteso 200, ottenuto ${code}"
+if grep -qF 's29-a@fixture.invalid' "${tmp_dir}/s31.b"; then fail "S31: l'export di B contiene l'e-mail di A"; fi
+[[ "$(json_get "${tmp_dir}/s31.b" 'j.sessions.length + "|" + j.sessions[0].device')" == "1|Browser sconosciuto" ]] || fail "S31: sessioni di B inattese: $(json_get "${tmp_dir}/s31.b" 'j.sessions')"
+echo "ok  S31: nell'export di A nessuna e-mail, account id, nome o user agent di B; e viceversa"
+
+[[ "$(json_get "${tmp_dir}/s31.b" 'Array.isArray(j.linkedAccounts) && Array.isArray(j.sessions) && j.linkedAccounts.length === 1 && j.sessions.length === 1')" == "true" ]] \
+  || fail "S32: un utente con un account e una sessione deve avere array di lunghezza 1: $(cat "${tmp_dir}/s31.b")"
+echo "ok  S32: un utente con un account e una sessione ha linkedAccounts e sessions di lunghezza 1 (mai null)"
+
+# S33: cancellazione totale con una sessione di 3 giorni fa, due dispositivi, token finti.
+read -r c_user c_cookie c_token <<<"$(helper mint s33-c@fixture.invalid 'Carla Cancella' 3 "${ua_mac}" --fake-tokens | tail -n 1)"
+c_cookie_hdr="Cookie: fuorirotta.session_token=${c_cookie}"
+helper session "${c_user}" 1 "${ua_iphone}" >/dev/null
+registry_tables="$(helper registry-tables | grep -E '^auth_' || true)"
+[[ -n "${registry_tables}" ]] || fail "S33: il registro non ha tabelle"
+user_rows() { # <userId> -> "tabella=conteggio ..." (auth_user + ogni tabella del registro)
+  local out="auth_user=$(psql_dev "SELECT count(*) FROM auth_user WHERE id = '$1'")" t
+  for t in ${registry_tables}; do out+=" ${t}=$(psql_dev "SELECT count(*) FROM ${t} WHERE user_id = '$1'")"; done
+  echo "${out}"
+}
+[[ "$(user_rows "${c_user}")" == "auth_user=1 auth_session=2 auth_account=1" ]] \
+  || fail "S33: preparazione: righe di C inattese '$(user_rows "${c_user}")'"
+b_before="$(user_rows "${y_user}")"
+code="$(call s33 POST /api/auth/delete-user 198.51.100.63 -H "Origin: ${origin}" -H 'Content-Type: application/json' -H "${c_cookie_hdr}" --data '{}')"
+[[ "${code}" == "200" ]] || fail "S33: delete-user con la sessione di 3 giorni fa: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s33.b"))"
+cleared="$(grep -i '^set-cookie: fuorirotta.session_token=' "${tmp_dir}/s33.h" | head -n 1 | tr -d '\r' || true)"
+grep -qi 'max-age=0' <<<"${cleared}" || fail "S33: manca il Set-Cookie che azzera il cookie di sessione (Max-Age=0): '${cleared}'"
+after="$(user_rows "${c_user}")"
+for t in auth_user ${registry_tables}; do
+  grep -qF "${t}=0" <<<"${after}" || fail "S33: dopo la cancellazione restano righe in ${t}: ${after}"
+done
+[[ "$(user_rows "${y_user}")" == "${b_before}" ]] || fail "S33: le righe di B sono cambiate: prima '${b_before}', dopo '$(user_rows "${y_user}")'"
+echo "ok  S33: delete-user {} con il cookie di una sessione di 3 giorni fa -> 200, Set-Cookie Max-Age=0; zero righe di C in ${after}; B intatto (${b_before})"
+
+code="$(call s34a POST /api/auth/delete-user 198.51.100.64 -H "Origin: ${origin}" -H 'Content-Type: application/json' -H "${c_cookie_hdr}" --data '{}')"
+[[ "${code}" == "401" ]] || fail "S34: secondo delete-user con il cookie ormai morto: atteso 401, ottenuto ${code}"
+code="$(call s34b POST /api/auth/delete-user 198.51.100.64 -H "Origin: ${origin}" -H 'Content-Type: application/json' --data '{}')"
+[[ "${code}" == "401" ]] || fail "S34: delete-user senza cookie: atteso 401, ottenuto ${code}"
+[[ "$(user_rows "${y_user}")" == "${b_before}" ]] || fail "S34: le righe di B sono cambiate"
+echo "ok  S34: un secondo delete-user con lo stesso cookie ormai morto e uno senza cookie -> 401, nessuna riga toccata"
+
+for target in /api/v1/me/export /api/v1/me/sessions; do
+  code="$(call s35 GET "${target}" 198.51.100.65)"
+  [[ "${code}" == "401" ]] || fail "S35: GET ${target} senza cookie: atteso 401, ottenuto ${code}"
+  no_store s35 S35
+done
+echo "ok  S35: export ed elenco sessioni senza cookie -> 401, private no-store"
