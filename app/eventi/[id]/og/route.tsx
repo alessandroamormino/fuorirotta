@@ -8,10 +8,10 @@ import { OgCard, ogCardContent } from "@/lib/og/card";
 
 const TEXT = "text/plain; charset=utf-8";
 
-// Geist Regular e Bold dal rilascio ufficiale (public/fonts, licenza OFL accanto).
+// Bricolage Grotesque Regular e Bold (TTF statici, repo ateliertriay/bricolage) (public/fonts, licenza OFL accanto).
 // Non dipendono dalla richiesta: si leggono una volta sola, a livello di modulo.
 const fontFile = (name: string) => readFile(join(process.cwd(), "public", "fonts", name));
-const [geistRegular, geistBold] = await Promise.all([fontFile("Geist-Regular.ttf"), fontFile("Geist-Bold.ttf")]);
+const [bricolageRegular, bricolageBold] = await Promise.all([fontFile("BricolageGrotesque-Regular.ttf"), fontFile("BricolageGrotesque-Bold.ttf")]);
 
 // La card Open Graph degli eventi senza immagine (SHARE-01). Sta fuori da
 // /api/ perche' robots.txt lo vieta ai crawler. Anonima: non legge cookie ne'
@@ -39,8 +39,8 @@ export async function GET(
 			width: 1200,
 			height: 630,
 			fonts: [
-				{ name: OG_BRAND.fontFamily, data: geistRegular, style: "normal", weight: 400 },
-				{ name: OG_BRAND.fontFamily, data: geistBold, style: "normal", weight: 700 },
+				{ name: OG_BRAND.fontFamily, data: bricolageRegular, style: "normal", weight: 400 },
+				{ name: OG_BRAND.fontFamily, data: bricolageBold, style: "normal", weight: 700 },
 			],
 			// Minuscolo come la chiave di ImageResponse: con altre maiuscole il
 			// costruttore di Headers accoderebbe i due valori. Un giorno, non il

@@ -10,6 +10,7 @@
 import { eventDays } from '../eventDays'
 import { formatDayRange } from '../calendar/links'
 import { decodeHtmlEntities } from '../utils'
+import { categoryVisual } from '../categories/visuals'
 import { OG_BRAND } from './brand'
 
 export interface OgSource {
@@ -33,7 +34,7 @@ const MAX_META = 50
 
 /**
  * Entita' decodificate, poi solo scrittura latina, cifre, punteggiatura,
- * valute e spazi, tutto sotto U+2C00 (il resto Geist non lo ha). Un glifo
+ * valute e spazi, tutto sotto U+2C00 (il resto Bricolage non lo ha). Un glifo
  * assente fa scaricare a Satori un font o un emoji da un CDN a ogni render
  * (T-20-21): meglio toglierlo qui. Newline e tab diventano spazi prima del
  * filtro, cosi' due parole non si fondono.
@@ -74,9 +75,14 @@ export function ogCardContent(event: OgSource, todayDay: string): OgCardContent 
 }
 
 const PAD = 64
+// L'icona della categoria (la stessa del segnaposto del sito) sta a destra:
+// il testo cede la sua colonna e il titolo guadagna una riga.
+const ICON = 240
+const TEXT_W = 1200 - 2 * PAD - ICON - 32
 
 export function OgCard(content: OgCardContent) {
   const b = OG_BRAND
+  const { Icon } = categoryVisual(content.kicker)
   return (
     <div
       style={{
@@ -90,16 +96,21 @@ export function OgCard(content: OgCardContent) {
       }}
     >
       <div style={{ display: 'flex', width: 1200, height: b.bandHeight, backgroundColor: content.bandColor }} />
+      {/* color sul contenitore: i cerchi pieni di Lucide (fill="currentColor", la tavolozza) Satori li legge dal colore CSS, non dallo stroke. */}
+      <div style={{ display: 'flex', position: 'absolute', right: PAD, top: 150, color: content.bandColor }}>
+        <Icon size={ICON} color={content.bandColor} strokeWidth={1.5} />
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: PAD, paddingRight: PAD, marginTop: 48 }}>
         <div style={{ fontSize: 32, lineHeight: 1.2, color: b.inkSecondary }}>{content.kicker}</div>
         <div
           style={{
-            // block + lineClamp: l'ellissi' di Satori e' la rete sotto il taglio a 90 caratteri (titoli tutti maiuscoli).
+            // block + lineClamp: l'ellissi' di Satori e' la rete sotto il taglio a 90 caratteri (titoli tutti maiuscoli, colonna stretta).
             display: 'block',
-            lineClamp: 3,
+            lineClamp: 4,
             marginTop: 24,
-            width: 1200 - 2 * PAD,
+            width: TEXT_W,
             fontSize: 64,
+            fontWeight: b.titleWeight,
             lineHeight: 1.1,
             color: b.ink,
           }}
@@ -110,7 +121,7 @@ export function OgCard(content: OgCardContent) {
           style={{
             display: 'block',
             marginTop: 24,
-            width: 1200 - 2 * PAD,
+            width: TEXT_W,
             overflow: 'hidden',
             whiteSpace: 'nowrap',
             textOverflow: 'ellipsis',
@@ -134,7 +145,7 @@ export function OgCard(content: OgCardContent) {
       >
         <div style={{ display: 'flex', height: 2, backgroundColor: b.hairline, marginBottom: 24 }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 32, lineHeight: 1.2 }}>
-          <div style={{ display: 'flex', alignItems: 'center', color: b.ink }}>
+          <div style={{ display: 'flex', alignItems: 'center', color: b.ink, fontWeight: b.titleWeight }}>
             {b.logo ? <img src={b.logo} alt="" height={40} style={{ height: 40, marginRight: 16 }} /> : null}
             <div style={{ display: 'flex' }}>{b.wordmark}</div>
           </div>

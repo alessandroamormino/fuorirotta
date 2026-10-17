@@ -13,7 +13,7 @@
  */
 
 /** Si incrementa a ogni cambio visibile della card: finisce in ?v= e rompe la cache dei crawler. */
-export const OG_VERSION = 2
+export const OG_VERSION = 3
 
 /**
  * Marchio "D2 · F col giro" (concept approvato il 2026-10-17, puo' essere
@@ -48,8 +48,10 @@ export const OG_BRAND = {
     Altro: 'rgb(110, 110, 115)',
   } as Record<string, string>,
   fallbackCategory: 'Altro',
-  fontFamily: 'geist',
-  fontWeight: 700 as 400 | 500 | 600 | 700,
+  fontFamily: 'bricolage',
+  /** Bricolage Grotesque: Regular per kicker, meta e dominio; Bold per titolo e wordmark. */
+  fontWeight: 400 as 400 | 500 | 600 | 700,
+  titleWeight: 700 as 400 | 500 | 600 | 700,
   /** URL o data-URL di un logo da mostrare prima del wordmark. */
   logo: `data:image/svg+xml,${encodeURIComponent(MARK_SVG)}` as string | null,
   wordmark: 'Fuorirotta',
