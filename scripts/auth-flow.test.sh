@@ -308,3 +308,54 @@ code="$(call s16b GET /api/v1/me/state 198.51.100.32 -H "Authorization: Bearer $
 [[ "${code}" == "200" ]] || fail "S16: bearer firmato: atteso 200, ottenuto ${code}"
 [[ "$(json_get "${tmp_dir}/s16b.b" 'j.user.email')" == "s16-bearer@fixture.invalid" ]] || fail "S16: il bearer firmato non ha dato l'utente: '$(cat "${tmp_dir}/s16b.b")'"
 echo "ok  S16: il token nudo come bearer non da' utente, quello firmato si"
+
+# --- S17-S21: modifica del nome (ACCT-01, D-09) -----------------------------------------
+read -r s17_user s17_cookie _s17_token <<<"$(helper mint s17-giulia@fixture.invalid 'Giulia Rossi' 0 | tail -n 1)"
+s17_cookie_hdr="Cookie: fuorirotta.session_token=${s17_cookie}"
+stored_name() { psql_dev "SELECT name FROM auth_user WHERE id = '$1'"; }
+patch_name() { # <nome-file> <ip> <corpo> [argomenti curl...]
+  local name="$1" ip="$2" body="$3"
+  shift 3
+  call "${name}" PATCH /api/v1/me/profile "${ip}" -H 'Content-Type: application/json' --data "${body}" "$@"
+}
+no_store() { [[ "$(header "$1" cache-control)" == "private, no-store" ]] || fail "$2: cache-control atteso 'private, no-store' su $1, ottenuto '$(header "$1" cache-control)'"; }
+
+code="$(patch_name s17 198.51.100.41 '{"name":"  Giulia  "}' -H "Origin: ${origin}" -H "${s17_cookie_hdr}")"
+[[ "${code}" == "200" ]] || fail "S17: PATCH nome: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s17.b"))"
+[[ "$(cat "${tmp_dir}/s17.b")" == '{"name":"Giulia"}' ]] || fail "S17: corpo inatteso: '$(cat "${tmp_dir}/s17.b")'"
+[[ "$(stored_name "${s17_user}")" == "Giulia" ]] || fail "S17: nel database il nome e' '$(stored_name "${s17_user}")'"
+no_store s17 S17
+echo "ok  S17: PATCH {name:'  Giulia  '} con cookie e Origin -> 200 {\"name\":\"Giulia\"}, il database dice Giulia"
+
+fifty_one="$(node -e 'process.stdout.write("a".repeat(51))')"
+n=0
+for body in '{"name":""}' '{"name":"   "}' "{\"name\":\"${fifty_one}\"}" '{"name":123}' 'questo non e json' ''; do
+  n=$((n + 1))
+  code="$(patch_name s18 198.51.100.42 "${body}" -H "Origin: ${origin}" -H "${s17_cookie_hdr}")"
+  [[ "${code}" == "400" ]] || fail "S18: corpo #${n} '${body}': atteso 400, ottenuto ${code}"
+  [[ "$(cat "${tmp_dir}/s18.b")" == '{"error":"Nome non valido"}' ]] || fail "S18: corpo #${n}: risposta inattesa '$(cat "${tmp_dir}/s18.b")'"
+  no_store s18 S18
+  [[ "$(stored_name "${s17_user}")" == "Giulia" ]] || fail "S18: corpo #${n}: il nome salvato e' cambiato in '$(stored_name "${s17_user}")'"
+done
+echo "ok  S18: stringa vuota, solo spazi, 51 punti di codice, numero, non-JSON e corpo vuoto -> 400 {\"error\":\"Nome non valido\"}, nome invariato"
+
+fifty_emoji="$(node -e 'process.stdout.write("\u{1F600}".repeat(50))')"
+code="$(patch_name s19 198.51.100.43 "{\"name\":\"${fifty_emoji}\"}" -H "Origin: ${origin}" -H "${s17_cookie_hdr}")"
+[[ "${code}" == "200" ]] || fail "S19: 50 emoji: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s19.b"))"
+[[ "$(stored_name "${s17_user}")" == "${fifty_emoji}" ]] || fail "S19: le 50 emoji non sono state salvate intere"
+echo "ok  S19: cinquanta emoji (100 unita' UTF-16, 50 punti di codice) -> 200 e salvate intere"
+
+code="$(patch_name s20a 198.51.100.44 '{"name":"Hacker"}' -H "${s17_cookie_hdr}")"
+[[ "${code}" == "403" ]] || fail "S20: senza Origin: atteso 403, ottenuto ${code}"
+no_store s20a S20
+code="$(patch_name s20b 198.51.100.44 '{"name":"Hacker"}' -H 'Origin: https://evil.example' -H "${s17_cookie_hdr}")"
+[[ "${code}" == "403" ]] || fail "S20: Origin esterno: atteso 403, ottenuto ${code}"
+no_store s20b S20
+[[ "$(stored_name "${s17_user}")" == "${fifty_emoji}" ]] || fail "S20: una richiesta rifiutata ha cambiato il nome"
+echo "ok  S20: PATCH senza Origin e con Origin https://evil.example -> 403, nome invariato"
+
+code="$(patch_name s21 198.51.100.45 '{"name":"Anonimo"}' -H "Origin: ${origin}")"
+[[ "${code}" == "401" ]] || fail "S21: senza cookie: atteso 401, ottenuto ${code}"
+[[ "$(cat "${tmp_dir}/s21.b")" == '{"error":"unauthenticated"}' ]] || fail "S21: corpo inatteso '$(cat "${tmp_dir}/s21.b")'"
+no_store s21 S21
+echo "ok  S21: PATCH senza cookie -> 401 {\"error\":\"unauthenticated\"}"
