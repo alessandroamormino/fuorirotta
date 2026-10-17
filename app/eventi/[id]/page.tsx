@@ -8,6 +8,7 @@ import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
 import { eventDays } from "@/lib/eventDays";
 import { todayInRome } from "@/lib/dateWindow";
+import { formatDayRange } from "@/lib/calendar/links";
 import { ogCardContent } from "@/lib/og/card";
 import { OG_VERSION } from "@/lib/og/brand";
 import EventDetailClient from "./EventDetailClient";
@@ -67,9 +68,22 @@ export async function generateMetadata(
 	const composedEvent = composeEvent(event, members);
 
 	const title = decodeHtmlEntities(composedEvent.title);
+	// Senza descrizione l'anteprima dice quando e dove (UI-SPEC, Copywriting
+	// Contract), non una frase uguale per tutti. Il comune viene dalla riga
+	// composta (include del getEvent sopra); in sua assenza il luogo scrapato.
 	const description = composedEvent.description
 		? decodeHtmlEntities(composedEvent.description.replace(/<[^>]*>/g, "")).slice(0, 160)
-		: "Scopri questo evento su Fuorirotta.";
+		: [
+				formatDayRange(
+					eventDays(composedEvent.dateStart, composedEvent.dateEnd).startDay,
+					eventDays(composedEvent.dateStart, composedEvent.dateEnd).endDay,
+					todayInRome()
+				),
+				(composedEvent as { comune?: { name: string } | null }).comune?.name ??
+					decodeHtmlEntities(composedEvent.locationName ?? "").trim(),
+			]
+				.filter(Boolean)
+				.join(" \u00b7 ");
 	const canonical = `${BASE_URL}/eventi/${eventId}`;
 
 	return {

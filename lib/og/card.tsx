@@ -28,17 +28,46 @@ export interface OgCardContent {
   bandColor: string
 }
 
+const MAX_TITLE = 90
+const MAX_META = 50
+
+/**
+ * Entita' decodificate, poi solo scrittura latina, cifre, punteggiatura,
+ * valute e spazi, tutto sotto U+2C00 (il resto Geist non lo ha). Un glifo
+ * assente fa scaricare a Satori un font o un emoji da un CDN a ogni render
+ * (T-20-21): meglio toglierlo qui. Newline e tab diventano spazi prima del
+ * filtro, cosi' due parole non si fondono.
+ */
+function clean(text: string): string {
+  return decodeHtmlEntities(text)
+    .replace(/\s+/g, ' ')
+    .replace(/[^\p{Script=Latin}\p{Nd}\p{P}\p{Sc}\p{Zs}]/gu, '')
+    .replace(/[^\u0000-\u2bff]/gu, '')
+    .replace(/ +/g, ' ')
+    .trim()
+}
+
+/** Oltre 90 caratteri: taglio all'ultimo spazio entro il 91esimo e un'ellissi (il titolo ha una sola misura, 64px). */
+function clip(title: string): string {
+  if (title.length <= MAX_TITLE) return title
+  const head = title.slice(0, MAX_TITLE + 1)
+  const space = head.lastIndexOf(' ')
+  return `${(space > 0 ? head.slice(0, space) : head.slice(0, MAX_TITLE)).trimEnd()}\u2026`
+}
+
 export function ogCardContent(event: OgSource, todayDay: string): OgCardContent {
   const known = event.canonicalCategory && OG_BRAND.categoryColors[event.canonicalCategory]
   const kicker = known ? (event.canonicalCategory as string) : OG_BRAND.fallbackCategory
-  const title = decodeHtmlEntities(event.title).trim()
+  const title = clip(clean(event.title))
   const { startDay, endDay } = eventDays(event.dateStart, event.dateEnd)
   const dates = formatDayRange(startDay, endDay, todayDay)
-  const place = decodeHtmlEntities(event.comune?.name ?? '').trim()
+  const place = clean(event.comune?.name ?? '')
+  const withPlace = `${dates} \u00b7 ${place}`
   return {
     kicker,
     title,
-    meta: place ? `${dates} · ${place}` : dates,
+    // Il comune salta per primo quando la riga non sta (UI-SPEC); senza comune nessun separatore in coda.
+    meta: place && withPlace.length <= MAX_META ? withPlace : dates,
     alt: `${title}, ${dates}`,
     bandColor: OG_BRAND.categoryColors[kicker],
   }
@@ -65,11 +94,11 @@ export function OgCard(content: OgCardContent) {
         <div style={{ fontSize: 32, lineHeight: 1.2, color: b.inkSecondary }}>{content.kicker}</div>
         <div
           style={{
-            display: 'flex',
+            // block + lineClamp: l'ellissi' di Satori e' la rete sotto il taglio a 90 caratteri (titoli tutti maiuscoli).
+            display: 'block',
+            lineClamp: 3,
             marginTop: 24,
             width: 1200 - 2 * PAD,
-            maxHeight: Math.round(64 * 1.1 * 3),
-            overflow: 'hidden',
             fontSize: 64,
             lineHeight: 1.1,
             color: b.ink,
@@ -79,7 +108,7 @@ export function OgCard(content: OgCardContent) {
         </div>
         <div
           style={{
-            display: 'flex',
+            display: 'block',
             marginTop: 24,
             width: 1200 - 2 * PAD,
             overflow: 'hidden',

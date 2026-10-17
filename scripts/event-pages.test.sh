@@ -22,6 +22,7 @@
 #   F8  formato UTC, un giorno PASSATO 2025-01-10 (nessun bottone calendario)
 #   F9  senza immagine ne' descrizione, 'Sagre e feste', comune Vigolzone, 2027-06-05
 #   F10 con immagine della fonte (https://example.invalid/foto.jpg)
+#   F11 senza immagine, titolo con emoji, cirillico e 150 caratteri
 #
 # Le colonne sono "timestamp without time zone": le cifre scritte qui sono
 # l'istante UTC memorizzato.
@@ -131,10 +132,14 @@ F9="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_e
 F10="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, image_url)
                  VALUES ('${test_source}', 'f10', 'Prova con immagine della fonte', '2027-06-06 00:00:00', '2027-06-06 23:59:59.999', 'Piazza di prova', 'Sagre e feste', 'https://example.invalid/foto.jpg')
                  RETURNING id" | head -n 1)"
-for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}" "${F8}" "${F9}" "${F10}"; do
+# F11: il titolo e' costruito in SQL (emoji e cirillico con escape unicode, 150 caratteri).
+F11="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
+                 VALUES ('${test_source}', 'f11', E'Sagra \\U0001F355 \\u041f\\u0440\\u0438\\u0432\\u0435\\u0442 del tortello ' || repeat('lunghissimo ', 11), '2027-06-07 00:00:00', '2027-06-07 23:59:59.999', 'Piazza di prova', 'Sagre e feste')
+                 RETURNING id" | head -n 1)"
+for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}" "${F8}" "${F9}" "${F10}" "${F11}"; do
   [[ "${id}" =~ ^[0-9]+$ ]] || fail "fixture non inserita (id ottenuto: '${id}')"
 done
-echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4} F5=${F5} F6=${F6} F7=${F7} F8=${F8} F9=${F9} F10=${F10})"
+echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4} F5=${F5} F6=${F6} F7=${F7} F8=${F8} F9=${F9} F10=${F10} F11=${F11})"
 
 # --- Dev server effimero, Postgres locale reale -----------------------------
 bash scripts/dev-db.sh npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
@@ -324,3 +329,38 @@ const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
 if (w !== 1200 || h !== 630) { console.error("dimensioni " + w + "x" + h); process.exit(1) }
 ' "${tmp_dir}/og-f9.b" || fail "S19: la card di F9 non e' un PNG 1200x630"
 echo "ok  S19: la card di F9 e' un PNG 1200x630 con cache-control public, max-age=86400"
+
+# --- S20: id sconosciuto -> 404 in testo semplice, prima di ogni render -------
+code="$(fetch_ics og-404 "/eventi/999999999/og")"
+[[ "${code}" == "404" ]] || fail "S20: /eventi/999999999/og: atteso 404, ottenuto ${code}"
+[[ "$(header og-404 content-type)" == text/plain* ]] || fail "S20: content-type del 404 non text/plain: '$(header og-404 content-type)'"
+[[ "$(cat "${tmp_dir}/og-404.b")" == "Evento non trovato" ]] || fail "S20: corpo del 404: '$(cat "${tmp_dir}/og-404.b")'"
+echo "ok  S20: card di un id sconosciuto -> 404 text/plain"
+
+# --- S21: id malformato -> 404 -------------------------------------------------
+for bad in abc 12abc; do
+  code="$(fetch_ics og-bad "/eventi/${bad}/og")"
+  [[ "${code}" == "404" ]] || fail "S21: /eventi/${bad}/og: atteso 404, ottenuto ${code}"
+done
+echo "ok  S21: card di un id malformato -> 404"
+
+# --- S22: titolo con emoji, cirillico e 150 caratteri: PNG sotto il limite di WhatsApp ----
+code="$(fetch_ics og-f11 "/eventi/${F11}/og?v=${og_version}")"
+[[ "${code}" == "200" ]] || fail "S22: GET /eventi/${F11}/og: atteso 200, ottenuto ${code}"
+[[ "$(header og-f11 content-type)" == image/png* ]] || fail "S22: content-type non image/png: '$(header og-f11 content-type)'"
+size="$(wc -c <"${tmp_dir}/og-f11.b" | tr -d ' ')"
+[[ "${size}" -lt 600000 ]] || fail "S22: la card di F11 pesa ${size} byte (limite di WhatsApp 600000)"
+echo "ok  S22: la card di F11 (emoji, cirillico, titolo lungo) e' un PNG da ${size} byte"
+
+# --- S23: senza descrizione, og:description dice quando e dove -----------------
+desc="$(og_meta "${tmp_dir}/page-${F9}.html" og:description)"
+[[ "${desc}" == *"sab 5 giu"* ]] || fail "S23: og:description di F9 atteso con 'sab 5 giu', ottenuto '${desc}'"
+[[ "${desc}" != *"Scopri questo evento"* ]] || fail "S23: og:description di F9 e' ancora la frase generica"
+echo "ok  S23: og:description di F9: '${desc}'"
+
+# Per guardarla a occhio: OG_SAMPLE_OUT=/percorso/card.png npm run check:event-pages
+if [[ -n "${OG_SAMPLE_OUT:-}" ]]; then
+  cp "${tmp_dir}/og-f9.b" "${OG_SAMPLE_OUT}"
+  [[ -z "${OG_SAMPLE_OUT_F11:-}" ]] || cp "${tmp_dir}/og-f11.b" "${OG_SAMPLE_OUT_F11}"
+  echo "ok  card di F9 copiata in ${OG_SAMPLE_OUT}"
+fi
