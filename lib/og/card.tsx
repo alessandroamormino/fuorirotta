@@ -62,7 +62,8 @@ function clip(title: string): string {
 export function ogCardContent(event: OgSource, todayDay: string): OgCardContent {
   const known = event.canonicalCategory && OG_BRAND.categoryColors[event.canonicalCategory]
   const kicker = known ? (event.canonicalCategory as string) : OG_BRAND.fallbackCategory
-  const title = clip(clean(event.title))
+  // Titolo tutto non latino: clean() lo svuota, la card ripiega su "Evento" (anche nell'alt).
+  const title = clip(clean(event.title)) || 'Evento'
   const { startDay, endDay } = eventDays(event.dateStart, event.dateEnd)
   const dates = formatDayRange(startDay, endDay, todayDay)
   const place = clean(event.comune?.name ?? '')
@@ -196,6 +197,11 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   assertCheck(t4 === 'Rock + Blues 5\u00b0 | A=B <18 ~', `titolo con simboli: "${t4}"`)
   const t5 = content({ title: 'Caffe\u0301 in piazza' }).title
   assertCheck(t5 === 'Caff\u00e9 in piazza', `titolo NFD: "${t5}"`)
+
+  // Titolo senza nessun carattere ammesso: ripiego "Evento", alt senza virgola iniziale.
+  const c6 = content({ title: '\u041f\u0440\u0438\u0432\u0435\u0442 \u796d\u308a' })
+  assertCheck(c6.title === 'Evento', `titolo tutto cirillico/CJK: "${c6.title}"`)
+  assertCheck(c6.alt === 'Evento, sab 5 giu 2027', `alt con titolo di ripiego: "${c6.alt}"`)
 
   // 150 caratteri: al massimo 91, finisce con "…", taglio su parola intera.
   const words = Array.from({ length: 30 }, (_, i) => `parola${i}`).join(' ')
