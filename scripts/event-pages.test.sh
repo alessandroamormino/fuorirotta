@@ -19,6 +19,7 @@
 #   F5  formato UTC, un giorno, con source_url   2027-06-05 (canonica per F6)
 #   F6  riga membro di F5 (canonical_event_id = F5)
 #   F7  titolo con CR LF + END:VEVENT + una proprieta' extra (iniezione nel .ics)
+#   F8  formato UTC, un giorno PASSATO 2025-01-10 (nessun bottone calendario)
 #
 # Le colonne sono "timestamp without time zone": le cifre scritte qui sono
 # l'istante UTC memorizzato.
@@ -117,10 +118,11 @@ F6="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_e
 F7="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
                 VALUES ('${test_source}', 'f7', E'Titolo normale\\r\\nEND:VEVENT\\r\\nATTENDEE:mailto:x@example.invalid', '2027-07-10 00:00:00', '2027-07-10 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo')
                 RETURNING id" | head -n 1)"
-for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}"; do
+F8="$(insert_event f8 'Prova evento concluso' '2025-01-10 00:00:00' '2025-01-10 23:59:59.999')"
+for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}" "${F8}"; do
   [[ "${id}" =~ ^[0-9]+$ ]] || fail "fixture non inserita (id ottenuto: '${id}')"
 done
-echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4} F5=${F5} F6=${F6} F7=${F7})"
+echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4} F5=${F5} F6=${F6} F7=${F7} F8=${F8})"
 
 # --- Dev server effimero, Postgres locale reale -----------------------------
 bash scripts/dev-db.sh npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
@@ -259,3 +261,17 @@ echo "ok  S13: titolo con CR LF + END:VEVENT -> un solo END:VEVENT, nessuna riga
 grep -qF "Condividi evento" "${page}" || fail "S14: la pagina di F1 non contiene 'Condividi evento'"
 grep -qE 'role="status"[^>]*sr-only|sr-only[^>]*role="status"' "${page}" || fail "S14: manca l'elemento role=\"status\" sr-only"
 echo "ok  S14: la pagina di F1 ha 'Condividi evento' e il role=status sr-only"
+
+# --- S15: un evento futuro offre il pulsante del calendario --------------------
+grep -qF "Aggiungi al calendario" "${page}" || fail "S15: la pagina di F1 non contiene 'Aggiungi al calendario'"
+echo "ok  S15: la pagina di F1 ha il pulsante 'Aggiungi al calendario'"
+
+# --- S16: un evento concluso ha badge e Condividi, ma non il calendario (D-05) --
+fetch_page "${F8}"
+page8="${tmp_dir}/page-${F8}.html"
+grep -qF "Concluso" "${page8}" || fail "S16: la pagina di F8 non mostra il badge 'Concluso'"
+grep -qF "Condividi evento" "${page8}" || fail "S16: la pagina di F8 non contiene 'Condividi evento'"
+if grep -qF "Aggiungi al calendario" "${page8}"; then
+  fail "S16: la pagina di F8 (concluso) contiene ancora 'Aggiungi al calendario'"
+fi
+echo "ok  S16: F8 (concluso) ha 'Concluso' e 'Condividi evento', senza 'Aggiungi al calendario'"

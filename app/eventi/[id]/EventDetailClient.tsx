@@ -13,8 +13,9 @@ import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import ShareButton from "@/components/ShareButton";
+import AddToCalendar from "@/components/calendar/AddToCalendar";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
-import { eventStatus, formatEventRange, romeCalendarDate } from "@/lib/eventStatus";
+import { eventStatus, formatEventRange, isEventOver, romeCalendarDate } from "@/lib/eventStatus";
 import { eventDays } from "@/lib/eventDays";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { MOTION_FAST, EASE_STANDARD } from "@/lib/motion";
@@ -374,6 +375,7 @@ export default function EventDetailClient({ initialEvent, canonicalUrl }: EventD
 	// formati con cui le sorgenti salvano le date (lib/eventDays.ts).
 	const days = eventDays(event.dateStart, event.dateEnd);
 	const isMultiDay = days.startDay !== days.endDay;
+	const calendarUrl = canonicalUrl && !isEventOver(event.dateStart, event.dateEnd) ? canonicalUrl : null;
 	const hasCoords = event.latitude != null && event.longitude != null;
 	const distanceKm =
 		userLocation && event.resolvedLatitude != null && event.resolvedLongitude != null
@@ -598,8 +600,12 @@ export default function EventDetailClient({ initialEvent, canonicalUrl }: EventD
 								    pieno nero. Fuori dalla colonna laterale, quindi presenti
 								    anche senza coordinate. */}
 								<div className="mb-6 flex gap-2">
+									{/* D-05: stessa regola del badge "Concluso" (isEventOver), cosi' bottone e
+									    badge non possono dissentire. */}
+									{calendarUrl && <AddToCalendar event={event} canonicalUrl={calendarUrl} />}
 									<ShareButton
 										presentation="detail"
+										labelAlways={!calendarUrl}
 										eventId={event.id}
 										title={event.title}
 										dateStart={event.dateStart}
