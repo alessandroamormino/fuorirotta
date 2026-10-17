@@ -29,7 +29,11 @@ psql_dev() {
 
 fixture="__user_data_gate__"
 
+tmp_ts="${repo_root}/user-data-gate.tmp.ts"
+
 cleanup() {
+  rm -f "${tmp_ts}"
+  psql_dev "DROP TABLE IF EXISTS __user_data_gate_probe, __user_data_gate_probe_orfana" >/dev/null 2>&1 || true
   psql_dev "DELETE FROM auth_user WHERE id = '${fixture}'" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -60,6 +64,9 @@ FROM pg_constraint c
 JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
 WHERE c.contype = 'f' AND c.confrelid = 'public.auth_user'::regclass ORDER BY 1"
 children="$(psql_dev "${children_sql}")"
+# Solo i nomi delle tabelle figlie, ordinati; e solo quelle SENZA cascata.
+child_tables() { psql_dev "${children_sql}" | cut -d'|' -f1 | sort; }
+non_cascading() { psql_dev "${children_sql}" | grep -v '|c$' || true; }
 expected="auth_account|user_id|c
 auth_session|user_id|c"
 [[ "${children}" == "${expected}" ]] || fail "S2: figli di auth_user attesi
@@ -76,3 +83,56 @@ psql_dev "DELETE FROM auth_user WHERE id = '${fixture}'" >/dev/null
 left="$(psql_dev "SELECT (SELECT count(*) FROM auth_session WHERE user_id = '${fixture}') + (SELECT count(*) FROM auth_account WHERE user_id = '${fixture}')")"
 [[ "${left}" == "0" ]] || fail "S3: dopo il DELETE di auth_user restano ${left} righe figlie"
 ok "S3: il DELETE diretto di auth_user non lascia righe in auth_session ne' auth_account"
+
+# --- funzioni condivise da S4/S5/S6 -------------------------------------------
+cat > "${tmp_ts}" <<'TS'
+import { USER_DATA_REGISTRY } from './lib/userData/registry'
+
+for (const entry of USER_DATA_REGISTRY) console.log(entry.table)
+process.exit(0)
+TS
+registry_tables() { bash scripts/dev-db.sh npx tsx "${tmp_ts}" | sort; }
+# Tabelle figlie non registrate (<), tabelle registrate senza FK (>).
+registry_diff() { diff <(child_tables) <(registry_tables) || true; }
+# Tabelle con una colonna user_id che non sono figlie di auth_user.
+orphan_user_id() {
+  comm -23 \
+    <(psql_dev "SELECT table_name FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'user_id'" | sort) \
+    <(child_tables)
+}
+
+# --- S4: il registro coincide con le FK verso auth_user -----------------------
+diff_out="$(registry_diff)"
+[[ -z "${diff_out}" ]] || fail "S4: registro e FK divergono (< FK senza registro, > registro senza FK)
+${diff_out}"
+ok "S4: il registro elenca esattamente le tabelle figlie di auth_user"
+
+# --- S5: nessuna colonna user_id senza FK verso auth_user ---------------------
+orphans="$(orphan_user_id)"
+[[ -z "${orphans}" ]] || fail "S5: tabelle con user_id ma senza FK verso auth_user: ${orphans}"
+ok "S5: ogni colonna user_id e' una FK verso auth_user"
+
+# --- S6: prova di non-vacuita' ------------------------------------------------
+# Un gate che non puo' fallire non dice nulla: due tabelle sbagliate di
+# proposito, una con FK senza cascata e una con user_id e nessuna FK.
+psql_dev "CREATE TABLE __user_data_gate_probe (id text PRIMARY KEY, user_id text REFERENCES auth_user(id) ON DELETE NO ACTION)" >/dev/null
+psql_dev "CREATE TABLE __user_data_gate_probe_orfana (id text PRIMARY KEY, user_id text)" >/dev/null
+seen_non_cascading="$(non_cascading)"
+seen_unregistered="$(registry_diff)"
+seen_orphan="$(orphan_user_id)"
+psql_dev "DROP TABLE __user_data_gate_probe, __user_data_gate_probe_orfana" >/dev/null
+[[ "${seen_non_cascading}" == *"__user_data_gate_probe|user_id|a"* ]] || fail "S6: la FK senza cascata non e' stata rilevata"
+[[ "${seen_unregistered}" == *"< __user_data_gate_probe"* ]] || fail "S6: la tabella non registrata non e' stata rilevata"
+[[ "${seen_orphan}" == *"__user_data_gate_probe_orfana"* ]] || fail "S6: user_id senza FK non e' stato rilevato"
+ok "S6: il gate rileva FK senza cascata, tabella non registrata e user_id senza FK"
+
+# --- S7: l'export non seleziona colonne segrete -------------------------------
+# Token di sessione, token/password dell'account e foto dell'utente non devono
+# comparire nel codice del registro (commenti esclusi).
+forbidden_in() {
+  sed -E '/^[[:space:]]*(\/\/|\*)/d' | grep -wE 'token|accessToken|refreshToken|idToken|password|image' || true
+}
+[[ -n "$(echo 'select: { accessToken: true }' | forbidden_in)" ]] || fail "S7: il controllo non vede un nome vietato (vacuo)"
+leaked="$(forbidden_in < lib/userData/registry.ts)"
+[[ -z "${leaked}" ]] || fail "S7: colonne segrete nel registro: ${leaked}"
+ok "S7: il registro non nomina token, password ne' foto"
