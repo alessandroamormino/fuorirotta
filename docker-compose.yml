@@ -8,6 +8,9 @@ services:
         DIRECT_URL: ${DIRECT_URL}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
         NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN}
+        # Decide se l'icona della persona esiste nell'HTML. E' inlinata dalla
+        # build: accenderla richiede una ricostruzione (D-19). Non e' un segreto.
+        NEXT_PUBLIC_AUTH_ENABLED: ${NEXT_PUBLIC_AUTH_ENABLED:-}
     # `build:` E `image:` insieme: compose costruisce e poi TAGGA il risultato
     # con questo nome. E' cio' che permette a scripts/deploy.sh di dare ad ogni
     # rilascio un tag proprio e di spingerlo su GHCR.
@@ -21,12 +24,26 @@ services:
     # altrove.
     image: ${FUORIROTTA_IMAGE:-ghcr.io/alessandroamormino/fuorirotta:latest}
     container_name: fuorirotta-frontend
+    # Solo loopback (D-17): nginx raggiunge l'app per nome di container sulla
+    # rete webstack e gli script dell'host (deploy.sh, cron-health.sh) usano
+    # 127.0.0.1, quindi nulla di legittimo ha bisogno dell'interfaccia pubblica.
+    # Una porta pubblica lascerebbe a chiunque impostare X-Real-IP e ottenere
+    # un secchio di rate limit nuovo a ogni richiesta.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       CRON_SECRET: ${CRON_SECRET:?CRON_SECRET must be set in .env}
+      # Accesso con Google. A differenza di CRON_SECRET questi NON devono
+      # abortire compose: il rilascio con l'interruttore spento parte prima che
+      # un segreto sia sul server; lib/auth.ts rifiuta di accendere l'accesso
+      # con un insieme incompleto. Solo a runtime, mai come build arg.
+      AUTH_ENABLED: ${AUTH_ENABLED:-0}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     restart: unless-stopped
     networks:
       - fuorirotta-network
