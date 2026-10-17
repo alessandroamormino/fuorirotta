@@ -33,11 +33,14 @@
 #   A6  statico: nessuna entrata pubblica importa lib/auth o legge la richiesta
 #   A7  / e la pagina evento hanno il pulsante "Accedi" e UNA regione avvisi vuota
 #   A8  interruttore spento: /account risponde 404
+#   A9  interruttore spento: /accedi risponde 404
 #   B2-B4, B7 come A2-A4, A7 con l'interruttore acceso
 #   B5  interruttore acceso: /api/auth/ok 200, stato enabled:true e, col cookie,
 #       l'utente di prova
 #   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
 #       con la sessione e' 200, private e no-store, noindex, e contiene il nome dell'utente
+#   B9  interruttore acceso: /accedi da ospite 200, no-store, noindex, "Continua con Google";
+#       con la sessione reindirizza a /account o al ?next valido, mai fuori sito
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -294,6 +297,10 @@ code="$(fetch a8account /account)"
 [[ "${code}" == "404" ]] || fail "A8: /account a interruttore spento: atteso 404, ottenuto ${code}"
 echo "ok  A8: /account risponde 404 con l'interruttore spento"
 
+code="$(fetch a9accedi /accedi)"
+[[ "${code}" == "404" ]] || fail "A9: /accedi a interruttore spento: atteso 404, ottenuto ${code}"
+echo "ok  A9: /accedi risponde 404 con l'interruttore spento"
+
 stop_server
 
 # --- Run B: interruttore acceso ----------------------------------------------------------
@@ -337,6 +344,29 @@ order="$(grep -oE '>(Profilo|Sessioni attive|I tuoi dati|Elimina account)</h2>' 
 grep -qF 'attiva ora (questo dispositivo)' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: la sessione corrente non e' nell'HTML del server"
 echo "ok  B8: /account da ospite 307 verso /accedi?next=%2Faccount; con la sessione 200, private no-store, noindex, nome nell'HTML"
+
+# --- B9: /accedi (D-02, T-21-32) -----------------------------------------------------------
+code="$(fetch b9guest /accedi)"
+[[ "${code}" == "200" ]] || fail "B9: /accedi da ospite: atteso 200, ottenuto ${code}"
+cc="$(header b9guest cache-control)"
+[[ "${cc}" == *no-store* ]] || fail "B9: /accedi: Cache-Control atteso con no-store, ottenuto '${cc}'"
+grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/b9guest.b" \
+  || fail "B9: /accedi: manca il meta robots noindex"
+grep -qF 'Continua con Google' "${tmp_dir}/b9guest.b" \
+  || fail "B9: /accedi: manca il testo 'Continua con Google'"
+# Con la sessione: verso /account, verso un ?next valido, e MAI fuori sito.
+expect_redirect() {
+  local path="$1" want="$2" code loc
+  code="$(fetch b9redir "${path}" "${session_cookie}")"
+  [[ "${code}" == "307" ]] || fail "B9: ${path} con la sessione: atteso 307, ottenuto ${code}"
+  loc="$(header b9redir location)"
+  [[ "${loc}" == "${want}" ]] || fail "B9: ${path} con la sessione: Location attesa '${want}', ottenuta '${loc}'"
+}
+expect_redirect /accedi /account
+expect_redirect '/accedi?next=%2Feventi%2F1' /eventi/1
+expect_redirect '/accedi?next=%2F%2Fevil.example' /account
+expect_redirect '/accedi?next=https%3A%2F%2Fevil.example' /account
+echo "ok  B9: /accedi da ospite 200, no-store, noindex, 'Continua con Google'; con la sessione verso /account o il ?next valido, mai fuori sito"
 
 echo ""
 echo "PASS: pagine pubbliche identiche con e senza sessione, interruttore spento e acceso (ACCT-05)"
