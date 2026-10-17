@@ -192,3 +192,84 @@ model MapClusterCache {
 
   @@map("map_cluster_cache")
 }
+
+// Account (Better Auth). Tabelle con prefisso auth_ perche' n8n condivide il
+// database Supabase e ha gia' `user` e `auth_identity` (20-PRODUCTION-FACTS.md
+// sezione 2): un nome nudo andrebbe in collisione. I NOMI DEI MODELLI restano
+// quelli di default della libreria di proposito: l'adapter Prisma chiama
+// prisma[modelName], quindi rinominarli lo rompe; si rinominano solo tabelle e
+// colonne (@@map/@map).
+// User.image esiste solo perche' la libreria lo dichiara e resta NULL (D-07:
+// niente foto Google). Account.password resta NULL (solo SSO, Fase 20 D-12).
+// Le FK verso auth_user sono ON DELETE CASCADE: cancellare l'utente toglie
+// sessioni e account senza dipendere dall'ordine di cancellazione (D-10).
+model User {
+  id            String    @id
+  name          String    @db.VarChar(50) // backstop del DB per D-09
+  email         String    @unique @db.VarChar(320)
+  emailVerified Boolean   @default(false) @map("email_verified")
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("auth_user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("auth_account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([identifier])
+  @@map("auth_verification")
+}
+
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("auth_rate_limit")
+}
