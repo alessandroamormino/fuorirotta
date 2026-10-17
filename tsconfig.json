@@ -47,7 +47,9 @@
     ".next-region-coverage-test/types/**/*.ts",
     ".next-region-coverage-test/dev/types/**/*.ts",
     ".next-event-pages-test/types/**/*.ts",
-    ".next-event-pages-test/dev/types/**/*.ts"
+    ".next-event-pages-test/dev/types/**/*.ts",
+    ".next-auth-flow-test/types/**/*.ts",
+    ".next-auth-flow-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
