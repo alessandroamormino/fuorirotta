@@ -7,6 +7,9 @@ import { decodeHtmlEntities } from "@/lib/utils";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
 import { eventDays } from "@/lib/eventDays";
+import { todayInRome } from "@/lib/dateWindow";
+import { ogCardContent } from "@/lib/og/card";
+import { OG_VERSION } from "@/lib/og/brand";
 import EventDetailClient from "./EventDetailClient";
 
 const BASE_URL = (
@@ -80,7 +83,19 @@ export async function generateMetadata(
 			type: "website",
 			locale: "it_IT",
 			siteName: "Fuorirotta",
-			...(composedEvent.imageUrl ? { images: [{ url: composedEvent.imageUrl }] } : {}),
+			// D-08: con l'immagine della fonte resta quella; senza, la card generata
+			// (D-09). Nessun file opengraph-image sotto questa cartella: con la
+			// convenzione di file Next ignorerebbe questo campo anche per le fonti.
+			images: composedEvent.imageUrl
+				? [{ url: composedEvent.imageUrl }]
+				: [
+						{
+							url: `${BASE_URL}/eventi/${eventId}/og?v=${OG_VERSION}`,
+							width: 1200,
+							height: 630,
+							alt: ogCardContent(composedEvent, todayInRome()).alt,
+						},
+					],
 		},
 		twitter: {
 			card: "summary_large_image",

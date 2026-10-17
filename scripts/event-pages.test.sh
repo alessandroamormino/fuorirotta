@@ -20,6 +20,8 @@
 #   F6  riga membro di F5 (canonical_event_id = F5)
 #   F7  titolo con CR LF + END:VEVENT + una proprieta' extra (iniezione nel .ics)
 #   F8  formato UTC, un giorno PASSATO 2025-01-10 (nessun bottone calendario)
+#   F9  senza immagine ne' descrizione, 'Sagre e feste', comune Vigolzone, 2027-06-05
+#   F10 con immagine della fonte (https://example.invalid/foto.jpg)
 #
 # Le colonne sono "timestamp without time zone": le cifre scritte qui sono
 # l'istante UTC memorizzato.
@@ -39,6 +41,9 @@ export NEXT_TEST_DIST_DIR="${test_dist_dir}"
 
 test_source="__test_event_pages__"
 compose_file="${repo_root}/docker-compose.dev.yml"
+# La versione della card si legge da lib/og/brand.ts: il restyling la incrementa.
+og_version="$(grep -oE 'OG_VERSION = [0-9]+' "${repo_root}/lib/og/brand.ts" | grep -oE '[0-9]+$')"
+[[ "${og_version}" =~ ^[0-9]+$ ]] || { echo "FAIL: OG_VERSION non trovato in lib/og/brand.ts"; exit 1; }
 
 tmp_dir="$(mktemp -d)"
 server_pid=""
@@ -119,10 +124,17 @@ F7="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_e
                 VALUES ('${test_source}', 'f7', E'Titolo normale\\r\\nEND:VEVENT\\r\\nATTENDEE:mailto:x@example.invalid', '2027-07-10 00:00:00', '2027-07-10 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo')
                 RETURNING id" | head -n 1)"
 F8="$(insert_event f8 'Prova evento concluso' '2025-01-10 00:00:00' '2025-01-10 23:59:59.999')"
-for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}" "${F8}"; do
+# F9: comune_id da sottoquery per nome; NULL se il comune non c'e' nel DB locale.
+F9="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, comune_id)
+                VALUES ('${test_source}', 'f9', 'Prova senza immagine', '2027-06-05 00:00:00', '2027-06-05 23:59:59.999', 'Piazza di prova', 'Sagre e feste', (SELECT id FROM comuni WHERE name = 'Vigolzone' LIMIT 1))
+                RETURNING id" | head -n 1)"
+F10="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, image_url)
+                 VALUES ('${test_source}', 'f10', 'Prova con immagine della fonte', '2027-06-06 00:00:00', '2027-06-06 23:59:59.999', 'Piazza di prova', 'Sagre e feste', 'https://example.invalid/foto.jpg')
+                 RETURNING id" | head -n 1)"
+for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}" "${F8}" "${F9}" "${F10}"; do
   [[ "${id}" =~ ^[0-9]+$ ]] || fail "fixture non inserita (id ottenuto: '${id}')"
 done
-echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4} F5=${F5} F6=${F6} F7=${F7} F8=${F8})"
+echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4} F5=${F5} F6=${F6} F7=${F7} F8=${F8} F9=${F9} F10=${F10})"
 
 # --- Dev server effimero, Postgres locale reale -----------------------------
 bash scripts/dev-db.sh npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
@@ -275,3 +287,40 @@ if grep -qF "Aggiungi al calendario" "${page8}"; then
   fail "S16: la pagina di F8 (concluso) contiene ancora 'Aggiungi al calendario'"
 fi
 echo "ok  S16: F8 (concluso) ha 'Concluso' e 'Condividi evento', senza 'Aggiungi al calendario'"
+
+# --- Card Open Graph (SHARE-01, D-08, D-09) ----------------------------------
+# og_meta <file> <property> -> valore del meta (i meta di Next sono self-closing)
+og_meta() {
+  grep -oE "<meta property=\"$2\" content=\"[^\"]*\"" "$1" | head -n 1 | sed -E 's/.*content="([^"]*)".*/\1/'
+}
+
+# --- S17: un evento senza immagine punta alla card generata -------------------
+fetch_page "${F9}"
+img="$(og_meta "${tmp_dir}/page-${F9}.html" og:image)"
+[[ "${img}" == http* ]] || fail "S17: og:image di F9 non e' un URL assoluto: '${img}'"
+[[ "${img}" == */eventi/${F9}/og?v=${og_version} ]] || fail "S17: og:image di F9 atteso .../eventi/${F9}/og?v=${og_version}, ottenuto '${img}'"
+[[ "$(og_meta "${tmp_dir}/page-${F9}.html" og:image:width)" == "1200" ]] || fail "S17: og:image:width di F9 non e' 1200"
+echo "ok  S17: F9 (senza immagine) ha og:image .../eventi/${F9}/og?v=${og_version}, 1200 di larghezza"
+
+# --- S18: l'immagine della fonte resta com'e' (D-08) --------------------------
+fetch_page "${F10}"
+img="$(og_meta "${tmp_dir}/page-${F10}.html" og:image)"
+[[ "${img}" == "https://example.invalid/foto.jpg" ]] || fail "S18: og:image di F10 atteso l'immagine della fonte, ottenuto '${img}'"
+if grep -qF "/og?v=" "${tmp_dir}/page-${F10}.html"; then
+  fail "S18: la pagina di F10 (con immagine) linka comunque la card generata"
+fi
+echo "ok  S18: F10 (con immagine) tiene l'immagine della fonte e non linka la card"
+
+# --- S19: la card e' un PNG 1200x630, in cache per un giorno -------------------
+code="$(fetch_ics og-f9 "/eventi/${F9}/og?v=${og_version}")"
+[[ "${code}" == "200" ]] || fail "S19: GET /eventi/${F9}/og: atteso 200, ottenuto ${code}"
+[[ "$(header og-f9 content-type)" == image/png* ]] || fail "S19: content-type non image/png: '$(header og-f9 content-type)'"
+[[ "$(header og-f9 cache-control)" == "public, max-age=86400" ]] || fail "S19: cache-control atteso 'public, max-age=86400', ottenuto '$(header og-f9 cache-control)'"
+node -e '
+const b = require("fs").readFileSync(process.argv[1]);
+const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+if (!b.subarray(0, 8).equals(sig)) { console.error("firma PNG assente"); process.exit(1) }
+const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+if (w !== 1200 || h !== 630) { console.error("dimensioni " + w + "x" + h); process.exit(1) }
+' "${tmp_dir}/og-f9.b" || fail "S19: la card di F9 non e' un PNG 1200x630"
+echo "ok  S19: la card di F9 e' un PNG 1200x630 con cache-control public, max-age=86400"
