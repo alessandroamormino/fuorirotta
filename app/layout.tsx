@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { EventCacheProvider } from "@/lib/eventCache";
 import { UserStateProvider } from "@/components/account/UserStateProvider";
+import NoticeHost from "@/components/account/NoticeHost";
 
 export const viewport = {
 	width: "device-width",
@@ -86,6 +87,7 @@ export default function RootLayout({
 						{children}
 					</EventCacheProvider>
 				</UserStateProvider>
+				<NoticeHost />
 			</body>
 		</html>
 	);
