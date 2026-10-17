@@ -24,7 +24,12 @@
  * La convenzione corretta, gia' in lib/eventStatus.ts e altri quattro file:
  *   if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module)
  *
- * Exit: 0 pulito, 1 se un modulo raggiungibile dal client ha la forma nuda.
+ * Seconda regola (piano 21-06): nessun file 'use client' puo' raggiungere
+ * SERVER_ONLY_MODULES (lib/auth.ts, lib/account.ts, lib/prisma.ts). Il gate si
+ * dimostra capace di fallire a ogni esecuzione, con un'entrata sintetica.
+ *
+ * Exit: 0 pulito, 1 se un modulo raggiungibile dal client ha la forma nuda o se
+ * un modulo solo-server entra nel grafo del client.
  */
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs'
 import { join, dirname, resolve as resolvePath, relative } from 'path'
@@ -32,6 +37,12 @@ import { join, dirname, resolve as resolvePath, relative } from 'path'
 const ROOT = resolvePath(__dirname, '..')
 const SCAN_DIRS = ['app', 'components', 'lib']
 const EXTS = ['.ts', '.tsx', '.js', '.jsx']
+
+// Moduli che non devono MAI entrare nel bundle del browser: portano la libreria
+// di accesso, i segreti letti dall'ambiente e il pool del database. `server-only`
+// non e' installato e gli script tsx importano lib/auth.ts, quindi il pacchetto
+// non sarebbe comunque applicabile: questo controllo sul grafo lo sostituisce.
+const SERVER_ONLY_MODULES = ['lib/auth.ts', 'lib/account.ts', 'lib/prisma.ts']
 
 function walk(dir: string, out: string[] = []): string[] {
   const full = join(ROOT, dir)
@@ -98,30 +109,89 @@ if (clientEntries.length === 0) {
 }
 
 // --- BFS sul grafo ----------------------------------------------------------
-const reachable = new Set<string>()
-const parent = new Map<string, string>()
-const queue = [...clientEntries]
-for (const e of clientEntries) reachable.add(e)
+type Graph = { reachable: Set<string>; parent: Map<string, string> }
 
-while (queue.length) {
-  const file = queue.shift()!
-  for (const spec of importsOf(file)) {
-    const target = resolveImport(spec, file)
-    if (!target || reachable.has(target)) continue
-    reachable.add(target)
-    parent.set(target, file)
-    queue.push(target)
+/** Cammina il grafo da `entries`; `edgesOf` restituisce i file (gia' risolti) importati da un file. */
+function walkGraph(entries: string[], edgesOf: (file: string) => string[]): Graph {
+  const reachable = new Set<string>(entries)
+  const parent = new Map<string, string>()
+  const queue = [...entries]
+  while (queue.length) {
+    const file = queue.shift()!
+    for (const target of edgesOf(file)) {
+      if (reachable.has(target)) continue
+      reachable.add(target)
+      parent.set(target, file)
+      queue.push(target)
+    }
+  }
+  return { reachable, parent }
+}
+
+const realEdges = (file: string): string[] =>
+  importsOf(file)
+    .map((spec) => resolveImport(spec, file))
+    .filter((target): target is string => target !== null)
+
+const { reachable, parent } = walkGraph(clientEntries, realEdges)
+
+// --- controllo --------------------------------------------------------------
+const rel = (f: string) => relative(ROOT, f)
+
+function chainOf(file: string, parents: Map<string, string>): string {
+  const chain: string[] = []
+  let cur: string | undefined = file
+  while (cur) {
+    chain.unshift(rel(cur))
+    cur = parents.get(cur)
+  }
+  return chain.join(' -> ')
+}
+
+/** I moduli solo-server raggiungibili in `graph`, con la catena che li porta nel client. */
+function serverOnlyHits(graph: Graph): { module: string; chain: string }[] {
+  return SERVER_ONLY_MODULES.flatMap((m) => {
+    const abs = join(ROOT, m)
+    return graph.reachable.has(abs) ? [{ module: m, chain: chainOf(abs, graph.parent) }] : []
+  })
+}
+
+for (const m of SERVER_ONLY_MODULES) {
+  if (!existsSync(join(ROOT, m))) {
+    console.error(`FAIL: ${m} non esiste: il controllo dei moduli solo-server starebbe verificando il vuoto`)
+    process.exit(1)
   }
 }
 
-// --- controllo --------------------------------------------------------------
+// Autoprova (non-vacuita'): un'entrata 'use client' SINTETICA, solo in memoria, che
+// importa il modulo deve essere segnalata. Se l'attraversamento smettesse di
+// seguire gli import, il gate passerebbe sull'albero vero senza dire nulla.
+const SYNTHETIC = join(ROOT, 'app/__synthetic_client__.tsx')
+for (const m of SERVER_ONLY_MODULES) {
+  const graph = walkGraph([SYNTHETIC], (f) => (f === SYNTHETIC ? [join(ROOT, m)] : realEdges(f)))
+  const hit = serverOnlyHits(graph).find((h) => h.module === m)
+  if (!hit) {
+    console.error(`FAIL: autoprova: un'entrata 'use client' sintetica che importa ${m} NON e' stata segnalata`)
+    process.exit(1)
+  }
+  console.log(`ok  autoprova: un'entrata 'use client' sintetica che importa ${m} viene segnalata`)
+}
+
+const serverHits = serverOnlyHits({ reachable, parent })
+if (serverHits.length > 0) {
+  console.error(
+    `FAIL: ${serverHits.length} modulo/i solo-server raggiungibile/i dal bundle client.\n` +
+      `Portano la libreria di accesso, i segreti letti dall'ambiente e il pool del database: non devono mai entrare nel browser.\n`
+  )
+  for (const h of serverHits) console.error(`  ${h.module}\n    catena: ${h.chain}`)
+  process.exit(1)
+}
+
 const offenders: { file: string; line: number }[] = []
 for (const file of reachable) {
   const line = hasBareSelfCheck(file)
   if (line !== null) offenders.push({ file, line })
 }
-
-const rel = (f: string) => relative(ROOT, f)
 
 if (offenders.length > 0) {
   console.error(
@@ -130,13 +200,7 @@ if (offenders.length > 0) {
   )
   for (const o of offenders) {
     console.error(`  ${rel(o.file)}:${o.line}`)
-    const chain: string[] = []
-    let cur: string | undefined = o.file
-    while (cur) {
-      chain.unshift(rel(cur))
-      cur = parent.get(cur)
-    }
-    console.error(`    catena: ${chain.join(' -> ')}`)
+    console.error(`    catena: ${chainOf(o.file, parent)}`)
   }
   console.error(`\nUsa la forma completa, come in lib/eventStatus.ts:`)
   console.error(
@@ -147,6 +211,6 @@ if (offenders.length > 0) {
 
 console.log(
   `ok  ${clientEntries.length} entry 'use client', ${reachable.size} moduli raggiungibili, ` +
-    `nessun require.main === module nudo`
+    `nessun require.main === module nudo, nessuno fra ${SERVER_ONLY_MODULES.join(', ')}`
 )
 console.log('PASS: sicurezza del bundle browser')

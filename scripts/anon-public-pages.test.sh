@@ -31,7 +31,8 @@
 #   A4  / ha Cache-Control esatto s-maxage=300, stale-while-revalidate=31535700
 #   A5  interruttore spento: /api/auth/ok 404 private no-store, stato spento
 #   A6  statico: nessuna entrata pubblica importa lib/auth o legge la richiesta
-#   B2-B4 come A2-A4 con l'interruttore acceso
+#   A7  / e la pagina evento hanno il pulsante "Accedi" e UNA regione avvisi vuota
+#   B2-B4, B7 come A2-A4, A7 con l'interruttore acceso
 #   B5  interruttore acceso: /api/auth/ok 200, stato enabled:true e, col cookie,
 #       l'utente di prova
 set -euo pipefail
@@ -221,6 +222,27 @@ check_pages() {
   echo "ok  ${tag}4: / ha Cache-Control 's-maxage=300, stale-while-revalidate=31535700' con e senza sessione"
 }
 
+# check_icon <A|B>: A7/B7. L'icona e la regione degli avvisi sono nell'HTML del
+# server, per tutti e uguali (21-06). A3/B3 dicono "identici"; qui si dice
+# "e contengono davvero l'icona", perche' due pagine senza icona sarebbero
+# identiche lo stesso. La regione e' un <div> (ShareButton ne ha una propria,
+# ma e' uno <span>), e deve esserci una volta sola e vuota.
+check_icon() {
+  local tag="$1" i=0 path name
+  for path in "/" "/eventi/${event_id}"; do
+    i=$((i + 1))
+    for name in "anon1-${i}" "sess-${i}"; do
+      grep -qF 'aria-label="Accedi"' "${tmp_dir}/${name}.b" \
+        || fail "${tag}7: ${path} (${name}): manca il pulsante da ospite (aria-label=\"Accedi\") nell'HTML del server"
+      local regions
+      regions="$(grep -oF '<div role="status" aria-live="polite"></div>' "${tmp_dir}/${name}.b" | wc -l | tr -d ' ')"
+      [[ "${regions}" == "1" ]] \
+        || fail "${tag}7: ${path} (${name}): attesa 1 regione degli avvisi vuota nell'HTML, trovate ${regions}"
+    done
+  done
+  echo "ok  ${tag}7: / e la pagina evento contengono il pulsante \"Accedi\" e una regione degli avvisi vuota, con e senza sessione"
+}
+
 # start_server <env...>: next start di produzione sul DB locale.
 start_server() {
   bash scripts/dev-db.sh env "NEXT_TEST_DIST_DIR=${test_dist_dir}" "$@" npx next start -p "${port}" \
@@ -234,6 +256,7 @@ start_server AUTH_ENABLED=0 BETTER_AUTH_URL= BETTER_AUTH_SECRET= GOOGLE_CLIENT_I
 echo "ok  next start (produzione) sulla porta ${port}, interruttore spento, Postgres locale"
 
 check_pages A
+check_icon A
 
 code="$(fetch a5ok /api/auth/ok)"
 [[ "${code}" == "404" ]] || fail "A5: /api/auth/ok a interruttore spento: atteso 404, ottenuto ${code}"
@@ -270,6 +293,7 @@ start_server "${auth_env[@]}"
 echo "ok  next start (produzione) sulla porta ${port}, interruttore acceso con valori finti"
 
 check_pages B
+check_icon B
 
 code="$(fetch b5ok /api/auth/ok)"
 [[ "${code}" == "200" ]] || fail "B5: /api/auth/ok a interruttore acceso: atteso 200, ottenuto ${code}"

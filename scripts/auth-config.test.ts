@@ -219,6 +219,31 @@ async function main(): Promise<void> {
   // 22:30 UTC del 16 sono le 00:30 del 17 a Roma (CEST): il giorno e' quello di Roma
   day('22:30 UTC del giorno prima e gia il giorno dopo a Roma', at('2026-10-16T22:30:00Z'), false, 'oggi')
 
+  // --- Percorso di ritorno dopo l'accesso (T-21-26) --------------------------
+  const { safeNextPath, returnPathFrom } = await import('../lib/safeNextPath')
+  check('safeNextPath: un percorso con query passa', safeNextPath('/eventi/12?a=1') === '/eventi/12?a=1')
+  for (const [name, raw] of [
+    ['URL senza schema (//host)', '//evil.example/x'],
+    ['URL assoluto', 'https://evil.example'],
+    ['backslash dopo la barra', '/\\evil'],
+    ['spazio', '/a b'],
+    ['tabulazione', '/a\tb'],
+    ['stringa vuota', ''],
+    ['nessuna barra iniziale', 'eventi/12'],
+    ['201 caratteri', '/' + 'a'.repeat(200)],
+  ] as const) {
+    check(`safeNextPath: ${name} -> '/'`, safeNextPath(raw) === '/', safeNextPath(raw))
+  }
+  check('safeNextPath: 200 caratteri esatti passano', safeNextPath('/' + 'a'.repeat(199)).length === 200)
+  check("safeNextPath: null e undefined -> '/'", safeNextPath(null) === '/' && safeNextPath(undefined) === '/')
+  check(
+    'returnPathFrom: toglie error e tiene il resto della query',
+    returnPathFrom('/eventi/12', '?a=1&error=access_denied') === '/eventi/12?a=1',
+    returnPathFrom('/eventi/12', '?a=1&error=access_denied'),
+  )
+  check("returnPathFrom: solo error -> percorso nudo", returnPathFrom('/', '?error=x') === '/')
+  check('returnPathFrom: senza query', returnPathFrom('/lombardia', '') === '/lombardia')
+
   // --- Versione esatta, senza ^ ne ~ -----------------------------------------
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
   const installed = (JSON.parse(readFileSync(join(root, 'node_modules/better-auth/package.json'), 'utf8')) as { version: string }).version
