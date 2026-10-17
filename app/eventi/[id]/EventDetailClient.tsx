@@ -45,6 +45,12 @@ interface EventDetailClientProps {
 	initialEvent?: Event | null;
 	/** URL canonico dell'evento, deciso dal server (stesso valore di alternates.canonical). */
 	canonicalUrl?: string;
+	/**
+	 * "Concluso" calcolato dal server (isEventOver). Il client non legge
+	 * l'orologio nel render di un albero idratato (errore di idratazione di React): senza questo
+	 * valore l'evento e' arrivato dal fetch, non c'e' SSR da cui divergere.
+	 */
+	eventOver?: boolean;
 }
 
 /**
@@ -119,7 +125,7 @@ function MobileDetailBar({ title, scrolled, onBack }: { title: string; scrolled:
 	);
 }
 
-export default function EventDetailClient({ initialEvent, canonicalUrl }: EventDetailClientProps) {
+export default function EventDetailClient({ initialEvent, canonicalUrl, eventOver }: EventDetailClientProps) {
 	const params = useParams();
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
@@ -375,7 +381,7 @@ export default function EventDetailClient({ initialEvent, canonicalUrl }: EventD
 	// formati con cui le sorgenti salvano le date (lib/eventDays.ts).
 	const days = eventDays(event.dateStart, event.dateEnd);
 	const isMultiDay = days.startDay !== days.endDay;
-	const calendarUrl = canonicalUrl && !isEventOver(event.dateStart, event.dateEnd) ? canonicalUrl : null;
+	const calendarUrl = canonicalUrl && !(eventOver ?? isEventOver(event.dateStart, event.dateEnd)) ? canonicalUrl : null;
 	const hasCoords = event.latitude != null && event.longitude != null;
 	const distanceKm =
 		userLocation && event.resolvedLatitude != null && event.resolvedLongitude != null

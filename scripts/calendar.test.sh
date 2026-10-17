@@ -57,4 +57,11 @@ if grep -nE '^(const|let|var|await) .*await |^await ' "${og_route}"; then
 fi
 echo "ok  ${og_route} nessun top-level await"
 
+# WR-05: "concluso" lo calcola il server e arriva come prop (niente orologio
+# nel render del client idratato, errore di idratazione). Guardia sul sorgente: la pagina
+# passa eventOver, il client lo legge prima di ripiegare su isEventOver.
+grep -qF 'eventOver={' "app/eventi/[id]/page.tsx" || fail "app/eventi/[id]/page.tsx non passa eventOver (guardia WR-05)"
+grep -qF 'eventOver ?? isEventOver(' "app/eventi/[id]/EventDetailClient.tsx" || fail "EventDetailClient.tsx non usa eventOver prima dell'orologio (guardia WR-05)"
+echo "ok  eventOver calcolato dal server (page.tsx -> EventDetailClient.tsx)"
+
 echo "Riepilogo: ${runs} esecuzioni dei self-check, tutte verdi"

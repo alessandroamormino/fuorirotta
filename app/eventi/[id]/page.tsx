@@ -7,6 +7,7 @@ import { decodeHtmlEntities } from "@/lib/utils";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
 import { eventDays } from "@/lib/eventDays";
+import { isEventOver } from "@/lib/eventStatus";
 import { todayInRome } from "@/lib/dateWindow";
 import { formatDayRange } from "@/lib/calendar/links";
 import { ogCardContent } from "@/lib/og/card";
@@ -205,6 +206,10 @@ export default async function EventDetailPage({
 			)}
 			<EventDetailClient
 				initialEvent={serializedEvent}
+				// WR-05: "concluso" lo decide il server, una volta: l'orologio del
+				// browser nel render darebbe un albero diverso (errore di idratazione di React) se
+				// SSR e idratazione stanno a cavallo della mezzanotte di Roma.
+				eventOver={composedEvent ? isEventOver(composedEvent.dateStart, composedEvent.dateEnd) : undefined}
 				canonicalUrl={isNaN(eventId) ? undefined : `${BASE_URL}/eventi/${eventId}`}
 			/>
 		</>
