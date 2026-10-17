@@ -1,6 +1,8 @@
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
+import { APIError } from 'better-auth/api'
 import { bearer } from 'better-auth/plugins'
+import { displayNameFromProvider, isValidDisplayName, normalizeDisplayName } from './displayName'
 import { prisma } from './prisma'
 
 // Accesso con Google (Fase 21). Questo e' l'UNICO file che configura Better
@@ -42,6 +44,10 @@ export function authEnabled(): boolean {
     console.error(`[Auth] AUTH_ENABLED=1 ma la configurazione e' incompleta: ${missing.join(', ')}`)
   }
   return false
+}
+
+function noTokens<T extends object>(account: T): T {
+  return { ...account, accessToken: null, refreshToken: null, idToken: null }
 }
 
 function create() {
@@ -94,6 +100,36 @@ function create() {
     user: { deleteUser: { enabled: true } },
     // Senza questo gli errori finirebbero sulla pagina di errore della libreria.
     onAPIError: { errorURL: `${baseURL}/accedi` },
+    databaseHooks: {
+      user: {
+        create: {
+          // Il nome di Google non e' nostro: lo si porta a 1-50 punti di codice
+          // (la colonna e' VARCHAR(50), un nome piu' lungo farebbe fallire
+          // l'inserimento) e la foto non si salva mai (D-07, D-09).
+          before: async (user) => ({
+            data: { ...user, name: displayNameFromProvider(user.name, user.email), image: null },
+          }),
+        },
+        update: {
+          // Rete di sicurezza per POST /api/auth/update-user diretto: la
+          // libreria accetta qualunque nome. Le rotte /api/v1/me/* validano
+          // prima con la stessa regola.
+          before: async (user) => {
+            if (user.name === undefined) return
+            if (!isValidDisplayName(user.name)) {
+              throw new APIError('BAD_REQUEST', { message: 'Nome non valido' })
+            }
+            return { data: { ...user, name: normalizeDisplayName(user.name) } }
+          },
+        },
+      },
+      account: {
+        // Non chiamiamo mai le API di Google: i suoi token non si tengono
+        // (D-12, e un'informativa piu' corta).
+        create: { before: async (account) => ({ data: noTokens(account) }) },
+        update: { before: async (account) => ({ data: noTokens(account) }) },
+      },
+    },
     socialProviders: {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID as string,

@@ -12,6 +12,19 @@
 #   S3  sessione vera (helper mint) -> lo stato restituisce nome ed e-mail
 #   S4  callbackURL assoluto o protocol-relative -> 403
 #   S5  statico: nessuno script di Google, nessuna pagina pubblica importa lib/auth
+#   S6  dallo stesso X-Real-IP il 5o POST sign-in/social passa, il 6o da 429 con X-Retry-After
+#   S7  un altro IP non e' toccato
+#   S8  un X-Forwarded-For falso non cambia il bucket
+#   S9  un ALTRO processo Node (helper rate) vede il contatore e risponde 429; la riga
+#       in auth_rate_limit ha chiave '<ip>|/sign-in/social' e last_request in millisecondi
+#   S10 con last_request spostato indietro di oltre 60 s il tentativo successivo passa
+#   S11 due IPv6 della stessa /64 contano insieme, un'altra /64 no
+#   S12 in produzione una richiesta senza X-Real-IP finisce nel bucket 'no-trusted-ip'
+#   S13 sessione rinnovata dopo piu' di un giorno: Set-Cookie con Max-Age=5184000,
+#       HttpOnly, SameSite=Lax, Path=/, senza Domain; expires_at torna a ~60 giorni
+#   S14 nome Google da 120 punti di codice: 50 salvati, foto null, tre token null
+#   S15 statico: lib/auth.ts nomina x-real-ip e nessun forwarded-for
+#   S16 bearer: il token nudo non da' utente, quello firmato si
 #
 # Ogni sezione usa un X-Real-IP di TEST-NET-2 (198.51.100.x) tutto suo, cosi'
 # i contatori del rate limit non si disturbano a vicenda. Utenti di prova
@@ -190,3 +203,108 @@ gsi_hits="$(grep -rnE 'accounts\.google\.com/gsi|googleusercontent' app componen
 public_hits="$(grep -rnE "lib/auth([\"'/]|$)" app/layout.tsx app/page.tsx app/eventi "app/[regione]" || true)"
 [[ -z "${public_hits}" ]] || fail "S5: una pagina pubblica importa lib/auth: ${public_hits}"
 echo "ok  S5: nessuno script di Google in app/ components/ lib/, nessuna pagina pubblica importa lib/auth"
+
+# --- S6: il sesto tentativo dallo stesso IP e' un 429 --------------------------
+ip_a="198.51.100.21"
+for attempt in 1 2 3 4 5; do
+  code="$(sign_in s6 "${ip_a}" '/')"
+  [[ "${code}" == "200" ]] || fail "S6: tentativo ${attempt} da ${ip_a}: atteso 200, ottenuto ${code}"
+done
+code="$(sign_in s6 "${ip_a}" '/')"
+[[ "${code}" == "429" ]] || fail "S6: il 6o tentativo da ${ip_a}: atteso 429, ottenuto ${code}"
+[[ -n "$(header s6 x-retry-after)" ]] || fail "S6: manca X-Retry-After nel 429"
+echo "ok  S6: 5 tentativi passano, il 6o da ${ip_a} e' 429 con X-Retry-After: $(header s6 x-retry-after)"
+
+# --- S7: un altro IP non e' toccato --------------------------------------------
+code="$(sign_in s7 198.51.100.22 '/')"
+[[ "${code}" == "200" ]] || fail "S7: altro IP: atteso 200, ottenuto ${code}"
+echo "ok  S7: un altro X-Real-IP risponde 200"
+
+# --- S8: un forwarded-for falso non sposta il bucket ---------------------------
+code="$(call s8 POST /api/auth/sign-in/social "${ip_a}" -H "Origin: ${origin}" -H 'Content-Type: application/json' \
+  -H 'X-Forwarded-For: 198.51.100.99' --data '{"provider":"google","callbackURL":"/","errorCallbackURL":"/"}')"
+[[ "${code}" == "429" ]] || fail "S8: con X-Forwarded-For falso: atteso 429, ottenuto ${code}"
+echo "ok  S8: un X-Forwarded-For falso non cambia il bucket (429)"
+
+# --- S9: un processo separato vede il contatore scritto dal dev server ------------
+status="$(helper rate "${ip_a}" | tail -n 1)"
+[[ "${status}" == "429" ]] || fail "S9: il processo separato: atteso 429, ottenuto '${status}'"
+key="${ip_a}|/sign-in/social"
+rows="$(psql_dev "SELECT count(*) FROM auth_rate_limit WHERE key = '${key}'")"
+[[ "${rows}" == "1" ]] || fail "S9: attesa una riga auth_rate_limit con chiave '${key}', trovate ${rows}"
+digits="$(psql_dev "SELECT length(last_request::text) FROM auth_rate_limit WHERE key = '${key}'")"
+[[ "${digits}" == "13" ]] || fail "S9: last_request atteso in millisecondi (13 cifre), ottenute ${digits}"
+echo "ok  S9: un altro processo Node risponde 429; la riga '${key}' ha last_request a 13 cifre"
+
+# --- S10: passata la finestra il tentativo successivo passa ----------------------
+psql_dev "UPDATE auth_rate_limit SET last_request = last_request - 61000 WHERE key = '${key}'" >/dev/null
+code="$(sign_in s10 "${ip_a}" '/')"
+[[ "${code}" == "200" ]] || fail "S10: dopo 61 s: atteso 200, ottenuto ${code}"
+echo "ok  S10: con last_request spostato indietro di 61 s il tentativo passa (200)"
+
+# --- S11: IPv6, contano le /64 ----------------------------------------------------
+for attempt in 1 2 3 4 5; do
+  code="$(sign_in s11 2001:db8:abcd:12::1 '/')"
+  [[ "${code}" == "200" ]] || fail "S11: tentativo ${attempt} da 2001:db8:abcd:12::1: atteso 200, ottenuto ${code}"
+done
+code="$(sign_in s11 2001:db8:abcd:12::2 '/')"
+[[ "${code}" == "429" ]] || fail "S11: stessa /64, altro indirizzo: atteso 429, ottenuto ${code}"
+code="$(sign_in s11 2001:db8:abcd:13::1 '/')"
+[[ "${code}" == "200" ]] || fail "S11: un'altra /64: atteso 200, ottenuto ${code}"
+v6_keys="$(psql_dev "SELECT count(*) FROM auth_rate_limit WHERE key LIKE '2001:%|/sign-in/social'")"
+[[ "${v6_keys}" == "2" ]] || fail "S11: attese 2 chiavi IPv6 (una per /64), trovate ${v6_keys}: $(psql_dev "SELECT key FROM auth_rate_limit WHERE key LIKE '2001:%'" | tr '\n' ' ')"
+echo "ok  S11: due indirizzi della stessa /64 contano insieme (429), un'altra /64 no; chiavi: $(psql_dev "SELECT key FROM auth_rate_limit WHERE key LIKE '2001:%' ORDER BY key" | tr '\n' ' ')"
+
+# --- S12: in produzione, senza X-Real-IP, un bucket condiviso -----------------------
+status="$(NODE_ENV=production helper rate --no-ip | tail -n 1)"
+[[ "${status}" == "200" || "${status}" == "429" ]] || fail "S12: richiesta senza X-Real-IP in produzione: stato inatteso '${status}'"
+shared="$(psql_dev "SELECT count(*) FROM auth_rate_limit WHERE key = 'no-trusted-ip|/sign-in/social'")"
+[[ "${shared}" == "1" ]] || fail "S12: attesa la riga 'no-trusted-ip|/sign-in/social', trovate ${shared}"
+echo "ok  S12: senza X-Real-IP in produzione la richiesta finisce nel bucket condiviso 'no-trusted-ip'"
+
+# --- S13: rinnovo a scorrimento, il cookie nuovo arriva al browser -------------------
+read -r s13_user s13_cookie s13_token <<<"$(helper mint s13-rinnovo@fixture.invalid 'Rina Neri' 0 | tail -n 1)"
+code="$(call s13a GET /api/v1/me/state 198.51.100.31 -H "Cookie: fuorirotta.session_token=${s13_cookie}")"
+[[ "${code}" == "200" ]] || fail "S13: stato con sessione nuova: atteso 200, ottenuto ${code}"
+if grep -qi '^set-cookie:' "${tmp_dir}/s13a.h"; then
+  fail "S13: una sessione appena creata non va rinnovata, ma c'e' un Set-Cookie"
+fi
+# La libreria rinnova quando expires_at - expiresIn + updateAge e' nel passato:
+# 2 giorni indietro portano expires_at a ~58 giorni da ora.
+psql_dev "UPDATE auth_session SET expires_at = expires_at - interval '2 days', updated_at = updated_at - interval '2 days' WHERE token = '${s13_token}'" >/dev/null
+days_before="$(psql_dev "SELECT round(extract(epoch FROM (expires_at - now())) / 86400) FROM auth_session WHERE token = '${s13_token}'")"
+[[ "${days_before}" == "58" ]] || fail "S13: prima del rinnovo expires_at atteso a ~58 giorni, trovato ${days_before}"
+code="$(call s13b GET /api/v1/me/state 198.51.100.31 -H "Cookie: fuorirotta.session_token=${s13_cookie}")"
+[[ "${code}" == "200" ]] || fail "S13: stato con sessione da rinnovare: atteso 200, ottenuto ${code}"
+renew="$(grep -i '^set-cookie: fuorirotta.session_token=' "${tmp_dir}/s13b.h" | head -n 1 | tr -d '\r' || true)"
+[[ -n "${renew}" ]] || fail "S13: manca il Set-Cookie di rinnovo"
+for needle in 'Max-Age=5184000' 'HttpOnly' 'SameSite=Lax' 'Path=/'; do
+  grep -qiF "${needle}" <<<"${renew}" || fail "S13: il Set-Cookie di rinnovo non ha '${needle}': ${renew}"
+done
+if grep -qi 'domain=' <<<"${renew}"; then fail "S13: il Set-Cookie di rinnovo ha Domain: ${renew}"; fi
+days_after="$(psql_dev "SELECT round(extract(epoch FROM (expires_at - now())) / 86400) FROM auth_session WHERE token = '${s13_token}'")"
+[[ "${days_after}" == "60" ]] || fail "S13: dopo il rinnovo expires_at atteso a ~60 giorni, trovato ${days_after}"
+echo "ok  S13: sessione a 58 giorni rinnovata: Set-Cookie Max-Age=5184000, HttpOnly, SameSite=Lax, Path=/, senza Domain; expires_at 58 -> 60 giorni"
+
+# --- S14: nome lungo di Google, nessuna foto, nessun token --------------------------
+long_name="$(node -e 'process.stdout.write("Ünï" + "\u{1F600}".repeat(60) + "x".repeat(57))')"
+out="$(helper create-google-user "${long_name}" | tail -n 1)"
+[[ "${out}" == "codepoints=50 lone_surrogates=false image=null accessToken=null refreshToken=null idToken=null" ]] \
+  || fail "S14: atteso 'codepoints=50 lone_surrogates=false image=null accessToken=null refreshToken=null idToken=null', ottenuto '${out}'"
+echo "ok  S14: nome da 120 punti di codice salvato a 50, foto null, access/refresh/id token null"
+
+# --- S15: statico, l'IP si legge solo da x-real-ip -----------------------------------
+code_lines="$(grep -vE '^[[:space:]]*//' lib/auth.ts)"
+grep -qi 'x-real-ip' <<<"${code_lines}" || fail "S15: lib/auth.ts non nomina x-real-ip fuori dai commenti"
+if grep -qiE 'forwarded' <<<"${code_lines}"; then fail "S15: lib/auth.ts nomina un header forwarded-for fuori dai commenti"; fi
+echo "ok  S15: lib/auth.ts legge l'IP solo da x-real-ip e non nomina forwarded-for"
+
+# --- S16: bearer, solo il valore firmato vale -------------------------------------------
+read -r s16_user s16_cookie s16_token <<<"$(helper mint s16-bearer@fixture.invalid 'Bruno Blu' 0 | tail -n 1)"
+code="$(call s16a GET /api/v1/me/state 198.51.100.32 -H "Authorization: Bearer ${s16_token}")"
+[[ "${code}" == "200" ]] || fail "S16: bearer nudo: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/s16a.b" 'j.user')" == "null" ]] || fail "S16: un token di sessione nudo come bearer ha dato un utente: '$(cat "${tmp_dir}/s16a.b")'"
+code="$(call s16b GET /api/v1/me/state 198.51.100.32 -H "Authorization: Bearer ${s16_cookie}")"
+[[ "${code}" == "200" ]] || fail "S16: bearer firmato: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/s16b.b" 'j.user.email')" == "s16-bearer@fixture.invalid" ]] || fail "S16: il bearer firmato non ha dato l'utente: '$(cat "${tmp_dir}/s16b.b")'"
+echo "ok  S16: il token nudo come bearer non da' utente, quello firmato si"

@@ -37,6 +37,22 @@ function check(name: string, condition: boolean, detail = ''): void {
 type HookResult = { data: Record<string, unknown> } | void | undefined
 type Hook = (data: Record<string, unknown>) => Promise<HookResult> | HookResult
 
+// Le opzioni risolte, viste in modo largo: i tipi della libreria le stringono
+// a cio' che abbiamo scritto e non lasciano chiedere "e' assente?".
+type ResolvedOptions = {
+  session?: { cookieCache?: { enabled?: boolean } }
+  account?: { accountLinking?: { enabled?: boolean; disableImplicitLinking?: boolean; trustedProviders?: unknown } }
+  advanced?: { ipAddress?: { ipAddressHeaders?: string[] } }
+  plugins?: { id: string; options?: { requireSignature?: boolean } }[]
+  telemetry?: { enabled?: boolean }
+  socialProviders?: { google?: { includeGrantedScopes?: boolean } }
+  user?: { deleteUser?: { enabled?: boolean; sendDeleteAccountVerification?: unknown } }
+  databaseHooks: {
+    user: { create: { before: Hook }; update: { before: Hook } }
+    account: { create: { before: Hook }; update: { before: Hook } }
+  }
+}
+
 async function main(): Promise<void> {
   const { authEnabled, getAuth } = await import('../lib/auth')
   const display = await import('../lib/displayName')
@@ -100,6 +116,7 @@ async function main(): Promise<void> {
   const auth = getAuth()
   check('getAuth: istanza con la configurazione completa', auth !== null)
   const ctx = await auth!.$context
+  const options = ctx.options as unknown as ResolvedOptions
 
   const session = ctx.authCookies.sessionToken
   check('cookie: nome __Secure-fuorirotta.session_token con baseURL https', session.name === '__Secure-fuorirotta.session_token', session.name)
@@ -116,30 +133,27 @@ async function main(): Promise<void> {
   check('session: freshAge 0 (elenco sessioni ed eliminazione dopo un giorno)', ctx.sessionConfig.freshAge === 0)
   check(
     'session: nessuna cookie cache (revoca immediata)',
-    !ctx.options.session?.cookieCache?.enabled && ctx.sessionConfig.cookieCacheSigner === undefined && ctx.sessionConfig.cookieRefreshCache === false,
+    !options.session?.cookieCache?.enabled && ctx.sessionConfig.cookieCacheSigner === undefined && ctx.sessionConfig.cookieRefreshCache === false,
   )
   check('linking: trustedProviders vuoto', Array.isArray(ctx.trustedProviders) && ctx.trustedProviders.length === 0)
-  check('linking: disableImplicitLinking true', ctx.options.account?.accountLinking?.disableImplicitLinking === true)
-  check('linking: accountLinking attivo (serve al collegamento esplicito della Fase 25)', ctx.options.account?.accountLinking?.enabled === true)
-  check('linking: nessun trustedProviders nelle opzioni', ctx.options.account?.accountLinking?.trustedProviders === undefined)
+  check('linking: disableImplicitLinking true', options.account?.accountLinking?.disableImplicitLinking === true)
+  check('linking: accountLinking attivo (serve al collegamento esplicito della Fase 25)', options.account?.accountLinking?.enabled === true)
+  check('linking: nessun trustedProviders nelle opzioni', options.account?.accountLinking?.trustedProviders === undefined)
   check('rate limit: attivo, storage database', ctx.rateLimit.enabled === true && ctx.rateLimit.storage === 'database')
   const rule = ctx.rateLimit.customRules?.['/sign-in/social']
   check('rate limit: regola /sign-in/social 5 ogni 60 s', typeof rule === 'object' && rule !== null && rule.window === 60 && rule.max === 5, JSON.stringify(rule))
-  const headers = ctx.options.advanced?.ipAddress?.ipAddressHeaders
+  const headers = options.advanced?.ipAddress?.ipAddressHeaders
   check('ip: ipAddressHeaders esattamente ["x-real-ip"]', JSON.stringify(headers) === '["x-real-ip"]', JSON.stringify(headers))
-  const plugins = (ctx.options.plugins ?? []) as { id: string; options?: { requireSignature?: boolean } }[]
+  const plugins = options.plugins ?? []
   const bearerPlugin = plugins.find((p) => p.id === 'bearer')
   check('bearer: presente con requireSignature', bearerPlugin?.options?.requireSignature === true)
   check('plugin: nessun next-cookies', !plugins.some((p) => p.id === 'next-cookies'))
-  check('telemetria spenta', ctx.options.telemetry?.enabled === false)
-  check('google: includeGrantedScopes false', ctx.options.socialProviders?.google?.includeGrantedScopes === false)
-  check('eliminazione: deleteUser attivo senza callback di verifica', ctx.options.user?.deleteUser?.enabled === true && ctx.options.user.deleteUser.sendDeleteAccountVerification === undefined)
+  check('telemetria spenta', options.telemetry?.enabled === false)
+  check('google: includeGrantedScopes false', options.socialProviders?.google?.includeGrantedScopes === false)
+  check('eliminazione: deleteUser attivo senza callback di verifica', options.user?.deleteUser?.enabled === true && options.user.deleteUser.sendDeleteAccountVerification === undefined)
 
   // --- Hook del database: nome valido, nessun token, nessuna foto -------------
-  const hooks = ctx.options.databaseHooks as {
-    user: { create: { before: Hook }; update: { before: Hook } }
-    account: { create: { before: Hook }; update: { before: Hook } }
-  }
+  const hooks = options.databaseHooks
   const created = await hooks.user.create.before({ name: '  '.concat('y'.repeat(120)), email: 'n@b.it', image: 'https://lh3.googleusercontent.com/x' })
   check(
     'hook user.create: nome a 50 punti di codice e foto scartata',
