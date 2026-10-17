@@ -12,17 +12,24 @@
 # nulla" se i dati di prova sono tutti nel formato di Roma.
 #
 # Fixture (sorgente '__test_event_pages__', cancellata prima e dopo):
-#   F1  formato UTC, un giorno      2027-03-28 (cambio ora legale)
-#   F2  formato UTC, intervallo     2027-04-10 -> 2027-04-11
-#   F3  formato Roma, un giorno     2027-04-21
-#   F4  formato UTC, fine a mezzanotte 2027-05-12
-#   F5  formato UTC, un giorno, con source_url   2027-06-05 (canonica per F6)
+#   F1  formato UTC, un giorno      2099-03-29 (ultima domenica di marzo, cambio ora legale)
+#   F2  formato UTC, intervallo     2099-04-10 -> 2099-04-11
+#   F3  formato Roma, un giorno     2099-04-21
+#   F4  formato UTC, fine a mezzanotte 2099-05-12
+#   F5  formato UTC, un giorno, con source_url   2099-06-05 (canonica per F6)
 #   F6  riga membro di F5 (canonical_event_id = F5)
 #   F7  titolo con CR LF + END:VEVENT + una proprieta' extra (iniezione nel .ics)
 #   F8  formato UTC, un giorno PASSATO 2025-01-10 (nessun bottone calendario)
-#   F9  senza immagine ne' descrizione, 'Sagre e feste', comune Vigolzone, 2027-06-05
+#   F9  senza immagine ne' descrizione, 'Sagre e feste', comune Vigolzone, 2099-06-05
 #   F10 con immagine della fonte (https://example.invalid/foto.jpg)
 #   F11 senza immagine, titolo con emoji, cirillico e 150 caratteri
+#
+# Le date "future" stanno nel 2099, non l'anno prossimo: una fixture a data
+# vicina fa scadere il gate da sola (isEventOver nasconde il bottone del
+# calendario, il badge diventa "Concluso") senza che il codice cambi. Il
+# 2099 e' lontano abbastanza da non scadere mai; giorno e mese sono quelli
+# di prima, e 29 marzo 2099 e' ancora l'ultima domenica del mese. Il
+# giorno della settimana nelle asserzioni (ven 5 giu) e' quello del 2099.
 #
 # Le colonne sono "timestamp without time zone": le cifre scritte qui sono
 # l'istante UTC memorizzato.
@@ -110,31 +117,31 @@ insert_event() {
             RETURNING id" | head -n 1
 }
 
-F1="$(insert_event f1 'Prova un giorno formato UTC' '2027-03-28 00:00:00' '2027-03-28 23:59:59.999')"
-F2="$(insert_event f2 'Prova intervallo formato UTC' '2027-04-10 00:00:00' '2027-04-11 23:59:59.999')"
-F3="$(insert_event f3 'Prova un giorno formato Roma' '2027-04-20 22:00:00' '2027-04-21 21:59:59.999')"
-F4="$(insert_event f4 'Prova fine a mezzanotte UTC' '2027-05-12 00:00:00' '2027-05-12 00:00:00')"
+F1="$(insert_event f1 'Prova un giorno formato UTC' '2099-03-29 00:00:00' '2099-03-29 23:59:59.999')"
+F2="$(insert_event f2 'Prova intervallo formato UTC' '2099-04-10 00:00:00' '2099-04-11 23:59:59.999')"
+F3="$(insert_event f3 'Prova un giorno formato Roma' '2099-04-20 22:00:00' '2099-04-21 21:59:59.999')"
+F4="$(insert_event f4 'Prova fine a mezzanotte UTC' '2099-05-12 00:00:00' '2099-05-12 00:00:00')"
 F5="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, source_url)
-                VALUES ('${test_source}', 'f5', 'Prova canonica con fonte', '2027-06-05 00:00:00', '2027-06-05 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo', 'https://example.invalid/f5')
+                VALUES ('${test_source}', 'f5', 'Prova canonica con fonte', '2099-06-05 00:00:00', '2099-06-05 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo', 'https://example.invalid/f5')
                 RETURNING id" | head -n 1)"
 F6="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, canonical_event_id)
-                VALUES ('${test_source}', 'f6', 'Prova membro', '2027-06-05 00:00:00', '2027-06-05 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo', ${F5})
+                VALUES ('${test_source}', 'f6', 'Prova membro', '2099-06-05 00:00:00', '2099-06-05 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo', ${F5})
                 RETURNING id" | head -n 1)"
 # F7: il titolo e' costruito in SQL con escape E'' (CR = \r, LF = \n).
 F7="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
-                VALUES ('${test_source}', 'f7', E'Titolo normale\\r\\nEND:VEVENT\\r\\nATTENDEE:mailto:x@example.invalid', '2027-07-10 00:00:00', '2027-07-10 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo')
+                VALUES ('${test_source}', 'f7', E'Titolo normale\\r\\nEND:VEVENT\\r\\nATTENDEE:mailto:x@example.invalid', '2099-07-10 00:00:00', '2099-07-10 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo')
                 RETURNING id" | head -n 1)"
 F8="$(insert_event f8 'Prova evento concluso' '2025-01-10 00:00:00' '2025-01-10 23:59:59.999')"
 # F9: comune_id da sottoquery per nome; NULL se il comune non c'e' nel DB locale.
 F9="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, comune_id)
-                VALUES ('${test_source}', 'f9', 'Prova senza immagine', '2027-06-05 00:00:00', '2027-06-05 23:59:59.999', 'Piazza di prova', 'Sagre e feste', (SELECT id FROM comuni WHERE name = 'Vigolzone' LIMIT 1))
+                VALUES ('${test_source}', 'f9', 'Prova senza immagine', '2099-06-05 00:00:00', '2099-06-05 23:59:59.999', 'Piazza di prova', 'Sagre e feste', (SELECT id FROM comuni WHERE name = 'Vigolzone' LIMIT 1))
                 RETURNING id" | head -n 1)"
 F10="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, image_url)
-                 VALUES ('${test_source}', 'f10', 'Prova con immagine della fonte', '2027-06-06 00:00:00', '2027-06-06 23:59:59.999', 'Piazza di prova', 'Sagre e feste', 'https://example.invalid/foto.jpg')
+                 VALUES ('${test_source}', 'f10', 'Prova con immagine della fonte', '2099-06-06 00:00:00', '2099-06-06 23:59:59.999', 'Piazza di prova', 'Sagre e feste', 'https://example.invalid/foto.jpg')
                  RETURNING id" | head -n 1)"
 # F11: il titolo e' costruito in SQL (emoji e cirillico con escape unicode, 150 caratteri).
 F11="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
-                 VALUES ('${test_source}', 'f11', E'Sagra \\U0001F355 \\u041f\\u0440\\u0438\\u0432\\u0435\\u0442 del tortello ' || repeat('lunghissimo ', 11), '2027-06-07 00:00:00', '2027-06-07 23:59:59.999', 'Piazza di prova', 'Sagre e feste')
+                 VALUES ('${test_source}', 'f11', E'Sagra \\U0001F355 \\u041f\\u0440\\u0438\\u0432\\u0435\\u0442 del tortello ' || repeat('lunghissimo ', 11), '2099-06-07 00:00:00', '2099-06-07 23:59:59.999', 'Piazza di prova', 'Sagre e feste')
                  RETURNING id" | head -n 1)"
 for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}" "${F8}" "${F9}" "${F10}" "${F11}"; do
   [[ "${id}" =~ ^[0-9]+$ ]] || fail "fixture non inserita (id ottenuto: '${id}')"
@@ -162,11 +169,11 @@ fetch_page "${F4}"
 
 # --- S1: un giorno, formato UTC: riga Quando col giorno lungo, non il vecchio intervallo
 page="${tmp_dir}/page-${F1}.html"
-grep -qF "28 marzo 2027" "${page}" || fail "S1: la riga Quando di F1 non contiene '28 marzo 2027'"
-if grep -qF "28 mar – 29 mar" "${page}"; then
-  fail "S1: F1 mostra ancora '28 mar – 29 mar' (un giorno letto come due)"
+grep -qF "29 marzo 2099" "${page}" || fail "S1: la riga Quando di F1 non contiene '29 marzo 2099'"
+if grep -qF "29 mar – 30 mar" "${page}"; then
+  fail "S1: F1 mostra ancora '29 mar – 30 mar' (un giorno letto come due)"
 fi
-echo "ok  S1: F1 (formato UTC, un giorno) mostra 28 marzo 2027 e non un intervallo"
+echo "ok  S1: F1 (formato UTC, un giorno) mostra 29 marzo 2099 e non un intervallo"
 
 # --- S2: intervallo UTC, "Quando" mostra 10 apr – 11 apr, non il vecchio 12 --
 page="${tmp_dir}/page-${F2}.html"
@@ -177,18 +184,18 @@ fi
 echo "ok  S2: F2 (formato UTC, intervallo) mostra 10 apr – 11 apr"
 
 # --- S3: un giorno, formato Roma (22:00Z -> 21:59:59.999Z) ------------------
-grep -qF "21 aprile 2027" "${tmp_dir}/page-${F3}.html" || fail "S3: la riga Quando di F3 non contiene '21 aprile 2027'"
-echo "ok  S3: F3 (formato Roma, un giorno) mostra 21 aprile 2027"
+grep -qF "21 aprile 2099" "${tmp_dir}/page-${F3}.html" || fail "S3: la riga Quando di F3 non contiene '21 aprile 2099'"
+echo "ok  S3: F3 (formato Roma, un giorno) mostra 21 aprile 2099"
 
 # --- S4: fine a mezzanotte UTC ----------------------------------------------
-grep -qF "12 maggio 2027" "${tmp_dir}/page-${F4}.html" || fail "S4: la riga Quando di F4 non contiene '12 maggio 2027'"
-echo "ok  S4: F4 (fine a mezzanotte UTC) mostra 12 maggio 2027"
+grep -qF "12 maggio 2099" "${tmp_dir}/page-${F4}.html" || fail "S4: la riga Quando di F4 non contiene '12 maggio 2099'"
+echo "ok  S4: F4 (fine a mezzanotte UTC) mostra 12 maggio 2099"
 
 # --- S5: dati strutturati: giorni di calendario, non istanti ----------------
 page="${tmp_dir}/page-${F1}.html"
-grep -qF '"startDate":"2027-03-28"' "${page}" || fail "S5: il JSON-LD di F1 non ha startDate 2027-03-28"
-grep -qF '"endDate":"2027-03-28"' "${page}" || fail "S5: il JSON-LD di F1 non ha endDate 2027-03-28"
-echo "ok  S5: JSON-LD di F1 con startDate e endDate 2027-03-28"
+grep -qF '"startDate":"2099-03-29"' "${page}" || fail "S5: il JSON-LD di F1 non ha startDate 2099-03-29"
+grep -qF '"endDate":"2099-03-29"' "${page}" || fail "S5: il JSON-LD di F1 non ha endDate 2099-03-29"
+echo "ok  S5: JSON-LD di F1 con startDate e endDate 2099-03-29"
 
 # --- .ics (CAL-01): un file per evento, giorni interi, anonimo ---------------
 # Controlli sui byte con node -e: grep tratta CR e tab in modo diverso tra
@@ -213,10 +220,10 @@ disp="$(header ics-f1 content-disposition)"
 [[ "${disp}" == inline* ]] || fail "S6: content-disposition non inline: '${disp}'"
 [[ "${disp}" == *"filename=\"fuorirotta-${F1}.ics\""* ]] || fail "S6: filename atteso fuorirotta-${F1}.ics, ottenuto '${disp}'"
 [[ "$(header ics-f1 cache-control)" == "public, max-age=600" ]] || fail "S6: cache-control atteso 'public, max-age=600', ottenuto '$(header ics-f1 cache-control)'"
-for needle in "BEGIN:VCALENDAR" "DTSTART;VALUE=DATE:20270328" "DTEND;VALUE=DATE:20270329"; do
+for needle in "BEGIN:VCALENDAR" "DTSTART;VALUE=DATE:20990329" "DTEND;VALUE=DATE:20990330"; do
   grep -qF "${needle}" "${tmp_dir}/ics-f1.b" || fail "S6: il corpo di F1 non contiene '${needle}'"
 done
-echo "ok  S6: .ics di F1 (200, text/calendar, inline, 20270328 -> 20270329 esclusivo)"
+echo "ok  S6: .ics di F1 (200, text/calendar, inline, 20990329 -> 20990330 esclusivo)"
 
 # --- S7: solo CRLF, righe fino a 75 ottetti ----------------------------------
 node -e '
@@ -232,9 +239,9 @@ echo "ok  S7: .ics di F1 solo CRLF, nessuna riga oltre 75 ottetti"
 # --- S8: intervallo UTC, la fine e' il giorno dopo l'ultimo -------------------
 code="$(fetch_ics ics-f2 "/api/events/${F2}/ics")"
 [[ "${code}" == "200" ]] || fail "S8: GET /api/events/${F2}/ics: atteso 200, ottenuto ${code}"
-grep -qF "DTEND;VALUE=DATE:20270412" "${tmp_dir}/ics-f2.b" || fail "S8: F2 non ha DTEND 20270412"
-grep -qF "DTSTART;VALUE=DATE:20270410" "${tmp_dir}/ics-f2.b" || fail "S8: F2 non ha DTSTART 20270410"
-echo "ok  S8: .ics di F2 (10 apr -> DTEND 20270412)"
+grep -qF "DTEND;VALUE=DATE:20990412" "${tmp_dir}/ics-f2.b" || fail "S8: F2 non ha DTEND 20990412"
+grep -qF "DTSTART;VALUE=DATE:20990410" "${tmp_dir}/ics-f2.b" || fail "S8: F2 non ha DTSTART 20990410"
+echo "ok  S8: .ics di F2 (10 apr -> DTEND 20990412)"
 
 # --- S9: ?download=1 -> attachment -------------------------------------------
 code="$(fetch_ics ics-dl "/api/events/${F1}/ics?download=1")"
@@ -354,7 +361,7 @@ echo "ok  S22: la card di F11 (emoji, cirillico, titolo lungo) e' un PNG da ${si
 
 # --- S23: senza descrizione, og:description dice quando e dove -----------------
 desc="$(og_meta "${tmp_dir}/page-${F9}.html" og:description)"
-[[ "${desc}" == *"sab 5 giu"* ]] || fail "S23: og:description di F9 atteso con 'sab 5 giu', ottenuto '${desc}'"
+[[ "${desc}" == *"ven 5 giu"* ]] || fail "S23: og:description di F9 atteso con 'ven 5 giu', ottenuto '${desc}'"
 [[ "${desc}" != *"Scopri questo evento"* ]] || fail "S23: og:description di F9 e' ancora la frase generica"
 echo "ok  S23: og:description di F9: '${desc}'"
 
