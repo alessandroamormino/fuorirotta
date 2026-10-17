@@ -49,7 +49,9 @@
     ".next-event-pages-test/types/**/*.ts",
     ".next-event-pages-test/dev/types/**/*.ts",
     ".next-auth-flow-test/types/**/*.ts",
-    ".next-auth-flow-test/dev/types/**/*.ts"
+    ".next-auth-flow-test/dev/types/**/*.ts",
+    ".next-anon-test/types/**/*.ts",
+    ".next-anon-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
