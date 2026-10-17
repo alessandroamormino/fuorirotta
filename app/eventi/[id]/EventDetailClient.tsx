@@ -9,6 +9,7 @@ import { Event, SearchFilters } from "@/lib/types";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
@@ -418,7 +419,7 @@ export default function EventDetailClient({ initialEvent, canonicalUrl, eventOve
 				<div
 					className={cn(
 						"container mx-auto px-4 max-w-7xl",
-						hasCoords ? "pb-24 md:pb-24 lg:pb-12" : "pb-8 md:pb-16"
+						hasCoords ? "pb-8 lg:pb-12" : "pb-8 md:pb-16"
 					)}
 				>
 					{/* Briciole di navigazione (D-8), desktop-only: sotto 1024px la
@@ -722,6 +723,11 @@ export default function EventDetailClient({ initialEvent, canonicalUrl, eventOve
 						</aside>
 					</div>
 				</div>
+				{/* D-13: piede statico dopo l'articolo. Lo spazio sotto la barra
+				    fissa "Naviga" (prima pb-24 sul contenitore, 96px) ora lo
+				    porta il piede: 32px suoi + pb-16 = 96px, fino a lg dove la
+				    barra sparisce. */}
+				<Footer className={hasCoords ? "pb-16 lg:pb-0" : undefined} />
 			</main>
 
 			{/* Barra d'azione fissa: una sola azione primaria per questa

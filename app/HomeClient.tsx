@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Event, SearchFilters } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import CategoryFilterBar from "@/components/CategoryFilterBar";
 import CoverageMessage, { type CoverageMessageVariant } from "@/components/CoverageMessage";
 import ViewSwitch, {
@@ -1555,6 +1556,11 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 										</motion.div>
 									)}
 								</AnimatePresence>
+								{/* D-13: piede statico in fondo alla lista, dentro lo scroller:
+								    scorre con le card e non esiste nella vista mappa a tutto
+								    schermo. Solo markup, nessuna sonda della vista in render, cosi'
+								    HTML del server e primo render del client coincidono. */}
+								<Footer />
 							</div>
 						</div>
 						{/* D-6: paginazione numerata desktop, ANCORATA FUORI dallo

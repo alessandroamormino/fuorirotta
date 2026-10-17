@@ -34,7 +34,11 @@
 #   A7  / e la pagina evento hanno il pulsante "Accedi" e UNA regione avvisi vuota
 #   A8  interruttore spento: /account risponde 404
 #   A9  interruttore spento: /accedi risponde 404
-#   B2-B4, B7 come A2-A4, A7 con l'interruttore acceso
+#   A10 /privacy e /cookie: statiche (o) nella tabella delle rotte, 200 con e senza
+#       sessione, con il loro h1 (pubbliche anche a interruttore spento, D-16)
+#   A11 il piede "Informazioni legali" e' nell'HTML di /, della pagina evento e di
+#       /lombardia, con e senza sessione (l'identita' byte per byte e' A3)
+#   B2-B4, B7, B10, B11 come A2-A4, A7, A10, A11 con l'interruttore acceso
 #   B5  interruttore acceso: /api/auth/ok 200, stato enabled:true e, col cookie,
 #       l'utente di prova
 #   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
@@ -157,6 +161,12 @@ for dyn in '/eventi/\[id\]' '/\[regione\]' '/\[regione\]/\[provincia\]'; do
     || { grep -E '^[┌├└] ' "${tmp_dir}/build.log" || true; fail "A1: la rotta ${dyn} non e' dinamica (ƒ): '${row}'"; }
 done
 echo "ok  A1: / statico con 5m; /eventi/[id], /[regione], /[regione]/[provincia] dinamiche"
+for legal in /privacy /cookie; do
+  row="$(route_row "${legal}")"
+  [[ "${row}" == *"○"* ]] \
+    || { grep -E '^[┌├└] ' "${tmp_dir}/build.log" || true; fail "A10: la rotta ${legal} non e' statica (○): '${row}'"; }
+done
+echo "ok  A10: /privacy e /cookie statiche (○) nella tabella delle rotte"
 
 # --- Fixture ------------------------------------------------------------------
 event_id="$(psql_dev "SELECT id FROM events WHERE canonical_event_id IS NULL ORDER BY id LIMIT 1" | head -n 1)"
@@ -249,6 +259,41 @@ check_icon() {
   echo "ok  ${tag}7: / e la pagina evento contengono il pulsante \"Accedi\" e una regione degli avvisi vuota, con e senza sessione"
 }
 
+# check_legal <A|B>: A10/B10 e A11/B11. Le pagine legali rispondono 200 con e
+# senza sessione, con il loro h1 e senza cambiare per chi e' collegato; il piede
+# e' nell'HTML del server delle tre pagine pubbliche, per tutti. Il piede e'
+# cercato per il suo nav: due pagine senza piede sarebbero identiche lo stesso.
+check_legal() {
+  local tag="$1" path h1 name code
+  for path in /privacy /cookie; do
+    case "${path}" in
+      /privacy) h1="Informativa sulla privacy" ;;
+      /cookie) h1="Informativa sui cookie" ;;
+    esac
+    name="legal-anon${path#/}"
+    code="$(fetch "${name}" "${path}")"
+    [[ "${code}" == "200" ]] || fail "${tag}10: GET ${path}: atteso 200, ottenuto ${code}"
+    code="$(fetch "legal-sess${path#/}" "${path}" "${session_cookie}")"
+    [[ "${code}" == "200" ]] || fail "${tag}10: GET ${path} con cookie: atteso 200, ottenuto ${code}"
+    grep -qF ">${h1}</h1>" "${tmp_dir}/${name}.b" \
+      || fail "${tag}10: ${path}: manca l'h1 '${h1}' nell'HTML del server"
+    same "${tag}10" "${name}" "legal-sess${path#/}" \
+      || fail "${tag}10: ${path}: la risposta con la sessione differisce da quella anonima"
+  done
+  echo "ok  ${tag}10: /privacy e /cookie rispondono 200 con il loro h1, uguali con e senza sessione"
+  local i=0
+  for path in "${pages[@]}"; do
+    i=$((i + 1))
+    for name in "anon1-${i}" "sess-${i}"; do
+      grep -qF 'aria-label="Informazioni legali"' "${tmp_dir}/${name}.b" \
+        || fail "${tag}11: ${path} (${name}): manca il piede (nav \"Informazioni legali\") nell'HTML del server"
+      grep -qF 'href="/privacy"' "${tmp_dir}/${name}.b" && grep -qF 'href="/cookie"' "${tmp_dir}/${name}.b" \
+        || fail "${tag}11: ${path} (${name}): il piede non collega /privacy e /cookie"
+    done
+  done
+  echo "ok  ${tag}11: il piede \"Informazioni legali\" e' nell'HTML di ${pages[*]}, con e senza sessione"
+}
+
 # start_server <env...>: next start di produzione sul DB locale.
 start_server() {
   bash scripts/dev-db.sh env "NEXT_TEST_DIST_DIR=${test_dist_dir}" "$@" npx next start -p "${port}" \
@@ -263,6 +308,7 @@ echo "ok  next start (produzione) sulla porta ${port}, interruttore spento, Post
 
 check_pages A
 check_icon A
+check_legal A
 
 code="$(fetch a5ok /api/auth/ok)"
 [[ "${code}" == "404" ]] || fail "A5: /api/auth/ok a interruttore spento: atteso 404, ottenuto ${code}"
@@ -309,6 +355,7 @@ echo "ok  next start (produzione) sulla porta ${port}, interruttore acceso con v
 
 check_pages B
 check_icon B
+check_legal B
 
 code="$(fetch b5ok /api/auth/ok)"
 [[ "${code}" == "200" ]] || fail "B5: /api/auth/ok a interruttore acceso: atteso 200, ottenuto ${code}"
