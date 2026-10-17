@@ -4,8 +4,14 @@
 // locale. Tutti gli utenti di prova hanno e-mail @fixture.invalid.
 //
 // Sottocomandi:
-//   mint <email> <nome> [giorniDiEta]   crea utente + account google + sessione e
-//                                       stampa "<userId> <cookieFirmato> <tokenNudo>"
+//   mint <email> <nome> [giorniDiEta] [userAgent] [--fake-tokens]
+//                                       crea utente + account google + sessione e
+//                                       stampa "<userId> <cookieFirmato> <tokenNudo>".
+//                                       Con --fake-tokens l'account nasce con access,
+//                                       refresh e id token finti (l'hook deve azzerarli)
+//   session <userId> [giorniDiEta] [userAgent]
+//                                       aggiunge una sessione a un utente di prova e
+//                                       stampa "<sessionId> <cookieFirmato> <tokenNudo>"
 //   create-google-user <nome>           crea utente + account google COME il callback
 //                                       (hook compresi), con token e foto finti, e
 //                                       stampa cosa e' rimasto nel database
@@ -31,7 +37,27 @@ function requireAuth() {
   return auth
 }
 
-async function mint(email: string, name: string, ageDays: number): Promise<void> {
+// Aggiunge una sessione a un utente: user agent e anzianita' a piacere, poi il
+// cookie come lo imposta il browser (URL-encoded "<valore>.<firma>" HMAC).
+async function addSession(userId: string, ageDays: number, userAgent: string | undefined): Promise<string> {
+  const ctx = await requireAuth().$context
+  const session = await ctx.internalAdapter.createSession(userId)
+  const back = new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000)
+  const data: { createdAt?: Date; updatedAt?: Date; userAgent?: string } = {}
+  if (ageDays > 0) Object.assign(data, { createdAt: back, updatedAt: back })
+  if (userAgent) data.userAgent = userAgent
+  if (Object.keys(data).length > 0) await prisma.session.update({ where: { token: session.token }, data })
+  const signed = `${session.token}.${await makeSignature(session.token, ctx.secret)}`
+  return `${session.id} ${encodeURIComponent(signed)} ${session.token}`
+}
+
+async function mint(
+  email: string,
+  name: string,
+  ageDays: number,
+  userAgent: string | undefined,
+  fakeTokens: boolean,
+): Promise<void> {
   if (!email.endsWith(FIXTURE_DOMAIN)) fail(`l'e-mail di prova deve finire con ${FIXTURE_DOMAIN}`)
   const ctx = await requireAuth().$context
   // Stessa strada del callback di Google: l'adapter interno, quindi anche gli hook.
@@ -43,19 +69,12 @@ async function mint(email: string, name: string, ageDays: number): Promise<void>
     userId: user.id,
     providerId: 'google',
     accountId: `fixture-${user.id}`,
+    ...(fakeTokens
+      ? { accessToken: 'fake-access-token', refreshToken: 'fake-refresh-token', idToken: 'fake-id-token' }
+      : {}),
   })
-  const session = await ctx.internalAdapter.createSession(user.id)
-  if (ageDays > 0) {
-    const back = new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000)
-    await prisma.session.update({
-      where: { token: session.token },
-      data: { createdAt: back, updatedAt: back },
-    })
-  }
-  // Il cookie e' "<valore>.<firma>" con la firma HMAC della libreria; lo
-  // stampiamo come lo imposta il browser (URL-encoded).
-  const signed = `${session.token}.${await makeSignature(session.token, ctx.secret)}`
-  console.log(`${user.id} ${encodeURIComponent(signed)} ${session.token}`)
+  const [, cookie, token] = (await addSession(user.id, ageDays, userAgent)).split(' ')
+  console.log(`${user.id} ${cookie} ${token}`)
 }
 
 async function createGoogleUser(name: string): Promise<void> {
@@ -111,9 +130,15 @@ async function main(): Promise<void> {
   }
   const [command, ...args] = process.argv.slice(2)
   switch (command) {
-    case 'mint':
-      if (args.length < 2) fail('uso: mint <email> <nome> [giorniDiEta]')
-      await mint(args[0], args[1], Number(args[2] ?? 0))
+    case 'mint': {
+      const positional = args.filter((a) => a !== '--fake-tokens')
+      if (positional.length < 2) fail('uso: mint <email> <nome> [giorniDiEta] [userAgent] [--fake-tokens]')
+      await mint(positional[0], positional[1], Number(positional[2] ?? 0), positional[3], args.includes('--fake-tokens'))
+      break
+    }
+    case 'session':
+      if (args.length < 1) fail('uso: session <userId> [giorniDiEta] [userAgent]')
+      console.log(await addSession(args[0], Number(args[1] ?? 0), args[2]))
       break
     case 'create-google-user':
       if (args.length < 1) fail('uso: create-google-user <nome>')

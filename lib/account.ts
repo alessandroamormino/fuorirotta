@@ -1,4 +1,6 @@
 import { getAuth } from './auth'
+import { prisma } from './prisma'
+import { deviceLabel, type DeviceKind } from './userAgent'
 
 // Supporto alle rotte /api/v1/me/* (Fase 21): tutte dietro l'interruttore,
 // tutte con sessione, nessuna mai in cache condivisa.
@@ -35,4 +37,62 @@ export async function requireUser(
   const data = await auth.api.getSession({ headers: req.headers })
   if (!data) return noStoreJson({ error: 'unauthenticated' }, 401)
   return { auth, user: data.user, session: data.session }
+}
+
+// Giorno di calendario di Roma ("YYYY-MM-DD") di un istante.
+function romeDay(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(date)
+}
+
+/**
+ * Etichetta di attivita' di una sessione, a granularita' di GIORNO: la
+ * libreria rinnova updatedAt al massimo una volta al giorno, quindi "minuti
+ * fa" sarebbe una bugia. Calcolata sul server con il giorno di Roma, cosi' la
+ * pagina dinamica non ha mismatch di idratazione (UI-SPEC 4b).
+ */
+export function activityLabel(updatedAt: Date, current: boolean, todayRome: string): string {
+  if (current) return 'attiva ora (questo dispositivo)'
+  const days = Math.round((Date.parse(todayRome) - Date.parse(romeDay(updatedAt))) / 86_400_000)
+  if (days <= 0) return 'oggi'
+  return days === 1 ? 'ieri' : `${days} giorni fa`
+}
+
+export type SessionRow = {
+  id: string
+  device: string
+  kind: DeviceKind
+  createdAt: Date
+  lastActive: Date
+  expiresAt: Date
+  current: boolean
+}
+
+/**
+ * Sessioni non scadute dell'utente, senza token ne' IP (select esplicita):
+ * la corrente per prima, poi la piu' recente, poi per id.
+ */
+export async function listUserSessions(userId: string, currentSessionId: string): Promise<SessionRow[]> {
+  const rows = await prisma.session.findMany({
+    where: { userId, expiresAt: { gt: new Date() } },
+    select: { id: true, userAgent: true, createdAt: true, updatedAt: true, expiresAt: true },
+  })
+  return rows
+    .map((row) => {
+      const { label, kind } = deviceLabel(row.userAgent)
+      return {
+        id: row.id,
+        device: label,
+        kind,
+        createdAt: row.createdAt,
+        lastActive: row.updatedAt,
+        expiresAt: row.expiresAt,
+        current: row.id === currentSessionId,
+      }
+    })
+    .sort(
+      (a, b) =>
+        Number(b.current) - Number(a.current) ||
+        b.lastActive.getTime() - a.lastActive.getTime() ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    )
 }

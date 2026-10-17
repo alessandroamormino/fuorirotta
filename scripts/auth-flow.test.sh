@@ -359,3 +359,78 @@ code="$(patch_name s21 198.51.100.45 '{"name":"Anonimo"}' -H "Origin: ${origin}"
 [[ "$(cat "${tmp_dir}/s21.b")" == '{"error":"unauthenticated"}' ]] || fail "S21: corpo inatteso '$(cat "${tmp_dir}/s21.b")'"
 no_store s21 S21
 echo "ok  S21: PATCH senza cookie -> 401 {\"error\":\"unauthenticated\"}"
+
+# --- S22-S28: sessioni attive (AUTH-06, D-08) ---------------------------------------------
+ua_mac='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+ua_iphone='Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+read -r a_user a_cookie a_token <<<"$(helper mint s22-a@fixture.invalid 'Anna A' 0 "${ua_mac}" | tail -n 1)"
+a_id="$(psql_dev "SELECT id FROM auth_session WHERE token = '${a_token}'")"
+a_cookie_hdr="Cookie: fuorirotta.session_token=${a_cookie}"
+read -r a_old_id _a_old_cookie _a_old_token <<<"$(helper session "${a_user}" 3 "${ua_iphone}" | tail -n 1)"
+read -r b_user b_cookie b_token <<<"$(helper mint s22-b@fixture.invalid 'Bruno B' 0 "${ua_mac}" | tail -n 1)"
+b_id="$(psql_dev "SELECT id FROM auth_session WHERE token = '${b_token}'")"
+session_count() { psql_dev "SELECT count(*) FROM auth_session WHERE user_id = '$1'"; }
+
+code="$(call s22 GET /api/v1/me/sessions 198.51.100.51 -H "${a_cookie_hdr}")"
+[[ "${code}" == "200" ]] || fail "S22: GET sessions: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s22.b"))"
+no_store s22 S22
+[[ "$(json_get "${tmp_dir}/s22.b" 'j.sessions.length')" == "2" ]] || fail "S22: attese 2 sessioni (anche quella di 3 giorni fa), corpo: '$(cat "${tmp_dir}/s22.b")'"
+[[ "$(json_get "${tmp_dir}/s22.b" 'j.sessions[0].id')" == "${a_id}" && "$(json_get "${tmp_dir}/s22.b" 'j.sessions[0].current')" == "true" ]] \
+  || fail "S22: la prima riga non e' la sessione corrente"
+[[ "$(json_get "${tmp_dir}/s22.b" 'j.sessions[1].id')" == "${a_old_id}" && "$(json_get "${tmp_dir}/s22.b" 'j.sessions[1].current')" == "false" ]] \
+  || fail "S22: la seconda riga non e' la sessione di 3 giorni fa"
+[[ "$(json_get "${tmp_dir}/s22.b" 'j.sessions.map((s) => s.device + "/" + s.kind).join(",")')" == "Chrome su Mac/desktop,Safari su iPhone/phone" ]] \
+  || fail "S22: device/kind inattesi: '$(cat "${tmp_dir}/s22.b")'"
+[[ "$(json_get "${tmp_dir}/s22.b" 'j.sessions.every((s) => Object.keys(s).sort().join() === "createdAt,current,device,expiresAt,id,kind,lastActive")')" == "true" ]] \
+  || fail "S22: le chiavi di ogni riga non sono esattamente id/device/kind/createdAt/lastActive/expiresAt/current: '$(cat "${tmp_dir}/s22.b")'"
+if grep -qiE 'token|ipAddress' "${tmp_dir}/s22.b"; then fail "S22: il corpo nomina token o ipAddress"; fi
+echo "ok  S22: l'elenco ha 2 righe (la corrente prima, quella di 3 giorni fa c'e'), 'Chrome su Mac' e 'Safari su iPhone', chiavi esatte, niente token ne' IP"
+
+code="$(call s23 DELETE "/api/v1/me/sessions/${b_id}" 198.51.100.52 -H "Origin: ${origin}" -H "${a_cookie_hdr}")"
+[[ "${code}" == "404" ]] || fail "S23: DELETE dell'id di un altro utente: atteso 404, ottenuto ${code}"
+[[ "$(psql_dev "SELECT count(*) FROM auth_session WHERE id = '${b_id}'")" == "1" ]] || fail "S23: la sessione di B e' stata cancellata (IDOR)"
+no_store s23 S23
+echo "ok  S23: DELETE /sessions/<id di B> con il cookie di A -> 404 e la riga di B resta"
+
+code="$(call s24 DELETE "/api/v1/me/sessions/${a_id}" 198.51.100.53 -H "Origin: ${origin}" -H "${a_cookie_hdr}")"
+[[ "${code}" == "400" ]] || fail "S24: DELETE della sessione corrente: atteso 400, ottenuto ${code}"
+[[ "$(cat "${tmp_dir}/s24.b")" == '{"error":"current"}' ]] || fail "S24: corpo inatteso '$(cat "${tmp_dir}/s24.b")'"
+[[ "$(session_count "${a_user}")" == "2" ]] || fail "S24: una richiesta rifiutata ha cambiato le sessioni di A"
+echo "ok  S24: DELETE della sessione corrente -> 400 {\"error\":\"current\"}, nulla cancellato"
+
+code="$(call s25 DELETE "/api/v1/me/sessions/${a_old_id}" 198.51.100.54 -H "Origin: ${origin}" -H "${a_cookie_hdr}")"
+[[ "${code}" == "200" ]] || fail "S25: DELETE della sessione di 3 giorni fa: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s25.b"))"
+[[ "$(cat "${tmp_dir}/s25.b")" == '{"revoked":1}' ]] || fail "S25: corpo inatteso '$(cat "${tmp_dir}/s25.b")'"
+code="$(call s25b GET /api/v1/me/sessions 198.51.100.54 -H "${a_cookie_hdr}")"
+[[ "$(json_get "${tmp_dir}/s25b.b" 'j.sessions.length')" == "1" ]] || fail "S25: dopo la revoca l'elenco deve avere 1 riga: '$(cat "${tmp_dir}/s25b.b")'"
+echo "ok  S25: DELETE della sessione di 3 giorni fa -> 200 {\"revoked\":1}, l'elenco ha 1 riga"
+
+helper session "${a_user}" 1 "${ua_iphone}" >/dev/null
+helper session "${a_user}" 2 >/dev/null
+[[ "$(session_count "${a_user}")" == "3" ]] || fail "S26: preparazione: attese 3 sessioni di A"
+code="$(call s26 DELETE /api/v1/me/sessions 198.51.100.55 -H "Origin: ${origin}" -H "${a_cookie_hdr}")"
+[[ "${code}" == "200" ]] || fail "S26: DELETE di tutte le altre: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s26.b"))"
+[[ "$(cat "${tmp_dir}/s26.b")" == '{"revoked":2}' ]] || fail "S26: corpo atteso {\"revoked\":2}, ottenuto '$(cat "${tmp_dir}/s26.b")'"
+[[ "$(psql_dev "SELECT string_agg(id, ',') FROM auth_session WHERE user_id = '${a_user}'")" == "${a_id}" ]] \
+  || fail "S26: deve restare esattamente la sessione corrente"
+[[ "$(session_count "${b_user}")" == "1" ]] || fail "S26: le sessioni di B sono cambiate"
+echo "ok  S26: DELETE /sessions -> {\"revoked\":2}, resta solo la sessione corrente di A, B intatto"
+
+for target in /api/v1/me/sessions "/api/v1/me/sessions/${a_old_id}"; do
+  code="$(call s27a DELETE "${target}" 198.51.100.56 -H "${a_cookie_hdr}")"
+  [[ "${code}" == "403" ]] || fail "S27: DELETE ${target} senza Origin: atteso 403, ottenuto ${code}"
+  no_store s27a S27
+  code="$(call s27b DELETE "${target}" 198.51.100.56 -H "Origin: ${origin}")"
+  [[ "${code}" == "401" ]] || fail "S27: DELETE ${target} senza cookie: atteso 401, ottenuto ${code}"
+  no_store s27b S27
+done
+[[ "$(session_count "${a_user}")" == "1" ]] || fail "S27: una richiesta rifiutata ha cambiato le sessioni di A"
+echo "ok  S27: DELETE senza Origin -> 403, senza cookie -> 401 (elenco e singola), private no-store"
+
+long_id="$(node -e 'process.stdout.write("a".repeat(65))')"
+for bad in "${long_id}" 'a%2Fb' '%2e%2e%2f%2e%2e' 'x.y'; do
+  code="$(call s28 DELETE "/api/v1/me/sessions/${bad}" 198.51.100.57 -H "Origin: ${origin}" -H "${a_cookie_hdr}")"
+  [[ "${code}" == "404" ]] || fail "S28: id '${bad}': atteso 404, ottenuto ${code}"
+done
+[[ "$(session_count "${a_user}")" == "1" && "$(session_count "${b_user}")" == "1" ]] || fail "S28: un id non valido ha cancellato una riga"
+echo "ok  S28: un id di 65 caratteri, con barra codificata, con '..' o con un punto -> 404, nessuna riga toccata"
