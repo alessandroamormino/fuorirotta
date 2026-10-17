@@ -39,7 +39,7 @@ services:
       # abortire compose: il rilascio con l'interruttore spento parte prima che
       # un segreto sia sul server; lib/auth.ts rifiuta di accendere l'accesso
       # con un insieme incompleto. Solo a runtime, mai come build arg.
-      AUTH_ENABLED: ${AUTH_ENABLED:-0}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

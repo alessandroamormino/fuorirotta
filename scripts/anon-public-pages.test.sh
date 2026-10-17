@@ -12,7 +12,7 @@
 # una pagina non deterministica fallisce rumorosamente qui, non viene
 # normalizzata fino a sparire.
 #
-# Perche' la build usa NEXT_PUBLIC_AUTH_ENABLED=1: e' l'HTML del giorno in cui
+# Perche' la build usa NEXT_PUBLIC_AUTH_ENABLED=true: e' l'HTML del giorno in cui
 # si accende l'accesso (icona della persona inclusa, dal piano 21-06 in poi).
 # La variante senza icona non si costruisce qui: una build sola resta in pochi
 # minuti, e la sua assenza si controlla in produzione dopo il rilascio a
@@ -54,7 +54,7 @@ server_pid=""
 # Valori finti ma di forma valida: il segreto ha 40 caratteri (minimo 32).
 test_secret="anon-pages-test-secret-0123456789abcdefg"
 auth_env=(
-  AUTH_ENABLED=1
+  AUTH_ENABLED=true
   "BETTER_AUTH_URL=${base_url}"
   "BETTER_AUTH_SECRET=${test_secret}"
   GOOGLE_CLIENT_ID=test-client-id.apps.googleusercontent.com
@@ -126,10 +126,10 @@ helper cleanup >/dev/null
 psql_dev "DELETE FROM auth_rate_limit WHERE key LIKE '198.51.100.%'" >/dev/null
 
 # --- Build di produzione ----------------------------------------------------
-# NEXT_PUBLIC_AUTH_ENABLED=1 viene inlinato nel bundle; i segreti restano vuoti
+# NEXT_PUBLIC_AUTH_ENABLED=true viene inlinato nel bundle; i segreti restano vuoti
 # (nessun segreto nella build, D-19).
 bash scripts/dev-db.sh env \
-  NEXT_PUBLIC_AUTH_ENABLED=1 AUTH_ENABLED=0 \
+  NEXT_PUBLIC_AUTH_ENABLED=true AUTH_ENABLED=false \
   BETTER_AUTH_URL= BETTER_AUTH_SECRET= GOOGLE_CLIENT_ID= GOOGLE_CLIENT_SECRET= \
   npx next build >"${tmp_dir}/build.log" 2>&1 || {
   tail -n 40 "${tmp_dir}/build.log"
@@ -252,7 +252,7 @@ start_server() {
 }
 
 # --- Run A: interruttore spento ------------------------------------------------------
-start_server AUTH_ENABLED=0 BETTER_AUTH_URL= BETTER_AUTH_SECRET= GOOGLE_CLIENT_ID= GOOGLE_CLIENT_SECRET=
+start_server AUTH_ENABLED=false BETTER_AUTH_URL= BETTER_AUTH_SECRET= GOOGLE_CLIENT_ID= GOOGLE_CLIENT_SECRET=
 echo "ok  next start (produzione) sulla porta ${port}, interruttore spento, Postgres locale"
 
 check_pages A

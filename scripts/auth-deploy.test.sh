@@ -76,8 +76,8 @@ for name in AUTH_ENABLED BETTER_AUTH_URL BETTER_AUTH_SECRET GOOGLE_CLIENT_ID GOO
   printf '%s\n' "${environment}" | grep -qE "^[[:space:]]*${name}:[[:space:]]*\\\$\\{${name}:-[^}]*\\}[[:space:]]*\$" \
     || fail "D2: ${name} non e' sotto environment nella forma \${${name}:-...}"
 done
-printf '%s\n' "${environment}" | grep -qE '^[[:space:]]*AUTH_ENABLED:[[:space:]]*\$\{AUTH_ENABLED:-0\}[[:space:]]*$' \
-  || fail "D2: AUTH_ENABLED deve avere default 0"
+printf '%s\n' "${environment}" | grep -qE '^[[:space:]]*AUTH_ENABLED:[[:space:]]*\$\{AUTH_ENABLED:-false\}[[:space:]]*$' \
+  || fail "D2: AUTH_ENABLED deve avere default false"
 echo "ok  D2: i cinque nomi a runtime sono sotto environment con default :-"
 
 # --- D3 ------------------------------------------------------------------------

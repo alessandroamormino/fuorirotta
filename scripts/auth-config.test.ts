@@ -18,7 +18,7 @@ const root = join(__dirname, '..')
 // avviso di bassa entropia.
 const SECRET = 'q8Vn2LzTfX0cRk5aYw9JdHs3UeBm7PoG1iNtZ4Ab'
 Object.assign(process.env, {
-  AUTH_ENABLED: '1',
+  AUTH_ENABLED: 'true',
   BETTER_AUTH_URL: 'https://fuori-rotta.it',
   BETTER_AUTH_SECRET: SECRET,
   GOOGLE_CLIENT_ID: 'test-client-id.apps.googleusercontent.com',
@@ -83,9 +83,12 @@ async function main(): Promise<void> {
   try {
     check('authEnabled: attivo con la configurazione completa', authEnabled() === true)
 
-    process.env.AUTH_ENABLED = '0'
-    check('authEnabled: AUTH_ENABLED=0 -> spento e senza log', authEnabled() === false && logged.length === 0)
-    process.env.AUTH_ENABLED = '1'
+    // Solo "true" accende, come APP_DEBUG: "1", "false" e vuoto sono spenti.
+    for (const off of ['false', '1', '']) {
+      process.env.AUTH_ENABLED = off
+      check(`authEnabled: AUTH_ENABLED='${off}' -> spento e senza log`, authEnabled() === false && logged.length === 0)
+    }
+    process.env.AUTH_ENABLED = 'true'
 
     process.env.BETTER_AUTH_SECRET = SECRET.slice(0, 31)
     check('authEnabled: segreto da 31 caratteri -> spento', authEnabled() === false)

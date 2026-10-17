@@ -36,7 +36,7 @@ export function UserStateProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		// Il valore e' inlinato alla build: senza il flag non parte nessuna richiesta.
-		if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== "1") return;
+		if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== "true") return;
 		const controller = new AbortController();
 		fetch("/api/v1/me/state", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
 			.then((res) => (res.ok ? res.json() : null))

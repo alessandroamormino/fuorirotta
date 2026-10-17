@@ -20,7 +20,7 @@ export default function AccountButton() {
 	const { enabled, user, openSignIn } = useUserState();
 	const pathname = usePathname();
 
-	if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== "1" || enabled === false) return null;
+	if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== "true" || enabled === false) return null;
 
 	if (user) {
 		return (

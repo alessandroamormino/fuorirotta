@@ -35,7 +35,7 @@ function fail(message: string): never {
 
 function requireAuth() {
   const auth = getAuth()
-  if (!auth) fail("auth non attivo: servono AUTH_ENABLED=1 e le variabili BETTER_AUTH_* / GOOGLE_*")
+  if (!auth) fail("auth non attivo: servono AUTH_ENABLED=true e le variabili BETTER_AUTH_* / GOOGLE_*")
   return auth
 }
 

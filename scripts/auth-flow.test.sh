@@ -49,7 +49,7 @@ server_pid=""
 # Valori finti, ma di forma valida: il segreto ha 40 caratteri (minimo 32).
 test_secret="auth-flow-test-secret-0123456789abcdefgh"
 auth_env=(
-  AUTH_ENABLED=1
+  AUTH_ENABLED=true
   "BETTER_AUTH_URL=${base_url}"
   "BETTER_AUTH_SECRET=${test_secret}"
   GOOGLE_CLIENT_ID=test-client-id.apps.googleusercontent.com
