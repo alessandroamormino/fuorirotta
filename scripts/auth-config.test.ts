@@ -179,6 +179,46 @@ async function main(): Promise<void> {
     )
   }
 
+  // --- Etichetta del dispositivo e giorno di attivita' (D-08, AUTH-06) --------
+  const { deviceLabel } = await import('../lib/userAgent')
+  const { activityLabel } = await import('../lib/account')
+  const UA = {
+    chromeMac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    safariIphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    safariIpad: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    edgeWindows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+    chromeAndroid: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    chromeAndroidTablet: 'Mozilla/5.0 (Linux; Android 13; SM-X700) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    firefoxWindows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+  }
+  const device = (name: string, ua: string | null | undefined, label: string, kind: string) => {
+    const got = deviceLabel(ua)
+    check(`deviceLabel: ${name} -> ${label} (${kind})`, got.label === label && got.kind === kind, `${got.label} / ${got.kind}`)
+  }
+  device('Chrome su Mac', UA.chromeMac, 'Chrome su Mac', 'desktop')
+  device('Safari su iPhone', UA.safariIphone, 'Safari su iPhone', 'phone')
+  device('Safari su iPad', UA.safariIpad, 'Safari su iPad', 'tablet')
+  device('Edge (contiene anche Chrome/ e Safari/)', UA.edgeWindows, 'Edge su Windows', 'desktop')
+  device('Chrome su Android telefono', UA.chromeAndroid, 'Chrome su Android', 'phone')
+  device('Chrome su Android senza Mobile e un tablet', UA.chromeAndroidTablet, 'Chrome su Android', 'tablet')
+  device('Firefox su Windows', UA.firefoxWindows, 'Firefox su Windows', 'desktop')
+  device('stringa vuota', '', 'Browser sconosciuto', 'desktop')
+  device('null', null, 'Browser sconosciuto', 'desktop')
+  device('curl', 'curl/8.4.0', 'Browser sconosciuto', 'desktop')
+
+  const at = (iso: string) => new Date(iso)
+  const today = '2026-10-17'
+  const day = (name: string, updatedAt: Date, current: boolean, expected: string) => {
+    const got = activityLabel(updatedAt, current, today)
+    check(`activityLabel: ${name} -> '${expected}'`, got === expected, got)
+  }
+  day('sessione corrente', at('2026-10-10T10:00:00Z'), true, 'attiva ora (questo dispositivo)')
+  day('stesso giorno di Roma', at('2026-10-17T05:00:00Z'), false, 'oggi')
+  day('un giorno prima', at('2026-10-16T12:00:00Z'), false, 'ieri')
+  day('tre giorni prima', at('2026-10-14T12:00:00Z'), false, '3 giorni fa')
+  // 22:30 UTC del 16 sono le 00:30 del 17 a Roma (CEST): il giorno e' quello di Roma
+  day('22:30 UTC del giorno prima e gia il giorno dopo a Roma', at('2026-10-16T22:30:00Z'), false, 'oggi')
+
   // --- Versione esatta, senza ^ ne ~ -----------------------------------------
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
   const installed = (JSON.parse(readFileSync(join(root, 'node_modules/better-auth/package.json'), 'utf8')) as { version: string }).version
