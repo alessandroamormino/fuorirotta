@@ -199,8 +199,9 @@ model MapClusterCache {
 // quelli di default della libreria di proposito: l'adapter Prisma chiama
 // prisma[modelName], quindi rinominarli lo rompe; si rinominano solo tabelle e
 // colonne (@@map/@map).
-// User.image esiste solo perche' la libreria lo dichiara e resta NULL (D-07:
-// niente foto Google). Account.password resta NULL (solo SSO, Fase 20 D-12).
+// User.image e' l'indirizzo della foto del profilo Google (D-20): solo https e
+// *.googleusercontent.com, altrimenti NULL; si cancella con l'utente.
+// Account.password resta NULL (solo SSO, Fase 20 D-12).
 // Le FK verso auth_user sono ON DELETE CASCADE: cancellare l'utente toglie
 // sessioni e account senza dipendere dall'ordine di cancellazione (D-10).
 model User {

@@ -16,7 +16,7 @@ import SignInDialog from "./SignIn";
 export interface UserState {
 	/** null finche' lo stato non e' arrivato; false = interruttore spento sul server. */
 	enabled: boolean | null;
-	user: { name: string; email: string } | null;
+	user: { name: string; email: string; image: string | null } | null;
 	openSignIn: () => void;
 }
 
@@ -40,9 +40,9 @@ export function UserStateProvider({ children }: { children: ReactNode }) {
 		const controller = new AbortController();
 		fetch("/api/v1/me/state", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
 			.then((res) => (res.ok ? res.json() : null))
-			.then((data: { enabled?: boolean; user?: { name: string; email: string } | null } | null) => {
+			.then((data: { enabled?: boolean; user?: { name: string; email: string; image?: string | null } | null } | null) => {
 				if (!data || typeof data.enabled !== "boolean") return;
-				setRemote({ enabled: data.enabled, user: data.user ?? null });
+				setRemote({ enabled: data.enabled, user: data.user ? { ...data.user, image: data.user.image ?? null } : null });
 			})
 			.catch(() => {
 				// Lo stato e' una lettura di sfondo: se fallisce resta l'ospite, e un

@@ -10,6 +10,7 @@ import SessionsList from "@/components/account/SessionsList";
 import { DeleteAccountSection, ExportButton, SignOutButton } from "@/components/account/AccountActions";
 import { activityLabel, listUserSessions } from "@/lib/account";
 import { todayInRome } from "@/lib/dateWindow";
+import { googleProfileImage } from "@/lib/profileImage";
 
 // Dinamica per costruzione: legge la sessione, quindi non puo' mai finire in
 // una cache condivisa. Nessun'altra pagina importa il codice di questa (D-06).
@@ -48,7 +49,7 @@ export default async function AccountPage() {
 						<h2 id="account-profilo" className={SECTION_TITLE}>
 							Profilo
 						</h2>
-						<ProfileCard initialName={user.name} email={user.email} />
+						<ProfileCard initialName={user.name} email={user.email} image={googleProfileImage(user.image)} />
 					</section>
 
 					<section aria-labelledby="account-sessioni">

@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { User } from "lucide-react";
 import { displayInitial } from "@/lib/displayName";
+import Avatar from "./Avatar";
 import { useUserState } from "./UserStateProvider";
 
 /**
  * Icona della persona accanto al toggle del tema (D-01). Server e primo render
- * client mostrano sempre l'ospite; l'iniziale arriva dopo la richiesta di stato,
+ * client mostrano sempre l'ospite; l'avatar (foto di Google o iniziale, D-20) arriva dopo la richiesta di stato,
  * nella STESSA scatola da 40/44px, cosi' lo scambio non sposta nulla.
  * Senza il flag di build il pulsante non esiste nell'HTML.
  */
@@ -28,9 +29,9 @@ export default function AccountButton() {
 				href="/account"
 				aria-label="Il tuo account"
 				aria-current={pathname === "/account" ? "page" : undefined}
-				className={`${BOX} bg-foreground text-background text-sm font-medium`}
+				className={`${BOX} overflow-hidden bg-foreground text-background text-sm font-medium`}
 			>
-				{displayInitial(user.name, user.email)}
+				<Avatar src={user.image} initial={displayInitial(user.name, user.email)} />
 			</Link>
 		);
 	}
