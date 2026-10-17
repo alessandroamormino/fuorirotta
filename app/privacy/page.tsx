@@ -143,7 +143,7 @@ export default function PrivacyPage() {
 							["Garanzie", "Con Hetzner abbiamo concluso l'accordo sul trattamento dei dati."],
 							[
 								"Copie di sicurezza",
-								"Anche le copie di sicurezza cifrate del database sono conservate presso Hetzner (Hetzner Object Storage, nell'Unione europea).",
+								"Le copie di sicurezza cifrate del database vengono create ogni giorno su questo stesso server.",
 							],
 						],
 					},
@@ -220,7 +220,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Facciamo ogni giorno una copia cifrata del database e la teniamo per 14 giorni. Se elimini l'account, i tuoi dati scompaiono subito dal database ma possono restare nelle copie di sicurezza già fatte fino a 14 giorni; poi scompaiono anche da lì. Le copie sono cifrate e non vengono riutilizzate per altri scopi.",
+								"Ogni giorno facciamo una copia cifrata del database sul server e la copiamo su un dispositivo di archiviazione del titolare (in casa, in Italia), non accessibile da internet. Ogni copia è leggibile solo con una chiave in possesso esclusivo del titolare e la teniamo per 14 giorni, poi la cancelliamo. Se elimini l'account, i tuoi dati scompaiono subito dal database ma possono restare nelle copie di sicurezza già fatte fino a 14 giorni; poi scompaiono anche da lì. Le copie non vengono riutilizzate per altri scopi.",
 							],
 						],
 					},
