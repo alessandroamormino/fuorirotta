@@ -15,6 +15,10 @@
 #   B6  ramo object storage con un rclone finto nel PATH: caricamento,
 #       verifica, file locale tolto solo dopo, potatura con la retention;
 #       caricamento fallito = file locale conservato ed exit 1
+#   B7  backup-pull.sh (D-21, il Mac che scarica nel NAS) con ssh, mount e
+#       rsync-remoto finti: volume smontato = exit non-zero e niente scritto;
+#       elenco remoto vuoto = niente delete; giro normale = specchio con il
+#       file vecchio tolto dal NAS
 #
 # Il server di produzione non si tocca: la DIRECT_URL e' letterale qui sotto.
 set -uo pipefail
@@ -142,4 +146,68 @@ FAKE_RCLONE_FAIL=1 PATH="${fake_bin}:${PATH}" ENV_FILE="${env_file}" bash script
 [[ "$(find "${backups}" -name 'fuorirotta-*.dump.gpg' | wc -l | tr -d '[:space:]')" -eq 1 ]] || fail "B6: caricamento fallito: il file locale doveva restare"
 ok "B6: object storage: caricamento verificato, locale tolto dopo, potatura 14d; fallimento = locale conservato ed exit 1"
 
-echo "PASS: backup cifrato end to end sul database locale (D-18)"
+# --- B7 ------------------------------------------------------------------------
+# Il server finto e' una cartella locale: ssh finto = esegue il comando in bash,
+# rsync finto = toglie "host:" e il -e, poi rsync vero su cartelle locali, mount
+# finto = dichiara montato solo cio' che la prova decide. Il pull non conosce
+# ne' il database ne' gpg: bastano file qualunque col nome giusto.
+command -v rsync >/dev/null || fail "B7: rsync non installato"
+real_rsync="$(command -v rsync)"
+pull_bin="${work}/pullbin"
+srv="${work}/server"
+nas="${work}/nas"
+mkdir -p "${pull_bin}" "${srv}" "${nas}"
+cat > "${pull_bin}/ssh" <<'EOF'
+#!/usr/bin/env bash
+bash -c "${@: -1}"
+EOF
+cat > "${pull_bin}/rsync" <<EOF
+#!/usr/bin/env bash
+args=()
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    -e) shift ;;
+    *:/*) args+=("\${1#*:}") ;;
+    *) args+=("\$1") ;;
+  esac
+  shift
+done
+exec "${real_rsync}" "\${args[@]}"
+EOF
+cat > "${pull_bin}/mount" <<'EOF'
+#!/usr/bin/env bash
+[[ -n "${FAKE_MOUNT_POINT:-}" ]] && echo "//x@NAS/share on ${FAKE_MOUNT_POINT} (smbfs, nodev)"
+exit 0
+EOF
+chmod +x "${pull_bin}"/*
+pull() {
+  PATH="${pull_bin}:${PATH}" BACKUP_PULL_HOST=x@server BACKUP_PULL_REMOTE_DIR="${srv}" \
+    BACKUP_PULL_DEST="${nas}" BACKUP_PULL_LOG="${work}/pull.log" bash scripts/backup-pull.sh > "${work}/pull.out" 2>&1
+}
+for n in 20260101T000000Z 20260102T000000Z 20260103T000000Z; do echo "dump ${n}" > "${srv}/fuorirotta-${n}.dump.gpg"; done
+echo partial > "${srv}/.fuorirotta-20260104T000000Z.dump.gpg.partial"
+
+# (a) volume non montato: errore e nessun file scritto
+unset FAKE_MOUNT_POINT
+echo old > "${nas}/fuorirotta-20251231T000000Z.dump.gpg"
+if pull; then fail "B7a: volume smontato ma exit 0"; fi
+[[ "$(ls "${nas}" | wc -l | tr -d '[:space:]')" -eq 1 && -f "${nas}/fuorirotta-20251231T000000Z.dump.gpg" ]] \
+  || fail "B7a: con il volume smontato la destinazione e' cambiata"
+grep -q 'status=FAILED' "${work}/pull.log" || fail "B7a: nessuna riga FAILED nel log"
+
+# (b) elenco remoto vuoto: errore e il NAS resta intatto (niente --delete)
+export FAKE_MOUNT_POINT="${nas}"
+real_srv="${srv}"; srv="${work}/server-empty"; mkdir -p "${srv}"
+if pull; then fail "B7b: elenco remoto vuoto ma exit 0"; fi
+[[ -f "${nas}/fuorirotta-20251231T000000Z.dump.gpg" ]] || fail "B7b: un elenco remoto vuoto ha cancellato dal NAS"
+srv="${real_srv}"
+
+# (c) giro normale: i tre del server arrivano, il vecchio sparisce, il .partial no
+pull || { cat "${work}/pull.out"; fail "B7c: giro normale uscito non-zero"; }
+got="$(ls "${nas}" | tr '\n' ' ')"
+want="fuorirotta-20260101T000000Z.dump.gpg fuorirotta-20260102T000000Z.dump.gpg fuorirotta-20260103T000000Z.dump.gpg "
+[[ "${got}" == "${want}" ]] || fail "B7c: NAS = '${got}', atteso '${want}'"
+grep -q 'status=ok file=fuorirotta-20260103T000000Z.dump.gpg' "${work}/pull.log" || fail "B7c: riga ok mancante nel log"
+ok "B7: pull nel NAS: smontato = niente scritto, elenco vuoto = niente delete, giro normale = specchio senza il file vecchio"
+
+echo "PASS: backup cifrato end to end sul database locale (D-18) e pull nel NAS (D-21)"
