@@ -13,7 +13,7 @@
  */
 
 /** Si incrementa a ogni cambio visibile della card: finisce in ?v= e rompe la cache dei crawler. */
-export const OG_VERSION = 3
+export const OG_VERSION = 4
 
 /**
  * Marchio "D2 · F col giro" (concept approvato il 2026-10-17, puo' essere

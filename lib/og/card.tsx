@@ -33,16 +33,19 @@ const MAX_TITLE = 90
 const MAX_META = 50
 
 /**
- * Entita' decodificate, poi solo scrittura latina, cifre, punteggiatura,
- * valute e spazi, tutto sotto U+2C00 (il resto Bricolage non lo ha). Un glifo
+ * Entita' decodificate, accenti ricomposti (NFC: il testo scrapato puo' essere
+ * decomposto), poi solo scrittura latina, cifre, punteggiatura, valute, i
+ * simboli ASCII (+ = < > ~ |), il grado e gli spazi, tutto sotto
+ * U+2C00 (il resto Bricolage non lo ha). Un glifo
  * assente fa scaricare a Satori un font o un emoji da un CDN a ogni render
  * (T-20-21): meglio toglierlo qui. Newline e tab diventano spazi prima del
  * filtro, cosi' due parole non si fondono.
  */
 function clean(text: string): string {
   return decodeHtmlEntities(text)
+    .normalize('NFC')
     .replace(/\s+/g, ' ')
-    .replace(/[^\p{Script=Latin}\p{Nd}\p{P}\p{Sc}\p{Zs}]/gu, '')
+    .replace(/[^\p{Script=Latin}\p{Nd}\p{P}\p{Sc}\p{Zs}+=<>~|\u00b0]/gu, '')
     .replace(/[^\u0000-\u2bff]/gu, '')
     .replace(/ +/g, ' ')
     .trim()
@@ -187,6 +190,12 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   const t2 = content({ title: 'Festa Привет 祭り 2027, l’è €5' }).title
   assertCheck(t2 === 'Festa 2027, l’è €5', `titolo con cirillico e CJK: "${t2}"`)
   assertCheck(!/[^\p{Script=Latin}\p{N}\p{P}\p{S}\s]/u.test(t2) && !/\p{Extended_Pictographic}/u.test(t2), 'titolo senza glifi fuori intervallo')
+
+  // Simboli ASCII e grado restano; l'accento decomposto (NFD) si ricompone.
+  const t4 = content({ title: 'Rock + Blues 5\u00b0 | A=B <18 ~' }).title
+  assertCheck(t4 === 'Rock + Blues 5\u00b0 | A=B <18 ~', `titolo con simboli: "${t4}"`)
+  const t5 = content({ title: 'Caffe\u0301 in piazza' }).title
+  assertCheck(t5 === 'Caff\u00e9 in piazza', `titolo NFD: "${t5}"`)
 
   // 150 caratteri: al massimo 91, finisce con "…", taglio su parola intera.
   const words = Array.from({ length: 30 }, (_, i) => `parola${i}`).join(' ')
