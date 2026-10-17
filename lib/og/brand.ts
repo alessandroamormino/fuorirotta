@@ -13,7 +13,23 @@
  */
 
 /** Si incrementa a ogni cambio visibile della card: finisce in ?v= e rompe la cache dei crawler. */
-export const OG_VERSION = 1
+export const OG_VERSION = 2
+
+/**
+ * Marchio "D2 · F col giro" (concept approvato il 2026-10-17, puo' essere
+ * sostituito). Sorgente master: public/brand/marchio.svg; qui sta una copia
+ * ritagliata sul disegno (x 52-226, y 16-254; il viewBox parte da 0 0 e lo
+ * spostamento sta nel <g>), con i colori in rgb() (niente esadecimali in lib/).
+ * Solo tracciati, un cerchio e un anello evenodd: niente maschere, filtri o testo.
+ */
+const MARK_BLUE = 'rgb(10, 102, 255)'
+const MARK_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 174 238" width="174" height="238">' +
+  '<g transform="translate(-52 -16)">' +
+  `<path fill="none" stroke="${MARK_BLUE}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" d="M80 186 V170 C80 124, 188 92, 188 142 C188 192, 80 172, 80 122 V72 A24 24 0 0 1 104 48 H168"/>` +
+  `<path fill="${MARK_BLUE}" fill-rule="evenodd" d="M80 206 A20 20 0 1 1 79.9 206 Z M80 217 A9 9 0 1 0 80.1 217 Z"/>` +
+  `<circle cx="202" cy="40" r="16" fill="${MARK_BLUE}"/>` +
+  '</g></svg>'
 
 export const OG_BRAND = {
   canvas: 'rgb(255, 255, 255)',
@@ -33,9 +49,9 @@ export const OG_BRAND = {
   } as Record<string, string>,
   fallbackCategory: 'Altro',
   fontFamily: 'geist',
-  fontWeight: 400 as 400 | 500 | 600 | 700,
-  /** URL o data-URL di un logo da mostrare prima del wordmark; null nella versione neutra. */
-  logo: null as string | null,
+  fontWeight: 700 as 400 | 500 | 600 | 700,
+  /** URL o data-URL di un logo da mostrare prima del wordmark. */
+  logo: `data:image/svg+xml,${encodeURIComponent(MARK_SVG)}` as string | null,
   wordmark: 'Fuorirotta',
   domain: 'fuori-rotta.it',
 }
