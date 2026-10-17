@@ -1,4 +1,5 @@
 import { getAuth } from '@/lib/auth'
+import { googleProfileImage } from '@/lib/profileImage'
 
 // Stato dell'utente per le isole client, dopo l'idratazione: le pagine
 // pubbliche non leggono mai cookie ne' header (ACCT-05), quindi chi vuole
@@ -17,7 +18,9 @@ export async function GET(req: Request): Promise<Response> {
     returnHeaders: true,
   })
   const res = Response.json(
-    { enabled: true, user: session ? { name: session.user.name, email: session.user.email } : null },
+    { enabled: true, user: session
+        ? { name: session.user.name, email: session.user.email, image: googleProfileImage(session.user.image) }
+        : null },
     { headers: NO_STORE },
   )
   // Rinnovo a scorrimento (D-04): getSession allunga la riga nel database, ma

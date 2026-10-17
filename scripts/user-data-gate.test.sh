@@ -127,12 +127,13 @@ psql_dev "DROP TABLE __user_data_gate_probe, __user_data_gate_probe_orfana" >/de
 ok "S6: il gate rileva FK senza cascata, tabella non registrata e user_id senza FK"
 
 # --- S7: l'export non seleziona colonne segrete -------------------------------
-# Token di sessione, token/password dell'account e foto dell'utente non devono
-# comparire nel codice del registro (commenti esclusi).
+# Token di sessione e token/password dell'account non devono comparire nel
+# codice del registro (commenti esclusi). La foto (image) e' un dato dell'utente
+# esportato dalla rotta, non un segreto (D-20).
 forbidden_in() {
-  sed -E '/^[[:space:]]*(\/\/|\*)/d' | grep -wE 'token|accessToken|refreshToken|idToken|password|image' || true
+  sed -E '/^[[:space:]]*(\/\/|\*)/d' | grep -wE 'token|accessToken|refreshToken|idToken|password' || true
 }
 [[ -n "$(echo 'select: { accessToken: true }' | forbidden_in)" ]] || fail "S7: il controllo non vede un nome vietato (vacuo)"
 leaked="$(forbidden_in < lib/userData/registry.ts)"
 [[ -z "${leaked}" ]] || fail "S7: colonne segrete nel registro: ${leaked}"
-ok "S7: il registro non nomina token, password ne' foto"
+ok "S7: il registro non nomina token ne' password"

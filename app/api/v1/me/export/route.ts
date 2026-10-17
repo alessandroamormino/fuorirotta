@@ -11,10 +11,10 @@ export async function GET(req: Request): Promise<Response> {
   const ctx = await requireUser(req)
   if (ctx instanceof Response) return ctx
 
-  // Select esplicita: la riga utente ha anche image e altro che non esportiamo.
+  // Select esplicita: la riga utente non ha altro da esportare oltre a questi campi.
   const profile = await prisma.user.findUnique({
     where: { id: ctx.user.id },
-    select: { name: true, email: true, emailVerified: true, createdAt: true },
+    select: { name: true, email: true, image: true, emailVerified: true, createdAt: true },
   })
   // Account eliminato fra la sessione e qui (altro dispositivo): come non autenticato.
   if (!profile) return noStoreJson({ error: 'unauthenticated' }, 401)

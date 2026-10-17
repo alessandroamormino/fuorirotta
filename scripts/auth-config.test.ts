@@ -45,7 +45,7 @@ type ResolvedOptions = {
   advanced?: { ipAddress?: { ipAddressHeaders?: string[] } }
   plugins?: { id: string; options?: { requireSignature?: boolean } }[]
   telemetry?: { enabled?: boolean }
-  socialProviders?: { google?: { includeGrantedScopes?: boolean } }
+  socialProviders?: { google?: { includeGrantedScopes?: boolean; overrideUserInfoOnSignIn?: boolean; mapProfileToUser?: unknown } }
   user?: { deleteUser?: { enabled?: boolean; sendDeleteAccountVerification?: unknown } }
   databaseHooks: {
     user: { create: { before: Hook }; update: { before: Hook } }
@@ -155,13 +155,29 @@ async function main(): Promise<void> {
   check('google: includeGrantedScopes false', options.socialProviders?.google?.includeGrantedScopes === false)
   check('eliminazione: deleteUser attivo senza callback di verifica', options.user?.deleteUser?.enabled === true && options.user.deleteUser.sendDeleteAccountVerification === undefined)
 
-  // --- Hook del database: nome valido, nessun token, nessuna foto -------------
+  // --- Hook del database: nome valido, nessun token, foto solo di Google -------------
   const hooks = options.databaseHooks
   const created = await hooks.user.create.before({ name: '  '.concat('y'.repeat(120)), email: 'n@b.it', image: 'https://lh3.googleusercontent.com/x' })
   check(
-    'hook user.create: nome a 50 punti di codice e foto scartata',
-    !!created && Array.from(String(created.data.name)).length === 50 && created.data.image == null,
+    'hook user.create: nome a 50 punti di codice e foto di Google tenuta',
+    !!created && Array.from(String(created.data.name)).length === 50 && created.data.image === 'https://lh3.googleusercontent.com/x',
   )
+  for (const bad of ['http://lh3.googleusercontent.com/x', 'https://example.com/x.png', 'https://evilgoogleusercontent.com/x', 'https://lh3.googleusercontent.com@example.com/x', 'nope', undefined]) {
+    const out = await hooks.user.create.before({ name: 'Anna', email: 'n@b.it', image: bad })
+    check(`hook user.create: foto ${String(bad)} -> null`, !!out && out.data.image === null)
+  }
+  check('google: overrideUserInfoOnSignIn attivo (foto aggiornata a ogni accesso, D-20)', options.socialProviders?.google?.overrideUserInfoOnSignIn === true)
+  check('google: nessun mapProfileToUser che azzeri la foto', options.socialProviders?.google?.mapProfileToUser === undefined)
+  const signIn = await hooks.user.update.before({ name: 'Nome Google', email: 'x@y.it', emailVerified: true, image: 'https://lh3.googleusercontent.com/new' })
+  check(
+    'hook user.update: la riscrittura dell\'accesso tiene solo la foto',
+    !!signIn && JSON.stringify(signIn.data) === JSON.stringify({ image: 'https://lh3.googleusercontent.com/new' }),
+    JSON.stringify(signIn),
+  )
+  const signInNoPhoto = await hooks.user.update.before({ name: 'Nome Google', email: 'x@y.it', emailVerified: true })
+  check('hook user.update: accesso senza foto -> foto null', !!signInNoPhoto && JSON.stringify(signInNoPhoto.data) === '{"image":null}', JSON.stringify(signInNoPhoto))
+  const foreign = await hooks.user.update.before({ image: 'https://example.com/x.png' })
+  check('hook user.update: scrittura diretta di una foto estranea -> null', !!foreign && foreign.data.image === null)
   const emptyName = await hooks.user.create.before({ name: '', email: 'mario.rossi@example.it' })
   check('hook user.create: nome vuoto -> parte locale dell\'e-mail', !!emptyName && emptyName.data.name === 'mario.rossi')
   let rejected = ''

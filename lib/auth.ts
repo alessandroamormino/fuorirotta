@@ -3,6 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { APIError } from 'better-auth/api'
 import { bearer } from 'better-auth/plugins'
 import { displayNameFromProvider, isValidDisplayName, normalizeDisplayName } from './displayName'
+import { googleProfileImage } from './profileImage'
 import { prisma } from './prisma'
 
 // Accesso con Google (Fase 21). Questo e' l'UNICO file che configura Better
@@ -105,21 +106,42 @@ function create() {
         create: {
           // Il nome di Google non e' nostro: lo si porta a 1-50 punti di codice
           // (la colonna e' VARCHAR(50), un nome piu' lungo farebbe fallire
-          // l'inserimento) e la foto non si salva mai (D-07, D-09).
+          // l'inserimento). La foto si salva solo se e' un indirizzo di Google
+          // (D-20, sostituisce D-07).
           before: async (user) => ({
-            data: { ...user, name: displayNameFromProvider(user.name, user.email), image: null },
+            data: {
+              ...user,
+              name: displayNameFromProvider(user.name, user.email),
+              image: googleProfileImage(user.image),
+            },
           }),
         },
         update: {
           // Rete di sicurezza per POST /api/auth/update-user diretto: la
-          // libreria accetta qualunque nome. Le rotte /api/v1/me/* validano
-          // prima con la stessa regola.
+          // libreria accetta qualunque nome e qualunque foto. Le rotte
+          // /api/v1/me/* validano prima con la stessa regola.
           before: async (user) => {
-            if (user.name === undefined) return
-            if (!isValidDisplayName(user.name)) {
-              throw new APIError('BAD_REQUEST', { message: 'Nome non valido' })
+            // overrideUserInfoOnSignIn riscrive a ogni accesso nome, e-mail e
+            // foto dal profilo Google (l'unico chiamante che passa l'e-mail).
+            // Il nome e' dell'utente (D-09) e l'e-mail e' l'identita': di
+            // quella riscrittura teniamo solo la foto, nuova o null (D-20).
+            // La libreria unisce il risultato ai dati originali: i campi da
+            // non toccare vanno esplicitamente a undefined (Prisma li ignora).
+            if (user.email !== undefined) {
+              return {
+                data: { name: undefined, email: undefined, emailVerified: undefined, image: googleProfileImage(user.image) },
+              }
             }
-            return { data: { ...user, name: normalizeDisplayName(user.name) } }
+            if (user.name === undefined && user.image === undefined) return
+            const data = { ...user }
+            if (user.image !== undefined) data.image = googleProfileImage(user.image)
+            if (user.name !== undefined) {
+              if (!isValidDisplayName(user.name)) {
+                throw new APIError('BAD_REQUEST', { message: 'Nome non valido' })
+              }
+              data.name = normalizeDisplayName(user.name)
+            }
+            return { data }
           },
         },
       },
@@ -136,8 +158,9 @@ function create() {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
         // Altrimenti a Google arriva include_granted_scopes=true.
         includeGrantedScopes: false,
-        // D-07: la foto di Google non si salva.
-        mapProfileToUser: () => ({ image: undefined }),
+        // D-20: la foto si aggiorna a ogni accesso; l'hook user.update.before
+        // la separa da nome ed e-mail, che questa opzione riscriverebbe.
+        overrideUserInfoOnSignIn: true,
       },
     },
   })

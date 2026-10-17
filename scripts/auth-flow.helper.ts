@@ -18,6 +18,8 @@
 //   rate <ip> | rate --no-ip            UN POST a /api/auth/sign-in/social in QUESTO
 //                                       processo (auth.handler), con X-Real-IP <ip>
 //                                       o senza; stampa lo stato HTTP
+//   image-rules                         prova le regole della foto (D-20): create e
+//                                       aggiornamento all'accesso, stampa una riga
 //   registry-tables                     stampa le tabelle di USER_DATA_REGISTRY, una per riga
 //   cleanup                             cancella gli utenti @fixture.invalid
 //                                       (la cascata porta via sessioni e account)
@@ -27,6 +29,7 @@ import { prisma } from '../lib/prisma'
 import { USER_DATA_REGISTRY } from '../lib/userData/registry'
 
 const FIXTURE_DOMAIN = '@fixture.invalid'
+const FIXTURE_IMAGE = 'https://lh3.googleusercontent.com/a/fixture-photo=s96-c'
 
 function fail(message: string): never {
   console.error(`FAIL: ${message}`)
@@ -64,7 +67,7 @@ async function mint(
   const ctx = await requireAuth().$context
   // Stessa strada del callback di Google: l'adapter interno, quindi anche gli hook.
   const user = await ctx.internalAdapter.createUser(
-    { email, name, emailVerified: true },
+    { email, name, emailVerified: true, image: FIXTURE_IMAGE },
     { method: 'oauth', oauth: { providerId: 'google' } },
   )
   await ctx.internalAdapter.createAccount({
@@ -103,6 +106,49 @@ async function createGoogleUser(name: string): Promise<void> {
     `codepoints=${codePoints.length} lone_surrogates=${lone} image=${stored.image} ` +
       `accessToken=${account.accessToken} refreshToken=${account.refreshToken} idToken=${account.idToken}`,
   )
+}
+
+// Regole della foto (D-20). Create: solo https e *.googleusercontent.com.
+// Accesso successivo: la libreria passa nome, foto ed e-mail insieme
+// (overrideUserInfoOnSignIn), l'hook deve tenere solo la foto.
+async function imageRules(): Promise<void> {
+  const ctx = await requireAuth().$context
+  const oauth = { method: 'oauth', oauth: { providerId: 'google' } } as const
+  const stamp = Date.now()
+  const created = async (tag: string, image: string) => {
+    const user = await ctx.internalAdapter.createUser(
+      { email: `img-${tag}-${stamp}${FIXTURE_DOMAIN}`, name: `Img ${tag}`, emailVerified: true, image },
+      oauth,
+    )
+    return user
+  }
+  const read = async (id: string) => prisma.user.findUniqueOrThrow({ where: { id } })
+  const out: string[] = []
+  for (const [tag, url] of [
+    ['http', 'http://lh3.googleusercontent.com/a/x'],
+    ['foreign', 'https://example.com/a/x.png'],
+    ['suffix', 'https://evilgoogleusercontent.com/a/x'],
+    ['creds', 'https://lh3.googleusercontent.com@example.com/a/x'],
+    ['junk', 'not a url'],
+  ] as const) {
+    out.push(`${tag}=${(await read((await created(tag, url)).id)).image}`)
+  }
+  const user = await created('good', FIXTURE_IMAGE)
+  out.push(`good=${(await read(user.id)).image}`)
+  // Accesso successivo con foto nuova, altro nome e altra e-mail: cambia solo la foto.
+  const fresh = 'https://lh3.googleusercontent.com/a/fresh-photo=s96-c'
+  await ctx.internalAdapter.updateUser(user.id, { name: 'Nome Di Google', image: fresh, email: `altra-${stamp}${FIXTURE_DOMAIN}`, emailVerified: false })
+  const row = await read(user.id)
+  out.push(`override_image=${row.image === fresh} override_name=${row.name} override_email=${row.email === `img-good-${stamp}${FIXTURE_DOMAIN}`} override_verified=${row.emailVerified}`)
+  // Google non manda piu' la foto: null, non quella vecchia.
+  await ctx.internalAdapter.updateUser(user.id, { name: 'Nome Di Google', image: undefined, email: row.email, emailVerified: true })
+  out.push(`override_none=${(await read(user.id)).image}`)
+  // Scrittura diretta (POST /api/auth/update-user): foto estranea scartata, nome valido passa.
+  await ctx.internalAdapter.updateUser(user.id, { image: 'https://example.com/a/x.png' })
+  out.push(`direct_foreign=${(await read(user.id)).image}`)
+  await ctx.internalAdapter.updateUser(user.id, { name: '  Zeno  ' })
+  out.push(`direct_name=${(await read(user.id)).name}`)
+  console.log(out.join(' '))
 }
 
 async function rate(ip: string | undefined): Promise<void> {
@@ -145,6 +191,9 @@ async function main(): Promise<void> {
     case 'create-google-user':
       if (args.length < 1) fail('uso: create-google-user <nome>')
       await createGoogleUser(args[0])
+      break
+    case 'image-rules':
+      await imageRules()
       break
     case 'rate':
       if (args[0] === '--no-ip') await rate(undefined)

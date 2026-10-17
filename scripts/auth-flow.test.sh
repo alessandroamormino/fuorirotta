@@ -22,7 +22,8 @@
 #   S12 in produzione una richiesta senza X-Real-IP finisce nel bucket 'no-trusted-ip'
 #   S13 sessione rinnovata dopo piu' di un giorno: Set-Cookie con Max-Age=5184000,
 #       HttpOnly, SameSite=Lax, Path=/, senza Domain; expires_at torna a ~60 giorni
-#   S14 nome Google da 120 punti di codice: 50 salvati, foto null, tre token null
+#   S14 nome Google da 120 punti di codice: 50 salvati, foto di Google tenuta, tre token null;
+#       foto non https o non *.googleusercontent.com -> null; accesso successivo: cambia solo la foto
 #   S15 statico: lib/auth.ts nomina x-real-ip e nessun forwarded-for
 #   S16 bearer: il token nudo non da' utente, quello firmato si
 #
@@ -187,8 +188,9 @@ code="$(call s3 GET /api/v1/me/state 198.51.100.13 -H "Cookie: fuorirotta.sessio
 [[ "$(json_get "${tmp_dir}/s3.b" 'j.enabled')" == "true" ]] || fail "S3: enabled non e' true"
 [[ "$(json_get "${tmp_dir}/s3.b" 'j.user.name')" == "Anna Verdi" ]] || fail "S3: nome atteso 'Anna Verdi', corpo: '$(cat "${tmp_dir}/s3.b")'"
 [[ "$(json_get "${tmp_dir}/s3.b" 'j.user.email')" == "s3-anna@fixture.invalid" ]] || fail "S3: e-mail attesa s3-anna@fixture.invalid, corpo: '$(cat "${tmp_dir}/s3.b")'"
+[[ "$(json_get "${tmp_dir}/s3.b" 'j.user.image')" == "https://lh3.googleusercontent.com/a/fixture-photo=s96-c" ]] || fail "S3: foto attesa nello stato, corpo: '$(cat "${tmp_dir}/s3.b")'"
 [[ "$(header s3 cache-control)" == "private, no-store" ]] || fail "S3: cache-control atteso 'private, no-store'"
-echo "ok  S3: il cookie di sessione firmato restituisce nome ed e-mail dell'utente"
+echo "ok  S3: il cookie di sessione firmato restituisce nome, e-mail e foto dell'utente"
 
 # --- S4: niente open redirect dai callback URL --------------------------------
 for evil in 'https://evil.example/x' '//evil.example/x'; do
@@ -198,11 +200,12 @@ done
 echo "ok  S4: callbackURL assoluto e protocol-relative -> 403"
 
 # --- S5: statico, nessuno script di Google e nessuna pagina pubblica sull'auth ---
-gsi_hits="$(grep -rnE 'accounts\.google\.com/gsi|googleusercontent' app components lib || true)"
+# googleusercontent compare in un solo posto: il validatore della foto (D-20).
+gsi_hits="$(grep -rnE 'accounts\.google\.com/gsi|googleusercontent' app components lib --exclude=profileImage.ts || true)"
 [[ -z "${gsi_hits}" ]] || fail "S5: script Google o host googleusercontent nel codice: ${gsi_hits}"
 public_hits="$(grep -rnE "lib/auth([\"'/]|$)" app/layout.tsx app/page.tsx app/eventi "app/[regione]" || true)"
 [[ -z "${public_hits}" ]] || fail "S5: una pagina pubblica importa lib/auth: ${public_hits}"
-echo "ok  S5: nessuno script di Google in app/ components/ lib/, nessuna pagina pubblica importa lib/auth"
+echo "ok  S5: nessuno script di Google in app/ components/ lib/ (googleusercontent solo in lib/profileImage.ts), nessuna pagina pubblica importa lib/auth"
 
 # --- S6: il sesto tentativo dallo stesso IP e' un 429 --------------------------
 ip_a="198.51.100.21"
@@ -286,12 +289,17 @@ days_after="$(psql_dev "SELECT round(extract(epoch FROM (expires_at - now())) / 
 [[ "${days_after}" == "60" ]] || fail "S13: dopo il rinnovo expires_at atteso a ~60 giorni, trovato ${days_after}"
 echo "ok  S13: sessione a 58 giorni rinnovata: Set-Cookie Max-Age=5184000, HttpOnly, SameSite=Lax, Path=/, senza Domain; expires_at 58 -> 60 giorni"
 
-# --- S14: nome lungo di Google, nessuna foto, nessun token --------------------------
+# --- S14: nome lungo di Google, foto di Google, nessun token ------------------------
 long_name="$(node -e 'process.stdout.write("Ünï" + "\u{1F600}".repeat(60) + "x".repeat(57))')"
 out="$(helper create-google-user "${long_name}" | tail -n 1)"
-[[ "${out}" == "codepoints=50 lone_surrogates=false image=null accessToken=null refreshToken=null idToken=null" ]] \
-  || fail "S14: atteso 'codepoints=50 lone_surrogates=false image=null accessToken=null refreshToken=null idToken=null', ottenuto '${out}'"
-echo "ok  S14: nome da 120 punti di codice salvato a 50, foto null, access/refresh/id token null"
+s14_expected="codepoints=50 lone_surrogates=false image=https://lh3.googleusercontent.com/a/fixture accessToken=null refreshToken=null idToken=null"
+[[ "${out}" == "${s14_expected}" ]] || fail "S14: atteso '${s14_expected}', ottenuto '${out}'"
+echo "ok  S14: nome da 120 punti di codice salvato a 50, foto di Google tenuta, access/refresh/id token null"
+
+out="$(helper image-rules | tail -n 1)"
+s14_rules="http=null foreign=null suffix=null creds=null junk=null good=https://lh3.googleusercontent.com/a/fixture-photo=s96-c override_image=true override_name=Img good override_email=true override_verified=true override_none=null direct_foreign=null direct_name=Zeno"
+[[ "${out}" == "${s14_rules}" ]] || fail "S14: regole della foto: atteso '${s14_rules}', ottenuto '${out}'"
+echo "ok  S14: foto http, di altro dominio, con suffisso simile, con credenziali o non-URL -> null; all'accesso successivo cambia solo la foto (nome ed e-mail restano), senza foto -> null; scrittura diretta di una foto estranea -> null"
 
 # --- S15: statico, l'IP si legge solo da x-real-ip -----------------------------------
 code_lines="$(grep -vE '^[[:space:]]*//' lib/auth.ts)"
@@ -452,8 +460,10 @@ no_store s29 S29
 [[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j).sort().join()')" == "exportedAt,format,linkedAccounts,profile,sessions" ]] \
   || fail "S29: chiavi di primo livello inattese: $(json_get "${tmp_dir}/s29.b" 'Object.keys(j).join()')"
 [[ "$(json_get "${tmp_dir}/s29.b" 'j.format === 1 && !Number.isNaN(Date.parse(j.exportedAt))')" == "true" ]] || fail "S29: format o exportedAt inattesi"
-[[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j.profile).sort().join() + "|" + j.profile.name + "|" + j.profile.email')" == "createdAt,email,emailVerified,name|Anna Esporta|s29-a@fixture.invalid" ]] \
+[[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j.profile).sort().join() + "|" + j.profile.name + "|" + j.profile.email')" == "createdAt,email,emailVerified,image,name|Anna Esporta|s29-a@fixture.invalid" ]] \
   || fail "S29: profilo inatteso: $(json_get "${tmp_dir}/s29.b" 'j.profile')"
+[[ "$(json_get "${tmp_dir}/s29.b" 'j.profile.image')" == "https://lh3.googleusercontent.com/a/fixture-photo=s96-c" ]] \
+  || fail "S29: l'export deve contenere l'indirizzo della foto (D-20): $(json_get "${tmp_dir}/s29.b" 'j.profile')"
 [[ "$(json_get "${tmp_dir}/s29.b" 'j.linkedAccounts.length + "|" + Object.keys(j.linkedAccounts[0]).sort().join() + "|" + j.linkedAccounts[0].provider')" == "1|createdAt,provider,providerAccountId|google" ]] \
   || fail "S29: linkedAccounts inattesi: $(json_get "${tmp_dir}/s29.b" 'j.linkedAccounts')"
 [[ "$(json_get "${tmp_dir}/s29.b" 'j.sessions.length + "|" + j.sessions.filter((s) => s.current).length + "|" + j.sessions.every((s) => typeof s.device === "string" && s.device.length > 0)')" == "2|1|true" ]] \
@@ -469,7 +479,7 @@ const bad = [];
   if (Array.isArray(v)) return v.forEach((x, i) => walk(x, path + "[" + i + "]"));
   if (v && typeof v === "object") {
     for (const [k, x] of Object.entries(v)) {
-      if (/token|password|secret|image/i.test(k)) bad.push("chiave " + path + "." + k);
+      if (/token|password|secret/i.test(k)) bad.push("chiave " + path + "." + k);
       walk(x, path + "." + k);
     }
     return;
@@ -478,7 +488,7 @@ const bad = [];
 })(j, "$");
 if (bad.length) { console.error(bad.join("; ")); process.exit(1) }
 ' "${tmp_dir}/s29.b" "${x_token}" "${x_cookie}" || fail "S30: l'export contiene una chiave o un valore segreto"
-echo "ok  S30: nessuna chiave /token|password|secret|image/i, nessun valore uguale al token di sessione, nessun token finto di Google"
+echo "ok  S30: nessuna chiave /token|password|secret/i, nessun valore uguale al token di sessione, nessun token finto di Google"
 
 for needle in 's29-b@fixture.invalid' "fixture-${y_user}" "${y_user}" 'BOnlyAgent' 'Bruno Altro' "${y_token}"; do
   if grep -qF "${needle}" "${tmp_dir}/s29.b"; then fail "S31: l'export di A contiene un dato di B: '${needle}'"; fi
