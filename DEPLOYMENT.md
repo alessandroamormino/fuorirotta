@@ -60,6 +60,12 @@ Three categories matter because they are read at different times by different pr
 | `NEXT_PUBLIC_APP_URL` | Runtime, in the container | App base URL (e.g., `https://fuori-rotta.it`); also passed at build time |
 | `CRON_SECRET` | Runtime, in the container | Auth token for `/api/cron/scrape` — generate with `openssl rand -base64 32`. Declared in `docker-compose.yml` as `${CRON_SECRET:?CRON_SECRET must be set in .env}`, so `docker compose up` refuses to start rather than silently running with no secret |
 | `HEALTHCHECK_URL` | Host-only, never passed to the container | Dead man's switch URL, read only by `scripts/cron-scrape.sh` on the host. Optional, but its absence is announced on every cron run instead of failing silently |
+| `AUTH_ENABLED` | Runtime, in the container | Sign-in switch (Phase 21, D-16). Only the exact value `true` turns the auth routes on; unset, `false` or an incomplete configuration leaves every auth route a 404. Declared in `docker-compose.yml` as `${AUTH_ENABLED:-false}` |
+| `NEXT_PUBLIC_AUTH_ENABLED` | Build-only, baked into the image | Decides whether the person icon exists in the HTML (D-19). Read by `next build`: changing it needs a rebuild of the deployed tag. Not a secret |
+| `BETTER_AUTH_URL` | Runtime, in the container | Public address of the app (`https://fuori-rotta.it`); Google's redirect URI is built from it |
+| `BETTER_AUTH_SECRET` | Runtime, in the container | Session signing secret, at least 32 characters. Generate it **on the server** with `openssl rand -base64 32`; never paste it in a chat or a ticket |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Runtime, in the container | OAuth credentials from the Google Cloud console. Same rule: typed straight into the server's `.env` |
+| `BACKUP_GPG_RECIPIENT`, `BACKUP_RETENTION_DAYS`, `BACKUP_TARGET`, `BACKUP_LOCAL_DIR`, `BACKUP_PG_IMAGE`, `HEALTHCHECK_BACKUP_URL` | Host-only, never passed to the container | Read only by `scripts/cron-backup.sh`. See §Backups |
 
 In production the file is `.env` in the compose directory (`/opt/docker/fuori-rotta/fuorirotta/.env`), not `.env.local` — `.env.local` is a local-development-only convention and is never read by Docker Compose.
 
@@ -184,6 +190,7 @@ Example output at the time of writing (all 20 ISTAT regions — SoloSagre genera
 11 4 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh valle-d-aosta >> /var/log/fuorirotta-cron.log 2>&1
 14 4 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-scrape.sh veneto >> /var/log/fuorirotta-cron.log 2>&1
 0 11 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-maintenance.sh >> /var/log/fuorirotta-cron.log 2>&1
+30 12 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-backup.sh >> /var/log/fuorirotta-cron.log 2>&1
 ```
 
 **Why emilia-romagna and puglia can sit only 3 minutes apart from lombardia and from each other, and why the 17 SoloSagre-national lines above cannot use the same reasoning.** `emiliaromagnaturismo.it` and `osservatorio.dms.puglia.it` are each their own host, distinct from `www.solosagre.it`, `www.dati.lombardia.it` and `www.in-lombardia.it` — `groupSourcesByHost` (`lib/scrapers/runner.ts`) already runs different hosts in parallel, so no `Crawl-delay` is at stake for those two; the few minutes of stagger exist only to avoid three scrapes starting on the same DB connection pool at once (D-12), not to be polite to a shared server. **`15-05-PLAN.md`** (`SRC-04`) generalized SoloSagre to all 20 ISTAT regions, and every SoloSagre line — Lombardy plus the 17 new regions above — shares the *same* host, `www.solosagre.it` (`robots.txt` `Crawl-delay: 5`, re-verified live 2026-09-18, unchanged from `08-RESEARCH.md`). Those lines are serialized against each other with a 3-minute gap, sized on the real cost measured with `npm run scrape:local -- --region <slug>` against the local Postgres on 2026-09-18: the highest observed was toscana at 11.7s (29 events, 3 pages) — the 3-minute gap is roughly 15x that, and comfortably covers the theoretical worst case bounded by `SOLOSAGRE_MAX_PAGES=20` (~100–140s, never actually observed). Emilia-Romagna and Puglia's SoloSagre sub-request rides their existing per-region trigger (03:20/03:23) — `REGION_SCHEDULES` is keyed by region, not by source, so no separate schedule entry was needed for those two — and both are already >= 3 minutes from every other SoloSagre line by construction. See the comment above `REGION_SCHEDULES` in `lib/scrapers/sources.ts` for the full measurement log (lombardia, toscana, veneto, lazio, campania, sicilia).
@@ -365,6 +372,152 @@ dropped, the chain was split in two that do not overlap.
 
 Lint is reported in CI but does **not** fail the job: 47 problems (8 errors) predate this
 pipeline. When those are fixed, remove `continue-on-error` from `.github/workflows/ci.yml`.
+
+### Sign-in switch (D-16, D-19)
+
+Accounts ship **switched off** and are turned on in a later, separate step. Two independent things
+decide what a visitor sees:
+
+- **`AUTH_ENABLED` (runtime).** Unset, `false`, or `true` with an incomplete configuration
+  (`BETTER_AUTH_URL`, a `BETTER_AUTH_SECRET` of 32+ characters, `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET`): every auth route answers 404 and `/api/v1/me/state` says
+  `{"enabled": false}`. An incomplete configuration is also logged once as an error.
+- **`NEXT_PUBLIC_AUTH_ENABLED` (build).** Decides whether the person icon is in the HTML at all. It is
+  inlined by `next build`, so it cannot be flipped on a running container.
+
+**Turning the routes off again** (fast, no rebuild): set `AUTH_ENABLED=false` in `.env`, then recreate
+the container on the image already deployed:
+
+```bash
+cd /opt/docker/fuori-rotta/fuorirotta && FUORIROTTA_IMAGE="$(grep -m1 '^image=' .deployed | cut -d= -f2-)" docker compose up -d --no-build
+```
+
+The routes answer 404 again at once. The icon stays visible until the next build.
+
+**Hiding or showing the icon** needs a rebuild of the deployed tag with the new
+`NEXT_PUBLIC_AUTH_ENABLED` value in `.env`:
+
+```bash
+bash /opt/docker/fuori-rotta/fuorirotta/scripts/deploy.sh <tag>
+```
+
+**Why the app port is bound to `127.0.0.1:3000:3000`.** nginx reaches the app by container name on the
+`webstack` network, so the binding does not affect it; host scripts (`cron-health.sh`, `deploy.sh`) use
+`http://127.0.0.1:3000`, which keeps working. A port open to the internet would let anyone call the app
+directly, bypassing nginx, and send their own `X-Real-IP` header: every request would then get a fresh
+rate-limit bucket, which defeats the sign-in rate limit.
+
+### Backups (D-18)
+
+**Why.** Supabase Free has no backups, and from Phase 21 the database holds accounts, the first data
+that re-scraping cannot regenerate. The same database also holds another tool's tables, credentials
+included, which must never enter a backup.
+
+**What is dumped.** Only Fuorirotta's tables: the `@@map("...")` names of `prisma/schema.prisma`
+(`auth_*` included) plus `_prisma_migrations`, read from the checked-out schema at every run. A table
+added by a later phase is backed up automatically; a foreign table cannot be, because it is not in the
+schema. The dump runs as `pg_dump` inside a `postgres` container on `DIRECT_URL`, and is **streamed
+straight into `gpg`** with a public key: no plaintext dump ever touches the server's disk, and the server
+cannot decrypt its own backups. The private key lives only on the Mac. `scripts/backup.test.sh`
+(`npm run check:backup`) proves the chain on the local database.
+
+**Host prerequisites** (verify once, one command at a time): `docker --version`, `gpg --version | head -1`,
+`rclone version | head -1`. `rclone` is the only one that may be missing: install it from
+https://rclone.org/install/ using the method for Ubuntu.
+
+**1. Key pair, on the Mac.** One command (it asks for a passphrase: choose one and store it in the
+password manager):
+
+```bash
+gpg --quick-generate-key fuorirotta-backup default default never
+```
+
+Then export the public key and copy it to the server:
+
+```bash
+gpg --armor --export fuorirotta-backup > fuorirotta-backup.pub.asc
+```
+
+Back the **private** key up somewhere safe, offline (`gpg --armor --export-secret-keys fuorirotta-backup`
+into the password manager). Lose it and every backup is unreadable.
+
+**2. Public key, on the server**, as the user whose crontab runs the backup:
+
+```bash
+gpg --import /tmp/fuorirotta-backup.pub.asc
+```
+
+**3. Destination (object storage, decided in 21-02).** Create a private bucket in the EU, with an access
+key limited to it, then on the server run `rclone config` and add an S3 remote (provider `Other`, the
+endpoint shown in the bucket's panel, the key pair typed into the prompt, never pasted elsewhere). Check
+it with `rclone lsd <remote>:`. The remote name and bucket go into `BACKUP_TARGET`.
+
+**4. `.env` on the server** (no quotes):
+
+```
+BACKUP_GPG_RECIPIENT=fuorirotta-backup
+BACKUP_RETENTION_DAYS=14
+BACKUP_TARGET=<remote>:<bucket>
+HEALTHCHECK_BACKUP_URL=<ping URL of a new daily healthchecks.io check>
+```
+
+`BACKUP_LOCAL_DIR` (default `/opt/docker/fuori-rotta/backups`, mode 700), `BACKUP_PG_IMAGE` (default
+`postgres:17-alpine`: its major must be at least the database's, change it if Supabase upgrades) can stay
+unset. Without `BACKUP_TARGET` the encrypted file simply stays in the local directory.
+
+**5. Crontab.** The generator emits the daily line (`30 12 * * *` UTC, after the maintenance job and clear
+of every scrape). Install it with the existing procedure of §Automated Scraping via Crontab: backup first,
+transform, diff, install behind a guard, one command per step. The transform is:
+
+```bash
+sed '/cron-maintenance\.sh/a 30 12 * * * /opt/docker/fuori-rotta/fuorirotta/scripts/cron-backup.sh >> /var/log/fuorirotta-cron.log 2>\&1' /tmp/crontab.bak > /tmp/crontab.new
+```
+
+Then verify with the drift check (`generate-crontab.ts --check`, step 4 of that section).
+
+**6. First run, by hand**, then look at the destination:
+
+```bash
+bash /opt/docker/fuori-rotta/fuorirotta/scripts/cron-backup.sh
+```
+
+It prints `tables: ...`, then `cron-backup status=ok file=fuorirotta-<UTC>.dump.gpg bytes=... target=<remote>:<bucket>`,
+then `healthcheck=pinged`. Exit codes: `0` ok, `1` a step failed (the line says which), `2` configuration.
+The healthcheck is pinged only after dump, encryption, verified upload and pruning all succeeded, so a
+silent failure shows up as a missing ping.
+
+**7. Restore test, on the Mac** (the D-18 gate before sign-in goes on). Download one file from the bucket
+(the provider's panel, or `rclone copy <remote>:<bucket>/<file> .` if rclone is configured on the Mac), then:
+
+```bash
+bash scripts/backup-restore-test.sh fuorirotta-<UTC>.dump.gpg
+```
+
+It decrypts with the private key (the passphrase prompt is gpg's), starts a throwaway `postgres` container
+of the dump's major version with no published port, restores into a fresh database, prints
+`<table> <rows>` for every table and removes the container and the decrypted file. It never reads `.env`
+and cannot point at a real database. Compare the counts with what production shows (for example the
+number of events). The `pg_trgm` extension is created before the restore because a per-table dump does
+not carry extensions.
+
+**Retention.** Files older than `BACKUP_RETENTION_DAYS` (default **14**) are deleted from the destination
+and from the local directory at every run. This is the number written in `/privacy`: data of a deleted
+account survives in backups for at most that many days. Changing the number means changing the privacy
+text too.
+
+### nginx access-log rotation (14 days)
+
+The privacy text says nginx access logs (IP, user agent, requested address) are kept about 14 days. The
+official `nginx` image writes them to stdout, so the Docker `json-file` log is what has to be bounded, and
+that rotation is by **size**, not by time. Measure the daily volume first (read-only), then size
+`max-size` x `max-file` to cover about 14 days:
+
+```bash
+docker logs nginx --since 24h 2>&1 | wc -c
+```
+
+Set `logging: {driver: json-file, options: {max-size: ..., max-file: ...}}` for nginx in the compose file
+that runs it on the server and recreate that container. Until this is done the logs are unbounded.
 
 ## Database
 
