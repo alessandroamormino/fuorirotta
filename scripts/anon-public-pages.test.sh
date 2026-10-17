@@ -330,6 +330,12 @@ grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: manca il meta robots noindex"
 grep -qF 'Utente Prova' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: il nome dell'utente non e' nell'HTML del server"
+# Ordine delle sezioni (D-06) e sessione corrente gia' nell'HTML del server (nessun flash di vuoto).
+order="$(grep -oE '>(Profilo|Sessioni attive|I tuoi dati|Elimina account)</h2>' "${tmp_dir}/b8user.b" | sed -E 's/^>(.*)<.*/\1/' | paste -sd'|' -)"
+[[ "${order}" == "Profilo|Sessioni attive|I tuoi dati|Elimina account" ]] \
+  || fail "B8: /account: ordine delle sezioni inatteso: '${order}'"
+grep -qF 'attiva ora (questo dispositivo)' "${tmp_dir}/b8user.b" \
+  || fail "B8: /account: la sessione corrente non e' nell'HTML del server"
 echo "ok  B8: /account da ospite 307 verso /accedi?next=%2Faccount; con la sessione 200, private no-store, noindex, nome nell'HTML"
 
 echo ""
