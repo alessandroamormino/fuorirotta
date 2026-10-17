@@ -13,6 +13,8 @@
  */
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { eventDays, dayToLocalDate } from './eventDays'
+import { romeMidnightUTC } from './dateWindow'
 
 export type EventStatusTone = 'live' | 'soon' | 'later'
 
@@ -38,8 +40,6 @@ export function romeCalendarDate(value: string | Date): Date {
   return new Date(y, m - 1, d)
 }
 
-const toMidnight = romeCalendarDate
-
 /** Differenza in giorni di calendario fra due date gia' a mezzanotte locale. */
 function dayDiff(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / MS_PER_DAY)
@@ -52,13 +52,31 @@ function dayDiff(a: Date, b: Date): number {
  * non due copie da tenere allineate.
  */
 export function formatEventRange(dateStart: string | Date, dateEnd?: string | Date | null): string {
-  const start = toMidnight(dateStart)
-  const end = dateEnd != null ? toMidnight(dateEnd) : start
-  const startLabel = format(start, 'd MMM', { locale: it })
-  if (start.getTime() === end.getTime()) {
+  // Il giorno di fine dipende dal formato in cui la sorgente salva le date:
+  // lo decide solo eventDays (lib/eventDays.ts), non c'e' un'altra copia.
+  const { startDay, endDay } = eventDays(dateStart, dateEnd)
+  const startLabel = format(dayToLocalDate(startDay), 'd MMM', { locale: it })
+  if (startDay === endDay) {
     return startLabel
   }
-  return `${startLabel} – ${format(end, 'd MMM', { locale: it })}`
+  return `${startLabel} – ${format(dayToLocalDate(endDay), 'd MMM', { locale: it })}`
+}
+
+/** Il giorno di calendario "YYYY-MM-DD" di `now` a Roma. */
+const romeDay = (now: Date): string => romeDayFormat.format(now)
+
+/**
+ * Vero quando l'ultimo giorno dell'evento (eventDays) e' gia' passato a Roma.
+ * Unica definizione di "concluso": la usano il badge qui sotto e il gate del
+ * calendario (piano 20-05), cosi' il bottone sparisce esattamente quando il
+ * badge dice "Concluso".
+ */
+export function isEventOver(
+  dateStart: string | Date,
+  dateEnd?: string | Date | null,
+  now: Date = new Date()
+): boolean {
+  return eventDays(dateStart, dateEnd).endDay < romeDay(now)
 }
 
 /**
@@ -66,6 +84,9 @@ export function formatEventRange(dateStart: string | Date, dateEnd?: string | Da
  * Oggi / In corso / Domani / Fra N giorni / Concluso / il range formattato
  * oltre i 7 giorni — quest'ultimo e' il testo `dd MMM` che oggi la card
  * espone gia', diventato il badge stesso invece di un secondo elemento.
+ *
+ * Giorni confrontati come stringhe "YYYY-MM-DD" (eventDays): l'ordine
+ * lessicografico e' quello cronologico e non c'e' fuso che lo sposti.
  *
  * `now` esiste per rendere la funzione testabile senza congelare
  * l'orologio: il default e' `new Date()`.
@@ -75,23 +96,28 @@ export function eventStatus(
   dateEnd?: string | Date | null,
   now: Date = new Date()
 ): EventStatus {
-  const today = toMidnight(now)
-  const start = toMidnight(dateStart)
-  // dateEnd nullo -> dateStart fa anche da fine (evento di un solo giorno).
-  const end = dateEnd != null ? toMidnight(dateEnd) : start
-  const days = dayDiff(start, today)
+  const today = romeDay(now)
+  const { startDay } = eventDays(dateStart, dateEnd)
+  const days = dayDiff(dayToLocalDate(startDay), dayToLocalDate(today))
 
   if (days === 0) return { label: 'Oggi', tone: 'live' }
-  if (start < today && end >= today) return { label: 'In corso', tone: 'live' }
+  if (isEventOver(dateStart, dateEnd, now)) return { label: 'Concluso', tone: 'later' }
+  // Qui startDay != oggi e l'evento non e' finito: se e' iniziato e' in corso.
+  if (startDay < today) return { label: 'In corso', tone: 'live' }
   if (days === 1) return { label: 'Domani', tone: 'soon' }
   if (days > 1 && days <= 7) return { label: `Fra ${days} giorni`, tone: 'soon' }
-  if (end < today) return { label: 'Concluso', tone: 'later' }
   return { label: formatEventRange(dateStart, dateEnd), tone: 'later' }
 }
 
-// Self-check: `npx tsx lib/eventStatus.ts`. Nessun accesso al DOM/DB: il
-// modulo e' puro e il suo self-check deve restare eseguibile senza
-// container, stesso stile di lib/territorial/distance.ts.
+// Self-check: `npx tsx lib/eventStatus.ts`, lanciato da scripts/calendar.test.sh
+// sotto quattro fusi orari. Nessun accesso al DOM/DB: il modulo e' puro e il
+// suo self-check deve restare eseguibile senza container, stesso stile di
+// lib/territorial/distance.ts.
+//
+// Le fixture NON dipendono dal fuso del processo (con setHours locale il test
+// sbagliava sotto TZ=Asia/Tokyo) e NON dipendono dall'orologio: `now` e' fisso
+// e passato esplicitamente, i giorni si costruiscono da giorni di Roma. Il DB
+// locale e' in formato Roma, la produzione in formato UTC: servono entrambi.
 //
 // La guardia su `typeof` non e' cerimonia: questo modulo e' importato da
 // componenti "use client" (EventCard, StatusBadge, MiniEventCard), e nel
@@ -99,40 +125,118 @@ export function eventStatus(
 // esplode con "module is not defined" al momento della valutazione del
 // modulo, prima ancora che la pagina renda.
 if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const at = (n: number, from = today) => {
-    const d = new Date(from)
-    d.setDate(d.getDate() + n)
-    return d
+  let failures = 0
+  const assertCheck = (cond: boolean, msg: string) => {
+    if (!cond) {
+      console.error(`  FAIL: ${msg}`)
+      failures++
+    }
   }
 
-  console.assert(eventStatus(at(0)).label === 'Oggi', 'atteso Oggi per dateStart di oggi')
-  console.assert(
-    eventStatus(at(-2), at(3)).label === 'In corso' && eventStatus(at(-2), at(3)).tone === 'live',
+  // 12:00 a Roma del 16 ottobre 2026.
+  const NOW = new Date('2026-10-16T10:00:00.000Z')
+  const TODAY = '2026-10-16'
+  const addDays = (day: string, n: number): string => {
+    const [y, m, d] = day.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
+  }
+  const day = (n: number) => addDays(TODAY, n)
+  // Formato Roma (DB locale): inizio = mezzanotte di Roma, fine = un attimo prima di quella del giorno dopo.
+  const romeStart = (n: number) => romeMidnightUTC(day(n))
+  const romeEnd = (n: number) => new Date(romeMidnightUTC(day(n + 1)).getTime() - 1)
+
+  const label = (s: Date | string, e?: Date | string | null) => eventStatus(s, e, NOW).label
+
+  assertCheck(label(romeStart(0)) === 'Oggi', 'atteso Oggi per dateStart di oggi')
+  assertCheck(
+    label(romeStart(-2), romeEnd(3)) === 'In corso' && eventStatus(romeStart(-2), romeEnd(3), NOW).tone === 'live',
     'atteso In corso per un evento iniziato e non ancora finito'
   )
-  console.assert(eventStatus(at(1)).label === 'Domani', 'atteso Domani per dateStart di domani')
-  console.assert(eventStatus(at(4)).label === 'Fra 4 giorni', 'atteso Fra 4 giorni')
-  console.assert(eventStatus(at(7)).label === 'Fra 7 giorni', 'atteso Fra 7 giorni al limite superiore')
-  console.assert(
-    eventStatus(at(8)).tone === 'later' && eventStatus(at(8)).label !== 'Fra 8 giorni',
+  assertCheck(label(romeStart(1)) === 'Domani', 'atteso Domani per dateStart di domani')
+  assertCheck(label(romeStart(4)) === 'Fra 4 giorni', 'atteso Fra 4 giorni')
+  assertCheck(label(romeStart(7)) === 'Fra 7 giorni', 'atteso Fra 7 giorni al limite superiore')
+  assertCheck(
+    eventStatus(romeStart(8), null, NOW).tone === 'later' && label(romeStart(8)) !== 'Fra 8 giorni',
     'atteso ramo range (non "Fra 8 giorni") a 8 giorni esatti'
   )
-  console.assert(eventStatus(at(-9), at(-3)).label === 'Concluso', 'atteso Concluso per evento gia\' finito')
-  console.assert(
-    eventStatus(at(0), at(30)).label === 'Oggi',
+  assertCheck(label(romeStart(-9), romeEnd(-3)) === "Concluso", "atteso Concluso per evento gia' finito")
+  assertCheck(
+    label(romeStart(0), romeEnd(30)) === 'Oggi',
     'un evento che parte oggi e finisce fra un mese deve restare Oggi, non In corso'
   )
-  console.assert(eventStatus(at(-5), null).label === 'Concluso', 'dateEnd nullo usa dateStart come fine')
+  assertCheck(label(romeStart(-5), null) === 'Concluso', 'dateEnd nullo usa dateStart come fine')
 
-  // React #418 (2026-10-16): mezzanotte di Roma del 2/9 scritta come cifre UTC
-  // del 1/9 sera (evento 22720). Deve dire "2 set" in QUALUNQUE fuso: lancia
-  // il self-check anche con TZ=UTC, il fuso del container in produzione.
-  console.assert(
+  // React error 418 (2026-10-16): mezzanotte di Roma del 2/9 scritta come cifre UTC
+  // del 1/9 sera (evento 22720). Deve dire "2 set" in QUALUNQUE fuso.
+  assertCheck(
     formatEventRange('2026-09-01T22:00:00.000Z', '2026-09-02T21:59:59.999Z') === '2 set',
     `atteso "2 set" anche fuori da Roma, ottenuto "${formatEventRange('2026-09-01T22:00:00.000Z', '2026-09-02T21:59:59.999Z')}"`
   )
 
+  // Formato UTC di produzione: l'evento 1100954 compariva come "15 ott – 16 ott".
+  const range = (s: string, e: string | null) => formatEventRange(s, e)
+  assertCheck(
+    range('2026-10-15T00:00:00.000Z', '2026-10-15T23:59:59.999Z') === '15 ott',
+    `formato UTC, un giorno: atteso "15 ott", ottenuto "${range('2026-10-15T00:00:00.000Z', '2026-10-15T23:59:59.999Z')}"`
+  )
+  assertCheck(
+    range('2026-10-18T00:00:00.000Z', '2026-10-19T23:59:59.999Z') === '18 ott – 19 ott',
+    `formato UTC, intervallo: atteso "18 ott – 19 ott", ottenuto "${range('2026-10-18T00:00:00.000Z', '2026-10-19T23:59:59.999Z')}"`
+  )
+  assertCheck(
+    range('2026-10-31T00:00:00.000Z', '2026-11-01T23:59:59.999Z') === '31 ott – 1 nov',
+    `formato UTC, cambio mese: atteso "31 ott – 1 nov", ottenuto "${range('2026-10-31T00:00:00.000Z', '2026-11-01T23:59:59.999Z')}"`
+  )
+
+  // Badge e isEventOver sul formato UTC di produzione. Il difetto vivo:
+  // concerto del 15 ottobre (15T00:00Z / 15T23:59:59.999Z), il 16 il badge
+  // diceva "In corso" perche' la fine veniva letta come 16 a Roma.
+  const prodOne = ['2026-10-15T00:00:00.000Z', '2026-10-15T23:59:59.999Z'] as const
+  const at = (iso: string) => new Date(iso)
+  assertCheck(
+    eventStatus(prodOne[0], prodOne[1], at('2026-10-16T10:00:00.000Z')).label === 'Concluso',
+    `formato UTC, giorno dopo: atteso Concluso, ottenuto ${eventStatus(prodOne[0], prodOne[1], at('2026-10-16T10:00:00.000Z')).label}`
+  )
+  assertCheck(
+    eventStatus(prodOne[0], prodOne[1], at('2026-10-15T20:00:00.000Z')).label === 'Oggi',
+    'formato UTC, la sera stessa: atteso Oggi'
+  )
+  // 23:30 UTC del 15 = 01:30 del 16 a Roma: l'evento e' finito.
+  assertCheck(
+    eventStatus(prodOne[0], prodOne[1], at('2026-10-15T23:30:00.000Z')).label === 'Concluso',
+    'formato UTC, 01:30 del giorno dopo a Roma: atteso Concluso'
+  )
+  // Fine a mezzanotte UTC e fine nulla: un giorno solo, nel giorno stesso e' Oggi.
+  assertCheck(
+    eventStatus('2026-10-15T00:00:00.000Z', '2026-10-15T00:00:00.000Z', at('2026-10-15T12:00:00.000Z')).label === 'Oggi',
+    'formato UTC, fine a mezzanotte, nel giorno: atteso Oggi'
+  )
+  assertCheck(
+    eventStatus('2026-10-15T00:00:00.000Z', null, at('2026-10-15T12:00:00.000Z')).label === 'Oggi',
+    'formato UTC, fine nulla, nel giorno: atteso Oggi'
+  )
+  // Intervallo UTC in corso il secondo giorno, concluso il terzo.
+  assertCheck(
+    eventStatus('2026-10-18T00:00:00.000Z', '2026-10-19T23:59:59.999Z', at('2026-10-19T10:00:00.000Z')).label === 'In corso',
+    'formato UTC, intervallo, secondo giorno: atteso In corso'
+  )
+  assertCheck(
+    eventStatus('2026-10-18T00:00:00.000Z', '2026-10-19T23:59:59.999Z', at('2026-10-20T10:00:00.000Z')).label === 'Concluso',
+    'formato UTC, intervallo, terzo giorno: atteso Concluso'
+  )
+  assertCheck(
+    isEventOver(prodOne[0], prodOne[1], at('2026-10-16T10:00:00.000Z')) &&
+      !isEventOver(prodOne[0], prodOne[1], at('2026-10-15T20:00:00.000Z')),
+    'isEventOver: vero il giorno dopo, falso nel giorno'
+  )
+  assertCheck(
+    isEventOver(romeStart(-3), romeEnd(-3), NOW) && !isEventOver(romeStart(0), romeEnd(0), NOW),
+    'isEventOver, formato Roma: vero per un evento di tre giorni fa, falso per oggi'
+  )
+
+  if (failures > 0) {
+    console.error(`[eventStatus.ts] ${failures} verifiche fallite`)
+    process.exit(1)
+  }
   console.log('[eventStatus.ts] self-check OK')
 }

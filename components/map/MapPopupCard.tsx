@@ -1,5 +1,6 @@
 "use client";
 
+import ShareButton from "@/components/ShareButton";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 
 /** Un evento gia' normalizzato dalle properties della feature Mapbox. */
@@ -86,7 +87,19 @@ export default function MapPopupCard({ events, onClose }: MapPopupCardProps) {
 
 			<div className="flex flex-col gap-2">
 				{events.map((ev) => (
-					<MiniEventCard key={ev.id} event={ev} className="hover:bg-surface" />
+					// Il bottone e' fratello della card, mai figlio: la radice della
+					// card e' un Link. pr-8 riserva i 32px dell'icona alla riga meta.
+					<div key={ev.id} className="relative">
+						<MiniEventCard event={ev} className="hover:bg-surface pr-8" />
+						<ShareButton
+							presentation="popup"
+							eventId={ev.id}
+							title={ev.title}
+							dateStart={ev.dateStart}
+							dateEnd={ev.dateEnd}
+							place={ev.locationName}
+						/>
+					</div>
 				))}
 			</div>
 		</div>

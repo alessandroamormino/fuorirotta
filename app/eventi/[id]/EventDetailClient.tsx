@@ -12,8 +12,11 @@ import Navbar from "@/components/Navbar";
 import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
+import ShareButton from "@/components/ShareButton";
+import AddToCalendar from "@/components/calendar/AddToCalendar";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
-import { eventStatus, formatEventRange, romeCalendarDate } from "@/lib/eventStatus";
+import { eventStatus, formatEventRange, isEventOver, romeCalendarDate } from "@/lib/eventStatus";
+import { eventDays } from "@/lib/eventDays";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { MOTION_FAST, EASE_STANDARD } from "@/lib/motion";
 import {
@@ -40,6 +43,14 @@ const EventsMap = dynamic(() => import("@/components/EventsMap"), {
 
 interface EventDetailClientProps {
 	initialEvent?: Event | null;
+	/** URL canonico dell'evento, deciso dal server (stesso valore di alternates.canonical). */
+	canonicalUrl?: string;
+	/**
+	 * "Concluso" calcolato dal server (isEventOver). Il client non legge
+	 * l'orologio nel render di un albero idratato (errore di idratazione di React): senza questo
+	 * valore l'evento e' arrivato dal fetch, non c'e' SSR da cui divergere.
+	 */
+	eventOver?: boolean;
 }
 
 /**
@@ -114,7 +125,7 @@ function MobileDetailBar({ title, scrolled, onBack }: { title: string; scrolled:
 	);
 }
 
-export default function EventDetailClient({ initialEvent }: EventDetailClientProps) {
+export default function EventDetailClient({ initialEvent, canonicalUrl, eventOver }: EventDetailClientProps) {
 	const params = useParams();
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
@@ -366,9 +377,11 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 	}
 
 	const status = eventStatus(event.dateStart, event.dateEnd);
-	const isMultiDay =
-		event.dateEnd != null &&
-		romeCalendarDate(event.dateEnd).getTime() !== romeCalendarDate(event.dateStart).getTime();
+	// Un solo giorno o piu' di uno lo decide eventDays, valido per entrambi i
+	// formati con cui le sorgenti salvano le date (lib/eventDays.ts).
+	const days = eventDays(event.dateStart, event.dateEnd);
+	const isMultiDay = days.startDay !== days.endDay;
+	const calendarUrl = canonicalUrl && !(eventOver ?? isEventOver(event.dateStart, event.dateEnd)) ? canonicalUrl : null;
 	const hasCoords = event.latitude != null && event.longitude != null;
 	const distanceKm =
 		userLocation && event.resolvedLatitude != null && event.resolvedLongitude != null
@@ -587,6 +600,25 @@ export default function EventDetailClient({ initialEvent }: EventDetailClientPro
 											}
 										/>
 									)}
+								</div>
+
+								{/* Azioni secondarie (D-04): "Naviga" resta l'unico controllo
+								    pieno nero. Fuori dalla colonna laterale, quindi presenti
+								    anche senza coordinate. */}
+								<div className="mb-6 flex gap-2">
+									{/* D-05: stessa regola del badge "Concluso" (isEventOver), cosi' bottone e
+									    badge non possono dissentire. */}
+									{calendarUrl && <AddToCalendar event={event} canonicalUrl={calendarUrl} />}
+									<ShareButton
+										presentation="detail"
+										labelAlways={!calendarUrl}
+										eventId={event.id}
+										title={event.title}
+										dateStart={event.dateStart}
+										dateEnd={event.dateEnd}
+										place={event.comune?.name ?? event.locationName}
+										url={canonicalUrl}
+									/>
 								</div>
 
 								{event.description && (

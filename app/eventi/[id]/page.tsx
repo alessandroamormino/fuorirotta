@@ -6,6 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { decodeHtmlEntities } from "@/lib/utils";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
+import { eventDays } from "@/lib/eventDays";
+import { isEventOver } from "@/lib/eventStatus";
+import { todayInRome } from "@/lib/dateWindow";
+import { formatDayRange } from "@/lib/calendar/links";
+import { ogCardContent } from "@/lib/og/card";
+import { OG_VERSION } from "@/lib/og/brand";
 import EventDetailClient from "./EventDetailClient";
 
 const BASE_URL = (
@@ -63,9 +69,22 @@ export async function generateMetadata(
 	const composedEvent = composeEvent(event, members);
 
 	const title = decodeHtmlEntities(composedEvent.title);
+	// Senza descrizione l'anteprima dice quando e dove (UI-SPEC, Copywriting
+	// Contract), non una frase uguale per tutti. Il comune viene dalla riga
+	// composta (include del getEvent sopra); in sua assenza il luogo scrapato.
 	const description = composedEvent.description
 		? decodeHtmlEntities(composedEvent.description.replace(/<[^>]*>/g, "")).slice(0, 160)
-		: "Scopri questo evento su Fuorirotta.";
+		: [
+				formatDayRange(
+					eventDays(composedEvent.dateStart, composedEvent.dateEnd).startDay,
+					eventDays(composedEvent.dateStart, composedEvent.dateEnd).endDay,
+					todayInRome()
+				),
+				(composedEvent as { comune?: { name: string } | null }).comune?.name ??
+					decodeHtmlEntities(composedEvent.locationName ?? "").trim(),
+			]
+				.filter(Boolean)
+				.join(" \u00b7 ");
 	const canonical = `${BASE_URL}/eventi/${eventId}`;
 
 	return {
@@ -79,7 +98,19 @@ export async function generateMetadata(
 			type: "website",
 			locale: "it_IT",
 			siteName: "Fuorirotta",
-			...(composedEvent.imageUrl ? { images: [{ url: composedEvent.imageUrl }] } : {}),
+			// D-08: con l'immagine della fonte resta quella; senza, la card generata
+			// (D-09). Nessun file opengraph-image sotto questa cartella: con la
+			// convenzione di file Next ignorerebbe questo campo anche per le fonti.
+			images: composedEvent.imageUrl
+				? [{ url: composedEvent.imageUrl }]
+				: [
+						{
+							url: `${BASE_URL}/eventi/${eventId}/og?v=${OG_VERSION}`,
+							width: 1200,
+							height: 630,
+							alt: ogCardContent(composedEvent, todayInRome()).alt,
+						},
+					],
 		},
 		twitter: {
 			card: "summary_large_image",
@@ -122,8 +153,13 @@ export default async function EventDetailPage({
 				description: composedEvent.description
 					? decodeHtmlEntities(composedEvent.description.replace(/<[^>]*>/g, "")).slice(0, 500)
 					: undefined,
-				startDate: composedEvent.dateStart.toISOString(),
-				endDate: composedEvent.dateEnd?.toISOString(),
+				// Giorni di calendario (YYYY-MM-DD, ISO 8601 valido per schema.org):
+				// l'istante 23:59:59.999Z dei dati in formato UTC, letto da Google,
+				// sarebbe il giorno dopo a Roma.
+				startDate: eventDays(composedEvent.dateStart, composedEvent.dateEnd).startDay,
+				endDate: composedEvent.dateEnd
+					? eventDays(composedEvent.dateStart, composedEvent.dateEnd).endDay
+					: undefined,
 				url: `${BASE_URL}/eventi/${eventId}`,
 				...(composedEvent.imageUrl ? { image: composedEvent.imageUrl } : {}),
 				location: composedEvent.locationName
@@ -168,7 +204,14 @@ export default async function EventDetailPage({
 					}}
 				/>
 			)}
-			<EventDetailClient initialEvent={serializedEvent} />
+			<EventDetailClient
+				initialEvent={serializedEvent}
+				// WR-05: "concluso" lo decide il server, una volta: l'orologio del
+				// browser nel render darebbe un albero diverso (errore di idratazione di React) se
+				// SSR e idratazione stanno a cavallo della mezzanotte di Roma.
+				eventOver={composedEvent ? isEventOver(composedEvent.dateStart, composedEvent.dateEnd) : undefined}
+				canonicalUrl={isNaN(eventId) ? undefined : `${BASE_URL}/eventi/${eventId}`}
+			/>
 		</>
 	);
 }
