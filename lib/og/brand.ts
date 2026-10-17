@@ -39,3 +39,58 @@ export const OG_BRAND = {
   wordmark: 'Fuorirotta',
   domain: 'fuori-rotta.it',
 }
+
+// Self-check: `npx tsx lib/og/brand.ts`, lanciato da scripts/calendar.test.sh.
+// Stesso schema di lib/motion.ts contro app/globals.css (VR-07): le tinte
+// delle categorie qui sono la copia dei token CSS del tema chiaro, e una
+// copia che diverge in silenzio e' il difetto che questo controllo chiude.
+// `require` e' dentro la guardia: il modulo non deve tirare fs fuori da qui.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+  let failures = 0
+  const assertCheck = (cond: boolean, msg: string) => {
+    if (!cond) {
+      console.error(`  FAIL: ${msg}`)
+      failures++
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const css: string = require('fs').readFileSync(require('path').join(__dirname, '../../app/globals.css'), 'utf8')
+  const start = css.indexOf(':root')
+  const root = css.slice(start, css.indexOf('\n}', start))
+  const hexToRgb = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const token = (name: string): string | null => {
+    const m = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(root)
+    return m ? hexToRgb(m[1]) : null
+  }
+  const pairs: Array<[string, string]> = [
+    ['category-sagre', 'Sagre e feste'],
+    ['category-musica', 'Musica e spettacolo'],
+    ['category-arte', 'Arte e cultura'],
+    ['category-fiere', 'Fiere e mercati'],
+    ['category-sport', 'Sport e outdoor'],
+    ['category-food', 'Food & Wine'],
+    ['muted-foreground', 'Altro'], // --category-altro e' l'alias di --muted-foreground
+  ]
+  for (const [cssName, category] of pairs) {
+    const expected = token(cssName)
+    assertCheck(expected !== null, `--${cssName} non trovato nel primo blocco :root`)
+    assertCheck(OG_BRAND.categoryColors[category] === expected, `${category}: atteso ${expected} (--${cssName}), trovato ${OG_BRAND.categoryColors[category]}`)
+  }
+  assertCheck(OG_BRAND.inkMuted === OG_BRAND.categoryColors.Altro, 'inkMuted e il grigio di Altro sono lo stesso --muted-foreground')
+
+  // Ogni categoria canonica ha una tinta (il modulo di tassonomia si carica solo qui).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { CANONICAL_CATEGORIES } = require('../categories/taxonomy') as { CANONICAL_CATEGORIES: readonly string[] }
+  assertCheck(CANONICAL_CATEGORIES.length === 7, `categorie canoniche: ${CANONICAL_CATEGORIES.length}`)
+  for (const name of CANONICAL_CATEGORIES) assertCheck(Boolean(OG_BRAND.categoryColors[name]), `nessuna tinta per "${name}"`)
+  assertCheck(Boolean(OG_BRAND.categoryColors[OG_BRAND.fallbackCategory]), 'la categoria di ripiego ha una tinta')
+
+  if (failures > 0) {
+    console.error(`[brand.ts] ${failures} controlli falliti`)
+    process.exit(1)
+  }
+  console.log('[brand.ts] self-check OK')
+}

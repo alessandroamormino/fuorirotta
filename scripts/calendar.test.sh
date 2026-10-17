@@ -29,6 +29,8 @@ FILES=(
   lib/eventStatus.ts
   lib/calendar/ics.ts
   lib/calendar/links.ts
+  lib/og/brand.ts
+  lib/og/card.tsx
 )
 
 cd "${repo_root}"
