@@ -10,7 +10,7 @@ export default function Card({ children, className, interactive = false }: CardP
 	return (
 		<div
 			className={cn(
-				"bg-surface border border-border rounded-card overflow-hidden",
+				"bg-surface border border-border rounded-md overflow-hidden",
 				interactive && "hover:border-primary/50 hover:shadow-sm transition-all",
 				className
 			)}
