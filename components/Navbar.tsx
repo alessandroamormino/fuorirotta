@@ -16,6 +16,7 @@ import MobileSearchOverlay from "@/components/navbar/MobileSearchOverlay";
 import SearchbarTrigger from "@/components/navbar/SearchbarTrigger";
 import DesktopSearchDropdown from "@/components/navbar/DesktopSearchDropdown";
 import * as Popover from "@/components/ui/Popover";
+import AccountButton from "@/components/account/AccountButton";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import type { SearchFilters } from "@/lib/types";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
@@ -660,11 +661,15 @@ export default function Navbar({
 							/>
 						</div>
 
-						{/* Toggle tema — un solo montaggio in tutto il prodotto reso a
-						    utente (D-09), sempre visibile in tutti e quattro gli stati
-						    e su entrambi i breakpoint. Stessa forma visiva del mount
-						    flottante rimosso, solo riposizionata (17-UI-SPEC.md). */}
-						<ThemeToggle className="flex-none lg:justify-self-end flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors" />
+						{/* Icona dell'account + toggle tema, nello stesso involucro: la
+						    griglia lg resta a tre figli (logo, ricerca, questo). Il toggle
+						    resta l'unico montaggio di ThemeToggle in questo file (D-09 della
+						    Fase 17), solo riposizionato (17-UI-SPEC.md); l'icona e' D-01 della
+						    Fase 21 (21-UI-SPEC Superficie 1). */}
+						<div className="flex flex-none items-center gap-2 lg:justify-self-end">
+							<AccountButton />
+							<ThemeToggle className="flex-none flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors" />
+						</div>
 					</div>
 				</div>
 			</nav>

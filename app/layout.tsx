@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { EventCacheProvider } from "@/lib/eventCache";
+import { UserStateProvider } from "@/components/account/UserStateProvider";
 
 export const viewport = {
 	width: "device-width",
@@ -80,9 +81,11 @@ export default function RootLayout({
 				/>
 			</head>
 			<body className="antialiased">
-				<EventCacheProvider>
-					{children}
-				</EventCacheProvider>
+				<UserStateProvider>
+					<EventCacheProvider>
+						{children}
+					</EventCacheProvider>
+				</UserStateProvider>
 			</body>
 		</html>
 	);
