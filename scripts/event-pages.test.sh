@@ -16,6 +16,9 @@
 #   F2  formato UTC, intervallo     2027-04-10 -> 2027-04-11
 #   F3  formato Roma, un giorno     2027-04-21
 #   F4  formato UTC, fine a mezzanotte 2027-05-12
+#   F5  formato UTC, un giorno, con source_url   2027-06-05 (canonica per F6)
+#   F6  riga membro di F5 (canonical_event_id = F5)
+#   F7  titolo con CR LF + END:VEVENT + una proprieta' extra (iniezione nel .ics)
 #
 # Le colonne sono "timestamp without time zone": le cifre scritte qui sono
 # l'istante UTC memorizzato.
@@ -104,10 +107,20 @@ F1="$(insert_event f1 'Prova un giorno formato UTC' '2027-03-28 00:00:00' '2027-
 F2="$(insert_event f2 'Prova intervallo formato UTC' '2027-04-10 00:00:00' '2027-04-11 23:59:59.999')"
 F3="$(insert_event f3 'Prova un giorno formato Roma' '2027-04-20 22:00:00' '2027-04-21 21:59:59.999')"
 F4="$(insert_event f4 'Prova fine a mezzanotte UTC' '2027-05-12 00:00:00' '2027-05-12 00:00:00')"
-for id in "${F1}" "${F2}" "${F3}" "${F4}"; do
+F5="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, source_url)
+                VALUES ('${test_source}', 'f5', 'Prova canonica con fonte', '2027-06-05 00:00:00', '2027-06-05 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo', 'https://example.invalid/f5')
+                RETURNING id" | head -n 1)"
+F6="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, canonical_event_id)
+                VALUES ('${test_source}', 'f6', 'Prova membro', '2027-06-05 00:00:00', '2027-06-05 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo', ${F5})
+                RETURNING id" | head -n 1)"
+# F7: il titolo e' costruito in SQL con escape E'' (CR = \r, LF = \n).
+F7="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
+                VALUES ('${test_source}', 'f7', E'Titolo normale\\r\\nEND:VEVENT\\r\\nATTENDEE:mailto:x@example.invalid', '2027-07-10 00:00:00', '2027-07-10 23:59:59.999', 'Piazza di prova', 'Musica e spettacolo')
+                RETURNING id" | head -n 1)"
+for id in "${F1}" "${F2}" "${F3}" "${F4}" "${F5}" "${F6}" "${F7}"; do
   [[ "${id}" =~ ^[0-9]+$ ]] || fail "fixture non inserita (id ottenuto: '${id}')"
 done
-echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4})"
+echo "ok  fixture inserite (F1=${F1} F2=${F2} F3=${F3} F4=${F4} F5=${F5} F6=${F6} F7=${F7})"
 
 # --- Dev server effimero, Postgres locale reale -----------------------------
 bash scripts/dev-db.sh npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
@@ -157,3 +170,87 @@ page="${tmp_dir}/page-${F1}.html"
 grep -qF '"startDate":"2027-03-28"' "${page}" || fail "S5: il JSON-LD di F1 non ha startDate 2027-03-28"
 grep -qF '"endDate":"2027-03-28"' "${page}" || fail "S5: il JSON-LD di F1 non ha endDate 2027-03-28"
 echo "ok  S5: JSON-LD di F1 con startDate e endDate 2027-03-28"
+
+# --- .ics (CAL-01): un file per evento, giorni interi, anonimo ---------------
+# Controlli sui byte con node -e: grep tratta CR e tab in modo diverso tra
+# macOS e Node 24 su Linux (CI), node no.
+#
+# fetch_ics <nome> <percorso> -> ${tmp_dir}/<nome>.h (header), <nome>.b (corpo);
+# stampa il codice HTTP. Niente -L: i redirect si guardano, non si seguono.
+fetch_ics() {
+  curl -s -D "${tmp_dir}/$1.h" -o "${tmp_dir}/$1.b" -w '%{http_code}' --max-time 60 "http://127.0.0.1:${port}$2"
+}
+# header <nome> <header> -> valore (minuscolo il nome, CR tolto)
+header() {
+  grep -i "^$2:" "${tmp_dir}/$1.h" | head -n 1 | cut -d: -f2- | sed 's/^ *//' | tr -d '\r'
+}
+
+# --- S6: F1 scaricabile, intestazioni e giorni giusti (esclusivo) -------------
+code="$(fetch_ics ics-f1 "/api/events/${F1}/ics")"
+[[ "${code}" == "200" ]] || fail "S6: GET /api/events/${F1}/ics: atteso 200, ottenuto ${code}"
+[[ "$(header ics-f1 content-type)" == text/calendar* ]] || fail "S6: content-type non text/calendar: '$(header ics-f1 content-type)'"
+header ics-f1 content-type | grep -qi "charset=utf-8" || fail "S6: manca charset=utf-8 nel content-type"
+disp="$(header ics-f1 content-disposition)"
+[[ "${disp}" == inline* ]] || fail "S6: content-disposition non inline: '${disp}'"
+[[ "${disp}" == *"filename=\"fuorirotta-${F1}.ics\""* ]] || fail "S6: filename atteso fuorirotta-${F1}.ics, ottenuto '${disp}'"
+[[ "$(header ics-f1 cache-control)" == "public, max-age=600" ]] || fail "S6: cache-control atteso 'public, max-age=600', ottenuto '$(header ics-f1 cache-control)'"
+for needle in "BEGIN:VCALENDAR" "DTSTART;VALUE=DATE:20270328" "DTEND;VALUE=DATE:20270329"; do
+  grep -qF "${needle}" "${tmp_dir}/ics-f1.b" || fail "S6: il corpo di F1 non contiene '${needle}'"
+done
+echo "ok  S6: .ics di F1 (200, text/calendar, inline, 20270328 -> 20270329 esclusivo)"
+
+# --- S7: solo CRLF, righe fino a 75 ottetti ----------------------------------
+node -e '
+const b = require("fs").readFileSync(process.argv[1]);
+const s = b.toString("latin1");
+if (/(^|[^\r])\n/.test(s)) { console.error("LF nudo"); process.exit(1) }
+if (/\r(?!\n)/.test(s)) { console.error("CR nudo"); process.exit(1) }
+const longest = Math.max(...b.toString("utf8").split("\r\n").map(l => Buffer.byteLength(l)));
+if (longest > 75) { console.error("riga di " + longest + " ottetti"); process.exit(1) }
+' "${tmp_dir}/ics-f1.b" || fail "S7: il .ics di F1 non e' solo-CRLF con righe da 75 ottetti al massimo"
+echo "ok  S7: .ics di F1 solo CRLF, nessuna riga oltre 75 ottetti"
+
+# --- S8: intervallo UTC, la fine e' il giorno dopo l'ultimo -------------------
+code="$(fetch_ics ics-f2 "/api/events/${F2}/ics")"
+[[ "${code}" == "200" ]] || fail "S8: GET /api/events/${F2}/ics: atteso 200, ottenuto ${code}"
+grep -qF "DTEND;VALUE=DATE:20270412" "${tmp_dir}/ics-f2.b" || fail "S8: F2 non ha DTEND 20270412"
+grep -qF "DTSTART;VALUE=DATE:20270410" "${tmp_dir}/ics-f2.b" || fail "S8: F2 non ha DTSTART 20270410"
+echo "ok  S8: .ics di F2 (10 apr -> DTEND 20270412)"
+
+# --- S9: ?download=1 -> attachment -------------------------------------------
+code="$(fetch_ics ics-dl "/api/events/${F1}/ics?download=1")"
+[[ "${code}" == "200" ]] || fail "S9: ?download=1: atteso 200, ottenuto ${code}"
+[[ "$(header ics-dl content-disposition)" == attachment* ]] || fail "S9: content-disposition non attachment: '$(header ics-dl content-disposition)'"
+echo "ok  S9: ?download=1 serve l'.ics come attachment"
+
+# --- S10: id malformati -> 400 con corpo breve in italiano --------------------
+for bad in abc 12abc; do
+  code="$(fetch_ics ics-bad "/api/events/${bad}/ics")"
+  [[ "${code}" == "400" ]] || fail "S10: /api/events/${bad}/ics: atteso 400, ottenuto ${code}"
+  [[ "$(cat "${tmp_dir}/ics-bad.b")" == "Identificativo non valido" ]] || fail "S10: corpo del 400 per '${bad}': '$(cat "${tmp_dir}/ics-bad.b")'"
+done
+echo "ok  S10: id malformati (abc, 12abc) -> 400 'Identificativo non valido'"
+
+# --- S11: id sconosciuto -> 404 in testo semplice, non una pagina HTML --------
+code="$(fetch_ics ics-404 "/api/events/999999999/ics")"
+[[ "${code}" == "404" ]] || fail "S11: id sconosciuto: atteso 404, ottenuto ${code}"
+[[ "$(cat "${tmp_dir}/ics-404.b")" == "Evento non trovato" ]] || fail "S11: corpo del 404: '$(cat "${tmp_dir}/ics-404.b")'"
+[[ "$(header ics-404 content-type)" == text/plain* ]] || fail "S11: content-type del 404 non text/plain: '$(header ics-404 content-type)'"
+echo "ok  S11: id sconosciuto -> 404 'Evento non trovato' (text/plain)"
+
+# --- S12: riga membro -> 307 alla canonica, tenendo download=1 ----------------
+code="$(fetch_ics ics-member "/api/events/${F6}/ics?download=1")"
+[[ "${code}" == "307" ]] || fail "S12: membro: atteso 307, ottenuto ${code}"
+[[ "$(header ics-member location)" == */api/events/${F5}/ics?download=1 ]] || fail "S12: Location attesa .../api/events/${F5}/ics?download=1, ottenuta '$(header ics-member location)'"
+echo "ok  S12: il membro F6 rimanda con 307 alla canonica F5 (download=1 mantenuto)"
+
+# --- S13: nessuna iniezione dal titolo ----------------------------------------
+code="$(fetch_ics ics-f7 "/api/events/${F7}/ics")"
+[[ "${code}" == "200" ]] || fail "S13: GET /api/events/${F7}/ics: atteso 200, ottenuto ${code}"
+node -e '
+const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\r\n");
+const n = lines.filter(l => l === "END:VEVENT").length;
+if (n !== 1) { console.error("END:VEVENT: " + n); process.exit(1) }
+if (lines.some(l => l.startsWith("ATTENDEE"))) { console.error("riga ATTENDEE iniettata"); process.exit(1) }
+' "${tmp_dir}/ics-f7.b" || fail "S13: il titolo di F7 ha iniettato righe nel .ics"
+echo "ok  S13: titolo con CR LF + END:VEVENT -> un solo END:VEVENT, nessuna riga iniettata"

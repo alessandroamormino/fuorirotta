@@ -27,6 +27,7 @@ fail() {
 FILES=(
   lib/eventDays.ts
   lib/eventStatus.ts
+  lib/calendar/ics.ts
 )
 
 cd "${repo_root}"
