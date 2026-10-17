@@ -32,9 +32,12 @@
 #   A5  interruttore spento: /api/auth/ok 404 private no-store, stato spento
 #   A6  statico: nessuna entrata pubblica importa lib/auth o legge la richiesta
 #   A7  / e la pagina evento hanno il pulsante "Accedi" e UNA regione avvisi vuota
+#   A8  interruttore spento: /account risponde 404
 #   B2-B4, B7 come A2-A4, A7 con l'interruttore acceso
 #   B5  interruttore acceso: /api/auth/ok 200, stato enabled:true e, col cookie,
 #       l'utente di prova
+#   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
+#       con la sessione e' 200, private e no-store, noindex, e contiene il nome dell'utente
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -286,6 +289,11 @@ for f in app/layout.tsx app/page.tsx; do
 done
 echo "ok  A6: nessuna entrata pubblica importa lib/auth o legge cookies(), headers(), searchParams"
 
+# --- A8: /account non esiste con l'interruttore spento (D-16) ----------------------------
+code="$(fetch a8account /account)"
+[[ "${code}" == "404" ]] || fail "A8: /account a interruttore spento: atteso 404, ottenuto ${code}"
+echo "ok  A8: /account risponde 404 con l'interruttore spento"
+
 stop_server
 
 # --- Run B: interruttore acceso ----------------------------------------------------------
@@ -307,6 +315,22 @@ email="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv
 [[ "${email}" == "anon-pages@fixture.invalid" ]] \
   || fail "B5: con il cookie l'utente atteso e' anon-pages@fixture.invalid, corpo: '$(cat "${tmp_dir}/b5user.b")'"
 echo "ok  B5: /api/auth/ok 200; stato enabled:true e, col cookie, l'utente di prova"
+
+# --- B8: /account (D-06, D-16) ------------------------------------------------------------
+code="$(fetch b8guest /account)"
+[[ "${code}" == "307" ]] || fail "B8: /account da ospite: atteso 307, ottenuto ${code}"
+loc="$(header b8guest location)"
+[[ "${loc}" == "/accedi?next=%2Faccount" ]] || fail "B8: /account da ospite: Location attesa '/accedi?next=%2Faccount', ottenuta '${loc}'"
+code="$(fetch b8user /account "${session_cookie}")"
+[[ "${code}" == "200" ]] || fail "B8: /account con la sessione: atteso 200, ottenuto ${code}"
+cc="$(header b8user cache-control)"
+[[ "${cc}" == *private* && "${cc}" == *no-store* ]] \
+  || fail "B8: /account: Cache-Control atteso con private e no-store, ottenuto '${cc}'"
+grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/b8user.b" \
+  || fail "B8: /account: manca il meta robots noindex"
+grep -qF 'Utente Prova' "${tmp_dir}/b8user.b" \
+  || fail "B8: /account: il nome dell'utente non e' nell'HTML del server"
+echo "ok  B8: /account da ospite 307 verso /accedi?next=%2Faccount; con la sessione 200, private no-store, noindex, nome nell'HTML"
 
 echo ""
 echo "PASS: pagine pubbliche identiche con e senza sessione, interruttore spento e acceso (ACCT-05)"
