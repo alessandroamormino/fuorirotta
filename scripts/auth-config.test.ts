@@ -111,6 +111,19 @@ async function main(): Promise<void> {
       logged.join(' | '),
     )
     process.env.GOOGLE_CLIENT_SECRET = saved.GOOGLE_CLIENT_SECRET
+
+    // BETTER_AUTH_URL: solo https, o http su localhost; il log non svela il valore.
+    process.env.BETTER_AUTH_URL = 'fuori-rotta.it'
+    check('authEnabled: BETTER_AUTH_URL senza schema -> spento', authEnabled() === false)
+    check(
+      'authEnabled: il log nomina BETTER_AUTH_URL e non il suo valore',
+      logged.length === 3 && logged[2].includes('BETTER_AUTH_URL') && !logged[2].includes('fuori-rotta.it'),
+      logged.join(' | '),
+    )
+    process.env.BETTER_AUTH_URL = 'http://fuori-rotta.it'
+    check('authEnabled: BETTER_AUTH_URL http su un dominio vero -> spento', authEnabled() === false)
+    process.env.BETTER_AUTH_URL = 'http://localhost:3000'
+    check('authEnabled: BETTER_AUTH_URL http://localhost -> attivo', authEnabled() === true)
   } finally {
     console.error = originalError
     Object.assign(process.env, saved)

@@ -27,6 +27,18 @@ const REQUIRED_VARS = ['BETTER_AUTH_URL', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SEC
 // per richiesta: authEnabled() gira a ogni chiamata a getAuth().
 const reportedMissing = new Set<string>()
 
+// https sempre; http solo per localhost (sviluppo e gate). Senza schema, o con
+// http su un dominio vero, il prefisso __Secure- del cookie cambierebbe in
+// silenzio o ogni richiesta andrebbe in 500: meglio spento.
+function validBaseUrl(value: string | undefined): boolean {
+  try {
+    const url = new URL(value ?? '')
+    return url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost')
+  } catch {
+    return false
+  }
+}
+
 /**
  * True solo con AUTH_ENABLED='true' E configurazione completa. Con AUTH_ENABLED='true'
  * ma qualcosa mancante rifiuta (false) e lo dice nel log, con i NOMI delle
@@ -35,6 +47,7 @@ const reportedMissing = new Set<string>()
 export function authEnabled(): boolean {
   if (process.env.AUTH_ENABLED !== 'true') return false
   const missing: string[] = REQUIRED_VARS.filter((name) => !process.env[name])
+  if (process.env.BETTER_AUTH_URL && !validBaseUrl(process.env.BETTER_AUTH_URL)) missing.push('BETTER_AUTH_URL')
   if ((process.env.BETTER_AUTH_SECRET ?? '').length < MIN_SECRET_LENGTH) {
     missing.push('BETTER_AUTH_SECRET')
   }
@@ -42,7 +55,7 @@ export function authEnabled(): boolean {
   const key = missing.join(',')
   if (!reportedMissing.has(key)) {
     reportedMissing.add(key)
-    console.error(`[Auth] AUTH_ENABLED=true ma la configurazione e' incompleta: ${missing.join(', ')}`)
+    console.error(`[Auth] AUTH_ENABLED=true ma la configurazione e' incompleta o non valida: ${missing.join(', ')}`)
   }
   return false
 }
