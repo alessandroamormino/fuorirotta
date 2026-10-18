@@ -157,6 +157,9 @@ fi
 # margine la fa cancellare nel giro giusto (e non in quello dopo).
 find "${local_dir}" -maxdepth 1 -type f -name 'fuorirotta-*.dump.gpg' \
   -mmin "+$((retention_days * 1440 - 60))" -delete || fail "potatura-locale"
+# Un .partial di un giro morto a meta' (OOM, riavvio) e' dati personali cifrati
+# fuori retention e il pattern sopra non lo vede: via dopo un giorno.
+find "${local_dir}" -maxdepth 1 -type f -name '.fuorirotta-*.partial' -mmin +1440 -delete || fail "potatura-partial"
 
 echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") cron-backup status=ok file=${name} bytes=${size} target=${target:-locale}"
 

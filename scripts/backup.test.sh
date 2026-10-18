@@ -16,14 +16,16 @@
 #       lascia nessun file
 #   B8  potatura locale (quella che gira in produzione): con retention 14 giorni
 #       restano le copie di 13 giorni e di 13 giorni e 22 ore, spariscono
-#       quelle di 14 giorni e 1 ora e di 15 giorni
+#       quelle di 14 giorni e 1 ora e di 15 giorni; un .partial vecchio di un
+#       giro morto sparisce, uno recente (giro in corso) resta
 #   B6  ramo object storage con un rclone finto nel PATH: caricamento,
 #       verifica, file locale tolto solo dopo, potatura con la retention;
 #       caricamento fallito = file locale conservato ed exit 1
 #   B7  backup-pull.sh (D-21, il Mac che scarica nel NAS) con ssh, mount e
 #       rsync-remoto finti: volume smontato = exit non-zero e niente scritto;
 #       elenco remoto vuoto = niente delete; giro normale = specchio con il
-#       file vecchio tolto dal NAS
+#       file vecchio tolto dal NAS; server con meno della meta' delle copie
+#       del NAS = niente delete
 #
 # Il server di produzione non si tocca: la DIRECT_URL e' letterale qui sotto.
 set -uo pipefail
@@ -137,6 +139,9 @@ for spec in 20250101T000000Z:$((13 * 1440)) 20250102T000000Z:$((13 * 1440 + 22 *
   echo x > "${f}"
   touch -t "$(age_stamp "${spec#*:}")" "${f}"
 done
+echo x > "${backups}/.fuorirotta-20250105T000000Z.dump.gpg.partial"
+touch -t "$(age_stamp $((2 * 1440)))" "${backups}/.fuorirotta-20250105T000000Z.dump.gpg.partial"
+echo x > "${backups}/.fuorirotta-20250106T000000Z.dump.gpg.partial"
 write_env "${good_url}" "BACKUP_RETENTION_DAYS=14"
 ENV_FILE="${env_file}" bash scripts/cron-backup.sh > "${work}/b8.out" 2>&1 \
   || { cat "${work}/b8.out"; fail "B8: cron-backup.sh e' uscito non-zero"; }
@@ -144,7 +149,9 @@ ENV_FILE="${env_file}" bash scripts/cron-backup.sh > "${work}/b8.out" 2>&1 \
   || fail "B8: una copia di meno di 14 giorni e' stata cancellata"
 [[ ! -e "${backups}/fuorirotta-20250103T000000Z.dump.gpg" && ! -e "${backups}/fuorirotta-20250104T000000Z.dump.gpg" ]] \
   || fail "B8: una copia di piu' di 14 giorni e' sopravvissuta ($(ls "${backups}" | tr '\n' ' '))"
-ok "B8: potatura locale a 14 giorni esatti: restano 13 giorni e 13 giorni 22 ore, spariscono 14 giorni 1 ora e 15 giorni"
+[[ ! -e "${backups}/.fuorirotta-20250105T000000Z.dump.gpg.partial" && -e "${backups}/.fuorirotta-20250106T000000Z.dump.gpg.partial" ]] \
+  || fail "B8: .partial vecchio non tolto o .partial recente tolto ($(ls -a "${backups}" | tr '\n' ' '))"
+ok "B8: potatura locale a 14 giorni esatti: restano 13 giorni e 13 giorni 22 ore, spariscono 14 giorni 1 ora e 15 giorni; .partial vecchio tolto"
 
 # --- B6 ------------------------------------------------------------------------
 # rclone finto: copyto = cp, lsf = ls, delete = registra gli argomenti. Cosi'
@@ -238,6 +245,13 @@ got="$(ls "${nas}" | tr '\n' ' ')"
 want="fuorirotta-20260101T000000Z.dump.gpg fuorirotta-20260102T000000Z.dump.gpg fuorirotta-20260103T000000Z.dump.gpg "
 [[ "${got}" == "${want}" ]] || fail "B7c: NAS = '${got}', atteso '${want}'"
 grep -q 'status=ok file=fuorirotta-20260103T000000Z.dump.gpg' "${work}/pull.log" || fail "B7c: riga ok mancante nel log"
-ok "B7: pull nel NAS: smontato = niente scritto, elenco vuoto = niente delete, giro normale = specchio senza il file vecchio"
+
+# (d) server quasi svuotato (1 copia contro 3 sul NAS): errore e il NAS resta intatto
+real_srv="${srv}"; srv="${work}/server-shrunk"; mkdir -p "${srv}"
+echo "dump 20260110" > "${srv}/fuorirotta-20260110T000000Z.dump.gpg"
+if pull; then fail "B7d: server svuotato ma exit 0"; fi
+[[ "$(ls "${nas}" | tr '\n' ' ')" == "${want}" ]] || fail "B7d: un server svuotato ha toccato il NAS ($(ls "${nas}" | tr '\n' ' '))"
+srv="${real_srv}"
+ok "B7: pull nel NAS: smontato = niente scritto, elenco vuoto o server svuotato = niente delete, giro normale = specchio senza il file vecchio"
 
 echo "PASS: backup cifrato end to end sul database locale (D-18) e pull nel NAS (D-21)"
