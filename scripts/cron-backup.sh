@@ -85,7 +85,9 @@ pg_image="${pg_image:-postgres:17-alpine}"
 # d'ambiente, e passarlo con --dbname lo metterebbe negli argomenti (T-21-39).
 # ponytail: del query string si legge solo sslmode (e' quello che un URL di
 # Supabase puo' avere); se servisse altro, aggiungerlo qui.
-urldecode() { printf '%b' "${1//%/\\x}"; }
+# Il raddoppio dei \ viene prima: un \ letterale nella password non deve
+# diventare una sequenza di escape per %b.
+urldecode() { local s="${1//\\/\\\\}"; printf '%b' "${s//%/\\x}"; }
 url_re='^postgres(ql)?://([^:@/]+)(:([^@]*))?@(\[[^]]+\]|[^:/?]+)(:([0-9]+))?/([^?]*)(\?(.*))?$'
 if [[ -n "${direct_url}" ]]; then
   if ! [[ "${direct_url}" =~ ${url_re} ]]; then
