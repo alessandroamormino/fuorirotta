@@ -58,7 +58,7 @@
  */
 import { backfillEvents } from '../lib/territorial/backfill'
 import { purgeConcludedEvents, RETENTION_DAYS } from '../lib/retention/purge'
-import { AUTH_RATE_LIMIT_RETENTION_HOURS, purgeAuthRows } from '../lib/retention/purgeAuth'
+import { purgeAuthRows } from '../lib/retention/purgeAuth'
 import { dedupeEvents } from '../lib/dedup/dedupe'
 import { truncateError } from '../lib/scrapers/health'
 import { prisma } from '../lib/prisma'
@@ -83,12 +83,14 @@ async function runMaintenance(): Promise<{ eventCount: number }> {
   )
 
   // AUTH-08 / D-15: i contatori di rate limit (indirizzi IP) vivono al massimo
-  // AUTH_RATE_LIMIT_RETENTION_HOURS, la durata che /privacy dichiara; sessioni
+  // AUTH_RATE_LIMIT_RETENTION_HOURS (con il giro quotidiano, la durata che
+  // /privacy dichiara): si cancella tutto cio' che e' fuori dalla finestra del
+  // throttle, quindi resta solo cio' scritto dopo il giro precedente; sessioni
   // e stati di accesso solo se gia' scaduti. Tabelle tiny, nessun ordine da
   // rispettare rispetto a backfill e dedup.
   const authReport = await purgeAuthRows()
   console.log(
-    `[Maintenance] Account: ${authReport.rateLimitDeleted} righe di rate limit oltre ${AUTH_RATE_LIMIT_RETENTION_HOURS} ore, ${authReport.sessionsDeleted} sessioni scadute, ${authReport.verificationsDeleted} stati di accesso scaduti cancellati.`
+    `[Maintenance] Account: ${authReport.rateLimitDeleted} righe di rate limit fuori dalla finestra del throttle, ${authReport.sessionsDeleted} sessioni scadute, ${authReport.verificationsDeleted} stati di accesso scaduti cancellati.`
   )
 
   const backfillReport = await backfillEvents()

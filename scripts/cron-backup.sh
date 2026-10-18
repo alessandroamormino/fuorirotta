@@ -11,7 +11,10 @@
 # prisma/schema.prisma (auth_* inclusi) piu' _prisma_migrations, letti dallo
 # schema del checkout al momento dell'esecuzione. Nessun nome e' scritto qui:
 # una tabella aggiunta da una fase futura entra nel backup da sola, e una
-# tabella di n8n non puo' entrarci perche' non e' nello schema.
+# tabella di n8n non puo' entrarci perche' non e' nello schema. Unica eccezione
+# scritta qui: auth_rate_limit entra con lo schema ma SENZA righe (contiene gli
+# indirizzi IP dei tentativi di accesso, che /privacy dichiara per 24 ore: nei
+# backup resterebbero 14 giorni, e non servono a nessun ripristino).
 #
 # COME: pg_dump gira dentro un container postgres (l'host non ha il client, ne'
 # Node 20: solo bash, docker, gpg, rclone) su DIRECT_URL (la porta non
@@ -129,7 +132,7 @@ for t in "${tables[@]}"; do
   t_args+=(-t "${t}")
 done
 if ! docker run --rm ${net_args[@]+"${net_args[@]}"} -e DUMP_URL="${direct_url}" "${pg_image}" \
-  sh -c 'exec pg_dump --dbname="$DUMP_URL" --format=custom --no-owner --no-privileges --strict-names "$@"' sh "${t_args[@]}" \
+  sh -c 'exec pg_dump --dbname="$DUMP_URL" --format=custom --no-owner --no-privileges --strict-names --exclude-table-data=auth_rate_limit "$@"' sh "${t_args[@]}" \
   | gpg --batch --yes --trust-model always --encrypt --recipient "${recipient}" --output "${tmp_file}"; then
   fail "dump-e-cifratura"
 fi

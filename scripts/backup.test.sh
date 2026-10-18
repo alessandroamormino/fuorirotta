@@ -9,7 +9,9 @@
 #   B3  le tabelle scaricate sono i @@map dello schema piu' _prisma_migrations,
 #       e nessun nome fuori dallo schema
 #   B4  backup-restore-test.sh (quello vero) ripristina e per ogni tabella il
-#       conteggio coincide con `select count(*)` su postgres-dev
+#       conteggio coincide con `select count(*)` su postgres-dev; unica
+#       eccezione auth_rate_limit: la tabella c'e' ma e' vuota (gli IP dei
+#       tentativi di accesso non finiscono nei backup)
 #   B5  con DIRECT_URL su una porta chiusa lo script esce non-zero e non
 #       lascia nessun file
 #   B6  ramo object storage con un rclone finto nel PATH: caricamento,
@@ -43,6 +45,7 @@ work="$(mktemp -d)"
 export GNUPGHOME="${work}/gnupg"
 mkdir -m 700 "${GNUPGHOME}"
 cleanup() {
+  psql_dev "DELETE FROM auth_rate_limit WHERE id = '__backup_gate__'" >/dev/null 2>&1 || true
   gpgconf --kill all >/dev/null 2>&1 || true
   rm -rf "${work}"
   # difesa: nessun container di prova deve sopravvivere al gate
@@ -69,6 +72,10 @@ EOF
 good_url="postgresql://fuorirotta:fuorirotta@localhost:5432/fuorirotta_dev"
 
 # --- B1 ------------------------------------------------------------------------
+# Una riga di rate limit di prova: B4 deve ritrovare la tabella ma vuota.
+rl_key="__backup_gate__|/sign-in/social"
+psql_dev "INSERT INTO auth_rate_limit (id, key, count, last_request) VALUES ('__backup_gate__', '${rl_key}', 1, 0) ON CONFLICT DO NOTHING" >/dev/null \
+  || fail "B1: impossibile inserire la riga di rate limit di prova"
 write_env "${good_url}"
 ENV_FILE="${env_file}" bash scripts/cron-backup.sh > "${work}/b1.out" 2>&1 \
   || { cat "${work}/b1.out"; fail "B1: cron-backup.sh e' uscito non-zero"; }
@@ -99,6 +106,7 @@ restored_names="$(echo "${restored}" | awk '{print $1}')"
 [[ "${restored_names}" == "${expected}" ]] || fail "B4: tabelle ripristinate ($(echo ${restored_names})) diverse da quelle attese"
 while read -r t n; do
   src="$(psql_dev "SELECT count(*) FROM public.\"${t}\"")"
+  [[ "${t}" == "auth_rate_limit" ]] && src=0
   [[ "${n}" == "${src}" ]] || fail "B4: ${t} ripristinata con ${n} righe, sorgente ${src}"
 done <<< "${restored}"
 if docker ps -a --format '{{.Names}}' | grep -q '^fuorirotta-restore-test-'; then
