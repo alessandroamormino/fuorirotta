@@ -14,6 +14,9 @@
 #       tentativi di accesso non finiscono nei backup)
 #   B5  con DIRECT_URL su una porta chiusa lo script esce non-zero e non
 #       lascia nessun file
+#   B9  la password del database non compare nella riga di comando di docker
+#       (T-21-39): ne' URL, ne' --dbname, ne' PGPASSWORD=valore; una password
+#       percent-encoded nell'URL si decodifica ancora bene
 #   B8  potatura locale (quella che gira in produzione): con retention 14 giorni
 #       restano le copie di 13 giorni e di 13 giorni e 22 ore, spariscono
 #       quelle di 14 giorni e 1 ora e di 15 giorni; un .partial vecchio di un
@@ -152,6 +155,32 @@ ENV_FILE="${env_file}" bash scripts/cron-backup.sh > "${work}/b8.out" 2>&1 \
 [[ ! -e "${backups}/.fuorirotta-20250105T000000Z.dump.gpg.partial" && -e "${backups}/.fuorirotta-20250106T000000Z.dump.gpg.partial" ]] \
   || fail "B8: .partial vecchio non tolto o .partial recente tolto ($(ls -a "${backups}" | tr '\n' ' '))"
 ok "B8: potatura locale a 14 giorni esatti: restano 13 giorni e 13 giorni 22 ore, spariscono 14 giorni 1 ora e 15 giorni; .partial vecchio tolto"
+
+# --- B9 ------------------------------------------------------------------------
+# docker finto: registra gli argomenti di ogni chiamata e poi esegue quello vero.
+rm -rf "${backups}"
+b9_bin="${work}/b9bin"
+mkdir -p "${b9_bin}"
+real_docker="$(command -v docker)"
+cat > "${b9_bin}/docker" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "\${FAKE_DOCKER_LOG}"
+exec "${real_docker}" "\$@"
+EOF
+chmod +x "${b9_bin}/docker"
+export FAKE_DOCKER_LOG="${work}/docker.log"
+: > "${FAKE_DOCKER_LOG}"
+# Password di prova "pw%40x" = "pw@x": il ruolo dev non la richiede (connessione
+# locale al container), conta solo che non finisca negli argomenti.
+write_env "postgresql://fuorirotta:pw%40x@localhost:5432/fuorirotta_dev"
+PATH="${b9_bin}:${PATH}" ENV_FILE="${env_file}" bash scripts/cron-backup.sh > "${work}/b9.out" 2>&1 \
+  || { cat "${work}/b9.out"; fail "B9: cron-backup.sh e' uscito non-zero"; }
+grep -q 'pg_dump' "${FAKE_DOCKER_LOG}" || fail "B9: il docker finto non ha visto la chiamata a pg_dump"
+leak='postgres(ql)?://|--dbname|pw%40x|pw@x|PGPASSWORD='
+if grep -qE "${leak}" "${FAKE_DOCKER_LOG}"; then
+  fail "B9: URL o password nella riga di comando di docker: $(grep -E "${leak}" "${FAKE_DOCKER_LOG}" | head -n 1)"
+fi
+ok "B9: ne' URL ne' password nella riga di comando di docker, il dump riesce"
 
 # --- B6 ------------------------------------------------------------------------
 # rclone finto: copyto = cp, lsf = ls, delete = registra gli argomenti. Cosi'
