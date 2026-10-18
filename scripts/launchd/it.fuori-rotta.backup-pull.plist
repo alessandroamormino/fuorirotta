@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Backup dal server al NAS, ogni sera (D-21). Modello: i segnaposto
+     __REPO__ e __HOME__ li sostituisce il comando di installazione in
+     DEPLOYMENT.md (§Backups). 21:00 locali = ben dopo il backup del server
+     (12:30 UTC). Se il Mac dorme alle 21:00, launchd lo esegue al risveglio. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>it.fuori-rotta.backup-pull</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>__REPO__/scripts/backup-pull.sh</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>21</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>
+	<!-- Lo script scrive da solo la riga di esito in fuorirotta-backup-pull.log;
+	     qui finisce solo cio' che esce dai suoi stream (errori di ssh/rsync). -->
+	<key>StandardOutPath</key>
+	<string>__HOME__/Library/Logs/fuorirotta-backup-pull.launchd.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/Library/Logs/fuorirotta-backup-pull.launchd.log</string>
+</dict>
+</plist>

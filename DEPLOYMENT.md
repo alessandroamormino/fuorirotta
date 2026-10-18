@@ -65,7 +65,7 @@ Three categories matter because they are read at different times by different pr
 | `BETTER_AUTH_URL` | Runtime, in the container | Public address of the app (`https://fuori-rotta.it`); Google's redirect URI is built from it |
 | `BETTER_AUTH_SECRET` | Runtime, in the container | Session signing secret, at least 32 characters. Generate it **on the server** with `openssl rand -base64 32`; never paste it in a chat or a ticket |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Runtime, in the container | OAuth credentials from the Google Cloud console. Same rule: typed straight into the server's `.env` |
-| `BACKUP_GPG_RECIPIENT`, `BACKUP_RETENTION_DAYS`, `BACKUP_TARGET`, `BACKUP_LOCAL_DIR`, `BACKUP_PG_IMAGE`, `HEALTHCHECK_BACKUP_URL` | Host-only, never passed to the container | Read only by `scripts/cron-backup.sh`. See §Backups |
+| `BACKUP_GPG_RECIPIENT`, `BACKUP_RETENTION_DAYS`, `BACKUP_LOCAL_DIR`, `BACKUP_PG_IMAGE`, `HEALTHCHECK_BACKUP_URL` | Host-only, never passed to the container | Read only by `scripts/cron-backup.sh`. See §Backups |
 
 In production the file is `.env` in the compose directory (`/opt/docker/fuori-rotta/fuorirotta/.env`), not `.env.local` — `.env.local` is a local-development-only convention and is never read by Docker Compose.
 
@@ -421,9 +421,15 @@ straight into `gpg`** with a public key: no plaintext dump ever touches the serv
 cannot decrypt its own backups. The private key lives only on the Mac. `scripts/backup.test.sh`
 (`npm run check:backup`) proves the chain on the local database.
 
-**Host prerequisites** (verify once, one command at a time): `docker --version`, `gpg --version | head -1`,
-`rclone version | head -1`. `rclone` is the only one that may be missing: install it from
-https://rclone.org/install/ using the method for Ubuntu.
+**Where the copies live (D-21, supersedes the object-storage plan of 21-02).** No paid storage and no
+second bucket on the same host. The server keeps the encrypted files itself in `BACKUP_LOCAL_DIR` (14 days,
+older ones pruned at every run, **no `BACKUP_TARGET`**), and every evening the **Mac pulls them over SSH
+into the home NAS** (`scripts/backup-pull.sh`, a mirror of the server's 14 copies). The NAS is never
+reachable from the internet: the Mac calls the server, never the reverse, and the NAS's own rsync server
+stays OFF. `rclone` is **not** required anywhere. (The `BACKUP_TARGET` branch of `cron-backup.sh` still
+exists and is still gated, but this deployment leaves it unset.)
+
+**Host prerequisites** (verify once, one command at a time): `docker --version`, `gpg --version | head -1`.
 
 **1. Key pair, on the Mac.** One command (it asks for a passphrase: choose one and store it in the
 password manager):
@@ -447,25 +453,19 @@ into the password manager). Lose it and every backup is unreadable.
 gpg --import /tmp/fuorirotta-backup.pub.asc
 ```
 
-**3. Destination (object storage, decided in 21-02).** Create a private bucket in the EU, with an access
-key limited to it, then on the server run `rclone config` and add an S3 remote (provider `Other`, the
-endpoint shown in the bucket's panel, the key pair typed into the prompt, never pasted elsewhere). Check
-it with `rclone lsd <remote>:`. The remote name and bucket go into `BACKUP_TARGET`.
-
-**4. `.env` on the server** (no quotes):
+**3. `.env` on the server** (no quotes; `BACKUP_TARGET` stays **unset**):
 
 ```
 BACKUP_GPG_RECIPIENT=fuorirotta-backup
 BACKUP_RETENTION_DAYS=14
-BACKUP_TARGET=<remote>:<bucket>
 HEALTHCHECK_BACKUP_URL=<ping URL of a new daily healthchecks.io check>
 ```
 
-`BACKUP_LOCAL_DIR` (default `/opt/docker/fuori-rotta/backups`, mode 700), `BACKUP_PG_IMAGE` (default
+`BACKUP_LOCAL_DIR` (default `/opt/docker/fuori-rotta/backups`, mode 700) and `BACKUP_PG_IMAGE` (default
 `postgres:17-alpine`: its major must be at least the database's, change it if Supabase upgrades) can stay
-unset. Without `BACKUP_TARGET` the encrypted file simply stays in the local directory.
+unset.
 
-**5. Crontab.** The generator emits the daily line (`30 12 * * *` UTC, after the maintenance job and clear
+**4. Crontab.** The generator emits the daily line (`30 12 * * *` UTC, after the maintenance job and clear
 of every scrape). Install it with the existing procedure of §Automated Scraping via Crontab: backup first,
 transform, diff, install behind a guard, one command per step. The transform is:
 
@@ -475,22 +475,58 @@ sed '/cron-maintenance\.sh/a 30 12 * * * /opt/docker/fuori-rotta/fuorirotta/scri
 
 Then verify with the drift check (`generate-crontab.ts --check`, step 4 of that section).
 
-**6. First run, by hand**, then look at the destination:
+**5. First run, by hand**, on the server:
 
 ```bash
 bash /opt/docker/fuori-rotta/fuorirotta/scripts/cron-backup.sh
 ```
 
-It prints `tables: ...`, then `cron-backup status=ok file=fuorirotta-<UTC>.dump.gpg bytes=... target=<remote>:<bucket>`,
+It prints `tables: ...`, then `cron-backup status=ok file=fuorirotta-<UTC>.dump.gpg bytes=... target=locale`,
 then `healthcheck=pinged`. Exit codes: `0` ok, `1` a step failed (the line says which), `2` configuration.
-The healthcheck is pinged only after dump, encryption, verified upload and pruning all succeeded, so a
-silent failure shows up as a missing ping.
+The healthcheck is pinged only after dump, encryption and pruning all succeeded, so a silent failure shows
+up as a missing ping.
 
-**7. Restore test, on the Mac** (the D-18 gate before sign-in goes on). Download one file from the bucket
-(the provider's panel, or `rclone copy <remote>:<bucket>/<file> .` if rclone is configured on the Mac), then:
+**6. The Mac pulls into the NAS** (`scripts/backup-pull.sh`). Prerequisites, on the Mac:
+
+- `ssh -o BatchMode=yes root@fuori-rotta.it true` succeeds with no prompt (the key must be usable without
+  typing a passphrase: launchd has no terminal).
+- The NAS share is mounted at `/Volumes/fuorirotta-backup` (Finder, `smb://NaloNAS/fuorirotta-backup`,
+  "remember in keychain"). The script refuses to run on an unmounted path, so it can never write into the
+  Mac's own disk, and never runs `--delete` when the server's listing is empty or fails.
+
+Run it once by hand and read the line it prints (also appended to `~/Library/Logs/fuorirotta-backup-pull.log`):
 
 ```bash
-bash scripts/backup-restore-test.sh fuorirotta-<UTC>.dump.gpg
+bash scripts/backup-pull.sh
+```
+
+`backup-pull status=ok file=<newest> bytes=... copie=N` means the NAS now mirrors the server and the
+newest file has the same name and size on both. Defaults are overridable with `BACKUP_PULL_HOST`,
+`BACKUP_PULL_REMOTE_DIR`, `BACKUP_PULL_DEST`, `BACKUP_PULL_LOG`.
+
+Then install the nightly agent (21:00 local; a run missed while the Mac sleeps happens on wake). One line,
+from the repo root, with a guard (nothing is installed if the template is missing or the result is not a
+valid plist):
+
+```bash
+[ -f scripts/launchd/it.fuori-rotta.backup-pull.plist ] && sed -e "s|__REPO__|$PWD|g" -e "s|__HOME__|$HOME|g" scripts/launchd/it.fuori-rotta.backup-pull.plist > ~/Library/LaunchAgents/it.fuori-rotta.backup-pull.plist && plutil -lint ~/Library/LaunchAgents/it.fuori-rotta.backup-pull.plist && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/it.fuori-rotta.backup-pull.plist
+```
+
+Run it now to prove the agent (not just the script) works, then look at the log:
+
+```bash
+launchctl kickstart gui/$(id -u)/it.fuori-rotta.backup-pull
+```
+
+To remove it: `launchctl bootout gui/$(id -u)/it.fuori-rotta.backup-pull`. If the agent log
+(`~/Library/Logs/fuorirotta-backup-pull.launchd.log`) says "Operation not permitted" on the volume, give
+`/bin/bash` access to network volumes in System Settings > Privacy & Security.
+
+**7. Restore test, on the Mac** (the D-18 gate before sign-in goes on), from the **NAS copy** (this proves
+the whole chain, pull included):
+
+```bash
+bash scripts/backup-restore-test.sh /Volumes/fuorirotta-backup/fuorirotta-<UTC>.dump.gpg
 ```
 
 It decrypts with the private key (the passphrase prompt is gpg's), starts a throwaway `postgres` container
@@ -500,10 +536,10 @@ and cannot point at a real database. Compare the counts with what production sho
 number of events). The `pg_trgm` extension is created before the restore because a per-table dump does
 not carry extensions.
 
-**Retention.** Files older than `BACKUP_RETENTION_DAYS` (default **14**) are deleted from the destination
-and from the local directory at every run. This is the number written in `/privacy`: data of a deleted
-account survives in backups for at most that many days. Changing the number means changing the privacy
-text too.
+**Retention.** Files older than `BACKUP_RETENTION_DAYS` (default **14**) are deleted from the server at
+every run; the next evening's pull removes them from the NAS too (it mirrors). This is the number written
+in `/privacy`: data of a deleted account survives in backups for at most that many days. Changing the
+number means changing the privacy text too.
 
 ### nginx access-log rotation (14 days)
 
