@@ -14,6 +14,9 @@
 #       tentativi di accesso non finiscono nei backup)
 #   B5  con DIRECT_URL su una porta chiusa lo script esce non-zero e non
 #       lascia nessun file
+#   B8  potatura locale (quella che gira in produzione): con retention 14 giorni
+#       restano le copie di 13 giorni e di 13 giorni e 22 ore, spariscono
+#       quelle di 14 giorni e 1 ora e di 15 giorni
 #   B6  ramo object storage con un rclone finto nel PATH: caricamento,
 #       verifica, file locale tolto solo dopo, potatura con la retention;
 #       caricamento fallito = file locale conservato ed exit 1
@@ -123,6 +126,25 @@ fi
 left="$(find "${backups}" -type f 2>/dev/null | wc -l | tr -d '[:space:]')"
 [[ "${left}" -eq 0 ]] || fail "B5: dump fallito ma restano ${left} file"
 ok "B5: dump fallito = exit non-zero e nessun file"
+
+# --- B8 ------------------------------------------------------------------------
+# touch -t (non -d) perche' e' l'unico formato uguale su GNU e BSD.
+age_stamp() { node -e 'const d=new Date(Date.now()-Number(process.argv[1])*60000),p=n=>String(n).padStart(2,"0");console.log(`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}`)' "$1"; }
+rm -rf "${backups}"
+mkdir -p "${backups}"
+for spec in 20250101T000000Z:$((13 * 1440)) 20250102T000000Z:$((13 * 1440 + 22 * 60)) 20250103T000000Z:$((14 * 1440 + 60)) 20250104T000000Z:$((15 * 1440)); do
+  f="${backups}/fuorirotta-${spec%%:*}.dump.gpg"
+  echo x > "${f}"
+  touch -t "$(age_stamp "${spec#*:}")" "${f}"
+done
+write_env "${good_url}" "BACKUP_RETENTION_DAYS=14"
+ENV_FILE="${env_file}" bash scripts/cron-backup.sh > "${work}/b8.out" 2>&1 \
+  || { cat "${work}/b8.out"; fail "B8: cron-backup.sh e' uscito non-zero"; }
+[[ -f "${backups}/fuorirotta-20250101T000000Z.dump.gpg" && -f "${backups}/fuorirotta-20250102T000000Z.dump.gpg" ]] \
+  || fail "B8: una copia di meno di 14 giorni e' stata cancellata"
+[[ ! -e "${backups}/fuorirotta-20250103T000000Z.dump.gpg" && ! -e "${backups}/fuorirotta-20250104T000000Z.dump.gpg" ]] \
+  || fail "B8: una copia di piu' di 14 giorni e' sopravvissuta ($(ls "${backups}" | tr '\n' ' '))"
+ok "B8: potatura locale a 14 giorni esatti: restano 13 giorni e 13 giorni 22 ore, spariscono 14 giorni 1 ora e 15 giorni"
 
 # --- B6 ------------------------------------------------------------------------
 # rclone finto: copyto = cp, lsf = ls, delete = registra gli argomenti. Cosi'

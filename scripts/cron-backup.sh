@@ -151,7 +151,12 @@ if [[ -n "${target}" ]]; then
   rclone delete "${target}" --min-age "${retention_days}d" --include 'fuorirotta-*.dump.gpg' || fail "potatura-remota"
 fi
 
-find "${local_dir}" -maxdepth 1 -type f -name 'fuorirotta-*.dump.gpg' -mtime "+${retention_days}" -delete || fail "potatura-locale"
+# -mmin e non -mtime: -mtime scarta la parte frazionaria dei giorni e tiene i
+# file un giorno in piu' di quanto /privacy promette. Il giro quotidiano trova
+# la copia di N giorni fa a N giorni piu' o meno qualche secondo: un'ora di
+# margine la fa cancellare nel giro giusto (e non in quello dopo).
+find "${local_dir}" -maxdepth 1 -type f -name 'fuorirotta-*.dump.gpg' \
+  -mmin "+$((retention_days * 1440 - 60))" -delete || fail "potatura-locale"
 
 echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") cron-backup status=ok file=${name} bytes=${size} target=${target:-locale}"
 
