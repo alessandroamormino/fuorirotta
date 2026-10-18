@@ -337,7 +337,7 @@ echo "ok  S17: PATCH {name:'  Giulia  '} con cookie e Origin -> 200 {\"name\":\"
 
 fifty_one="$(node -e 'process.stdout.write("a".repeat(51))')"
 n=0
-for body in '{"name":""}' '{"name":"   "}' "{\"name\":\"${fifty_one}\"}" '{"name":123}' 'questo non e json' ''; do
+for body in '{"name":""}' '{"name":"   "}' "{\"name\":\"${fifty_one}\"}" '{"name":123}' '{"name":"a\u0000b"}' '{"name":"a\u202Eb"}' 'questo non e json' ''; do
   n=$((n + 1))
   code="$(patch_name s18 198.51.100.42 "${body}" -H "Origin: ${origin}" -H "${s17_cookie_hdr}")"
   [[ "${code}" == "400" ]] || fail "S18: corpo #${n} '${body}': atteso 400, ottenuto ${code}"
@@ -345,7 +345,7 @@ for body in '{"name":""}' '{"name":"   "}' "{\"name\":\"${fifty_one}\"}" '{"name
   no_store s18 S18
   [[ "$(stored_name "${s17_user}")" == "Giulia" ]] || fail "S18: corpo #${n}: il nome salvato e' cambiato in '$(stored_name "${s17_user}")'"
 done
-echo "ok  S18: stringa vuota, solo spazi, 51 punti di codice, numero, non-JSON e corpo vuoto -> 400 {\"error\":\"Nome non valido\"}, nome invariato"
+echo "ok  S18: stringa vuota, solo spazi, 51 punti di codice, NUL, override bidi, numero, non-JSON e corpo vuoto -> 400 {\"error\":\"Nome non valido\"}, nome invariato"
 
 fifty_emoji="$(node -e 'process.stdout.write("\u{1F600}".repeat(50))')"
 code="$(patch_name s19 198.51.100.43 "{\"name\":\"${fifty_emoji}\"}" -H "Origin: ${origin}" -H "${s17_cookie_hdr}")"

@@ -58,7 +58,7 @@
  */
 import { backfillEvents } from '../lib/territorial/backfill'
 import { purgeConcludedEvents, RETENTION_DAYS } from '../lib/retention/purge'
-import { AUTH_RATE_LIMIT_RETENTION_HOURS, purgeAuthRows } from '../lib/retention/purgeAuth'
+import { purgeAuthRows } from '../lib/retention/purgeAuth'
 import { dedupeEvents } from '../lib/dedup/dedupe'
 import { truncateError } from '../lib/scrapers/health'
 import { prisma } from '../lib/prisma'
@@ -82,15 +82,6 @@ async function runMaintenance(): Promise<{ eventCount: number }> {
         : '.')
   )
 
-  // AUTH-08 / D-15: i contatori di rate limit (indirizzi IP) vivono al massimo
-  // AUTH_RATE_LIMIT_RETENTION_HOURS, la durata che /privacy dichiara; sessioni
-  // e stati di accesso solo se gia' scaduti. Tabelle tiny, nessun ordine da
-  // rispettare rispetto a backfill e dedup.
-  const authReport = await purgeAuthRows()
-  console.log(
-    `[Maintenance] Account: ${authReport.rateLimitDeleted} righe di rate limit oltre ${AUTH_RATE_LIMIT_RETENTION_HOURS} ore, ${authReport.sessionsDeleted} sessioni scadute, ${authReport.verificationsDeleted} stati di accesso scaduti cancellati.`
-  )
-
   const backfillReport = await backfillEvents()
   console.log(
     `[Maintenance] Backfill territoriale: ${backfillReport.updated} agganciati/aggiornati, ${backfillReport.unchanged} invariati su ${backfillReport.scanned} eventi (no_input: ${backfillReport.byStep.no_input}).`
@@ -106,6 +97,19 @@ async function runMaintenance(): Promise<{ eventCount: number }> {
   // conteggio gia' scritto — nessuna chiamata aggiuntiva a updateClusterCache().
   console.log(
     `[Maintenance] Cache dei cluster ricalcolata in coda al dedup (ultimo passo, D-07): ${dedupReport.clusterFeatureCount} feature nel GeoJSON.`
+  )
+
+  // AUTH-08 / D-15: i contatori di rate limit (indirizzi IP) vivono al massimo
+  // AUTH_RATE_LIMIT_RETENTION_HOURS (con il giro quotidiano, la durata che
+  // /privacy dichiara): si cancella tutto cio' che e' fuori dalla finestra del
+  // throttle, quindi resta solo cio' scritto dopo il giro precedente; sessioni
+  // e stati di accesso solo se gia' scaduti. Tabelle tiny, indipendenti da
+  // backfill e dedup: per questo gira PER ULTIMO, cosi' un suo errore (tabelle
+  // non ancora migrate, DB che singhiozza) propaga, e fa fallire il job, ma a
+  // pipeline degli eventi gia' conclusa.
+  const authReport = await purgeAuthRows()
+  console.log(
+    `[Maintenance] Account: ${authReport.rateLimitDeleted} righe di rate limit fuori dalla finestra del throttle, ${authReport.sessionsDeleted} sessioni scadute, ${authReport.verificationsDeleted} stati di accesso scaduti cancellati.`
   )
 
   return { eventCount: dedupReport.scanned }

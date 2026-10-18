@@ -11,6 +11,13 @@ export const DISPLAY_NAME_MAX = 50
 
 const FALLBACK_NAME = 'Utente'
 
+// Caratteri di controllo (tra cui NUL, che Postgres rifiuta in un text con un
+// errore invece di un 400) e gli override bidirezionali (U+202E rovescia il
+// testo che segue). Gli altri Cf (ZWJ, selettori di variante) restano: servono
+// alle sequenze emoji.
+const FORBIDDEN = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u
+const FORBIDDEN_ALL = new RegExp(FORBIDDEN.source, 'gu')
+
 export function normalizeDisplayName(raw: string): string {
   return raw.normalize('NFC').trim()
 }
@@ -22,12 +29,14 @@ function codePoints(text: string): string[] {
 // Taglia a DISPLAY_NAME_MAX punti di codice senza spezzare una coppia
 // surrogata, e ripulisce gli spazi che il taglio puo' lasciare in coda.
 function clip(text: string): string {
-  return codePoints(text).slice(0, DISPLAY_NAME_MAX).join('').trim()
+  return codePoints(text.replace(FORBIDDEN_ALL, '')).slice(0, DISPLAY_NAME_MAX).join('').trim()
 }
 
 export function isValidDisplayName(raw: unknown): raw is string {
   if (typeof raw !== 'string') return false
-  const length = codePoints(normalizeDisplayName(raw)).length
+  const text = normalizeDisplayName(raw)
+  if (FORBIDDEN.test(text)) return false
+  const length = codePoints(text).length
   return length >= 1 && length <= DISPLAY_NAME_MAX
 }
 

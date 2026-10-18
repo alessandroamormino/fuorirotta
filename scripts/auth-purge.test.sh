@@ -4,9 +4,10 @@
 #
 # Cosa prova, su righe di prova create e rimosse da questo gate (marcatore
 # __auth_purge_gate__) e solo sul Postgres LOCALE (scripts/dev-db.sh):
-#   - un contatore di rate limit con last_request di 25 ore fa viene
-#     cancellato, uno di 1 ora fa resta (24 ore e' il numero che /privacy
-#     dichiara: AUTH_RATE_LIMIT_RETENTION_HOURS)
+#   - un contatore di rate limit con last_request di 10 minuti fa (fuori dalla
+#     finestra del throttle) viene cancellato, uno di 1 minuto fa resta; cosi'
+#     con il giro quotidiano una riga vive meno di 24 ore, il numero che
+#     /privacy dichiara (AUTH_RATE_LIMIT_RETENTION_HOURS)
 #   - una sessione scaduta sparisce, una che scade domani resta
 #   - una riga di verifica (stato OAuth) scaduta sparisce, una viva resta
 #   - dryRun riporta i conteggi idonei e non cancella nulla
@@ -53,14 +54,14 @@ fi
 cleanup  # righe orfane di un giro interrotto
 
 now_ms="$(node -e 'console.log(Date.now())')"
-hours=24
-cutoff_ms=$((now_ms - hours * 3600 * 1000))
+cutoff_minutes=5
+cutoff_ms=$((now_ms - cutoff_minutes * 60 * 1000))
 ts() { echo "to_timestamp(($now_ms + ($1) * 1000)::numeric / 1000)"; }  # offset in secondi
 
 # --- Fixture -------------------------------------------------------------------
 psql_dev "INSERT INTO auth_rate_limit (id, key, count, last_request) VALUES
-  ('${marker}rl-old', '${marker}old|/sign-in/social', 3, $((now_ms - 25 * 3600 * 1000))),
-  ('${marker}rl-fresh', '${marker}fresh|/sign-in/social', 3, $((now_ms - 1 * 3600 * 1000)))" >/dev/null \
+  ('${marker}rl-old', '${marker}old|/sign-in/social', 3, $((now_ms - 10 * 60 * 1000))),
+  ('${marker}rl-fresh', '${marker}fresh|/sign-in/social', 3, $((now_ms - 1 * 60 * 1000)))" >/dev/null \
   || { echo "FAIL: fixture rate limit non inserite"; exit 1; }
 psql_dev "INSERT INTO auth_user (id, name, email, updated_at) VALUES
   ('${marker}u1', 'Prova purge', '${marker}@fixture.invalid', now())" >/dev/null \
@@ -146,11 +147,11 @@ fi
 present="$(fixture_present)"
 IFS=',' read -r p_rl_old p_rl_fresh p_s_exp p_s_live p_v_exp p_v_live <<<"${present}"
 [[ "${p_rl_old}" == "0" && "${p_s_exp}" == "0" && "${p_v_exp}" == "0" ]] \
-  && ok "old-deleted: rate limit di 25 ore fa, sessione scaduta e stato di accesso scaduto cancellati" \
+  && ok "old-deleted: rate limit di 10 minuti fa, sessione scaduta e stato di accesso scaduto cancellati" \
   || fail "old-deleted: righe vecchie ancora presenti (rl-old=${p_rl_old} s-expired=${p_s_exp} v-expired=${p_v_exp})"
 [[ "${p_rl_fresh}" == "1" ]] \
-  && ok "fresh-kept: il rate limit di 1 ora fa resta" \
-  || fail "fresh-kept: il rate limit di 1 ora fa e' stato cancellato"
+  && ok "fresh-kept: il rate limit di 1 minuto fa resta" \
+  || fail "fresh-kept: il rate limit di 1 minuto fa e' stato cancellato"
 [[ "${p_s_live}" == "1" && "${p_v_live}" == "1" ]] \
   && ok "live-session-kept: la sessione che scade domani e lo stato di accesso vivo restano" \
   || fail "live-session-kept: cancellata una riga viva (s-live=${p_s_live} v-live=${p_v_live})"

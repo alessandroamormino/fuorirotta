@@ -7,13 +7,15 @@
  * finche' qualcuno non li toglie. Senza questo passo "gli indirizzi IP del
  * rate limit restano 24 ore" sarebbe una promessa, non un fatto.
  *
- * Perche' 24 ore: abbastanza per coprire con ampio margine le finestre di 60
- * secondi del throttle e per capire la mattina dopo un attacco della notte,
- * abbastanza poco da essere una promessa piccola in /privacy. Questa costante
- * E' il numero che /privacy dichiara: check:privacy-pages (21-09) confronta il
- * testo con questo valore, quindi cambiarla senza cambiare il testo fa
- * fallire il gate. Il job gira una volta al giorno: una riga vive al massimo
- * 24 ore piu' un giro di manutenzione.
+ * Perche' 24 ore: il job gira una volta al giorno, quindi la vita massima di
+ * una riga e' un giro di manutenzione. AUTH_RATE_LIMIT_RETENTION_HOURS E' il
+ * numero che /privacy dichiara: check:privacy-pages (21-09) confronta il testo
+ * con questo valore, quindi cambiarla senza cambiare il testo fa fallire il
+ * gate. Per tenere vera la promessa il taglio NON e' a 24 ore (una riga
+ * scritta un minuto dopo il giro sopravviverebbe a quello dopo, ~48 ore): si
+ * cancella tutto cio' che e' fuori dalla finestra del throttle
+ * (AUTH_RATE_LIMIT_CUTOFF_MINUTES), cosi' a ogni giro resta solo cio' che e'
+ * stato scritto dopo, cioe' meno di un giorno.
  *
  * Sessioni e stati di accesso: si cancellano solo quelli GIA' scaduti, mai
  * una sessione viva (cancellarla sloggerebbe una persona).
@@ -21,8 +23,10 @@
 
 import { prisma } from '../prisma'
 
-/** Ore di vita di una riga di rate limit; e' il numero scritto in /privacy. */
+/** Vita massima di una riga di rate limit dato il giro quotidiano; e' il numero scritto in /privacy. */
 export const AUTH_RATE_LIMIT_RETENTION_HOURS = 24
+/** Minuti oltre i quali un contatore e' fuori dalle finestre del throttle (60 s in lib/auth.ts) e si cancella. */
+export const AUTH_RATE_LIMIT_CUTOFF_MINUTES = 5
 
 export interface PurgeAuthReport {
   /** Istante (ms dall'epoca) prima del quale un contatore di rate limit e' vecchio. */
@@ -39,7 +43,7 @@ export async function purgeAuthRows(
   options: { now?: Date; dryRun?: boolean } = {}
 ): Promise<PurgeAuthReport> {
   const { now = new Date(), dryRun = false } = options
-  const cutoffMs = now.getTime() - AUTH_RATE_LIMIT_RETENTION_HOURS * 60 * 60 * 1000
+  const cutoffMs = now.getTime() - AUTH_RATE_LIMIT_CUTOFF_MINUTES * 60 * 1000
   // last_request e' in millisecondi (BigInt), come lo scrive la libreria.
   const oldRateLimit = { lastRequest: { lt: BigInt(cutoffMs) } }
   const expired = { expiresAt: { lt: now } }

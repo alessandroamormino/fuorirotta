@@ -11,13 +11,18 @@
 # prisma/schema.prisma (auth_* inclusi) piu' _prisma_migrations, letti dallo
 # schema del checkout al momento dell'esecuzione. Nessun nome e' scritto qui:
 # una tabella aggiunta da una fase futura entra nel backup da sola, e una
-# tabella di n8n non puo' entrarci perche' non e' nello schema.
+# tabella di n8n non puo' entrarci perche' non e' nello schema. Unica eccezione
+# scritta qui: auth_rate_limit entra con lo schema ma SENZA righe (contiene gli
+# indirizzi IP dei tentativi di accesso, che /privacy dichiara per 24 ore: nei
+# backup resterebbero 14 giorni, e non servono a nessun ripristino).
 #
 # COME: pg_dump gira dentro un container postgres (l'host non ha il client, ne'
 # Node 20: solo bash, docker, gpg, rclone) su DIRECT_URL (la porta non
-# raggruppata, quella che pg_dump richiede). L'URL entra nel container solo
-# come variabile d'ambiente, mai come argomento, quindi non compare nell'elenco
-# dei processi. L'output va DIRETTAMENTE in gpg con cifratura a chiave
+# raggruppata, quella che pg_dump richiede). L'URL viene scomposto qui in
+# variabili libpq (PGHOST, PGPASSWORD...) che entrano nel container con
+# `-e NOME` (il valore resta nell'ambiente di docker, non nella sua riga di
+# comando) e pg_dump le legge da solo: ne' l'URL ne' la password compaiono mai
+# nell'elenco dei processi, dell'host o del container. L'output va DIRETTAMENTE in gpg con cifratura a chiave
 # pubblica: nessun dump in chiaro tocca mai il disco del server, e il server
 # non puo' decifrare i propri backup (la chiave privata sta solo sul Mac). Un
 # dump fallito non lascia nessun file (pipefail + file temporaneo rimosso).
@@ -76,6 +81,31 @@ retention_days="${retention_days:-14}"
 local_dir="${local_dir:-/opt/docker/fuori-rotta/backups}"
 pg_image="${pg_image:-postgres:17-alpine}"
 
+# DIRECT_URL -> variabili libpq. libpq non legge un URL da una variabile
+# d'ambiente, e passarlo con --dbname lo metterebbe negli argomenti (T-21-39).
+# ponytail: del query string si legge solo sslmode (e' quello che un URL di
+# Supabase puo' avere); se servisse altro, aggiungerlo qui.
+# Il raddoppio dei \ viene prima: un \ letterale nella password non deve
+# diventare una sequenza di escape per %b.
+urldecode() { local s="${1//\\/\\\\}"; printf '%b' "${s//%/\\x}"; }
+url_re='^postgres(ql)?://([^:@/]+)(:([^@]*))?@(\[[^]]+\]|[^:/?]+)(:([0-9]+))?/([^?]*)(\?(.*))?$'
+if [[ -n "${direct_url}" ]]; then
+  if ! [[ "${direct_url}" =~ ${url_re} ]]; then
+    echo "cron-backup: DIRECT_URL non e' un URL postgresql://utente:password@host:porta/database" >&2
+    exit 2
+  fi
+  export PGUSER="$(urldecode "${BASH_REMATCH[2]}")"
+  export PGPASSWORD="$(urldecode "${BASH_REMATCH[4]}")"
+  export PGHOST="${BASH_REMATCH[5]#[}"; PGHOST="${PGHOST%]}"
+  export PGPORT="${BASH_REMATCH[7]:-5432}"
+  export PGDATABASE="$(urldecode "${BASH_REMATCH[8]}")"
+  pg_env_args=(-e PGUSER -e PGPASSWORD -e PGHOST -e PGPORT -e PGDATABASE)
+  if [[ "${BASH_REMATCH[10]}" =~ (^|&)sslmode=([a-z-]+) ]]; then
+    export PGSSLMODE="${BASH_REMATCH[2]}"
+    pg_env_args+=(-e PGSSLMODE)
+  fi
+fi
+
 for required in DIRECT_URL:"${direct_url}" BACKUP_GPG_RECIPIENT:"${recipient}"; do
   if [[ -z "${required#*:}" ]]; then
     echo "cron-backup: variabile obbligatoria ${required%%:*} assente o vuota in ${env_file}" >&2
@@ -128,8 +158,8 @@ t_args=()
 for t in "${tables[@]}"; do
   t_args+=(-t "${t}")
 done
-if ! docker run --rm ${net_args[@]+"${net_args[@]}"} -e DUMP_URL="${direct_url}" "${pg_image}" \
-  sh -c 'exec pg_dump --dbname="$DUMP_URL" --format=custom --no-owner --no-privileges --strict-names "$@"' sh "${t_args[@]}" \
+if ! docker run --rm ${net_args[@]+"${net_args[@]}"} "${pg_env_args[@]}" "${pg_image}" \
+  sh -c 'exec pg_dump --format=custom --no-owner --no-privileges --strict-names --exclude-table-data=auth_rate_limit "$@"' sh "${t_args[@]}" \
   | gpg --batch --yes --trust-model always --encrypt --recipient "${recipient}" --output "${tmp_file}"; then
   fail "dump-e-cifratura"
 fi
@@ -148,7 +178,15 @@ if [[ -n "${target}" ]]; then
   rclone delete "${target}" --min-age "${retention_days}d" --include 'fuorirotta-*.dump.gpg' || fail "potatura-remota"
 fi
 
-find "${local_dir}" -maxdepth 1 -type f -name 'fuorirotta-*.dump.gpg' -mtime "+${retention_days}" -delete || fail "potatura-locale"
+# -mmin e non -mtime: -mtime scarta la parte frazionaria dei giorni e tiene i
+# file un giorno in piu' di quanto /privacy promette. Il giro quotidiano trova
+# la copia di N giorni fa a N giorni piu' o meno qualche secondo: un'ora di
+# margine la fa cancellare nel giro giusto (e non in quello dopo).
+find "${local_dir}" -maxdepth 1 -type f -name 'fuorirotta-*.dump.gpg' \
+  -mmin "+$((retention_days * 1440 - 60))" -delete || fail "potatura-locale"
+# Un .partial di un giro morto a meta' (OOM, riavvio) e' dati personali cifrati
+# fuori retention e il pattern sopra non lo vede: via dopo un giorno.
+find "${local_dir}" -maxdepth 1 -type f -name '.fuorirotta-*.partial' -mmin +1440 -delete || fail "potatura-partial"
 
 echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") cron-backup status=ok file=${name} bytes=${size} target=${target:-locale}"
 

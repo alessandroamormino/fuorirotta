@@ -19,12 +19,17 @@
 #   BACKUP_PULL_DEST        punto di mount del NAS (/Volumes/fuorirotta-backup)
 #   BACKUP_PULL_LOG         file di log (~/Library/Logs/fuorirotta-backup-pull.log)
 #
-# Due guardie, ognuna per un disastro gia' visto o evitabile:
+# Tre guardie, ognuna per un disastro gia' visto o evitabile:
 # - DEST deve essere un volume MONTATO. Un /Volumes/x smontato e' una cartella
 #   qualsiasi del disco del Mac: rsync ci scriverebbe dentro in silenzio.
 # - --delete parte solo se l'elenco remoto contiene almeno un backup. Un
 #   elenco vuoto o fallito (server giu', cartella sbagliata) non deve mai
 #   svuotare il NAS: si esce con errore e il NAS resta com'e'.
+# - --delete non parte se il server ha meno della meta' delle copie che il NAS
+#   ha gia'. Un server che ne ha perse quasi tutte (retention sbagliata,
+#   cartella ripulita, server compromesso) non deve portarsi dietro anche la
+#   storia fuori dal server, che e' il motivo per cui il NAS esiste. Se la
+#   riduzione e' voluta, si tolgono a mano le copie in piu' dal NAS.
 #
 # Exit code: 0 ok, 1 qualunque guardia o passo fallito (la riga di log dice
 # quale).
@@ -64,6 +69,12 @@ remote_list="$(ssh "${ssh_opts[@]}" "${host}" "cd '${remote_dir}' && wc -c fuori
 [[ -n "${remote_list}" ]] \
   || die "nessun backup *.dump.gpg elencato su ${host}:${remote_dir} (server irraggiungibile o cartella vuota): il NAS non e' stato toccato"
 
+# Guardia 3: il server non si e' svuotato rispetto al NAS.
+remote_count="$(echo "${remote_list}" | wc -l | tr -d '[:space:]')"
+nas_count="$(find "${dest}" -maxdepth 1 -type f -name 'fuorirotta-*.dump.gpg' | wc -l | tr -d '[:space:]')"
+(( remote_count * 2 >= nas_count )) \
+  || die "il server ha ${remote_count} backup, il NAS ${nas_count}: sembra svuotato, --delete non eseguito (se e' voluto, togli a mano le copie in piu' dal NAS)"
+
 rsync -rt --delete \
   --include='fuorirotta-*.dump.gpg' --exclude='*' \
   -e "ssh ${ssh_opts[*]}" \
@@ -80,5 +91,4 @@ local_size="$(wc -c < "${dest}/${newest_name}" | tr -d '[:space:]')"
 [[ "${local_size}" == "${newest_remote%% *}" ]] \
   || die "${newest_name}: ${local_size} byte sul NAS, ${newest_remote%% *} sul server"
 
-count="$(echo "${remote_list}" | wc -l | tr -d '[:space:]')"
-say ok "file=${newest_name} bytes=${local_size} copie=${count}"
+say ok "file=${newest_name} bytes=${local_size} copie=${remote_count}"
