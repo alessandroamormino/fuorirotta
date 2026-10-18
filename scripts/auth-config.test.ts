@@ -62,6 +62,8 @@ async function main(): Promise<void> {
   check('displayName: vuoto e spazi non validi', !display.isValidDisplayName('') && !display.isValidDisplayName('   '))
   check('displayName: un valore non stringa non e valido', !display.isValidDisplayName(42) && !display.isValidDisplayName(null) && !display.isValidDisplayName(undefined))
   check('displayName: 50 emoji valide, 51 punti di codice no', display.isValidDisplayName('😀'.repeat(50)) && !display.isValidDisplayName('a'.repeat(51)))
+  check('displayName: NUL, controllo e override bidi non validi', !display.isValidDisplayName('a\u0000b') && !display.isValidDisplayName('a\u0007') && !display.isValidDisplayName('a\u202Eb') && display.isValidDisplayName('\u{1F468}\u200D\u{1F469}'))
+  check('displayName: dal provider i caratteri vietati si tolgono', display.displayNameFromProvider('Ma\u0000rio\u202E', 'a@b.it') === 'Mario')
   check('displayName: e + U+0301 diventa un solo punto di codice', Array.from(display.normalizeDisplayName('é')).length === 1)
   const long = display.displayNameFromProvider('x'.repeat(120), 'a@b.it')
   check('displayName: un nome da 120 caratteri viene tagliato a 50 punti di codice', Array.from(long).length === 50, `lunghezza ${Array.from(long).length}`)

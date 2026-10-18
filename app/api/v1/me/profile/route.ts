@@ -22,6 +22,11 @@ export async function PATCH(req: Request): Promise<Response> {
   if (!isValidDisplayName(name)) return noStoreJson({ error: 'Nome non valido' }, 400)
 
   const clean = normalizeDisplayName(name)
-  await prisma.user.update({ where: { id: ctx.user.id }, data: { name: clean } })
+  // Un account cancellato da un altro dispositivo tra requireUser e qui da' P2025.
+  try {
+    await prisma.user.update({ where: { id: ctx.user.id }, data: { name: clean } })
+  } catch {
+    return noStoreJson({ error: 'Nome non valido' }, 400)
+  }
   return noStoreJson({ name: clean })
 }
