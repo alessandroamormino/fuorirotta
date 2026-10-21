@@ -168,4 +168,17 @@ function ok(label: string): void {
   ok('Caso 11: primissima run mai registrata, fallita -> status=failed, baseline=null, anomaly=true (mai null)')
 }
 
-console.log('PASS: health-cases (11/11) — computeSourceHealth verificata su tutti i confini di SRC-08')
+// --- Caso 12: calo piccolo in assoluto su una sorgente piccola ------------------------------
+// 2026-10-20/21: solosagre campania 1 contro 2, umbria 3 contro 6 -> check sorgenti rosso per
+// due giorni senza nessuna sorgente rotta. Oltre il 40% ma sotto HEALTH_MIN_DROP: sana.
+{
+  const small = computeSourceHealth('s', 'r', [run(3), ...Array.from({ length: HEALTH_WINDOW_SIZE }, () => run(6))])
+  assert.equal(small.status, 'healthy', 'Caso 12a: 3 contro 6 e\' rumore, non degraded')
+  const tiny = computeSourceHealth('s', 'r', [run(1), ...Array.from({ length: HEALTH_WINDOW_SIZE }, () => run(2))])
+  assert.equal(tiny.status, 'healthy', 'Caso 12b: 1 contro 2 e\' rumore, non degraded')
+  const roma = computeSourceHealth('s', 'r', [run(0), ...Array.from({ length: HEALTH_WINDOW_SIZE }, () => run(39))])
+  assert.equal(roma.status, 'degraded', 'Caso 12c: 0 contro 39 resta degraded')
+  ok('Caso 12: calo sotto HEALTH_MIN_DROP non e\' anomalo, un crollo vero si')
+}
+
+console.log('PASS: health-cases (12/12) — computeSourceHealth verificata su tutti i confini di SRC-08')
