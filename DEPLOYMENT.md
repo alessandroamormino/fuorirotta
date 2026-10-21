@@ -636,6 +636,28 @@ The cron endpoint returns execution metrics:
 }
 ```
 
+### Alert map: the five healthchecks.io checks
+
+Every unattended job on the host pings its own check. Ping URLs live only in the host `.env`, never
+here: anyone holding one can turn its check green. Times are UTC.
+
+| Check | `.env` variable | Pinged by | Runs | Period / grace | Pings success when | Pings `/fail` when | Silence (DOWN mail) means |
+|---|---|---|---|---|---|---|---|
+| `fuorirotta-live` | `HEALTHCHECK_URL` | `cron-scrape.sh` | after each nightly scrape, 03:17-04:14 | 1 day / 3 h | the scrape POST returned 2xx (accepted, not finished) | never | cron not running, or every scrape POST failed |
+| `fuorirotta-sorgenti` | `HEALTHCHECK_SOURCES_URL` | `cron-health.sh` | 05:00 | 1 day / 2 h | every source healthy in `/api/monitoring` | a source is `failed`/`degraded` (list in the mail), or the site does not answer | the health job itself did not run |
+| `fuorirotta-maintenance` | `HEALTHCHECK_MAINTENANCE_URL` | `cron-maintenance.sh` | 11:00 | 1 day / 3 h | retention, backfill, dedup, cluster cache and auth purge all succeeded | never | the job failed (cause only in `/var/log/fuorirotta-cron.log`, e.g. `lock occupato`) or did not run |
+| `fuorirotta-backup` | `HEALTHCHECK_BACKUP_URL` | `cron-backup.sh` | 12:30 | 1 day / 2 h | encrypted dump written and pruned to 14 days | never | dump, encryption or prune failed, or the job did not run |
+| `fuorirotta-deploy` | `HEALTHCHECK_DEPLOY_URL` | `auto-deploy.sh` | every 5 min, pings only on a release | 365 days / 15 days | a release went live | a release failed and was rolled back | nothing useful: only `/fail` matters |
+
+Not covered by any check: the Mac pulling backups onto the NAS (21:00 local, launchd), and the
+site going down between two 05:00 runs.
+
+Known false alarm: a deploy (or container restart) between 03:17 and ~08:30 kills the in-flight
+lombardia scrape inside the app container; its region lock stays orphaned until its 8 h TTL
+(11:17), so the 11:00 maintenance finds it busy and `fuorirotta-maintenance` goes DOWN that
+afternoon (2026-10-18, deploys at 07:00 and 08:20). Nothing is lost: the next day's run catches
+up, or run `scripts/cron-maintenance.sh` by hand once the lock has expired.
+
 ### Alerting: dead man's switch
 
 `/api/cron/scrape` responds `202` immediately and runs the scrape in the background, so an HTTP 202 only proves the request was accepted — not that the scrape finished. There is deliberately **no internal health endpoint** for this: `GET /api/events` triggers the exact same scrape path on cache staleness (same `cacheQuery`, same `queryHash`, same `WorkflowExecution` row), so any endpoint reading that row would read "healthy" from ordinary site traffic even with the cron completely dead. And no endpoint inside the app can detect the case that actually matters here — the cron never firing at all (crond down, the crontab line deleted, the box rebooted).

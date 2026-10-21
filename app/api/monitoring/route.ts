@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SOURCE_META } from '@/lib/scrapers/sources'
+import { getActiveLockedRegions } from '@/lib/scrapers/regionLock'
 import { computeSourceHealth, summarizeHealth, HEALTH_WINDOW_SIZE, type RunRecord, type SourceHealth } from '@/lib/scrapers/health'
 
 /**
@@ -69,6 +70,10 @@ export async function GET() {
       // Gia' pronto per l'allarme giornaliero (scripts/cron-health.sh), che
       // cosi' non deve ricalcolare niente in bash.
       summary: summarizeHealth(allSources),
+      // Regioni con uno scrape in corso: scripts/auto-deploy.sh rimanda il
+      // rilascio finche' non e' vuoto, o il restart del container uccide lo
+      // scrape e lascia il lock appeso fino al TTL (2026-10-18, lombardia).
+      lockedRegions: await getActiveLockedRegions(),
       sources: allSources
     })
   } catch (error) {

@@ -60,6 +60,20 @@ main() {
     exit 0
   fi
 
+  # Uno scrape in corso morirebbe col restart del container, lasciando il
+  # region lock appeso fino al TTL (8h): il 2026-10-18 i deploy delle 07:00
+  # hanno ucciso lo scrape lombardo e fatto fallire la manutenzione delle 11:00.
+  # Si riprova al giro dopo. Se il sito non risponde si procede: un deploy
+  # potrebbe proprio sistemarlo, e senza app non gira nessuno scrape.
+  # ponytail: un lock orfano (scrape gia' morto) blocca il rilascio fino al TTL.
+  local locked
+  locked="$(curl -fsS --max-time 10 http://127.0.0.1:3000/api/monitoring 2>/dev/null \
+    | grep -o '"lockedRegions":\[[^]]*\]' | sed 's/.*\[\(.*\)\]/\1/' || true)"
+  if [[ -n "${locked}" ]]; then
+    echo "${ts} auto-deploy: ${latest} rimandato, scrape in corso: ${locked}"
+    exit 0
+  fi
+
   local hc_url=""
   hc_url="$(grep -m1 '^HEALTHCHECK_DEPLOY_URL=' "${root}/.env" 2>/dev/null | cut -d= -f2- | tr -d "\"'" || true)"
 

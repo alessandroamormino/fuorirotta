@@ -35,6 +35,11 @@ export interface SourceHealth {
 // Valori iniziali, rivedibili dopo aver osservato dati reali in produzione (vedi SUMMARY).
 export const HEALTH_WINDOW_SIZE = 7
 export const HEALTH_DROP_THRESHOLD = 0.4
+// Sotto questo calo assoluto non e' un'anomalia, anche oltre la soglia: con medie da
+// 2 o 6 eventi (solosagre campania/umbria a fine stagione, 2026-10-20) il 40% e' un
+// evento o tre, e il check sorgenti restava rosso tutti i giorni per niente.
+// ponytail: una sorgente piccola che scende in silenzio a 0 senza errore non suona.
+export const HEALTH_MIN_DROP = 5
 
 const MAX_ERROR_LENGTH = 500
 
@@ -111,6 +116,7 @@ export function computeSourceHealth(source: string, region: string, runs: RunRec
   } else if (baselineComplete && rawMean !== null) {
     // Confronto strettamente minore: un calo esattamente pari alla soglia non e' anomalo.
     anomaly = lastRun.eventCount < rawMean * (1 - HEALTH_DROP_THRESHOLD)
+      && rawMean - lastRun.eventCount >= HEALTH_MIN_DROP
   }
 
   // Precedenza dello stato, prima condizione vera vince.
