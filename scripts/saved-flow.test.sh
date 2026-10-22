@@ -31,6 +31,22 @@
 #       PUT A di nuovo -> 200 (gia' salvato al tetto)
 #   S9  GET ids senza cookie -> 401 private, no-store
 #
+#   M1  POST merge [A, B] con savedAt due ore e un'ora fa -> added 2, righe su A e B con saved_at uguali
+#       agli istanti mandati (al secondo)
+#   M2  lo stesso corpo di nuovo -> added 0 e righe invariate; due merge in parallelo di [C] -> una riga su C
+#   M3  101 elementi -> 400, items non array -> 400, items [] -> 200 added 0, esattamente 100 -> 200
+#   M4  id sconosciuto con istantanea valida finita 20 giorni fa -> riga con event_id NULL; finita 13 mesi fa,
+#       sourceUrl javascript:, categoria 'Hacker', riga che esiste sotto un altro id -> nessuna riga;
+#       A con snap.title 'EVIL' -> il titolo della riga e' 'Gate A'
+#   M5  499 righe + tre elementi nuovi -> added 1, overCap 2
+#   M6  merge senza Origin -> 403, senza cookie -> 401, entrambi private, no-store
+#
+#   L1  GET /api/v1/me/saved con A (viva) e una riga di sola istantanea G -> due elementi, A con eventId e live,
+#       G con eventId e live nulli e titolo di G
+#   L2  DELETE gone/{G} -> removed 1, di nuovo -> 0, DELETE gone/{riga di A} -> 0 e la riga resta,
+#       DELETE gone/{G'} di un altro utente -> 0
+#   L3  GET lista senza cookie -> 401, ogni risposta private, no-store
+#
 # Righe di prova sotto il `source` dedicato '__saved_gate__', cancellate prima
 # e all'uscita: nessuna riga reale viene letta o toccata.
 set -euo pipefail
@@ -340,4 +356,107 @@ code="$(call s9 GET /api/v1/me/saved/ids)"
 no_store s9 S9
 echo "ok  S9: GET ids senza cookie -> 401 private, no-store"
 
-echo "Riepilogo: R1-R7, S1-S9 verdi"
+# ============================ Unione della lista (AUTH-09) ===================
+c_id="$(insert_event gate-c 'Gate C' "now() + interval '7 days'" "now() + interval '8 days'" NULL)"
+[[ -n "${c_id}" ]] || fail "fixture C non creata"
+merge() { # <nome> <cookie> <corpo json> -> codice HTTP
+  call "$1" POST /api/v1/me/saved/merge -H "Origin: ${origin}" -H "$2" -H 'Content-Type: application/json' --data "$3"
+}
+user_rows() { psql_dev "SELECT count(*) FROM saved_events WHERE user_id = '$1'"; }
+# snap_json <sourceId> <titolo> <giorniFaDiInizio> <giorniFaDiFine> [categoria] [sourceUrl] -> JSON dell'istantanea
+snap_json() {
+  node -e '
+    const [sid, title, s, e, cat, url] = process.argv.slice(1)
+    const d = (days) => new Date(Date.now() - Number(days) * 86400000).toISOString()
+    console.log(JSON.stringify({ title, dateStart: d(s), dateEnd: d(e), place: "Altrove (XX)", category: cat || "Sagre e feste",
+      source: process.argv[7], sourceId: sid, sourceUrl: url || "https://example.it/e" }))' "$1" "$2" "$3" "$4" "${5:-}" "${6:-}" "${test_source}"
+}
+
+# --- M1: l'unione tiene l'ordine di salvataggio del dispositivo ---------------
+mint_user u4
+t1="$(node -e 'console.log(new Date(Date.now() - 2 * 3600000).toISOString())')"
+t2="$(node -e 'console.log(new Date(Date.now() - 3600000).toISOString())')"
+body="{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1}\",\"snap\":null},{\"id\":${b_id},\"savedAt\":\"${t2}\"}]}"
+code="$(merge m1 "${u4_cookie}" "${body}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/m1.b" 'j.added')" == "2" && "$(json_get "${tmp_dir}/m1.b" 'j.overCap')" == "0" ]] || fail "M1: atteso 200 added 2 overCap 0, ottenuto ${code} '$(cat "${tmp_dir}/m1.b")'"
+for pair in "${a_id}|${t1}" "${b_id}|${t2}"; do
+  ev="${pair%%|*}"; want="${pair#*|}"
+  got="$(psql_dev "SELECT to_char(saved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS') FROM saved_events WHERE user_id = '${u4_user}' AND event_id = ${ev}")"
+  [[ "${got}" == "${want:0:19}" ]] || fail "M1: saved_at della riga su ${ev}: atteso '${want:0:19}', ottenuto '${got}'"
+done
+echo "ok  M1: merge [A, B] -> added 2, saved_at delle righe uguali agli istanti del dispositivo"
+
+# --- M2: idempotente e sicuro in parallelo ------------------------------------
+code="$(merge m2 "${u4_cookie}" "${body}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/m2.b" 'j.added')" == "0" ]] || fail "M2: secondo merge: atteso 200 added 0, ottenuto ${code} '$(cat "${tmp_dir}/m2.b")'"
+[[ "$(user_rows "${u4_user}")" == "2" ]] || fail "M2: dopo il secondo merge devono restare 2 righe"
+cbody="{\"items\":[{\"id\":${c_id},\"savedAt\":\"${t1}\"}]}"
+merge m2p1 "${u4_cookie}" "${cbody}" >"${tmp_dir}/m2p1.code" &
+pid1=$!
+merge m2p2 "${u4_cookie}" "${cbody}" >"${tmp_dir}/m2p2.code" &
+pid2=$!
+wait "${pid1}" "${pid2}"
+[[ "$(cat "${tmp_dir}/m2p1.code")" == "200" && "$(cat "${tmp_dir}/m2p2.code")" == "200" ]] || fail "M2: due merge in parallelo: attesi 200 e 200"
+[[ "$(saved_rows "${u4_user}" "${c_id}")" == "1" ]] || fail "M2: due merge in parallelo di C devono lasciare una riga"
+echo "ok  M2: stesso corpo di nuovo -> added 0 e 2 righe; due merge in parallelo di C -> una riga"
+
+# --- M3: da 0 a 100 elementi, tutto il resto e' 400 ---------------------------
+many() { node -e 'console.log(JSON.stringify({items: Array.from({length: Number(process.argv[1])}, (_, i) => ({id: 900000000 + i, savedAt: new Date().toISOString()}))}))' "$1"; }
+code="$(merge m3a "${u4_cookie}" "$(many 101)")"
+[[ "${code}" == "400" ]] || fail "M3: 101 elementi: atteso 400, ottenuto ${code}"
+no_store m3a M3
+for bad in '{"items":{}}' '{"items":"x"}' '{}' 'non json'; do
+  code="$(merge m3b "${u4_cookie}" "${bad}")"
+  [[ "${code}" == "400" ]] || fail "M3: corpo '${bad}': atteso 400, ottenuto ${code}"
+done
+code="$(merge m3c "${u4_cookie}" '{"items":[]}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/m3c.b" 'j.added')" == "0" ]] || fail "M3: lista vuota: atteso 200 added 0, ottenuto ${code} '$(cat "${tmp_dir}/m3c.b")'"
+code="$(merge m3d "${u4_cookie}" "$(many 100)")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/m3d.b" 'j.added')" == "0" ]] || fail "M3: esattamente 100: atteso 200 added 0, ottenuto ${code} '$(cat "${tmp_dir}/m3d.b")'"
+echo "ok  M3: 101 -> 400, non array / corpo vuoto / non JSON -> 400, [] -> added 0, 100 -> 200"
+
+# --- M4: il testo del browser entra solo per le righe sparite e validato ------
+mint_user u5
+gone_try() { # <nome> <sourceId> <titolo> <inizio> <fine> [categoria] [sourceUrl] -> codice HTTP del merge di un id sconosciuto
+  local name="$1" snap
+  snap="$(snap_json "$2" "$3" "$4" "$5" "${6:-}" "${7:-}")"
+  merge "${name}" "${u5_cookie}" "{\"items\":[{\"id\":999999998,\"savedAt\":\"${t1}\",\"snap\":${snap}}]}"
+}
+gone_rows() { psql_dev "SELECT count(*) FROM saved_events WHERE user_id = '${u5_user}' AND event_id IS NULL AND source_id = '$1'"; }
+code="$(gone_try m4a gone-ok Fantasma 21 20)"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/m4a.b" 'j.added')" == "1" ]] || fail "M4: istantanea valida: atteso added 1, ottenuto ${code} '$(cat "${tmp_dir}/m4a.b")'"
+[[ "$(psql_dev "SELECT title FROM saved_events WHERE user_id = '${u5_user}' AND event_id IS NULL AND source_id = 'gone-ok'")" == "Fantasma" ]] || fail "M4: la riga sparita deve avere event_id NULL e titolo 'Fantasma'"
+gone_try m4b gone-old Vecchio 400 396 >/dev/null
+[[ "$(gone_rows gone-old)" == "0" ]] || fail "M4: un evento finito 13 mesi fa non deve entrare"
+gone_try m4c gone-js Cattivo 21 20 "Sagre e feste" "javascript:alert(1)" >/dev/null
+[[ "$(gone_rows gone-js)" == "0" ]] || fail "M4: sourceUrl javascript: non deve entrare"
+gone_try m4d gone-cat Cattivo 21 20 Hacker >/dev/null
+[[ "$(gone_rows gone-cat)" == "0" ]] || fail "M4: categoria 'Hacker' non deve entrare"
+gone_try m4e gate-a EVIL 21 20 >/dev/null
+[[ "$(psql_dev "SELECT count(*) FROM saved_events WHERE user_id = '${u5_user}' AND title = 'EVIL'")" == "0" ]] || fail "M4: testo del browser per un evento che esiste ancora (sotto un altro id)"
+snap_a="$(snap_json gate-a EVIL 21 20)"
+code="$(merge m4f "${u5_cookie}" "{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1}\",\"snap\":${snap_a}}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/m4f.b" 'j.added')" == "1" ]] || fail "M4: A: atteso added 1, ottenuto ${code} '$(cat "${tmp_dir}/m4f.b")'"
+[[ "$(psql_dev "SELECT title FROM saved_events WHERE user_id = '${u5_user}' AND event_id = ${a_id}")" == "Gate A" ]] || fail "M4: il titolo della riga su A deve essere quello del server ('Gate A')"
+echo "ok  M4: sparito valido -> riga con event_id NULL; 13 mesi, javascript:, categoria Hacker, evento vivo sotto altro id -> nessuna riga; A ignora 'EVIL'"
+
+# --- M5: il tetto di 500 sull'account -----------------------------------------
+mint_user u6
+psql_dev "INSERT INTO saved_events (user_id, title, date_start, canonical_category, source, source_id)
+          SELECT '${u6_user}', 'Tetto ' || n, now() + interval '30 days', 'Altro', '${test_source}', 'mcap-' || n FROM generate_series(1, 499) AS n" >/dev/null
+code="$(merge m5 "${u6_cookie}" "{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1}\"},{\"id\":${b_id},\"savedAt\":\"${t1}\"},{\"id\":${c_id},\"savedAt\":\"${t1}\"}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/m5.b" 'j.added')" == "1" && "$(json_get "${tmp_dir}/m5.b" 'j.overCap')" == "2" ]] || fail "M5: atteso added 1 overCap 2, ottenuto ${code} '$(cat "${tmp_dir}/m5.b")'"
+[[ "$(user_rows "${u6_user}")" == "500" ]] || fail "M5: devono restare 500 righe"
+echo "ok  M5: 499 righe + 3 nuovi -> added 1, overCap 2, 500 righe"
+
+# --- M6: Origin e sessione prima di ogni query --------------------------------
+code="$(call m6a POST /api/v1/me/saved/merge -H "${u4_cookie}" -H 'Content-Type: application/json' --data '{"items":[]}')"
+[[ "${code}" == "403" ]] || fail "M6: senza Origin: atteso 403, ottenuto ${code}"
+no_store m6a M6
+code="$(call m6b POST /api/v1/me/saved/merge -H "Origin: ${origin}" -H 'Content-Type: application/json' --data '{"items":[]}')"
+[[ "${code}" == "401" ]] || fail "M6: senza cookie: atteso 401, ottenuto ${code}"
+no_store m6b M6
+no_store m2 M6
+echo "ok  M6: merge senza Origin -> 403, senza cookie -> 401, sempre private, no-store"
+
+echo "Riepilogo: R1-R7, S1-S9, M1-M6 verdi"

@@ -117,16 +117,42 @@ let auth: { enabled: boolean | null; signedIn: boolean } = { enabled: null, sign
 let accountIds: Set<number> | null = null
 // Cresce a ogni cambio di modo: una risposta arrivata dopo l'uscita non riempie la lista di nessuno.
 let authEpoch = 0
+// Vero quando SavedSync ha finito unione e id per l'utente corrente: solo allora /salvati legge l'account.
+let accountReady = false
 export function setSavedAuth(state: { enabled: boolean | null; signedIn: boolean }): void {
   const modeChanged = state.signedIn !== auth.signedIn
   auth = state
   if (!modeChanged) return
   authEpoch += 1
   accountIds = null
+  accountReady = false
   listeners.forEach((l) => l())
 }
 export function savedAuth(): { enabled: boolean | null; signedIn: boolean } {
   return auth
+}
+
+/** Chiamata da SavedSync a unione e caricamento degli id finiti: /salvati passa da 'pending' ad 'account'. */
+export function markAccountReady(): void {
+  if (!auth.signedIn || accountReady) return
+  accountReady = true
+  listeners.forEach((l) => l())
+}
+
+/**
+ * Da quale lista legge /salvati. 'pending' finche' lo stato dell'accesso non e'
+ * noto (con il flag di build acceso) e, per chi ha l'accesso, finche' l'unione non
+ * e' finita: una lista mezza unita non si mostra mai (AUTH-09). Il valore del
+ * flag e' inlinato alla build, uguale sul server e sul client (idratazione).
+ */
+export type SavedMode = 'pending' | 'guest' | 'account'
+export function useSavedMode(): SavedMode {
+  const flagOn = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true'
+  return useSyncExternalStore(
+    subscribe,
+    () => (!flagOn ? 'guest' : auth.enabled === null ? 'pending' : !auth.signedIn ? 'guest' : accountReady ? 'account' : 'pending'),
+    () => (flagOn ? 'pending' : 'guest')
+  )
 }
 
 function setAccountIds(next: Set<number>): void {
@@ -181,6 +207,30 @@ async function toggleAccount(eventId: number): Promise<ToggleResult> {
   } catch {
     rollBack()
     return wasSaved ? 'error-remove' : 'error-save'
+  }
+}
+
+/**
+ * Toglie dal dispositivo gli id dati (tutto se omessi). Dopo l'unione, per gli id
+ * mandati; all'uscita e alla cancellazione dell'account, per tutto (D-07): su un
+ * computer condiviso niente di chi e' uscito deve restare.
+ */
+export function clearDeviceSaves(ids?: number[]): void {
+  const drop = ids ? new Set(ids) : null
+  commit(drop ? readStorage().filter((e) => !drop.has(e.id)) : [])
+}
+
+/** D-16: una riga di sola istantanea se ne va subito. Ospite: la voce locale; account: DELETE gone/{ref}. */
+export async function removeGone(ref: number): Promise<'removed' | 'error-remove'> {
+  if (!auth.signedIn) {
+    clearDeviceSaves([ref])
+    return 'removed'
+  }
+  try {
+    const res = await fetch(`/api/v1/me/saved/gone/${ref}`, { method: 'DELETE', credentials: 'same-origin' })
+    return res.ok ? 'removed' : 'error-remove'
+  } catch {
+    return 'error-remove'
   }
 }
 

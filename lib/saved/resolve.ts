@@ -43,6 +43,15 @@ export async function snapshotForEvent(id: number): Promise<{ canonicalId: numbe
   return item?.eventId != null && item.live ? { canonicalId: item.eventId, snap: item.live } : null
 }
 
+/** Per ogni id la cui riga esiste: id canonico e istantanea viva (stessa composizione di resolveIds, nessuna query in piu'). */
+export async function snapshotsForIds(ids: number[]): Promise<Map<number, { canonicalId: number; snap: Snap }>> {
+  const out = new Map<number, { canonicalId: number; snap: Snap }>()
+  for (const item of await resolveIds(ids)) {
+    if (item.eventId !== null && item.live) out.set(item.ref, { canonicalId: item.eventId, snap: item.live })
+  }
+  return out
+}
+
 /** La canonica e tutti i suoi membri: le righe salvate su uno qualunque contano come un salvato solo (SAVE-04). */
 export async function clusterIds(canonicalId: number): Promise<number[]> {
   const members = await prisma.event.findMany({ where: { canonicalEventId: canonicalId }, select: { id: true } })
