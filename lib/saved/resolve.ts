@@ -10,7 +10,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { composeEvent, groupMembersByCanonical } from '@/lib/dedup/compose'
-import { snapFromEvent, type ResolvedItem } from '@/lib/saved/snapshot'
+import { snapFromEvent, type ResolvedItem, type Snap } from '@/lib/saved/snapshot'
 
 export async function resolveIds(ids: number[]): Promise<ResolvedItem[]> {
   const comune = { select: { name: true, provinceCode: true } }
@@ -35,4 +35,16 @@ export async function resolveIds(ids: number[]): Promise<ResolvedItem[]> {
     const composed = composeEvent(canonical, members.get(canonical.id) ?? [])
     return { ref, eventId: canonical.id, live: snapFromEvent({ ...composed, comune: canonical.comune }) }
   })
+}
+
+/** Un solo evento: id canonico e istantanea viva, o null se la riga non esiste (stessa composizione di resolveIds). */
+export async function snapshotForEvent(id: number): Promise<{ canonicalId: number; snap: Snap } | null> {
+  const [item] = await resolveIds([id])
+  return item?.eventId != null && item.live ? { canonicalId: item.eventId, snap: item.live } : null
+}
+
+/** La canonica e tutti i suoi membri: le righe salvate su uno qualunque contano come un salvato solo (SAVE-04). */
+export async function clusterIds(canonicalId: number): Promise<number[]> {
+  const members = await prisma.event.findMany({ where: { canonicalEventId: canonicalId }, select: { id: true } })
+  return [canonicalId, ...members.map((m) => m.id)]
 }

@@ -24,6 +24,9 @@ export const SAVED_RETENTION_MONTHS = 12
 /** Tetto della lista sul dispositivo (D-06): oltre, il cuore resta spento e compare l'avviso. */
 export const GUEST_CAP = 100
 
+/** Tetto della lista di un account (D-15): guardia contro la crescita senza fine, non una quota esatta. */
+export const ACCOUNT_CAP = 500
+
 export interface Snap {
   title: string
   /** ISO 8601, le stesse cifre della colonna: eventDays() legge entrambi i formati. */

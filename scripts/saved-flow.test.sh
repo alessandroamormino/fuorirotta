@@ -2,7 +2,9 @@
 # Gate dei salvati (check:saved-flow, test:local): dev server effimero sul
 # Postgres LOCALE (scripts/dev-db.sh, mai produzione), con le variabili di
 # accesso passate ESPLICITE e valori finti, come scripts/auth-flow.test.sh.
-# Nessun utente di prova: la rotta dei salvati degli ospiti non ne ha bisogno.
+# La rotta dei salvati degli ospiti (R1-R7) non ha bisogno di utenti; quelle
+# dell'account (S1-S9) si, creati con scripts/auth-flow.helper.ts (e-mail
+# @fixture.invalid, cancellati a fine prova: la cascata porta via i salvati).
 #
 # Sezioni:
 #   R1  POST /api/v1/saved/resolve [A, M, 999999999]: tre righe, il membro M risolve
@@ -16,6 +18,13 @@
 #       nell'ambiente di prova non cambia nulla: non legge il flag), /salvati con aria-current,
 #       nessuna delle due con il punto data-saved-dot
 #
+#   S1  PUT /api/v1/me/saved/A con sessione e Origin -> 200 e UNA riga con event_id A, titolo
+#       'Gate A', source '__saved_gate__'
+#   S2  secondo PUT -> 200 e ancora una riga; due PUT in parallelo su B -> una riga
+#   S3  GET /api/v1/me/saved/ids contiene A e B
+#   S4  riga a mano sul membro M: GET ids elenca A una volta sola; DELETE A -> removed 2, zero righe su A e M
+#   S5  DELETE A di nuovo -> 200 removed 0
+#
 # Righe di prova sotto il `source` dedicato '__saved_gate__', cancellate prima
 # e all'uscita: nessuna riga reale viene letta o toccata.
 set -euo pipefail
@@ -26,6 +35,7 @@ repo_root="$(cd -- "${script_dir}/.." >/dev/null 2>&1 && pwd -P)"
 # shell farebbe uccidere da stop_server il dev server dello sviluppatore.
 port="${SAVED_FLOW_TEST_PORT:-39887}"
 base_url="http://localhost:${port}"
+origin="${base_url}"
 
 test_dist_dir=".next-saved-flow-test"
 export NEXT_TEST_DIST_DIR="${test_dist_dir}"
@@ -85,8 +95,14 @@ delete_fixtures() {
   psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null 2>&1 || true
 }
 
+# Gli utenti di prova @fixture.invalid: la FK in cascata porta via saved_events e calendar_feeds.
+delete_users() {
+  psql_dev "DELETE FROM auth_user WHERE email LIKE '%@fixture.invalid'" >/dev/null 2>&1 || true
+}
+
 cleanup() {
   stop_server
+  delete_users
   delete_fixtures
   rm -rf "${tmp_dir}"
   rm -rf "${repo_root}/${test_dist_dir}"
@@ -100,6 +116,7 @@ if ! docker compose -f "${compose_file}" ps postgres-dev 2>/dev/null | grep -q "
 fi
 
 # Parte pulita: righe di un giro interrotto.
+delete_users
 delete_fixtures
 
 # --- Fixture: canonica A, membro M di A, passato P ---------------------------
@@ -137,6 +154,11 @@ post_ids() {
 # json_get <file> <espressione JS su "j"> -> stampa il risultato
 json_get() {
   node -e 'const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const v = eval(process.argv[2]); console.log(v === undefined ? "undefined" : typeof v === "string" ? v : JSON.stringify(v))' "$1" "$2"
+}
+
+# helper <sottocomando> [args...]: stesso ambiente del dev server, Postgres locale.
+helper() {
+  bash scripts/dev-db.sh env "${auth_env[@]}" npx tsx scripts/auth-flow.helper.ts "$@"
 }
 
 # --- R1: risoluzione a canonica e istantanea viva ----------------------------
@@ -199,4 +221,67 @@ done
 grep -q 'aria-current="page"' "${tmp_dir}/r7salvati.b" || fail "R7: /salvati: manca aria-current=\"page\" sul cuore"
 echo "ok  R7: / e /salvati hanno il cuore Salvati verso /salvati, aria-current su /salvati, mai il punto"
 
-echo "Riepilogo: R1-R7 verdi"
+# ============================ Salvati dell'account ============================
+# mint_user <prefisso> -> imposta ${prefix}_user e ${prefix}_cookie (intestazione Cookie)
+mint_user() {
+  local prefix="$1" uid cookie
+  read -r uid cookie _ <<<"$(helper mint "${prefix}-saved@fixture.invalid" "Prova ${prefix}" 0 | tail -n 1)"
+  [[ -n "${uid}" && -n "${cookie}" ]] || fail "helper mint non ha stampato utente e cookie per ${prefix}"
+  printf -v "${prefix}_user" '%s' "${uid}"
+  printf -v "${prefix}_cookie" '%s' "Cookie: fuorirotta.session_token=${cookie}"
+}
+saved_rows() { # <utente> <event_id> -> numero di righe
+  psql_dev "SELECT count(*) FROM saved_events WHERE user_id = '$1' AND event_id = $2"
+}
+put() { call "$1" PUT "/api/v1/me/saved/$2" -H "Origin: ${origin}" -H "$3"; }
+del() { call "$1" DELETE "/api/v1/me/saved/$2" -H "Origin: ${origin}" -H "$3"; }
+get_ids() { call "$1" GET /api/v1/me/saved/ids -H "$2"; }
+
+mint_user u1
+b_id="$(insert_event gate-b 'Gate B' "now() + interval '5 days'" "now() + interval '6 days'" NULL)"
+[[ -n "${b_id}" ]] || fail "fixture B non creata"
+
+# --- S1: il salvataggio crea una riga con l'istantanea del server -------------
+code="$(put s1 "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" ]] || fail "S1: PUT A: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s1.b"))"
+[[ "$(saved_rows "${u1_user}" "${a_id}")" == "1" ]] || fail "S1: attesa una riga per A"
+row="$(psql_dev "SELECT title || '|' || source FROM saved_events WHERE user_id = '${u1_user}' AND event_id = ${a_id}")"
+[[ "${row}" == "Gate A|${test_source}" ]] || fail "S1: istantanea attesa 'Gate A|${test_source}', ottenuto '${row}'"
+echo "ok  S1: PUT A -> 200, una riga con event_id A, titolo 'Gate A', source '${test_source}'"
+
+# --- S2: idempotente e sicuro in parallelo ------------------------------------
+code="$(put s2 "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" ]] || fail "S2: secondo PUT A: atteso 200, ottenuto ${code}"
+[[ "$(saved_rows "${u1_user}" "${a_id}")" == "1" ]] || fail "S2: dopo il secondo PUT deve restare una riga su A"
+put s2p1 "${b_id}" "${u1_cookie}" >"${tmp_dir}/s2p1.code" &
+pid1=$!
+put s2p2 "${b_id}" "${u1_cookie}" >"${tmp_dir}/s2p2.code" &
+pid2=$!
+wait "${pid1}" "${pid2}"
+[[ "$(cat "${tmp_dir}/s2p1.code")" == "200" && "$(cat "${tmp_dir}/s2p2.code")" == "200" ]] || fail "S2: due PUT in parallelo su B: attesi 200 e 200, ottenuti $(cat "${tmp_dir}/s2p1.code") e $(cat "${tmp_dir}/s2p2.code")"
+[[ "$(saved_rows "${u1_user}" "${b_id}")" == "1" ]] || fail "S2: due PUT in parallelo su B devono lasciare una riga"
+echo "ok  S2: secondo PUT -> 200 e una riga; due PUT in parallelo su B -> una riga"
+
+# --- S3: gli id per i cuori ---------------------------------------------------
+code="$(get_ids s3 "${u1_cookie}")"
+[[ "${code}" == "200" ]] || fail "S3: GET ids: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/s3.b" "[${a_id},${b_id}].every((x) => j.ids.includes(x)) && j.ids.length === 2")" == "true" ]] || fail "S3: ids attesi [${a_id},${b_id}], corpo '$(cat "${tmp_dir}/s3.b")'"
+echo "ok  S3: GET ids contiene A e B"
+
+# --- S4: salvato prima della fusione e sulla canonica = un salvato solo -------
+psql_dev "INSERT INTO saved_events (user_id, event_id, title, date_start, canonical_category, source, source_id)
+          SELECT '${u1_user}', id, title, date_start, canonical_category, source, source_id FROM events WHERE id = ${m_id}" >/dev/null
+code="$(get_ids s4 "${u1_cookie}")"
+[[ "$(json_get "${tmp_dir}/s4.b" "j.ids.filter((x) => x === ${a_id}).length")" == "1" ]] || fail "S4: A deve comparire una volta sola negli id, corpo '$(cat "${tmp_dir}/s4.b")'"
+[[ "$(json_get "${tmp_dir}/s4.b" "j.ids.includes(${m_id})")" == "false" ]] || fail "S4: il membro M non deve comparire negli id"
+code="$(del s4d "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s4d.b" 'j.removed')" == "2" ]] || fail "S4: DELETE A: atteso 200 removed 2, ottenuto ${code} '$(cat "${tmp_dir}/s4d.b")'"
+[[ "$(saved_rows "${u1_user}" "${a_id}")" == "0" && "$(saved_rows "${u1_user}" "${m_id}")" == "0" ]] || fail "S4: dopo DELETE A devono sparire le righe su A e su M"
+echo "ok  S4: riga su M + riga su A -> id A una volta sola, DELETE A -> removed 2, zero righe su A e M"
+
+# --- S5: togliere due volte non e' un errore ----------------------------------
+code="$(del s5 "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s5.b" 'j.removed')" == "0" ]] || fail "S5: secondo DELETE A: atteso 200 removed 0, ottenuto ${code} '$(cat "${tmp_dir}/s5.b")'"
+echo "ok  S5: secondo DELETE A -> 200 removed 0"
+
+echo "Riepilogo: R1-R7, S1-S5 verdi"

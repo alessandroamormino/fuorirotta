@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useUserState } from "@/components/account/UserStateProvider";
-import { setSavedAuth } from "@/lib/saved/store";
+import { loadAccountIds, setSavedAuth } from "@/lib/saved/store";
 
 /**
  * Ponte a effetto puro fra il Context dell'utente e lo store dei salvati: lo
@@ -13,10 +13,13 @@ import { setSavedAuth } from "@/lib/saved/store";
 export default function SavedSync() {
 	const { enabled, user } = useUserState();
 	const signedIn = user !== null;
+	const userKey = user?.email ?? null;
 
 	useEffect(() => {
 		setSavedAuth({ enabled, signedIn });
-	}, [enabled, signedIn]);
+		// Una volta per utente: setSavedAuth svuota gli id al cambio di modo, il caricamento li rimette.
+		if (userKey) void loadAccountIds();
+	}, [enabled, signedIn, userKey]);
 
 	return null;
 }

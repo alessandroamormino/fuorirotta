@@ -16,7 +16,7 @@ import { useSyncExternalStore } from 'react'
 import { GUEST_CAP, parseDeviceList, validateSnap, type DeviceEntry, type ResolvedItem } from './snapshot'
 
 export type { DeviceEntry }
-export type ToggleResult = 'saved' | 'removed' | 'busy' | 'cap'
+export type ToggleResult = 'saved' | 'removed' | 'busy' | 'cap' | 'error-save' | 'error-remove'
 
 const KEY = 'fuorirotta.saved.v1'
 
@@ -89,7 +89,7 @@ function subscribe(cb: () => void): () => void {
 export function useIsSaved(eventId: number): boolean {
   return useSyncExternalStore(
     subscribe,
-    () => includes(getList(), eventId),
+    () => (auth.signedIn ? accountIds?.has(eventId) === true : includes(getList(), eventId)),
     () => false
   )
 }
@@ -97,7 +97,7 @@ export function useIsSaved(eventId: number): boolean {
 export function useSavedCount(): number {
   return useSyncExternalStore(
     subscribe,
-    () => getList().length,
+    () => (auth.signedIn ? (accountIds?.size ?? 0) : getList().length),
     () => 0
   )
 }
@@ -112,11 +112,76 @@ export function useSavedPulse(): number {
 
 // Stato dell'accesso, scritto da SavedSync: lo store non importa il Context (popup = altra radice).
 let auth: { enabled: boolean | null; signedIn: boolean } = { enabled: null, signedIn: false }
+// Modo account (D-07): gli id canonici stanno SOLO in memoria, mai nel localStorage (AUTH-09:
+// su un computer condiviso la lista di chi e' uscito non deve restare). null = non ancora caricati.
+let accountIds: Set<number> | null = null
+// Cresce a ogni cambio di modo: una risposta arrivata dopo l'uscita non riempie la lista di nessuno.
+let authEpoch = 0
 export function setSavedAuth(state: { enabled: boolean | null; signedIn: boolean }): void {
+  const modeChanged = state.signedIn !== auth.signedIn
   auth = state
+  if (!modeChanged) return
+  authEpoch += 1
+  accountIds = null
+  listeners.forEach((l) => l())
 }
 export function savedAuth(): { enabled: boolean | null; signedIn: boolean } {
   return auth
+}
+
+function setAccountIds(next: Set<number>): void {
+  accountIds = next
+  listeners.forEach((l) => l())
+}
+
+/** Modo account: riempie gli id canonici in memoria dal server. Senza accesso non fa nulla. */
+export async function loadAccountIds(): Promise<void> {
+  if (!auth.signedIn) return
+  const epoch = authEpoch
+  try {
+    const res = await fetch('/api/v1/me/saved/ids', { credentials: 'same-origin' })
+    if (!res.ok) return
+    const json = (await res.json()) as { ids?: unknown }
+    if (epoch !== authEpoch || !Array.isArray(json.ids)) return
+    setAccountIds(new Set(json.ids.filter((n): n is number => Number.isSafeInteger(n))))
+  } catch {
+    // Offline: restano null e il prossimo tocco riprova a caricare.
+  }
+}
+
+async function toggleAccount(eventId: number): Promise<ToggleResult> {
+  if (accountIds === null) await loadAccountIds()
+  const before = accountIds
+  if (before === null) return 'error-save'
+  const epoch = authEpoch
+  const wasSaved = before.has(eventId)
+  const next = new Set(before)
+  if (wasSaved) next.delete(eventId)
+  else {
+    next.add(eventId)
+    pulse += 1
+  }
+  setAccountIds(next)
+  // Torna come prima solo per questo id e solo se l'utente e' lo stesso.
+  const rollBack = () => {
+    if (epoch !== authEpoch || accountIds === null) return
+    const restored = new Set(accountIds)
+    if (wasSaved) restored.add(eventId)
+    else restored.delete(eventId)
+    setAccountIds(restored)
+  }
+  try {
+    const res = await fetch(`/api/v1/me/saved/${eventId}`, {
+      method: wasSaved ? 'DELETE' : 'PUT',
+      credentials: 'same-origin',
+    })
+    if (res.ok) return wasSaved ? 'removed' : 'saved'
+    rollBack()
+    return res.status === 409 ? 'cap' : wasSaved ? 'error-remove' : 'error-save'
+  } catch {
+    rollBack()
+    return wasSaved ? 'error-remove' : 'error-save'
+  }
 }
 
 export function readDeviceList(): DeviceEntry[] {
@@ -160,6 +225,7 @@ export async function toggleSaved(eventId: number): Promise<ToggleResult> {
   if (pending.has(eventId)) return 'busy'
   pending.add(eventId)
   try {
+    if (auth.signedIn) return await toggleAccount(eventId)
     const current = readStorage()
     if (includes(current, eventId)) {
       commit(current.filter((e) => e.id !== eventId && e.c !== eventId))
