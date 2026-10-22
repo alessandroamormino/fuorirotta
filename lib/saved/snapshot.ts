@@ -14,12 +14,10 @@
 import { CANONICAL_CATEGORIES } from '../categories/taxonomy'
 import { eventDays } from '../eventDays'
 
-/**
- * Per quanto un evento finito resta in "Passati" (D-01). E' il numero che
- * /privacy dichiara: la lista sul dispositivo e il purge lato server lo
- * condividono, cosi' non possono divergere dal testo.
- */
-export const SAVED_RETENTION_MONTHS = 12
+import { SAVED_RETENTION_MONTHS } from './retention'
+
+/** Il numero vive in ./retention (zero import, lo legge anche il job notturno); qui si riesporta per chi lo importa da sempre. */
+export { SAVED_RETENTION_MONTHS }
 
 /** Tetto della lista sul dispositivo (D-06): oltre, il cuore resta spento e compare l'avviso. */
 export const GUEST_CAP = 100

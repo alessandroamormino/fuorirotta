@@ -59,6 +59,8 @@
 import { backfillEvents } from '../lib/territorial/backfill'
 import { purgeConcludedEvents, RETENTION_DAYS } from '../lib/retention/purge'
 import { purgeAuthRows } from '../lib/retention/purgeAuth'
+import { purgeOldSaves } from '../lib/retention/purgeSaved'
+import { SAVED_RETENTION_MONTHS } from '../lib/saved/retention'
 import { dedupeEvents } from '../lib/dedup/dedupe'
 import { truncateError } from '../lib/scrapers/health'
 import { prisma } from '../lib/prisma'
@@ -110,6 +112,16 @@ async function runMaintenance(): Promise<{ eventCount: number }> {
   const authReport = await purgeAuthRows()
   console.log(
     `[Maintenance] Account: ${authReport.rateLimitDeleted} righe di rate limit fuori dalla finestra del throttle, ${authReport.sessionsDeleted} sessioni scadute, ${authReport.verificationsDeleted} stati di accesso scaduti cancellati.`
+  )
+
+  // Fase 22, D-01: i salvataggi escono SAVED_RETENTION_MONTHS mesi dopo la fine
+  // dell'evento (il numero che /privacy dichiara). Come la pulizia degli
+  // accessi gira PER ULTIMO: un suo errore propaga e fa fallire il job, ma a
+  // pipeline degli eventi gia' conclusa; il purge dei 7 giorni, qui sopra, ha
+  // gia' lasciato vivi i salvataggi con le date finali.
+  const savedReport = await purgeOldSaves()
+  console.log(
+    `[Maintenance] Salvati: ${savedReport.deleted} salvataggi conclusi da oltre ${SAVED_RETENTION_MONTHS} mesi cancellati.`
   )
 
   return { eventCount: dedupReport.scanned }
