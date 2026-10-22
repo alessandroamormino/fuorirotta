@@ -36,6 +36,9 @@ let loaded = false
 // Vero dopo una scrittura fallita: da li' in poi lo storage non e' piu' la verita', la memoria si'.
 let memoryOnly = false
 const listeners = new Set<() => void>()
+// Cresce solo quando un tocco dell'utente salva: fa pulsare il punto della navbar.
+// Idratazione, altre schede e unione non lo toccano.
+let pulse = 0
 const pending = new Set<number>()
 
 const isEntry = (e: unknown): e is DeviceEntry => {
@@ -117,6 +120,14 @@ export function useSavedCount(): number {
   )
 }
 
+export function useSavedPulse(): number {
+  return useSyncExternalStore(
+    subscribe,
+    () => pulse,
+    () => 0
+  )
+}
+
 export function readDeviceList(): DeviceEntry[] {
   return typeof window === 'undefined' ? [] : getList()
 }
@@ -162,6 +173,7 @@ export async function toggleSaved(eventId: number): Promise<ToggleResult> {
       commit(current.filter((e) => e.id !== eventId && e.c !== eventId))
       return 'removed'
     }
+    pulse += 1
     commit([...current, { id: eventId, savedAt: new Date().toISOString(), snap: null }])
     resolveInBackground(eventId)
     return 'saved'

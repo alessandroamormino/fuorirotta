@@ -12,6 +12,9 @@
 #   R4  GET /salvati -> 200, contiene >Salvati</h1> e un meta robots noindex
 #   R5  GET / -> 200, i cuori del server sono il contorno non salvato per tutti
 #   R6  GET /eventi/{A} -> 200, il cuore del dettaglio e' il contorno non salvato "Salva: Gate A"
+#   R7  GET / e GET /salvati hanno il cuore "Salvati" verso /salvati (anche con l'accesso spento
+#       nell'ambiente di prova non cambia nulla: non legge il flag), /salvati con aria-current,
+#       nessuna delle due con il punto data-saved-dot
 #
 # Righe di prova sotto il `source` dedicato '__saved_gate__', cancellate prima
 # e all'uscita: nessuna riga reale viene letta o toccata.
@@ -184,4 +187,16 @@ grep -q 'aria-label="Salva: Gate A"' "${tmp_dir}/r6.b" || fail "R6: manca il cuo
 grep -q 'aria-pressed="false"' "${tmp_dir}/r6.b" || fail "R6: il cuore del dettaglio deve avere aria-pressed=\"false\""
 echo "ok  R6: il dettaglio di A contiene il cuore 'Salva: Gate A' con aria-pressed=\"false\""
 
-echo "Riepilogo: R1-R6 verdi"
+# --- R7: il cuore della testata e' per tutti, senza punto lato server -------
+for page in "/" "/salvati"; do
+  name="r7$(echo "${page}" | tr -d '/')"
+  code="$(call "${name}" GET "${page}")"
+  [[ "${code}" == "200" ]] || fail "R7: GET ${page}: atteso 200, ottenuto ${code}"
+  grep -q 'aria-label="Salvati"' "${tmp_dir}/${name}.b" || fail "R7: ${page}: manca aria-label=\"Salvati\""
+  grep -q 'href="/salvati"' "${tmp_dir}/${name}.b" || fail "R7: ${page}: manca href=\"/salvati\""
+  if grep -q 'data-saved-dot' "${tmp_dir}/${name}.b"; then fail "R7: ${page}: il punto non puo' stare nell'HTML del server"; fi
+done
+grep -q 'aria-current="page"' "${tmp_dir}/r7salvati.b" || fail "R7: /salvati: manca aria-current=\"page\" sul cuore"
+echo "ok  R7: / e /salvati hanno il cuore Salvati verso /salvati, aria-current su /salvati, mai il punto"
+
+echo "Riepilogo: R1-R7 verdi"

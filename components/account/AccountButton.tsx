@@ -13,7 +13,7 @@ import { useUserState } from "./UserStateProvider";
  * nella STESSA scatola da 40/44px, cosi' lo scambio non sposta nulla.
  * Senza il flag di build il pulsante non esiste nell'HTML.
  */
-const BOX =
+export const HEADER_ICON_BOX =
 	"flex flex-none h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full shadow-sm transition-colors " +
 	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
@@ -29,7 +29,7 @@ export default function AccountButton() {
 				href="/account"
 				aria-label="Il tuo account"
 				aria-current={pathname === "/account" ? "page" : undefined}
-				className={`${BOX} overflow-hidden bg-foreground text-background text-sm font-medium`}
+				className={`${HEADER_ICON_BOX} overflow-hidden bg-foreground text-background text-sm font-medium`}
 			>
 				<Avatar src={user.image} initial={displayInitial(user.name, user.email)} />
 			</Link>
@@ -42,7 +42,7 @@ export default function AccountButton() {
 			aria-haspopup="dialog"
 			aria-label="Accedi"
 			onClick={openSignIn}
-			className={`${BOX} border border-border bg-surface text-foreground hover:border-primary/50`}
+			className={`${HEADER_ICON_BOX} border border-border bg-surface text-foreground hover:border-primary/50`}
 		>
 			<User size={20} aria-hidden="true" />
 		</button>

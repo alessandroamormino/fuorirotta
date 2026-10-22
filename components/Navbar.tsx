@@ -17,6 +17,7 @@ import SearchbarTrigger from "@/components/navbar/SearchbarTrigger";
 import DesktopSearchDropdown from "@/components/navbar/DesktopSearchDropdown";
 import * as Popover from "@/components/ui/Popover";
 import AccountButton from "@/components/account/AccountButton";
+import SavedNavButton from "@/components/saved/SavedNavButton";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import type { SearchFilters } from "@/lib/types";
 import { useNavbarSearch } from "@/lib/hooks/useNavbarSearch";
@@ -267,7 +268,7 @@ export default function Navbar({
 						{/* Logo — in flusso (D-10): non piu' absolute, fratello flex-none
 						    della zona di ricerca e del toggle. */}
 						<div className="flex-none lg:justify-self-start">
-							<Link href="/">
+							<Link href="/" aria-label="Fuorirotta - pagina iniziale">
 								<motion.div
 									className="flex items-center space-x-3 cursor-pointer"
 									whileHover={{ scale: 1.05 }}
@@ -288,7 +289,7 @@ export default function Navbar({
 									    ricompare non e' piu' xl (1280px) ma il breakpoint
 									    arbitrario 900px del mock — sotto, resta il solo logo
 									    icona. */}
-									<span className="block sm:hidden min-[900px]:block text-2xl font-bold text-primary">
+									<span className="block sm:hidden min-[900px]:block max-[359px]:hidden text-2xl font-bold text-primary">
 										Fuorirotta
 									</span>
 								</motion.div>
@@ -667,6 +668,7 @@ export default function Navbar({
 						    Fase 17), solo riposizionato (17-UI-SPEC.md); l'icona e' D-01 della
 						    Fase 21 (21-UI-SPEC Superficie 1). */}
 						<div className="flex flex-none items-center gap-2 lg:justify-self-end">
+							<SavedNavButton />
 							<AccountButton />
 							<ThemeToggle className="flex-none flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-surface border border-border text-foreground shadow-sm hover:border-primary/50 transition-colors" />
 						</div>
