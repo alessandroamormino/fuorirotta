@@ -24,6 +24,12 @@
 #   S3  GET /api/v1/me/saved/ids contiene A e B
 #   S4  riga a mano sul membro M: GET ids elenca A una volta sola; DELETE A -> removed 2, zero righe su A e M
 #   S5  DELETE A di nuovo -> 200 removed 0
+#   S6  PUT senza Origin -> 403, senza cookie -> 401, id 'abc' / 1234567890 / 999999999 (sconosciuto) -> 404,
+#       tutte private, no-store
+#   S7  DELETE A di un altro utente mentre u1 ha una riga su A -> 200 removed 0, la riga di u1 resta
+#   S8  499 righe di sola istantanea: PUT A -> 200 (la 500a), PUT B -> 409 {error:'cap'} e 500 righe,
+#       PUT A di nuovo -> 200 (gia' salvato al tetto)
+#   S9  GET ids senza cookie -> 401 private, no-store
 #
 # Righe di prova sotto il `source` dedicato '__saved_gate__', cancellate prima
 # e all'uscita: nessuna riga reale viene letta o toccata.
@@ -284,4 +290,54 @@ code="$(del s5 "${a_id}" "${u1_cookie}")"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/s5.b" 'j.removed')" == "0" ]] || fail "S5: secondo DELETE A: atteso 200 removed 0, ottenuto ${code} '$(cat "${tmp_dir}/s5.b")'"
 echo "ok  S5: secondo DELETE A -> 200 removed 0"
 
-echo "Riepilogo: R1-R7, S1-S5 verdi"
+# --- S6: Origin, sessione e id sono controllati prima di ogni query ----------
+no_store() { # <nome-file> <sezione>
+  local cc
+  cc="$(grep -i '^cache-control:' "${tmp_dir}/$1.h" | head -n 1 | cut -d: -f2- | sed 's/^ *//' | tr -d '\r')"
+  [[ "${cc}" == "private, no-store" ]] || fail "$2: cache-control atteso 'private, no-store' su $1, ottenuto '${cc}'"
+}
+code="$(call s6a PUT "/api/v1/me/saved/${a_id}" -H "${u1_cookie}")"
+[[ "${code}" == "403" ]] || fail "S6: PUT senza Origin: atteso 403, ottenuto ${code}"
+no_store s6a S6
+code="$(call s6b PUT "/api/v1/me/saved/${a_id}" -H "Origin: ${origin}")"
+[[ "${code}" == "401" ]] || fail "S6: PUT senza cookie: atteso 401, ottenuto ${code}"
+no_store s6b S6
+for bad in abc 1234567890 999999999; do
+  code="$(put s6c "${bad}" "${u1_cookie}")"
+  [[ "${code}" == "404" ]] || fail "S6: PUT /api/v1/me/saved/${bad}: atteso 404, ottenuto ${code}"
+  no_store s6c S6
+done
+[[ "$(saved_rows "${u1_user}" "${a_id}")" == "0" ]] || fail "S6: una richiesta rifiutata ha scritto una riga"
+echo "ok  S6: PUT senza Origin -> 403, senza cookie -> 401, id abc / 1234567890 / sconosciuto -> 404, sempre private, no-store"
+
+# --- S7: la cancellazione e' sempre dell'utente della sessione ----------------
+mint_user u2
+code="$(put s7p "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" && "$(saved_rows "${u1_user}" "${a_id}")" == "1" ]] || fail "S7: u1 deve avere una riga su A (PUT ${code})"
+code="$(del s7 "${a_id}" "${u2_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s7.b" 'j.removed')" == "0" ]] || fail "S7: DELETE A di u2: atteso 200 removed 0, ottenuto ${code} '$(cat "${tmp_dir}/s7.b")'"
+no_store s7 S7
+[[ "$(saved_rows "${u1_user}" "${a_id}")" == "1" ]] || fail "S7: il DELETE di un altro utente ha tolto la riga di u1"
+echo "ok  S7: DELETE A dell'utente 2 -> 200 removed 0, la riga dell'utente 1 resta"
+
+# --- S8: tetto di 500 sull'account --------------------------------------------
+mint_user u3
+psql_dev "INSERT INTO saved_events (user_id, title, date_start, canonical_category, source, source_id)
+          SELECT '${u3_user}', 'Tetto ' || n, now() + interval '30 days', 'Altro', '${test_source}', 'cap-' || n FROM generate_series(1, 499) AS n" >/dev/null
+code="$(put s8a "${a_id}" "${u3_cookie}")"
+[[ "${code}" == "200" ]] || fail "S8: la 500a riga: atteso 200, ottenuto ${code} '$(cat "${tmp_dir}/s8a.b")'"
+code="$(put s8b "${b_id}" "${u3_cookie}")"
+[[ "${code}" == "409" && "$(json_get "${tmp_dir}/s8b.b" 'j.error')" == "cap" ]] || fail "S8: la 501a: atteso 409 cap, ottenuto ${code} '$(cat "${tmp_dir}/s8b.b")'"
+no_store s8b S8
+[[ "$(psql_dev "SELECT count(*) FROM saved_events WHERE user_id = '${u3_user}'")" == "500" ]] || fail "S8: dopo il 409 devono restare 500 righe"
+code="$(put s8c "${a_id}" "${u3_cookie}")"
+[[ "${code}" == "200" ]] || fail "S8: A gia' salvato al tetto: atteso 200, ottenuto ${code}"
+echo "ok  S8: 499 righe + A -> 200, B -> 409 cap con 500 righe, A di nuovo -> 200"
+
+# --- S9: gli id richiedono la sessione ----------------------------------------
+code="$(call s9 GET /api/v1/me/saved/ids)"
+[[ "${code}" == "401" ]] || fail "S9: GET ids senza cookie: atteso 401, ottenuto ${code}"
+no_store s9 S9
+echo "ok  S9: GET ids senza cookie -> 401 private, no-store"
+
+echo "Riepilogo: R1-R7, S1-S9 verdi"

@@ -58,12 +58,21 @@ export default function SaveHeart({ eventId, title, presentation, label, classNa
 						setPop((n) => n + 1);
 						setPopping(true);
 					} else if (result === "cap") {
-						// D-06: l'unico avviso del cuore. L'azione di accesso solo con l'accesso acceso sia nella build sia sul server.
-						const canSignIn = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && savedAuth().enabled !== false;
-						notify(
-							"Hai raggiunto il limite di 100 eventi salvati",
-							canSignIn ? { label: "Accedi per salvarne altri", onClick: requestSignIn } : undefined
-						);
+						if (savedAuth().signedIn) {
+							// D-15: dal server, il tetto dell'account; niente azione, l'accesso c'e' gia'.
+							notify("Hai raggiunto il limite di 500 eventi salvati");
+						} else {
+							// D-06: l'azione di accesso solo con l'accesso acceso sia nella build sia sul server.
+							const canSignIn = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && savedAuth().enabled !== false;
+							notify(
+								"Hai raggiunto il limite di 100 eventi salvati",
+								canSignIn ? { label: "Accedi per salvarne altri", onClick: requestSignIn } : undefined
+							);
+						}
+					} else if (result === "error-save") {
+						notify("Salvataggio non riuscito. Riprova tra poco.");
+					} else if (result === "error-remove") {
+						notify("Rimozione non riuscita. Riprova tra poco.");
 					}
 				});
 			}}
