@@ -52,5 +52,27 @@ export const USER_DATA_REGISTRY: readonly UserDataEntry[] = [
         createdAt: row.createdAt
       }))
     }
+  },
+  {
+    table: 'saved_events',
+    exportKey: 'savedEvents',
+    // Solo le colonne che l'utente ha scelto o che descrivono l'evento: niente id interni.
+    exportRows: async (userId) =>
+      prisma.savedEvent.findMany({
+        where: { userId },
+        select: { title: true, dateStart: true, dateEnd: true, place: true, category: true, sourceUrl: true, savedAt: true },
+        orderBy: [{ savedAt: 'asc' }, { id: 'asc' }]
+      })
+  },
+  {
+    table: 'calendar_feeds',
+    exportKey: 'calendarFeed',
+    // Del link del calendario si esporta quando e' nato e quando e' stato rigenerato, MAI il link
+    // stesso: il file scaricato diventerebbe un secondo modo per leggere la lista (D-13).
+    exportRows: async (userId) =>
+      prisma.calendarFeed.findMany({
+        where: { userId },
+        select: { createdAt: true, rotatedAt: true }
+      })
   }
 ]
