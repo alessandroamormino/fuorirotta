@@ -317,6 +317,19 @@ html {
   }
 }
 
+/* Salvataggio (components/saved/SaveHeart.tsx): il cuore pulsa una volta. */
+@keyframes heartPop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 /* Comparsa dell'avviso (components/account/NoticeHost.tsx): solo opacita'. */
 @keyframes noticeIn {
   from {

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Event } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import MiniEventCard from "@/components/map/MiniEventCard";
+import SaveHeart from "@/components/saved/SaveHeart";
 import CoverageMessage, { type CoverageMessageVariant } from "@/components/CoverageMessage";
 
 interface MapEventsRailProps {
@@ -105,7 +106,7 @@ export default function MapEventsRail({ events, totalInView, selectedEventId, co
 					className="pointer-events-auto flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				>
 					{events.map((event) => (
-						<div key={`${event.source}-${event.id}`} data-event-id={event.id} className={cn("shrink-0 snap-center", events.length === 1 ? "w-full" : "w-[264px]")}>
+						<div key={`${event.source}-${event.id}`} data-event-id={event.id} className={cn("relative shrink-0 snap-center", events.length === 1 ? "w-full" : "w-[264px]")}>
 							<MiniEventCard
 								event={{
 									id: event.id,
@@ -117,11 +118,17 @@ export default function MapEventsRail({ events, totalInView, selectedEventId, co
 									dateEnd: event.dateEnd,
 								}}
 								className={cn(
-									"h-full bg-background",
+									"h-full bg-background pr-8",
 									event.id === selectedEventId
 										? "shadow-[0_0_0_2px_var(--primary)]"
 										: "shadow-[var(--elev-ring)]"
 								)}
+							/>
+							<SaveHeart
+								presentation="compact"
+								eventId={event.id}
+								title={event.title}
+								className="absolute bottom-1 right-0"
 							/>
 						</div>
 					))}

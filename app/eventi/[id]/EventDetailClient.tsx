@@ -14,6 +14,7 @@ import * as Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import ShareButton from "@/components/ShareButton";
+import SaveHeart from "@/components/saved/SaveHeart";
 import AddToCalendar from "@/components/calendar/AddToCalendar";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 import { eventStatus, formatEventRange, isEventOver, romeCalendarDate } from "@/lib/eventStatus";
@@ -522,14 +523,17 @@ export default function EventDetailClient({ initialEvent, canonicalUrl, eventOve
 									)}
 								</div>
 
-								<h1
-									ref={h1Ref}
-									id="detail-title"
-									className="mb-4 text-balance font-display text-xl font-semibold leading-tight text-foreground"
-									style={{ letterSpacing: "var(--tracking-display)" }}
-								>
-									{decodeHtmlEntities(event.title)}
-								</h1>
+								<div className="mb-4 flex items-start gap-4">
+									<h1
+										ref={h1Ref}
+										id="detail-title"
+										className="min-w-0 flex-1 text-balance font-display text-xl font-semibold leading-tight text-foreground"
+										style={{ letterSpacing: "var(--tracking-display)" }}
+									>
+										{decodeHtmlEntities(event.title)}
+									</h1>
+									<SaveHeart presentation="pill" eventId={event.id} title={event.title} className="flex-none" />
+								</div>
 
 								{/* Lista raggruppata (D-14): un contenitore, righe separate da
 								    filetti — sostituisce le quattro card in griglia. Ogni riga

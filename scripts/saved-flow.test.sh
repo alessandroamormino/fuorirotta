@@ -11,6 +11,7 @@
 #   R3  la risposta 200 ha cache-control "private, no-store" e nessun set-cookie
 #   R4  GET /salvati -> 200, contiene >Salvati</h1> e un meta robots noindex
 #   R5  GET / -> 200, i cuori del server sono il contorno non salvato per tutti
+#   R6  GET /eventi/{A} -> 200, il cuore del dettaglio e' il contorno non salvato "Salva: Gate A"
 #
 # Righe di prova sotto il `source` dedicato '__saved_gate__', cancellate prima
 # e all'uscita: nessuna riga reale viene letta o toccata.
@@ -176,4 +177,11 @@ grep -q 'aria-pressed="false"' "${tmp_dir}/r5.b" || fail "R5: i cuori del server
 if grep -q 'aria-pressed="true"' "${tmp_dir}/r5.b"; then fail "R5: nessun cuore del server puo' essere salvato"; fi
 echo "ok  R5: la home contiene cuori 'Salva: ...' con aria-pressed=\"false\", mai \"true\""
 
-echo "Riepilogo: R1-R5 verdi"
+# --- R6: il dettaglio porta il cuore a pillola, non salvato, per tutti -------
+code="$(call r6 GET "/eventi/${a_id}")"
+[[ "${code}" == "200" ]] || fail "R6: GET /eventi/${a_id}: atteso 200, ottenuto ${code}"
+grep -q 'aria-label="Salva: Gate A"' "${tmp_dir}/r6.b" || fail "R6: manca il cuore 'Salva: Gate A' nell'HTML del dettaglio"
+grep -q 'aria-pressed="false"' "${tmp_dir}/r6.b" || fail "R6: il cuore del dettaglio deve avere aria-pressed=\"false\""
+echo "ok  R6: il dettaglio di A contiene il cuore 'Salva: Gate A' con aria-pressed=\"false\""
+
+echo "Riepilogo: R1-R6 verdi"
