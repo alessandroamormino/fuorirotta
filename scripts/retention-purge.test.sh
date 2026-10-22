@@ -33,7 +33,7 @@ cleanup() {
   rm -f "${tmp_ts}"
   docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
     psql -U fuorirotta -d fuorirotta_dev -c \
-    "DELETE FROM events WHERE source = '${test_source}'" >/dev/null 2>&1 || true
+    "DELETE FROM events WHERE source = '${test_source}'; DELETE FROM auth_user WHERE id = '${test_source}'" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -64,7 +64,19 @@ const day = 24 * 60 * 60 * 1000
   const duplicato = await mk('duplicato', new Date(cutoff.getTime() - 30 * day), new Date(Date.now() + day))
   await prisma.event.update({ where: { id: duplicato }, data: { canonicalEventId: canonico } })
 
+  // Salvataggio del solo utente di prova sull'evento 'vecchio', con date
+  // dell'istantanea volutamente 60 giorni PRIMA di quelle dell'evento.
+  const vecchioRow = await prisma.event.findUniqueOrThrow({ where: { id: vecchio } })
+  await prisma.user.create({ data: { id: SRC, name: 'gate', email: 'gate@retention.invalid' } })
+  await prisma.savedEvent.create({ data: {
+    userId: SRC, eventId: vecchio, title: 'gate save', category: 'Altro', source: SRC, sourceId: 'vecchio',
+    dateStart: new Date(vecchioRow.dateStart.getTime() - 60 * day),
+    dateEnd: new Date(vecchioRow.dateEnd!.getTime() - 60 * day)
+  } })
+
   const report = await purgeConcludedEvents({ onlySource: SRC })
+
+  const save = await prisma.savedEvent.findUnique({ where: { userId_source_sourceId: { userId: SRC, source: SRC, sourceId: 'vecchio' } } })
 
   const vivo = async (id: number) => (await prisma.event.findUnique({ where: { id } })) !== null
   const dupRow = await prisma.event.findUnique({ where: { id: duplicato } })
@@ -79,7 +91,10 @@ const day = 24 * 60 * 60 * 1000
     inCorsoSopravvive: await vivo(inCorso),
     recenteSopravvive: await vivo(recente),
     canonicoSopravvive: await vivo(canonico),
-    duplicatoAncoraAgganciato: dupRow?.canonicalEventId === canonico
+    duplicatoAncoraAgganciato: dupRow?.canonicalEventId === canonico,
+    saveSopravvive: save !== null,
+    saveEventIdNull: save?.eventId === null,
+    saveDateFresche: save?.dateStart.getTime() === vecchioRow.dateStart.getTime()
   }))
   process.exit(0)
 })().catch((e) => { console.error('ERRORE: ' + (e?.message ?? e)); process.exit(1) })
@@ -128,6 +143,13 @@ if [[ "$(get keptAsCanonical)" -ge 1 ]]; then
   ok "S3: la guardia ha contato $(get keptAsCanonical) riga/e risparmiata/e, non e' un ramo morto"
 else
   fail "S3: keptAsCanonical vale 0 con un caso costruito apposta — la guardia non e' stata esercitata (prova di non-vacuita')"
+fi
+
+# --- S4: un salvataggio sopravvive al purge, con le date finali --------------
+if [[ "$(get saveSopravvive)" == "true" && "$(get saveEventIdNull)" == "true" && "$(get saveDateFresche)" == "true" ]]; then
+  ok "S4: il salvataggio sopravvive alla cancellazione dell'evento, con event_id NULL e le date finali dell'evento"
+else
+  fail "S4: salvataggio sopravvissuto=$(get saveSopravvive), event_id NULL=$(get saveEventIdNull), date aggiornate=$(get saveDateFresche) — 'Passati' mostrerebbe date vecchie o perderebbe la riga"
 fi
 
 echo ""

@@ -115,6 +115,18 @@ export async function purgeConcludedEvents(
   let deleted = 0
   for (let i = 0; i < deletable.length; i += PURGE_BATCH_SIZE) {
     const batch = deletable.slice(i, i + PURGE_BATCH_SIZE)
+    // Salvati (Fase 22, D1): l'istantanea di un salvataggio si aggiorna quando
+    // /salvati mostra una data cambiata (D-10), ma un evento che nessuno
+    // riapre terrebbe per sempre le date del giorno in cui e' stato salvato.
+    // Prima di cancellare la riga se ne copiano le date finali: subito dopo la
+    // FK mette event_id a NULL e il salvataggio vive sulla sua istantanea.
+    // SQL puro, le cifre del timestamp passano cosi' come sono.
+    await prisma.$executeRaw`
+      UPDATE saved_events
+      SET date_start = events.date_start, date_end = events.date_end
+      FROM events
+      WHERE saved_events.event_id = events.id AND events.id = ANY(${batch}::int[])
+    `
     const res = await prisma.event.deleteMany({ where: { id: { in: batch } } })
     deleted += res.count
   }
