@@ -11,6 +11,8 @@
 import { prisma } from '@/lib/prisma'
 import { composeEvent, groupMembersByCanonical } from '@/lib/dedup/compose'
 import { snapFromEvent, type ResolvedItem, type Snap } from '@/lib/saved/snapshot'
+import { seriesOf, type Sibling } from '@/lib/saved/series'
+import { windowStartToday } from '@/lib/dateWindow'
 import type { SavedItemData } from '@/lib/saved/view'
 
 export async function resolveIds(ids: number[]): Promise<ResolvedItem[]> {
@@ -28,14 +30,77 @@ export async function resolveIds(ids: number[]): Promise<ResolvedItem[]> {
     await prisma.event.findMany({ where: { canonicalEventId: { in: canonicalIds } }, orderBy: { id: 'asc' } })
   )
 
+  // Una sola query per le altre date di tutte le canoniche della richiesta.
+  const siblings = await findSiblings(
+    canonicalIds.flatMap((id) => {
+      const c = rows.get(id)
+      return c ? [{ source: c.source, sourceId: c.sourceId }] : []
+    }),
+    windowStartToday()
+  )
+
   return ids.map((ref) => {
     const row = rows.get(ref)
     const canonical = row && rows.get(row.canonicalEventId ?? row.id)
-    if (!canonical) return { ref, eventId: null, live: null }
+    if (!canonical) return { ref, eventId: null, live: null, siblings: [] }
     // composeEvent copia la riga canonica ({ ...canonical }): `comune` resta.
     const composed = composeEvent(canonical, members.get(canonical.id) ?? [])
-    return { ref, eventId: canonical.id, live: snapFromEvent({ ...composed, comune: canonical.comune }) }
+    return {
+      ref,
+      eventId: canonical.id,
+      live: snapFromEvent({ ...composed, comune: canonical.comune }),
+      siblings: siblings.get(siblingKey(canonical.source, canonical.sourceId)) ?? [],
+    }
   })
+}
+
+export const siblingKey = (source: string, sourceId: string): string => `${source}\u0000${sourceId}`
+
+/**
+ * Le altre date della serie di ogni evento (SAVE-06, D-17: solo altoadige, torino e roma),
+ * solo righe canoniche e non ancora finite a `windowStart`, la riga stessa esclusa.
+ * Solo lettura. Il prefisso della serie e' un PARAMETRO di starts_with, mai un LIKE:
+ * gli id di torino sono il titolo in minuscolo e '_' e '%' devono valere se stessi.
+ */
+export async function findSiblings(
+  keys: Array<{ source: string; sourceId: string }>,
+  windowStart: Date
+): Promise<Map<string, Sibling[]>> {
+  const out = new Map<string, Sibling[]>()
+  const wanted: Array<{ key: string; sourceId: string; source: string; prefix: string; tail: string }> = []
+  for (const { source, sourceId } of keys) {
+    const key = siblingKey(source, sourceId)
+    const series = seriesOf(source, sourceId)
+    if (!series || out.has(key)) continue
+    out.set(key, [])
+    wanted.push({ key, sourceId, source, ...series })
+  }
+  if (wanted.length === 0) return out
+
+  // ponytail: al massimo 100 righe per serie (un evento altoadige giornaliero puo' durare mesi);
+  // alzare il tetto, o paginare, solo se "Altre date" deve davvero elencarne di piu'.
+  const rows = await prisma.$queryRaw<Array<{ k: bigint; id: number; sourceId: string; dateStart: Date; dateEnd: Date | null }>>`
+    SELECT s.k, s.id, s.source_id AS "sourceId", s.date_start AS "dateStart", s.date_end AS "dateEnd"
+    FROM (
+      SELECT k.k, e.id, e.source_id, e.date_start, e.date_end,
+             row_number() OVER (PARTITION BY k.k ORDER BY e.date_start, e.id) AS rn
+      FROM unnest(${wanted.map((w) => w.source)}::text[], ${wanted.map((w) => w.prefix)}::text[], ${wanted.map((w) => w.tail)}::text[])
+           WITH ORDINALITY AS k(source, prefix, tail, k)
+      JOIN events e ON e.source = k.source
+        AND starts_with(e.source_id, k.prefix)
+        AND (k.tail = '' OR right(e.source_id, length(k.tail)) = k.tail)
+      WHERE e.canonical_event_id IS NULL
+        AND COALESCE(e.date_end, e.date_start) >= ${windowStart}
+    ) s
+    WHERE s.rn <= 100
+    ORDER BY s.k, s.date_start, s.id
+  `
+  for (const r of rows) {
+    const w = wanted[Number(r.k) - 1]
+    if (!w || r.sourceId === w.sourceId) continue
+    out.get(w.key)?.push({ id: r.id, dateStart: r.dateStart.toISOString(), dateEnd: r.dateEnd === null ? null : r.dateEnd.toISOString() })
+  }
+  return out
 }
 
 /** Un solo evento: id canonico e istantanea viva, o null se la riga non esiste (stessa composizione di resolveIds). */
@@ -80,6 +145,7 @@ export async function listAccountItems(userId: string): Promise<SavedItemData[]>
         sourceUrl: r.sourceUrl,
       },
       live: hit?.live ?? null,
+      siblings: hit?.siblings ?? [],
     }
   })
 }

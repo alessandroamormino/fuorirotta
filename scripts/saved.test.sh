@@ -26,6 +26,7 @@ fail() {
 FILES=(
   lib/saved/snapshot.ts
   lib/saved/view.ts
+  lib/saved/series.ts
 )
 
 cd "${repo_root}"

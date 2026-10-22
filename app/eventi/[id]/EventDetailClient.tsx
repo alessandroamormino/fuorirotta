@@ -15,10 +15,12 @@ import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import ShareButton from "@/components/ShareButton";
 import SaveHeart from "@/components/saved/SaveHeart";
+import Button from "@/components/ui/Button";
+import type { Sibling } from "@/lib/saved/series";
 import AddToCalendar from "@/components/calendar/AddToCalendar";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 import { eventStatus, formatEventRange, isEventOver, romeCalendarDate } from "@/lib/eventStatus";
-import { eventDays } from "@/lib/eventDays";
+import { dayToLocalDate, eventDays } from "@/lib/eventDays";
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { MOTION_FAST, EASE_STANDARD } from "@/lib/motion";
 import {
@@ -53,6 +55,8 @@ interface EventDetailClientProps {
 	 * valore l'evento e' arrivato dal fetch, non c'e' SSR da cui divergere.
 	 */
 	eventOver?: boolean;
+	/** Altre date non ancora finite della stessa serie (SAVE-06), scelte dal server. */
+	siblings?: Sibling[];
 }
 
 /**
@@ -127,7 +131,64 @@ function MobileDetailBar({ title, scrolled, onBack }: { title: string; scrolled:
 	);
 }
 
-export default function EventDetailClient({ initialEvent, canonicalUrl, eventOver }: EventDetailClientProps) {
+const OTHER_DATES_VISIBLE = 5;
+const OTHER_DATES_LIST_ID = "altre-date-list";
+
+/**
+ * "Altre date" (SAVE-06, D-08): una riga per data della stessa serie, ognuna con
+ * il suo cuore. Nessun orologio qui: l'elenco e' gia' filtrato dal server.
+ */
+function OtherDates({ siblings, title }: { siblings: Sibling[]; title: string }) {
+	const [showAll, setShowAll] = useState(false);
+	const shown = showAll ? siblings : siblings.slice(0, OTHER_DATES_VISIBLE);
+	return (
+		<>
+			<h2
+				className="mb-2 font-display text-lg font-semibold leading-tight text-foreground"
+				style={{ letterSpacing: "var(--tracking-display)" }}
+			>
+				Altre date
+			</h2>
+			<ul id={OTHER_DATES_LIST_ID} className={cn("overflow-hidden rounded-lg bg-surface", showAll || siblings.length <= OTHER_DATES_VISIBLE ? "mb-6" : "mb-2")}>
+				{shown.map((s, i) => {
+					const { startDay, endDay } = eventDays(s.dateStart, s.dateEnd);
+					const when =
+						startDay === endDay
+							? format(dayToLocalDate(startDay), "EEE d MMM", { locale: it })
+							: formatEventRange(s.dateStart, s.dateEnd);
+					return (
+						<li key={s.id} className={cn("flex min-h-12 items-center gap-2 px-4", i > 0 && "border-t border-border-soft")}>
+							<NextLink href={`/eventi/${s.id}`} className="flex min-h-12 min-w-0 flex-1 items-center text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:underline">
+								{when}
+							</NextLink>
+							<SaveHeart
+								presentation="row"
+								eventId={s.id}
+								title={title}
+								label={`Salva: ${decodeHtmlEntities(title)}, ${when}`}
+								className="flex-none"
+							/>
+						</li>
+					);
+				})}
+			</ul>
+			{!showAll && siblings.length > OTHER_DATES_VISIBLE && (
+				<Button
+					variant="secondary"
+					size="sm"
+					className="mb-6"
+					aria-expanded={false}
+					aria-controls={OTHER_DATES_LIST_ID}
+					onClick={() => setShowAll(true)}
+				>
+					Mostra altre {siblings.length - OTHER_DATES_VISIBLE} date
+				</Button>
+			)}
+		</>
+	);
+}
+
+export default function EventDetailClient({ initialEvent, canonicalUrl, eventOver, siblings }: EventDetailClientProps) {
 	const params = useParams();
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
@@ -625,6 +686,10 @@ export default function EventDetailClient({ initialEvent, canonicalUrl, eventOve
 										url={canonicalUrl}
 									/>
 								</div>
+
+								{siblings && siblings.length > 0 && (
+									<OtherDates siblings={siblings} title={event.title} />
+								)}
 
 								{event.description && (
 									<>

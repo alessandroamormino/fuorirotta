@@ -15,6 +15,7 @@ import { CANONICAL_CATEGORIES } from '../categories/taxonomy'
 import { eventDays } from '../eventDays'
 
 import { SAVED_RETENTION_MONTHS } from './retention'
+import type { Sibling } from './series'
 
 /** Il numero vive in ./retention (zero import, lo legge anche il job notturno); qui si riesporta per chi lo importa da sempre. */
 export { SAVED_RETENTION_MONTHS }
@@ -44,6 +45,8 @@ export interface ResolvedItem {
   /** canonicalEventId ?? id della riga viva, null se la riga non esiste piu'. */
   eventId: number | null
   live: Snap | null
+  /** Altre date future della stessa serie (SAVE-06), vuoto se la sorgente non ha serie o la riga non esiste. */
+  siblings: Sibling[]
 }
 
 interface SnapSource {

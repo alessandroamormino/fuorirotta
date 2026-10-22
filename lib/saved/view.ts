@@ -8,6 +8,7 @@
 import { eventDays } from '../eventDays'
 import { isEventOver } from '../eventStatus'
 import type { Snap } from './snapshot'
+import type { Sibling } from './series'
 
 export interface SavedItemData {
   /** L'id salvato sul dispositivo. */
@@ -19,6 +20,8 @@ export interface SavedItemData {
   snap: Snap | null
   /** Istantanea costruita ora dal server dalla riga viva. */
   live: Snap | null
+  /** Altre date future della stessa serie, dal server (SAVE-06). */
+  siblings: Sibling[]
 }
 
 export interface SavedRow {
@@ -112,6 +115,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     savedAt,
     snap: kept,
     live,
+    siblings: [],
   })
   const keys = (rows: SavedRow[]) => rows.map((r) => r.key).join(',')
 

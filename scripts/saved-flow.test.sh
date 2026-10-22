@@ -47,8 +47,20 @@
 #       DELETE gone/{G'} di un altro utente -> 0
 #   L3  GET lista senza cookie -> 401, ogni risposta private, no-store
 #
-# Righe di prova sotto il `source` dedicato '__saved_gate__', cancellate prima
-# e all'uscita: nessuna riga reale viene letta o toccata.
+#   A1  GET /eventi/{torino +5} contiene >Altre date</h2>, i link alle date +12 e +19 con un cuore
+#       "Salva: Gate Serie, {data}", nessun link alla data finita ne' al decoy che differisce solo
+#       nei due '_' iniziali (un LIKE lo abbinerebbe, starts_with no)
+#   A2  GET /eventi/{roma d1 piazza-a} linka d2 (stessa sede) e non d3 (altra sede)
+#   A3  GET /eventi/{A} (sorgente senza serie) non ha 'Altre date'
+#
+#   D1  POST resolve [torino +5] -> l'elemento ha siblings con esattamente gli id +12 e +19
+#   D2  PUT torino +5, psql sposta di tre giorni indietro le date dell'istantanea, GET lista le mostra
+#       diverse da quelle vive, POST ack {eventIds:[id]} -> updated 1 e l'istantanea torna uguale
+#       all'evento; ack senza Origin -> 403; l'ack di un altro utente -> updated 0
+#
+# Righe di prova sotto il `source` dedicato '__saved_gate__' e, per le serie, sotto i source reali
+# 'torino' e 'roma' con source_id che contiene 'saved_gate__': cancellate prima e all'uscita,
+# nessuna riga reale viene letta o toccata.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -114,7 +126,7 @@ stop_server() {
 
 delete_fixtures() {
   # Prima i membri, poi le canoniche: la FK canonical_event_id e' SET NULL, ma cosi' non resta nulla.
-  psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null 2>&1 || true
+  psql_dev "DELETE FROM events WHERE source = '${test_source}' OR (source IN ('torino', 'roma') AND position('saved_gate__' in source_id) > 0)" >/dev/null 2>&1 || true
 }
 
 # Gli utenti di prova @fixture.invalid: la FK in cascata porta via saved_events e calendar_feeds.
@@ -151,6 +163,24 @@ m_id="$(insert_event gate-m 'Gate M' "now() + interval '3 days'" "now() + interv
 p_id="$(insert_event gate-p 'Gate P' "now() - interval '21 days'" "now() - interval '20 days'" NULL)"
 [[ -n "${a_id}" && -n "${m_id}" && -n "${p_id}" ]] || fail "fixture non create (A='${a_id}' M='${m_id}' P='${p_id}')"
 echo "ok  fixture create: A=${a_id} M=${m_id} (membro di A) P=${p_id} (passato)"
+
+# Serie a piu' date (SAVE-06): source reali 'torino' e 'roma', source_id riconoscibili per la pulizia.
+insert_series() {
+  # insert_series <source> <source_id> <titolo> <giorni di inizio da oggi> -> id (solo data, senza ora)
+  psql_dev "INSERT INTO events (source, source_id, title, date_start) VALUES ('$1', '$2', '$3', date_trunc('day', now()) + interval '$4 days') RETURNING id" | head -n 1
+}
+day_str() { psql_dev "SELECT to_char(now() + interval '$1 days', 'YYYY-MM-DD')" | head -n 1; }
+s5_day="$(day_str 5)"; s12_day="$(day_str 12)"; s19_day="$(day_str 19)"; sold_day="$(day_str -10)"; s8_day="$(day_str 8)"
+t5_id="$(insert_series torino "__saved_gate__serie#${s5_day}" 'Gate Serie' 5)"
+t12_id="$(insert_series torino "__saved_gate__serie#${s12_day}" 'Gate Serie' 12)"
+t19_id="$(insert_series torino "__saved_gate__serie#${s19_day}" 'Gate Serie' 19)"
+told_id="$(insert_series torino "__saved_gate__serie#${sold_day}" 'Gate Serie' -10)"
+tdecoy_id="$(insert_series torino "ZZsaved_gate__serie#${s8_day}" 'Gate Serie' 8)"
+r1_id="$(insert_series roma "__saved_gate__roma#${s5_day}#piazza-a" 'Gate Roma' 5)"
+r2_id="$(insert_series roma "__saved_gate__roma#${s12_day}#piazza-a" 'Gate Roma' 12)"
+r3_id="$(insert_series roma "__saved_gate__roma#${s19_day}#piazza-b" 'Gate Roma' 19)"
+[[ -n "${t5_id}" && -n "${t12_id}" && -n "${t19_id}" && -n "${told_id}" && -n "${tdecoy_id}" && -n "${r1_id}" && -n "${r2_id}" && -n "${r3_id}" ]] || fail "fixture delle serie non create"
+echo "ok  fixture serie: torino ${t5_id}/${t12_id}/${t19_id} (+ finita ${told_id}, decoy ${tdecoy_id}), roma ${r1_id}/${r2_id}/${r3_id}"
 
 # --- Dev server effimero, Postgres locale reale -----------------------------
 bash scripts/dev-db.sh env "${auth_env[@]}" npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
@@ -242,6 +272,30 @@ for page in "/" "/salvati"; do
 done
 grep -q 'aria-current="page"' "${tmp_dir}/r7salvati.b" || fail "R7: /salvati: manca aria-current=\"page\" sul cuore"
 echo "ok  R7: / e /salvati hanno il cuore Salvati verso /salvati, aria-current su /salvati, mai il punto"
+
+# --- A1: l'altra data di una serie torino, con il suo cuore ------------------
+code="$(call a1 GET "/eventi/${t5_id}")"
+[[ "${code}" == "200" ]] || fail "A1: GET /eventi/${t5_id}: atteso 200, ottenuto ${code}"
+grep -q '>Altre date</h2>' "${tmp_dir}/a1.b" || fail "A1: manca >Altre date</h2>"
+grep -q "href=\"/eventi/${t12_id}\"" "${tmp_dir}/a1.b" || fail "A1: manca il link alla data +12 (${t12_id})"
+grep -q "href=\"/eventi/${t19_id}\"" "${tmp_dir}/a1.b" || fail "A1: manca il link alla data +19 (${t19_id})"
+if grep -q "href=\"/eventi/${told_id}\"" "${tmp_dir}/a1.b"; then fail "A1: la data finita (${told_id}) non deve essere elencata"; fi
+if grep -q "href=\"/eventi/${tdecoy_id}\"" "${tmp_dir}/a1.b"; then fail "A1: il decoy (${tdecoy_id}) non deve essere elencato: il prefisso e' un parametro di starts_with, non un LIKE"; fi
+[[ "$(grep -o 'aria-label="Salva: Gate Serie, ' "${tmp_dir}/a1.b" | wc -l | tr -d ' ')" == "2" ]] || fail "A1: attesi due cuori 'Salva: Gate Serie, {data}' nelle Altre date"
+echo "ok  A1: la serie torino elenca +12 e +19 con un cuore ciascuno, non la data finita ne' il decoy"
+
+# --- A2: roma, solo la stessa sede --------------------------------------------
+code="$(call a2 GET "/eventi/${r1_id}")"
+[[ "${code}" == "200" ]] || fail "A2: GET /eventi/${r1_id}: atteso 200, ottenuto ${code}"
+grep -q "href=\"/eventi/${r2_id}\"" "${tmp_dir}/a2.b" || fail "A2: manca il link alla stessa sede (${r2_id})"
+if grep -q "href=\"/eventi/${r3_id}\"" "${tmp_dir}/a2.b"; then fail "A2: un'altra sede (${r3_id}) non e' della serie"; fi
+echo "ok  A2: roma elenca la data della stessa sede e non quella di un'altra sede"
+
+# --- A3: una sorgente senza serie non mostra nulla ----------------------------
+code="$(call a3 GET "/eventi/${a_id}")"
+[[ "${code}" == "200" ]] || fail "A3: GET /eventi/${a_id}: atteso 200, ottenuto ${code}"
+if grep -q 'Altre date' "${tmp_dir}/a3.b"; then fail "A3: una sorgente senza serie non deve mostrare 'Altre date'"; fi
+echo "ok  A3: un evento di una sorgente senza serie non ha 'Altre date'"
 
 # ============================ Salvati dell'account ============================
 # mint_user <prefisso> -> imposta ${prefix}_user e ${prefix}_cookie (intestazione Cookie)
@@ -507,4 +561,4 @@ no_store l3c L3
 no_store l2c L3
 echo "ok  L3: lista senza cookie -> 401; DELETE gone senza Origin -> 403, senza cookie -> 401; sempre private, no-store"
 
-echo "Riepilogo: R1-R7, S1-S9, M1-M6, L1-L3 verdi"
+echo "Riepilogo: R1-R7, A1-A3, S1-S9, M1-M6, L1-L3 verdi"

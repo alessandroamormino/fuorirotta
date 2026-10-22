@@ -68,7 +68,7 @@ export default function SavedList() {
 					}
 					items = entries.map((entry) => {
 						const item = resolved.find((i) => i.ref === entry.id);
-						return { ref: entry.id, eventId: item?.eventId ?? null, savedAt: entry.savedAt, snap: entry.snap, live: item?.live ?? null };
+						return { ref: entry.id, eventId: item?.eventId ?? null, savedAt: entry.savedAt, snap: entry.snap, live: item?.live ?? null, siblings: item?.siblings ?? [] };
 					});
 				}
 				const view = buildSavedView(items, new Date());
