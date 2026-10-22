@@ -459,4 +459,52 @@ no_store m6b M6
 no_store m2 M6
 echo "ok  M6: merge senza Origin -> 403, senza cookie -> 401, sempre private, no-store"
 
-echo "Riepilogo: R1-R7, S1-S9, M1-M6 verdi"
+# ============================ Lista dell'account e righe sparite =============
+# --- L1: la lista porta istantanea e riga viva --------------------------------
+mint_user u7
+mint_user u8
+code="$(put l1p "${a_id}" "${u7_cookie}")"
+[[ "${code}" == "200" ]] || fail "L1: PUT A: atteso 200, ottenuto ${code}"
+psql_dev "INSERT INTO saved_events (user_id, title, date_start, canonical_category, source, source_id)
+          VALUES ('${u7_user}', 'Sparito G', now() - interval '30 days', 'Altro', '${test_source}', 'list-g'),
+                 ('${u8_user}', 'Sparito G2', now() - interval '30 days', 'Altro', '${test_source}', 'list-g2')" >/dev/null
+code="$(call l1 GET /api/v1/me/saved -H "${u7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/l1.b" 'j.items.length')" == "2" ]] || fail "L1: attesi 200 e 2 elementi, ottenuto ${code} '$(cat "${tmp_dir}/l1.b")'"
+[[ "$(json_get "${tmp_dir}/l1.b" "j.items.filter((i) => i.eventId === ${a_id} && i.live !== null && i.live.title === 'Gate A' && i.snap.title === 'Gate A').length")" == "1" ]] || fail "L1: A deve avere eventId, live e snap, corpo '$(cat "${tmp_dir}/l1.b")'"
+[[ "$(json_get "${tmp_dir}/l1.b" "j.items.filter((i) => i.eventId === null && i.live === null && i.snap.title === 'Sparito G').length")" == "1" ]] || fail "L1: G deve avere eventId e live nulli e titolo 'Sparito G', corpo '$(cat "${tmp_dir}/l1.b")'"
+echo "ok  L1: GET lista -> A con eventId e live, G (sparito) con eventId e live nulli e la sua istantanea"
+
+# --- L2: la riga sparita la toglie solo il suo proprietario -------------------
+g_ref="$(psql_dev "SELECT id FROM saved_events WHERE user_id = '${u7_user}' AND source_id = 'list-g'")"
+g2_ref="$(psql_dev "SELECT id FROM saved_events WHERE user_id = '${u8_user}' AND source_id = 'list-g2'")"
+a_ref="$(psql_dev "SELECT id FROM saved_events WHERE user_id = '${u7_user}' AND event_id = ${a_id}")"
+gone_del() { call "$1" DELETE "/api/v1/me/saved/gone/$2" -H "Origin: ${origin}" -H "$3"; }
+code="$(gone_del l2a "${g2_ref}" "${u7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/l2a.b" 'j.removed')" == "0" ]] || fail "L2: la riga di un altro utente: atteso removed 0, ottenuto ${code} '$(cat "${tmp_dir}/l2a.b")'"
+[[ "$(user_rows "${u8_user}")" == "1" ]] || fail "L2: la riga di u8 e' stata tolta da u7"
+code="$(gone_del l2b "${a_ref}" "${u7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/l2b.b" 'j.removed')" == "0" ]] || fail "L2: riga viva (A): atteso removed 0, ottenuto ${code} '$(cat "${tmp_dir}/l2b.b")'"
+[[ "$(saved_rows "${u7_user}" "${a_id}")" == "1" ]] || fail "L2: la riga viva su A e' stata tolta da gone"
+code="$(gone_del l2c "${g_ref}" "${u7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/l2c.b" 'j.removed')" == "1" ]] || fail "L2: riga sparita: atteso removed 1, ottenuto ${code} '$(cat "${tmp_dir}/l2c.b")'"
+code="$(gone_del l2d "${g_ref}" "${u7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/l2d.b" 'j.removed')" == "0" ]] || fail "L2: secondo DELETE: atteso removed 0, ottenuto ${code} '$(cat "${tmp_dir}/l2d.b")'"
+code="$(call l2e DELETE "/api/v1/me/saved/gone/abc" -H "Origin: ${origin}" -H "${u7_cookie}")"
+[[ "${code}" == "404" ]] || fail "L2: ref 'abc': atteso 404, ottenuto ${code}"
+echo "ok  L2: DELETE gone -> removed 1 una volta sola; riga viva e riga altrui -> removed 0 e restano"
+
+# --- L3: sessione, Origin e cache ---------------------------------------------
+code="$(call l3a GET /api/v1/me/saved)"
+[[ "${code}" == "401" ]] || fail "L3: GET lista senza cookie: atteso 401, ottenuto ${code}"
+no_store l3a L3
+no_store l1 L3
+code="$(call l3b DELETE "/api/v1/me/saved/gone/${g2_ref}" -H "${u8_cookie}")"
+[[ "${code}" == "403" ]] || fail "L3: DELETE gone senza Origin: atteso 403, ottenuto ${code}"
+no_store l3b L3
+code="$(call l3c DELETE "/api/v1/me/saved/gone/${g2_ref}" -H "Origin: ${origin}")"
+[[ "${code}" == "401" ]] || fail "L3: DELETE gone senza cookie: atteso 401, ottenuto ${code}"
+no_store l3c L3
+no_store l2c L3
+echo "ok  L3: lista senza cookie -> 401; DELETE gone senza Origin -> 403, senza cookie -> 401; sempre private, no-store"
+
+echo "Riepilogo: R1-R7, S1-S9, M1-M6, L1-L3 verdi"

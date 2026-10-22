@@ -11,6 +11,7 @@
 import { prisma } from '@/lib/prisma'
 import { composeEvent, groupMembersByCanonical } from '@/lib/dedup/compose'
 import { snapFromEvent, type ResolvedItem, type Snap } from '@/lib/saved/snapshot'
+import type { SavedItemData } from '@/lib/saved/view'
 
 export async function resolveIds(ids: number[]): Promise<ResolvedItem[]> {
   const comune = { select: { name: true, provinceCode: true } }
@@ -50,6 +51,37 @@ export async function snapshotsForIds(ids: number[]): Promise<Map<number, { cano
     if (item.eventId !== null && item.live) out.set(item.ref, { canonicalId: item.eventId, snap: item.live })
   }
   return out
+}
+
+/**
+ * La lista dell'account per /salvati: una voce per riga, con l'istantanea salvata
+ * e, se la riga dell'evento c'e' ancora, quella viva. ref = id della riga salvata
+ * (non dell'evento): e' il parametro di DELETE gone/{ref}.
+ */
+export async function listAccountItems(userId: string): Promise<SavedItemData[]> {
+  const rows = await prisma.savedEvent.findMany({ where: { userId }, orderBy: { id: 'asc' } })
+  const live = new Map(
+    (await resolveIds([...new Set(rows.flatMap((r) => (r.eventId === null ? [] : [r.eventId])))])).map((i) => [i.ref, i])
+  )
+  return rows.map((r) => {
+    const hit = r.eventId === null ? undefined : live.get(r.eventId)
+    return {
+      ref: r.id,
+      eventId: hit?.eventId ?? null,
+      savedAt: r.savedAt.toISOString(),
+      snap: {
+        title: r.title,
+        dateStart: r.dateStart.toISOString(),
+        dateEnd: r.dateEnd === null ? null : r.dateEnd.toISOString(),
+        place: r.place,
+        category: r.category,
+        source: r.source,
+        sourceId: r.sourceId,
+        sourceUrl: r.sourceUrl,
+      },
+      live: hit?.live ?? null,
+    }
+  })
 }
 
 /** La canonica e tutti i suoi membri: le righe salvate su uno qualunque contano come un salvato solo (SAVE-04). */
