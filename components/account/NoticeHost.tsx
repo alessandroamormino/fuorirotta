@@ -27,11 +27,19 @@ const STORAGE_KEY = "notice";
 // Timeout di visualizzazione, non durata di animazione.
 const NOTICE_MS = 6000;
 
-let listener: ((text: string) => void) | null = null;
+export interface NoticeAction {
+	label: string;
+	onClick: () => void;
+}
 
-/** Mostra un avviso (uno alla volta: sostituisce quello corrente). No-op se l'host non e' montato. */
-export function notify(text: string): void {
-	listener?.(text);
+let listener: ((text: string, action?: NoticeAction) => void) | null = null;
+
+/**
+ * Mostra un avviso (uno alla volta: sostituisce quello corrente). No-op se l'host non e' montato.
+ * Con `action` compare un pulsante fra il testo e la chiusura: esegue onClick e chiude l'avviso.
+ */
+export function notify(text: string, action?: NoticeAction): void {
+	listener?.(text, action);
 }
 
 /** Da chiamare PRIMA di una navigazione completa: l'avviso compare una volta dopo il caricamento. */
@@ -48,12 +56,12 @@ function isNoticeId(value: string | null): value is NoticeId {
 }
 
 export default function NoticeHost() {
-	const [message, setMessage] = useState<{ text: string; key: number } | null>(null);
+	const [message, setMessage] = useState<{ text: string; key: number; action?: NoticeAction } | null>(null);
 	// Messaggio in pausa mentre e' sotto il mouse o contiene il focus.
 	const [paused, setPaused] = useState(false);
 
 	useEffect(() => {
-		const show = (text: string) => setMessage((prev) => ({ text, key: (prev?.key ?? 0) + 1 }));
+		const show = (text: string, action?: NoticeAction) => setMessage((prev) => ({ text, action, key: (prev?.key ?? 0) + 1 }));
 		listener = show;
 
 		try {
@@ -98,6 +106,19 @@ export default function NoticeHost() {
 						style={{ boxShadow: "var(--elev-raised)" }}
 					>
 						<span>{message.text}</span>
+						{message.action && (
+							<button
+								type="button"
+								onClick={() => {
+									message.action?.onClick();
+									setPaused(false);
+									setMessage(null);
+								}}
+								className="relative flex-none rounded-sm text-sm font-semibold text-background underline underline-offset-4 before:absolute before:-inset-3 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-foreground"
+							>
+								{message.action.label}
+							</button>
+						)}
 						<button
 							type="button"
 							aria-label="Chiudi avviso"

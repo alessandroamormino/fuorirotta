@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { Heart } from "lucide-react";
-import { useIsSaved, toggleSaved } from "@/lib/saved/store";
+import { useIsSaved, toggleSaved, savedAuth } from "@/lib/saved/store";
+import { notify } from "@/components/account/NoticeHost";
+import { requestSignIn } from "@/components/account/UserStateProvider";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
 
 /**
@@ -55,6 +57,13 @@ export default function SaveHeart({ eventId, title, presentation, label, classNa
 					if (result === "saved") {
 						setPop((n) => n + 1);
 						setPopping(true);
+					} else if (result === "cap") {
+						// D-06: l'unico avviso del cuore. L'azione di accesso solo con l'accesso acceso sia nella build sia sul server.
+						const canSignIn = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && savedAuth().enabled !== false;
+						notify(
+							"Hai raggiunto il limite di 100 eventi salvati",
+							canSignIn ? { label: "Accedi per salvarne altri", onClick: requestSignIn } : undefined
+						);
 					}
 				});
 			}}
