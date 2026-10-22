@@ -561,4 +561,41 @@ no_store l3c L3
 no_store l2c L3
 echo "ok  L3: lista senza cookie -> 401; DELETE gone senza Origin -> 403, senza cookie -> 401; sempre private, no-store"
 
-echo "Riepilogo: R1-R7, A1-A3, S1-S9, M1-M6, L1-L3 verdi"
+# ============================ Altre date e "Data cambiata" ===================
+# --- D1: resolve porta le altre date future della serie ----------------------
+code="$(post_ids d1 "{\"ids\":[${t5_id}]}")"
+[[ "${code}" == "200" ]] || fail "D1: resolve: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/d1.b" 'j.items[0].siblings.map((s) => s.id).join(",")')" == "${t12_id},${t19_id}" ]] || fail "D1: siblings attesi ${t12_id},${t19_id} (non la data finita ne' il decoy), corpo '$(cat "${tmp_dir}/d1.b")'"
+echo "ok  D1: resolve [torino +5] -> siblings esattamente +12 e +19"
+
+# --- D2: l'ack porta l'istantanea alle date vive, solo per chi lo chiede -------
+mint_user u9
+mint_user u10
+code="$(put d2p "${t5_id}" "${u9_cookie}")"
+[[ "${code}" == "200" ]] || fail "D2: PUT torino +5: atteso 200, ottenuto ${code}"
+psql_dev "UPDATE saved_events SET date_start = date_start - interval '3 days', date_end = date_end - interval '3 days' WHERE user_id = '${u9_user}' AND event_id = ${t5_id}" >/dev/null
+code="$(call d2g GET /api/v1/me/saved -H "${u9_cookie}")"
+[[ "${code}" == "200" ]] || fail "D2: GET lista: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/d2g.b" "j.items.filter((i) => i.eventId === ${t5_id} && i.live !== null && i.snap.dateStart !== i.live.dateStart).length")" == "1" ]] || fail "D2: l'istantanea spostata deve avere date diverse da quelle vive, corpo '$(cat "${tmp_dir}/d2g.b")'"
+stale() { psql_dev "SELECT count(*) FROM saved_events s JOIN events e ON e.id = s.event_id WHERE s.user_id = '${u9_user}' AND s.event_id = ${t5_id} AND (s.date_start <> e.date_start OR s.date_end IS DISTINCT FROM e.date_end)"; }
+# La sola lettura della lista non riallinea nulla (anti-pattern "ack su GET").
+[[ "$(stale)" == "1" ]] || fail "D2: il GET della lista non deve riallineare l'istantanea"
+ack() { call "$1" POST /api/v1/me/saved/ack -H "Origin: ${origin}" -H "$2" -H 'Content-Type: application/json' --data "$3"; }
+code="$(ack d2o "${u10_cookie}" "{\"eventIds\":[${t5_id}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/d2o.b" 'j.updated')" == "0" ]] || fail "D2: l'ack di un altro utente: atteso updated 0, ottenuto ${code} '$(cat "${tmp_dir}/d2o.b")'"
+[[ "$(stale)" == "1" ]] || fail "D2: l'ack di un altro utente ha toccato la riga di u9"
+code="$(ack d2a "${u9_cookie}" "{\"eventIds\":[${t5_id}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/d2a.b" 'j.updated')" == "1" ]] || fail "D2: ack: atteso updated 1, ottenuto ${code} '$(cat "${tmp_dir}/d2a.b")'"
+[[ "$(stale)" == "0" ]] || fail "D2: dopo l'ack l'istantanea deve avere le date dell'evento"
+no_store d2a D2
+code="$(call d2n POST /api/v1/me/saved/ack -H "${u9_cookie}" -H 'Content-Type: application/json' --data "{\"eventIds\":[${t5_id}]}")"
+[[ "${code}" == "403" ]] || fail "D2: ack senza Origin: atteso 403, ottenuto ${code}"
+code="$(call d2c POST /api/v1/me/saved/ack -H "Origin: ${origin}" -H 'Content-Type: application/json' --data "{\"eventIds\":[${t5_id}]}")"
+[[ "${code}" == "401" ]] || fail "D2: ack senza cookie: atteso 401, ottenuto ${code}"
+for bad in '{"eventIds":[]}' '{"eventIds":["7"]}' '{"eventIds":[0]}' 'non json'; do
+  code="$(ack d2b "${u9_cookie}" "${bad}")"
+  [[ "${code}" == "400" ]] || fail "D2: corpo '${bad}': atteso 400, ottenuto ${code}"
+done
+echo "ok  D2: ack -> updated 1 e istantanea uguale all'evento (mai sul GET); altro utente -> updated 0; senza Origin -> 403, senza cookie -> 401, corpo errato -> 400"
+
+echo "Riepilogo: R1-R7, A1-A3, S1-S9, M1-M6, L1-L3, D1-D2 verdi"

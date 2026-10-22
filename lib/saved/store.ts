@@ -234,6 +234,33 @@ export async function removeGone(ref: number): Promise<'removed' | 'error-remove
   }
 }
 
+/**
+ * "Data cambiata" una volta sola (SAVE-05, D-10): chiamata da /salvati DOPO aver mostrato il badge,
+ * porta le date dell'istantanea a quelle vive. Account: POST ack (se fallisce il badge resta per la
+ * prossima volta); ospite: la voce locale con quell'id canonico. Mai dal caricamento della lista.
+ */
+export function ackDateChanges(changes: Array<{ eventId: number; dateStart: string; dateEnd: string | null }>): void {
+  if (changes.length === 0) return
+  if (auth.signedIn) {
+    void fetch('/api/v1/me/saved/ack', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventIds: changes.map((c) => c.eventId) }),
+    }).catch(() => {})
+    return
+  }
+  const byId = new Map(changes.map((c) => [c.eventId, c]))
+  let changed = false
+  const next = readStorage().map((entry) => {
+    const live = byId.get(entry.c ?? entry.id) ?? byId.get(entry.id)
+    if (!live || !entry.snap) return entry
+    changed = true
+    return { ...entry, snap: { ...entry.snap, dateStart: live.dateStart, dateEnd: live.dateEnd } }
+  })
+  if (changed) commit(next)
+}
+
 export function readDeviceList(): DeviceEntry[] {
   return typeof window === 'undefined' ? [] : getList()
 }

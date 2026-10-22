@@ -5,7 +5,9 @@
  * salvano in due formati (UTC in produzione, Roma nel DB locale) e un
  * confronto fra timestamp grezzi sbaglia di un giorno in uno dei due.
  */
-import { eventDays } from '../eventDays'
+import { format } from 'date-fns'
+import { it } from 'date-fns/locale'
+import { dayToLocalDate, eventDays } from '../eventDays'
 import { isEventOver } from '../eventStatus'
 import type { Snap } from './snapshot'
 import type { Sibling } from './series'
@@ -34,6 +36,10 @@ export interface SavedRow {
   dateEnd: string | null
   /** La riga dell'evento non c'e' piu': solo istantanea, niente link. */
   gone: boolean
+  /** Il primo o l'ultimo GIORNO dell'evento vivo e' diverso da quello salvato (SAVE-05, D-10). */
+  dateChanged: boolean
+  /** "anche il 14, 21 set": altre date future della serie non ancora salvate, null se non ce ne sono (D-09). */
+  otherDays: string | null
 }
 
 interface Entry {
@@ -41,6 +47,27 @@ interface Entry {
   savedAt: string
   startDay: string
   endDay: string
+}
+
+/**
+ * "anche il 14, 21 set" (D-09). `days` sono "YYYY-MM-DD" in ordine crescente. Al piu'
+ * tre date, poi " e altre N"; i giorni dello stesso mese condividono il mese:
+ * "anche il 28 set, 5 ott". Nessuna data, nessuna riga (null).
+ */
+export function otherDaysLabel(days: string[]): string | null {
+  if (days.length === 0) return null
+  const shown = days.slice(0, 3)
+  const groups: Array<{ key: string; month: string; nums: string[] }> = []
+  for (const day of shown) {
+    const date = dayToLocalDate(day)
+    const month = format(date, 'MMM', { locale: it })
+    const last = groups[groups.length - 1]
+    // Stesso mese E stesso anno (la chiave e' "YYYY-MM"), cosi' set 2026 e set 2027 non si fondono.
+    if (last && last.key === day.slice(0, 7)) last.nums.push(format(date, 'd'))
+    else groups.push({ key: day.slice(0, 7), month, nums: [format(date, 'd')] })
+  }
+  const text = groups.map((g) => `${g.nums.join(', ')} ${g.month}`).join(', ')
+  return `anche il ${text}${days.length > 3 ? ` e altre ${days.length - 3}` : ''}`
 }
 
 const bySavedAt = (a: Entry, b: Entry): number =>
@@ -56,12 +83,29 @@ export function buildSavedView(items: SavedItemData[], now: Date): { upcoming: S
     if (!prev || item.savedAt < prev.savedAt || (item.savedAt === prev.savedAt && item.ref < prev.ref)) kept.set(key, item)
   }
 
+  // Le date che l'utente ha gia' salvato hanno una riga propria: non si ripetono in "anche il ...".
+  const savedEventIds = new Set<number>()
+  for (const item of items) if (item.eventId !== null) savedEventIds.add(item.eventId)
+
   const upcoming: Entry[] = []
   const past: Entry[] = []
   for (const [key, item] of kept) {
     // Le date mostrate sono quelle vive se ci sono, altrimenti quelle dell'istantanea.
     const data = (item.live ?? item.snap) as Snap
     const { startDay, endDay } = eventDays(data.dateStart, data.dateEnd)
+    // D-10: conta solo il giorno di calendario, letto con eventDays su entrambi i lati. Un cambio di
+    // sola ora, o del formato UTC/Roma con gli stessi giorni, non e' una data cambiata.
+    let dateChanged = false
+    if (item.snap && item.live) {
+      const was = eventDays(item.snap.dateStart, item.snap.dateEnd)
+      dateChanged = was.startDay !== startDay || was.endDay !== endDay
+    }
+    const otherStartDays = new Set<string>()
+    for (const sib of item.siblings) {
+      if (savedEventIds.has(sib.id) || isEventOver(sib.dateStart, sib.dateEnd, now)) continue
+      const day = eventDays(sib.dateStart, sib.dateEnd).startDay
+      if (day !== startDay) otherStartDays.add(day)
+    }
     const entry: Entry = {
       row: {
         key,
@@ -72,6 +116,8 @@ export function buildSavedView(items: SavedItemData[], now: Date): { upcoming: S
         dateStart: data.dateStart,
         dateEnd: data.dateEnd,
         gone: item.live === null,
+        dateChanged,
+        otherDays: otherDaysLabel([...otherStartDays].sort()),
       },
       savedAt: item.savedAt,
       startDay,
@@ -109,13 +155,20 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     sourceId: title,
     sourceUrl: null,
   })
-  const item = (ref: number, eventId: number | null, savedAt: string, live: Snap | null, kept: Snap | null = null): SavedItemData => ({
+  const item = (
+    ref: number,
+    eventId: number | null,
+    savedAt: string,
+    live: Snap | null,
+    kept: Snap | null = null,
+    siblings: Sibling[] = []
+  ): SavedItemData => ({
     ref,
     eventId,
     savedAt,
     snap: kept,
     live,
-    siblings: [],
+    siblings,
   })
   const keys = (rows: SavedRow[]) => rows.map((r) => r.key).join(',')
 
@@ -173,6 +226,41 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   assertCheck(!!live && live.title === 'nuovo' && live.dateStart === '2026-10-25T00:00:00.000Z' && !live.gone, 'le date mostrate sono le vive')
   const gone = moved.upcoming.find((r) => r.ref === 31)
   assertCheck(!!gone && gone.gone && gone.key === 'r31' && gone.title === 'sparito' && gone.place === null, 'riga sparita: gone, chiave r31, campi dell\'istantanea')
+
+  // "Data cambiata" (SAVE-05, D-10): conta il giorno di calendario, mai l'ora ne' il formato UTC/Roma.
+  const changed = (kept: Snap | null, live: Snap | null) => buildSavedView([item(40, 40, '2026-10-01T00:00:00.000Z', live, kept)], NOW).upcoming[0]?.dateChanged
+  const utc14 = snap('x', '2026-11-14T00:00:00.000Z', '2026-11-14T23:59:59.999Z')
+  const rome14 = snap('x', '2026-11-13T23:00:00.000Z', '2026-11-14T22:59:59.999Z')
+  assertCheck(changed(utc14, rome14) === false, 'cambio di formato UTC -> Roma con gli stessi giorni: non e\' una data cambiata')
+  assertCheck(changed(rome14, utc14) === false, 'cambio di formato Roma -> UTC con gli stessi giorni: non e\' una data cambiata')
+  assertCheck(changed(utc14, snap('x', '2026-11-21T00:00:00.000Z', '2026-11-21T23:59:59.999Z')) === true, 'primo giorno spostato (UTC): data cambiata')
+  assertCheck(changed(rome14, snap('x', '2026-11-20T23:00:00.000Z', '2026-11-21T22:59:59.999Z')) === true, 'primo giorno spostato (Roma): data cambiata')
+  const two = snap('x', '2026-11-14T00:00:00.000Z', '2026-11-15T23:59:59.999Z')
+  assertCheck(changed(two, snap('x', '2026-11-14T00:00:00.000Z', '2026-11-16T23:59:59.999Z')) === true, 'solo l\'ultimo giorno spostato: data cambiata')
+  assertCheck(changed(snap('x', '2026-11-14T08:00:00.000Z', null), snap('x', '2026-11-14T10:30:00.000Z', null)) === false, 'solo l\'ora cambia nello stesso giorno: nessun badge')
+  assertCheck(changed(null, utc14) === false && changed(utc14, null) === false, 'istantanea o riga viva mancante: nessun badge')
+
+  // "anche il ..." (D-09)
+  assertCheck(otherDaysLabel(['2026-09-14', '2026-09-21']) === 'anche il 14, 21 set', `stesso mese: ${otherDaysLabel(['2026-09-14', '2026-09-21'])}`)
+  assertCheck(otherDaysLabel(['2026-09-28', '2026-10-05']) === 'anche il 28 set, 5 ott', `mesi diversi: ${otherDaysLabel(['2026-09-28', '2026-10-05'])}`)
+  assertCheck(otherDaysLabel(['2026-09-14']) === 'anche il 14 set', 'una data sola')
+  const five = otherDaysLabel(['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12'])
+  assertCheck(five === 'anche il 14, 21, 28 set e altre 2', `cinque date: ${five}`)
+  assertCheck(otherDaysLabel([]) === null, 'nessuna data: nessuna riga')
+
+  // otherDays: niente giorno proprio, niente date finite, niente date che l'utente ha gia' salvato.
+  const sib = (id: number, start: string): Sibling => ({ id, dateStart: `${start}T00:00:00.000Z`, dateEnd: `${start}T23:59:59.999Z` })
+  const series = buildSavedView(
+    [
+      item(50, 50, '2026-10-01T00:00:00.000Z', utc14, null, [sib(51, '2026-11-14'), sib(52, '2026-11-21'), sib(53, '2026-10-01'), sib(54, '2026-11-28'), sib(55, '2026-12-05')]),
+      item(54, 54, '2026-10-02T00:00:00.000Z', snap('y', '2026-11-28T00:00:00.000Z', '2026-11-28T23:59:59.999Z')),
+      item(56, 56, '2026-10-01T00:00:00.000Z', utc14),
+    ],
+    NOW
+  )
+  const withSeries = series.upcoming.find((r) => r.ref === 50)
+  assertCheck(withSeries?.otherDays === 'anche il 21 nov, 5 dic', `otherDays: atteso 'anche il 21 nov, 5 dic', ottenuto ${withSeries?.otherDays}`)
+  assertCheck(series.upcoming.find((r) => r.ref === 56)?.otherDays === null, 'senza siblings: otherDays null')
 
   if (failures > 0) {
     console.error(`[view.ts] ${failures} verifiche fallite`)

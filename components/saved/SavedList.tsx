@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Heart } from "lucide-react";
-import { applyResolved, readDeviceList, useSavedCount, useSavedMode, type SavedMode } from "@/lib/saved/store";
+import { ackDateChanges, applyResolved, readDeviceList, useSavedCount, useSavedMode, type SavedMode } from "@/lib/saved/store";
 import { ACCOUNT_CAP, GUEST_CAP, SAVED_RETENTION_MONTHS, type ResolvedItem } from "@/lib/saved/snapshot";
 import { buildSavedView, type SavedItemData, type SavedRow } from "@/lib/saved/view";
 import { formatEventRange } from "@/lib/eventStatus";
 import { decodeHtmlEntities } from "@/lib/utils";
 import Button from "@/components/ui/Button";
+import StatusBadge from "@/components/StatusBadge";
 import SaveHeart from "@/components/saved/SaveHeart";
 import { useUserState } from "@/components/account/UserStateProvider";
 
@@ -82,6 +83,17 @@ export default function SavedList() {
 			cancelled = true;
 		};
 	}, [mode, attempt]);
+
+	// D-10: il badge "Data cambiata" si mostra una volta. Solo DOPO che le righe sono state disegnate si
+	// riallineano le date salvate a quelle vive (idempotente: il doppio giro di StrictMode non fa danni).
+	useEffect(() => {
+		if (mode === "pending" || loaded.status !== "ready") return;
+		ackDateChanges(
+			[...loaded.upcoming, ...loaded.past].flatMap((r) =>
+				r.dateChanged && r.eventId !== null ? [{ eventId: r.eventId, dateStart: r.dateStart, dateEnd: r.dateEnd }] : []
+			)
+		);
+	}, [mode, loaded]);
 
 	const keep = (rows: SavedRow[]) => rows.filter((r) => !removed.has(r.key));
 	const view =
@@ -275,6 +287,8 @@ function RowList({ rows, id, mode, onRemoved }: { rows: SavedRow[]; id?: string;
 							<p className="mt-1 text-sm text-foreground-secondary">
 								{[row.place, formatEventRange(row.dateStart, row.dateEnd)].filter(Boolean).join(" · ")}
 							</p>
+							{row.dateChanged && <StatusBadge label="Data cambiata" tone="soon" variant="pill" className="mt-2" />}
+							{row.otherDays && <p className="mt-1 text-sm text-muted-foreground">{row.otherDays}</p>}
 							{row.gone && (
 								<p className="mt-1 text-sm text-muted-foreground">{"Pagina dell'evento non più disponibile"}</p>
 							)}
