@@ -3,18 +3,19 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Heart } from "lucide-react";
-import { applyResolved, readDeviceList } from "@/lib/saved/store";
-import { SAVED_RETENTION_MONTHS, type ResolvedItem } from "@/lib/saved/snapshot";
+import { applyResolved, readDeviceList, useSavedCount, useSavedMode, type SavedMode } from "@/lib/saved/store";
+import { ACCOUNT_CAP, GUEST_CAP, SAVED_RETENTION_MONTHS, type ResolvedItem } from "@/lib/saved/snapshot";
 import { buildSavedView, type SavedItemData, type SavedRow } from "@/lib/saved/view";
 import { formatEventRange } from "@/lib/eventStatus";
 import { decodeHtmlEntities } from "@/lib/utils";
 import Button from "@/components/ui/Button";
 import SaveHeart from "@/components/saved/SaveHeart";
+import { useUserState } from "@/components/account/UserStateProvider";
 
 type State =
 	| { status: "loading" }
 	| { status: "error" }
-	| { status: "ready"; upcoming: SavedRow[]; past: SavedRow[] };
+	| { status: "ready"; upcoming: SavedRow[]; past: SavedRow[]; total: number };
 
 const PAST_VISIBLE = 5;
 const PAST_LIST_ID = "salvati-passati-list";
@@ -32,43 +33,64 @@ const SURFACE = "rounded-lg bg-surface shadow-[var(--elev-ring)]";
  * che gira anche sul server (React error 418).
  */
 export default function SavedList() {
-	const [state, setState] = useState<State>({ status: "loading" });
+	const mode = useSavedMode();
+	const [loaded, setLoaded] = useState<State>({ status: "loading" });
 	const [showAllPast, setShowAllPast] = useState(false);
+	// Righe di sola istantanea tolte con il cuore (D-16): escono subito dalla pagina.
+	const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+	const [attempt, setAttempt] = useState(0);
+	// Finche' la modalita' non e' nota (stato dell'accesso, unione) la pagina resta in caricamento.
+	const state: State = mode === "pending" ? { status: "loading" } : loaded;
 
 	useEffect(() => {
+		if (mode === "pending") return;
 		let cancelled = false;
 		const load = async () => {
 			try {
-				const entries = readDeviceList();
-				let resolved: ResolvedItem[] = [];
-				if (entries.length > 0) {
-					const res = await fetch("/api/v1/saved/resolve", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ ids: entries.map((e) => e.id) }),
+				let items: SavedItemData[];
+				if (mode === "account") {
+					// Solo dopo l'unione (useSavedMode): una lista mezza unita non si mostra mai.
+					const res = await fetch("/api/v1/me/saved", { credentials: "same-origin", cache: "no-store" });
+					if (!res.ok) throw new Error(`saved ${res.status}`);
+					items = ((await res.json()) as { items: SavedItemData[] }).items;
+				} else {
+					const entries = readDeviceList();
+					let resolved: ResolvedItem[] = [];
+					if (entries.length > 0) {
+						const res = await fetch("/api/v1/saved/resolve", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ ids: entries.map((e) => e.id) }),
+						});
+						if (!res.ok) throw new Error(`resolve ${res.status}`);
+						resolved = ((await res.json()) as { items: ResolvedItem[] }).items;
+						applyResolved(resolved);
+					}
+					items = entries.map((entry) => {
+						const item = resolved.find((i) => i.ref === entry.id);
+						return { ref: entry.id, eventId: item?.eventId ?? null, savedAt: entry.savedAt, snap: entry.snap, live: item?.live ?? null };
 					});
-					if (!res.ok) throw new Error(`resolve ${res.status}`);
-					resolved = ((await res.json()) as { items: ResolvedItem[] }).items;
-					applyResolved(resolved);
 				}
-				const items: SavedItemData[] = entries.map((entry) => {
-					const item = resolved.find((i) => i.ref === entry.id);
-					return { ref: entry.id, eventId: item?.eventId ?? null, savedAt: entry.savedAt, snap: entry.snap, live: item?.live ?? null };
-				});
 				const view = buildSavedView(items, new Date());
-				if (!cancelled) setState({ status: "ready", ...view });
+				if (!cancelled) setLoaded({ status: "ready", ...view, total: items.length });
 			} catch {
-				if (!cancelled) setState({ status: "error" });
+				if (!cancelled) setLoaded({ status: "error" });
 			}
 		};
 		void load();
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [mode, attempt]);
+
+	const keep = (rows: SavedRow[]) => rows.filter((r) => !removed.has(r.key));
+	const view =
+		state.status === "ready" ? { upcoming: keep(state.upcoming), past: keep(state.past), total: state.total - removed.size } : null;
+	const onRemoved = (key: string) => setRemoved((prev) => new Set(prev).add(key));
 
 	return (
 		<div aria-busy={state.status === "loading"}>
+			<HeaderSlot mode={mode} accountTotal={view?.total ?? 0} />
 			{state.status === "loading" && (
 				<>
 					<p role="status" className="sr-only">
@@ -83,26 +105,43 @@ export default function SavedList() {
 			)}
 			{state.status === "error" && (
 				<div className={`p-6 text-center ${SURFACE}`}>
-					<p className="text-base text-foreground-secondary">
-						Non riusciamo a caricare i salvati adesso. Restano su questo dispositivo: riprova tra poco.
-					</p>
+					{mode === "account" ? (
+						<>
+							<p className="text-base text-foreground-secondary">Non riusciamo a caricare i tuoi salvati. Riprova tra poco.</p>
+							<Button
+								variant="secondary"
+								size="md"
+								className="mt-4"
+								onClick={() => {
+									setLoaded({ status: "loading" });
+									setAttempt((n) => n + 1);
+								}}
+							>
+								Riprova
+							</Button>
+						</>
+					) : (
+						<p className="text-base text-foreground-secondary">
+							Non riusciamo a caricare i salvati adesso. Restano su questo dispositivo: riprova tra poco.
+						</p>
+					)}
 				</div>
 			)}
-			{state.status === "ready" && state.upcoming.length === 0 && state.past.length === 0 && (
+			{view && view.upcoming.length === 0 && view.past.length === 0 && (
 				<EmptyBlock
 					heading="Nessun evento salvato"
 					body="Tocca il cuore su un evento per ritrovarlo qui, anche dopo che è finito."
 					cta
 				/>
 			)}
-			{state.status === "ready" && (state.upcoming.length > 0 || state.past.length > 0) && (
+			{view && (view.upcoming.length > 0 || view.past.length > 0) && (
 				<div className="space-y-8">
 					<section aria-labelledby="salvati-in-arrivo">
 						<h2 id="salvati-in-arrivo" className={`mb-4 ${HEADING}`} style={HEADING_STYLE}>
 							In arrivo
 						</h2>
-						{state.upcoming.length > 0 ? (
-							<RowList rows={state.upcoming} />
+						{view.upcoming.length > 0 ? (
+							<RowList rows={view.upcoming} mode={mode} onRemoved={onRemoved} />
 						) : (
 							<EmptyBlock
 								heading="Nessun evento in programma"
@@ -115,10 +154,15 @@ export default function SavedList() {
 						<h2 id="salvati-passati" className={`mb-4 ${HEADING}`} style={HEADING_STYLE}>
 							Passati
 						</h2>
-						{state.past.length > 0 ? (
+						{view.past.length > 0 ? (
 							<>
-								<RowList id={PAST_LIST_ID} rows={showAllPast ? state.past : state.past.slice(0, PAST_VISIBLE)} />
-								{!showAllPast && state.past.length > PAST_VISIBLE && (
+								<RowList
+									id={PAST_LIST_ID}
+									rows={showAllPast ? view.past : view.past.slice(0, PAST_VISIBLE)}
+									mode={mode}
+									onRemoved={onRemoved}
+								/>
+								{!showAllPast && view.past.length > PAST_VISIBLE && (
 									<Button
 										variant="secondary"
 										size="sm"
@@ -127,7 +171,7 @@ export default function SavedList() {
 										aria-controls={PAST_LIST_ID}
 										onClick={() => setShowAllPast(true)}
 									>
-										Mostra altri {state.past.length - PAST_VISIBLE} eventi
+										Mostra altri {view.past.length - PAST_VISIBLE} eventi
 									</Button>
 								)}
 							</>
@@ -140,6 +184,46 @@ export default function SavedList() {
 					</section>
 				</div>
 			)}
+		</div>
+	);
+}
+
+/**
+ * Sotto il titolo (22-UI-SPEC Surface 3): l'invito ad accedere per l'ospite, l'avviso
+ * del tetto (100 sul dispositivo, 500 nell'account) al posto dell'invito. Con il flag di
+ * build spento non c'e' nessun invito; lo stato dell'accesso in arrivo tiene lo spazio.
+ */
+function HeaderSlot({ mode, accountTotal }: { mode: SavedMode; accountTotal: number }) {
+	const { enabled, openSignIn } = useUserState();
+	const guestCount = useSavedCount();
+	const flagOn = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
+	const canSignIn = flagOn && enabled === true;
+	const textButton = `min-h-11 text-left text-sm text-foreground-secondary underline underline-offset-4 ${FOCUS_RING}`;
+
+	if (mode === "pending") return flagOn ? <div className="mt-2 mb-6 min-h-11" /> : null;
+	if (mode === "account") {
+		return accountTotal >= ACCOUNT_CAP ? (
+			<p className={`mt-2 mb-6 p-4 text-sm text-foreground ${SURFACE}`}>Hai raggiunto il limite di 500 eventi salvati.</p>
+		) : null;
+	}
+	if (guestCount >= GUEST_CAP) {
+		return (
+			<div className={`mt-2 mb-6 p-4 text-sm text-foreground ${SURFACE}`}>
+				<p>Hai raggiunto il limite di 100 eventi salvati.</p>
+				{canSignIn && (
+					<button type="button" aria-haspopup="dialog" onClick={openSignIn} className={textButton}>
+						Accedi per salvarne altri
+					</button>
+				)}
+			</div>
+		);
+	}
+	if (!canSignIn) return null;
+	return (
+		<div className="mt-2 mb-6 min-h-11">
+			<button type="button" aria-haspopup="dialog" onClick={openSignIn} className={textButton}>
+				Accedi per ritrovarli su tutti i tuoi dispositivi
+			</button>
 		</div>
 	);
 }
@@ -163,7 +247,7 @@ function EmptyBlock({ heading, body, cta = false }: { heading: string; body: str
 	);
 }
 
-function RowList({ rows, id }: { rows: SavedRow[]; id?: string }) {
+function RowList({ rows, id, mode, onRemoved }: { rows: SavedRow[]; id?: string; mode: SavedMode; onRemoved: (key: string) => void }) {
 	return (
 		<ul id={id} className="flex flex-col gap-4">
 			{rows.map((row) => {
@@ -195,7 +279,15 @@ function RowList({ rows, id }: { rows: SavedRow[]; id?: string }) {
 								<p className="mt-1 text-sm text-muted-foreground">{"Pagina dell'evento non più disponibile"}</p>
 							)}
 						</div>
-						<SaveHeart eventId={row.ref} title={row.title} presentation="row" className="relative z-10 flex-none" />
+						<SaveHeart
+							// Account: l'id canonico dell'evento (ref e' la riga salvata); ospite: l'id del dispositivo.
+							eventId={mode === "account" ? (row.eventId ?? row.ref) : row.ref}
+							title={row.title}
+							presentation="row"
+							// D-16: una riga di sola istantanea se ne va subito, senza risalvataggio.
+							gone={row.gone ? { ref: row.ref, onRemoved: () => onRemoved(row.key) } : undefined}
+							className="relative z-10 flex-none"
+						/>
 					</li>
 				);
 			})}

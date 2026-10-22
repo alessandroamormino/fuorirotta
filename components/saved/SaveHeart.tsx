@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Heart } from "lucide-react";
-import { useIsSaved, toggleSaved, savedAuth } from "@/lib/saved/store";
+import { useIsSaved, toggleSaved, removeGone, savedAuth } from "@/lib/saved/store";
 import { notify } from "@/components/account/NoticeHost";
 import { requestSignIn } from "@/components/account/UserStateProvider";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
@@ -26,6 +26,11 @@ interface SaveHeartProps {
 	presentation: "overlay" | "compact" | "pill" | "row";
 	/** Sostituisce "Salva: {titolo}" (le righe "Altre date" aggiungono la data). */
 	label?: string;
+	/**
+	 * Riga di sola istantanea (l'evento non esiste piu', D-16): il cuore e' acceso e un tocco
+	 * la toglie dalla lista subito, senza risalvataggio. ref = id della voce da togliere.
+	 */
+	gone?: { ref: number; onRemoved: () => void };
 	className?: string;
 }
 
@@ -42,8 +47,8 @@ const BOX: Record<SaveHeartProps["presentation"], string> = {
 	row: "h-11 w-11 hover:bg-muted-strong",
 };
 
-export default function SaveHeart({ eventId, title, presentation, label, className }: SaveHeartProps) {
-	const saved = useIsSaved(eventId);
+export default function SaveHeart({ eventId, title, presentation, label, gone, className }: SaveHeartProps) {
+	const saved = useIsSaved(eventId) || gone !== undefined;
 	// Vero solo dopo un tocco che ha salvato: idratazione, altre schede e rimozioni non animano.
 	const [pop, setPop] = useState(0);
 	const [popping, setPopping] = useState(false);
@@ -53,6 +58,13 @@ export default function SaveHeart({ eventId, title, presentation, label, classNa
 		<button
 			type="button"
 			onClick={() => {
+				if (gone) {
+					void removeGone(gone.ref).then((result) => {
+						if (result === "removed") gone.onRemoved();
+						else notify("Rimozione non riuscita. Riprova tra poco.");
+					});
+					return;
+				}
 				void toggleSaved(eventId).then((result) => {
 					if (result === "saved") {
 						setPop((n) => n + 1);
