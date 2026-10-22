@@ -51,7 +51,9 @@
     ".next-auth-flow-test/types/**/*.ts",
     ".next-auth-flow-test/dev/types/**/*.ts",
     ".next-anon-test/types/**/*.ts",
-    ".next-anon-test/dev/types/**/*.ts"
+    ".next-anon-test/dev/types/**/*.ts",
+    ".next-saved-flow-test/types/**/*.ts",
+    ".next-saved-flow-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
