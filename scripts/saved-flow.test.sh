@@ -58,6 +58,17 @@
 #       diverse da quelle vive, POST ack {eventIds:[id]} -> updated 1 e l'istantanea torna uguale
 #       all'evento; ack senza Origin -> 403; l'ack di un altro utente -> updated 0
 #
+#   F1  utente con salvati su A (in arrivo), P (finito 20 giorni fa) e una riga di sola istantanea finita 40 giorni
+#       fa: POST calendar-feed -> 200 con path /cal/{22 caratteri}.ics, secondo POST -> lo stesso path, una riga
+#   F2  GET path -> 200 con i quattro header, esattamente due BEGIN:VEVENT (A e P), un solo BEGIN:VALARM con
+#       TRIGGER:-PT6H, UID saved-{riga}@fuori-rotta.it, nessuna riga oltre 75 ottetti, secondo GET identico al byte
+#   F3  POST rotate -> path diverso; il vecchio path risponde un 404 uguale (corpo e header senza Date) a un token
+#       ignoto di 22 caratteri, a /cal/short.ics e a un token valido con .txt; il nuovo path risponde 200
+#   F4  utente senza salvati -> 200, un VCALENDAR e zero VEVENT
+#   F5  POST calendar-feed senza Origin -> 403, senza cookie -> 401
+#   F6  server riavviato con AUTH_ENABLED=false: il nuovo path risponde il 404 di F3, GET ids con cookie -> 404,
+#       POST resolve [A] -> 200
+#
 # Righe di prova sotto il `source` dedicato '__saved_gate__' e, per le serie, sotto i source reali
 # 'torino' e 'roma' con source_id che contiene 'saved_gate__': cancellate prima e all'uscita,
 # nessuna riga reale viene letta o toccata.
@@ -598,4 +609,111 @@ for bad in '{"eventIds":[]}' '{"eventIds":["7"]}' '{"eventIds":[0]}' 'non json';
 done
 echo "ok  D2: ack -> updated 1 e istantanea uguale all'evento (mai sul GET); altro utente -> updated 0; senza Origin -> 403, senza cookie -> 401, corpo errato -> 400"
 
-echo "Riepilogo: R1-R7, A1-A3, S1-S9, M1-M6, L1-L3, D1-D2 verdi"
+# ============================ Feed del calendario (CAL-03) ===================
+mint_user u11
+mint_user u12
+code="$(put f1a "${a_id}" "${u11_cookie}")"
+[[ "${code}" == "200" ]] || fail "F1: PUT A: atteso 200, ottenuto ${code}"
+code="$(put f1p "${p_id}" "${u11_cookie}")"
+[[ "${code}" == "200" ]] || fail "F1: PUT P (passato): atteso 200, ottenuto ${code} '$(cat "${tmp_dir}/f1p.b")'"
+psql_dev "INSERT INTO saved_events (user_id, title, date_start, date_end, canonical_category, source, source_id)
+          VALUES ('${u11_user}', 'Feed Vecchio', now() - interval '41 days', now() - interval '40 days', 'Altro', '${test_source}', 'feed-old')" >/dev/null
+a_row="$(psql_dev "SELECT id FROM saved_events WHERE user_id = '${u11_user}' AND event_id = ${a_id}")"
+p_row="$(psql_dev "SELECT id FROM saved_events WHERE user_id = '${u11_user}' AND event_id = ${p_id}")"
+feed_post() { call "$1" POST /api/v1/me/calendar-feed -H "Origin: ${origin}" -H "$2"; }
+
+# --- F1: il link si crea una volta e resta lo stesso --------------------------
+code="$(feed_post f1 "${u11_cookie}")"
+[[ "${code}" == "200" ]] || fail "F1: POST calendar-feed: atteso 200, ottenuto ${code} '$(cat "${tmp_dir}/f1.b")'"
+feed_path="$(json_get "${tmp_dir}/f1.b" 'j.path')"
+[[ "${feed_path}" =~ ^/cal/[A-Za-z0-9_-]{22}\.ics$ ]] || fail "F1: path inatteso '${feed_path}'"
+code="$(feed_post f1b "${u11_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/f1b.b" 'j.path')" == "${feed_path}" ]] || fail "F1: il secondo POST deve dare lo stesso path, ottenuto ${code} '$(cat "${tmp_dir}/f1b.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM calendar_feeds WHERE user_id = '${u11_user}'")" == "1" ]] || fail "F1: attesa una sola riga in calendar_feeds"
+echo "ok  F1: POST calendar-feed -> path /cal/{22 caratteri}.ics, secondo POST uguale, una riga"
+
+# --- F2: il feed ---------------------------------------------------------------
+hdr() { grep -i "^$2:" "${tmp_dir}/$1.h" | head -n 1 | cut -d: -f2- | sed 's/^ *//' | tr -d '\r'; }
+code="$(call f2 GET "${feed_path}")"
+[[ "${code}" == "200" ]] || fail "F2: GET feed: atteso 200, ottenuto ${code}"
+[[ "$(hdr f2 content-type)" == "text/calendar; charset=utf-8" ]] || fail "F2: content-type '$(hdr f2 content-type)'"
+[[ "$(hdr f2 cache-control)" == "private, no-cache" ]] || fail "F2: cache-control '$(hdr f2 cache-control)'"
+[[ "$(hdr f2 referrer-policy)" == "no-referrer" ]] || fail "F2: referrer-policy '$(hdr f2 referrer-policy)'"
+[[ "$(hdr f2 x-robots-tag)" == "noindex" ]] || fail "F2: x-robots-tag '$(hdr f2 x-robots-tag)'"
+feed_lines() { tr -d '\r' <"${tmp_dir}/$1.b"; }
+[[ "$(feed_lines f2 | grep -c '^BEGIN:VEVENT$')" == "2" ]] || fail "F2: attesi due BEGIN:VEVENT (A e P, non la riga finita 40 giorni fa), ottenuti $(feed_lines f2 | grep -c '^BEGIN:VEVENT$')"
+feed_lines f2 | grep -q '^SUMMARY:Gate A$' || fail "F2: manca Gate A"
+feed_lines f2 | grep -q '^SUMMARY:Gate P$' || fail "F2: manca Gate P"
+if feed_lines f2 | grep -q 'Feed Vecchio'; then fail "F2: la riga finita 40 giorni fa non deve esserci"; fi
+[[ "$(feed_lines f2 | grep -c '^BEGIN:VALARM$')" == "1" && "$(feed_lines f2 | grep -c '^TRIGGER:-PT6H$')" == "1" ]] || fail "F2: atteso un solo VALARM con TRIGGER:-PT6H"
+feed_lines f2 | grep -q "^UID:saved-${a_row}@fuori-rotta.it$" || fail "F2: manca UID saved-${a_row}@fuori-rotta.it"
+feed_lines f2 | grep -q "^UID:saved-${p_row}@fuori-rotta.it$" || fail "F2: manca UID saved-${p_row}@fuori-rotta.it"
+[[ "$(LC_ALL=C awk '{ if (length($0) > 76) n++ } END { print n + 0 }' "${tmp_dir}/f2.b")" == "0" ]] || fail "F2: righe oltre 75 ottetti"
+code="$(call f2b GET "${feed_path}")"
+[[ "${code}" == "200" ]] && cmp -s "${tmp_dir}/f2.b" "${tmp_dir}/f2b.b" || fail "F2: due GET devono dare gli stessi byte"
+echo "ok  F2: feed 200, quattro header, due VEVENT (A, P), un VALARM -PT6H, UID saved-{riga}, righe <= 75, due GET identici"
+
+# --- F3: rigenerare uccide il vecchio link, e ogni 404 e' lo stesso -----------
+same_404() { # <nome> <riferimento> <sezione>: stato, header senza Date e corpo identici
+  grep -qE '^HTTP/[0-9.]+ 404' "${tmp_dir}/$1.h" || fail "$3: $1 non e' un 404"
+  [[ "$(grep -vi '^date:' "${tmp_dir}/$1.h" | tr -d '\r' | sort)" == "$(grep -vi '^date:' "${tmp_dir}/$2.h" | tr -d '\r' | sort)" ]] || fail "$3: gli header di $1 e $2 differiscono"
+  cmp -s "${tmp_dir}/$1.b" "${tmp_dir}/$2.b" || fail "$3: il corpo di $1 e $2 differisce"
+}
+code="$(call f3rot POST /api/v1/me/calendar-feed/rotate -H "Origin: ${origin}" -H "${u11_cookie}")"
+[[ "${code}" == "200" ]] || fail "F3: rotate: atteso 200, ottenuto ${code} '$(cat "${tmp_dir}/f3rot.b")'"
+new_path="$(json_get "${tmp_dir}/f3rot.b" 'j.path')"
+[[ "${new_path}" =~ ^/cal/[A-Za-z0-9_-]{22}\.ics$ && "${new_path}" != "${feed_path}" ]] || fail "F3: il nuovo path deve essere valido e diverso, ottenuto '${new_path}'"
+code="$(call f3old GET "${feed_path}")"
+[[ "${code}" == "404" ]] || fail "F3: il vecchio path: atteso 404, ottenuto ${code}"
+code="$(call f3unk GET "/cal/AAAAAAAAAAAAAAAAAAAAAA.ics")"
+[[ "${code}" == "404" ]] || fail "F3: token ignoto: atteso 404, ottenuto ${code}"
+code="$(call f3short GET "/cal/short.ics")"
+[[ "${code}" == "404" ]] || fail "F3: nome corto: atteso 404, ottenuto ${code}"
+code="$(call f3txt GET "${new_path%.ics}.txt")"
+[[ "${code}" == "404" ]] || fail "F3: token valido con .txt: atteso 404, ottenuto ${code}"
+same_404 f3old f3unk F3
+same_404 f3short f3unk F3
+same_404 f3txt f3unk F3
+code="$(call f3new GET "${new_path}")"
+[[ "${code}" == "200" ]] || fail "F3: il nuovo path: atteso 200, ottenuto ${code}"
+[[ "$(psql_dev "SELECT count(*) FROM calendar_feeds WHERE user_id = '${u11_user}'")" == "1" ]] || fail "F3: rotate deve lasciare una sola riga"
+echo "ok  F3: rotate -> path nuovo 200; il vecchio, un token ignoto, un nome corto e .txt rispondono lo stesso 404 (header senza Date e corpo)"
+
+# --- F4: senza salvati il calendario e' valido e vuoto -------------------------
+code="$(feed_post f4p "${u12_cookie}")"
+[[ "${code}" == "200" ]] || fail "F4: POST calendar-feed: atteso 200, ottenuto ${code}"
+empty_path="$(json_get "${tmp_dir}/f4p.b" 'j.path')"
+code="$(call f4 GET "${empty_path}")"
+[[ "${code}" == "200" ]] || fail "F4: GET feed vuoto: atteso 200, ottenuto ${code}"
+[[ "$(feed_lines f4 | grep -c '^BEGIN:VCALENDAR$')" == "1" && "$(feed_lines f4 | grep -c '^END:VCALENDAR$')" == "1" ]] || fail "F4: atteso un solo VCALENDAR"
+[[ "$(feed_lines f4 | grep -c '^BEGIN:VEVENT$')" == "0" ]] || fail "F4: nessun VEVENT atteso"
+echo "ok  F4: utente senza salvati -> 200, un VCALENDAR e zero VEVENT"
+
+# --- F5: creare il link richiede Origin e sessione ----------------------------
+code="$(call f5a POST /api/v1/me/calendar-feed -H "${u11_cookie}")"
+[[ "${code}" == "403" ]] || fail "F5: senza Origin: atteso 403, ottenuto ${code}"
+no_store f5a F5
+code="$(call f5b POST /api/v1/me/calendar-feed -H "Origin: ${origin}")"
+[[ "${code}" == "401" ]] || fail "F5: senza cookie: atteso 401, ottenuto ${code}"
+no_store f5b F5
+code="$(call f5c POST /api/v1/me/calendar-feed/rotate -H "${u11_cookie}")"
+[[ "${code}" == "403" ]] || fail "F5: rotate senza Origin: atteso 403, ottenuto ${code}"
+code="$(call f5d POST /api/v1/me/calendar-feed/rotate -H "Origin: ${origin}")"
+[[ "${code}" == "401" ]] || fail "F5: rotate senza cookie: atteso 401, ottenuto ${code}"
+echo "ok  F5: calendar-feed senza Origin -> 403, senza cookie -> 401 (anche rotate), private, no-store"
+
+# --- F6: con l'accesso spento il feed non esiste piu', i salvati degli ospiti si ----
+stop_server
+bash scripts/dev-db.sh env "${auth_env[@]}" AUTH_ENABLED=false npx next dev -p "${port}" >"${tmp_dir}/dev-server-off.log" 2>&1 &
+server_pid=$!
+wait_for_port "${port}"
+code="$(call f6 GET "${new_path}")"
+[[ "${code}" == "404" ]] || fail "F6: feed con accesso spento: atteso 404, ottenuto ${code}"
+same_404 f6 f3unk F6
+code="$(call f6ids GET /api/v1/me/saved/ids -H "${u11_cookie}")"
+[[ "${code}" == "404" ]] || fail "F6: GET ids con accesso spento: atteso 404, ottenuto ${code}"
+code="$(post_ids f6res "{\"ids\":[${a_id}]}")"
+[[ "${code}" == "200" ]] || fail "F6: resolve con accesso spento: atteso 200, ottenuto ${code}"
+echo "ok  F6: accesso spento -> il feed risponde il 404 di F3, GET ids 404, resolve [A] 200"
+
+echo "Riepilogo: R1-R7, A1-A3, S1-S9, M1-M6, L1-L3, D1-D2, F1-F6 verdi"

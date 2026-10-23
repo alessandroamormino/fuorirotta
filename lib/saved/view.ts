@@ -30,6 +30,8 @@ export interface SavedRow {
   key: string
   ref: number
   eventId: number | null
+  /** Istante del salvataggio (ISO) della riga tenuta: il feed del calendario ne ricava il DTSTAMP. */
+  savedAt: string
   title: string
   place: string | null
   dateStart: string
@@ -111,6 +113,7 @@ export function buildSavedView(items: SavedItemData[], now: Date): { upcoming: S
         key,
         ref: item.ref,
         eventId: item.eventId,
+        savedAt: item.savedAt,
         title: data.title,
         place: data.place,
         dateStart: data.dateStart,
