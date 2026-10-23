@@ -36,7 +36,7 @@ export default function SavedNavButton() {
 					key={pulse}
 					aria-hidden="true"
 					data-saved-dot
-					className={`absolute right-1 top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-surface ${
+					className={`absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-primary ring-2 ring-surface ${
 						pulse > 0 ? "animate-[heartPop_var(--motion-base)_var(--ease-standard)] motion-reduce:animate-none" : ""
 					}`}
 				/>
