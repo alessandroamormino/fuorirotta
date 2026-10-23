@@ -11,6 +11,7 @@ import { decodeHtmlEntities } from "@/lib/utils";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
 import SaveHeart from "@/components/saved/SaveHeart";
+import CalendarFeedDialog from "@/components/saved/CalendarFeedDialog";
 import { useUserState } from "@/components/account/UserStateProvider";
 
 type State =
@@ -103,6 +104,7 @@ export default function SavedList() {
 	return (
 		<div aria-busy={state.status === "loading"}>
 			<HeaderSlot mode={mode} accountTotal={view?.total ?? 0} />
+			<CalendarEntry mode={mode} />
 			{state.status === "loading" && (
 				<>
 					<p role="status" className="sr-only">
@@ -235,6 +237,38 @@ function HeaderSlot({ mode, accountTotal }: { mode: SavedMode; accountTotal: num
 		<div className="mt-2 mb-6 min-h-11">
 			<button type="button" aria-haspopup="dialog" onClick={openSignIn} className={textButton}>
 				Accedi per ritrovarli su tutti i tuoi dispositivi
+			</button>
+		</div>
+	);
+}
+
+/**
+ * "Aggiungi al calendario" (22-UI-SPEC Surface 3 punto 3, D-11): per chi ha l'account, sempre, anche
+ * a lista vuota; l'ospite con l'accesso disponibile lo vede come invito solo se ha gia' salvato
+ * qualcosa; senza accesso nessuno dei due. Lo stato in arrivo tiene lo spazio.
+ */
+function CalendarEntry({ mode }: { mode: SavedMode }) {
+	const { enabled, openSignIn } = useUserState();
+	const guestCount = useSavedCount();
+	if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== "true") return null;
+	if (mode === "pending") return <div className="mt-4 min-h-12" />;
+	if (mode === "account") {
+		return (
+			<div className="mt-4 mb-6">
+				<CalendarFeedDialog />
+			</div>
+		);
+	}
+	if (enabled !== true || guestCount < 1) return null;
+	return (
+		<div className="mb-6 min-h-11">
+			<button
+				type="button"
+				aria-haspopup="dialog"
+				onClick={openSignIn}
+				className={`min-h-11 text-left text-sm text-foreground-secondary underline underline-offset-4 ${FOCUS_RING}`}
+			>
+				Accedi per avere i salvati nel calendario
 			</button>
 		</div>
 	);
