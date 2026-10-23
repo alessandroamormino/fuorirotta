@@ -61,6 +61,9 @@ interface SnapSource {
   sourceUrl?: string | null
 }
 
+/** Caratteri di controllo (CR/LF/NUL compresi): mai in un URL che finisce in una riga del file .ics. */
+const CONTROL = /[\u0000-\u001f\u007f]/
+
 const iso = (d: Date | string): string => new Date(d).toISOString()
 
 export function snapFromEvent(e: SnapSource): Snap {
@@ -76,7 +79,7 @@ export function snapFromEvent(e: SnapSource): Snap {
     source: e.source,
     sourceId: e.sourceId,
     // Solo http(s), come calendarFields: un "javascript:" non deve finire in un link.
-    sourceUrl: e.sourceUrl && /^https?:\/\//i.test(e.sourceUrl) ? e.sourceUrl : null,
+    sourceUrl: e.sourceUrl && /^https?:\/\//i.test(e.sourceUrl) && !CONTROL.test(e.sourceUrl) ? e.sourceUrl : null,
   }
 }
 
@@ -109,7 +112,7 @@ export function validateSnap(input: unknown): Snap | null {
   if (!(place === null || str(place, 255))) return null
   if (typeof category !== 'string' || !(CANONICAL_CATEGORIES as readonly string[]).includes(category)) return null
   if (!str(source, 50) || !str(sourceId, 255)) return null
-  if (!(sourceUrl === null || (str(sourceUrl, 1000) && /^https?:\/\//i.test(sourceUrl)))) return null
+  if (!(sourceUrl === null || (str(sourceUrl, 1000) && /^https?:\/\//i.test(sourceUrl) && !CONTROL.test(sourceUrl)))) return null
   return { title, dateStart, dateEnd, place, category, source, sourceId, sourceUrl }
 }
 
@@ -203,6 +206,9 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   const parse = (v: unknown, now = NOW) => parseDeviceList(typeof v === 'string' ? v : JSON.stringify(v), now)
   assertCheck(JSON.stringify(validateSnap(good)) === JSON.stringify(good), 'validateSnap: istantanea valida invariata')
   assertCheck(validateSnap({ ...good, sourceUrl: 'javascript:alert(1)' }) === null, 'validateSnap: javascript: rifiutato')
+  assertCheck(validateSnap({ ...good, sourceUrl: 'https://x.it/a\r\nATTENDEE:mailto:x@y.it' }) === null, 'validateSnap: CR/LF nel sourceUrl rifiutato')
+  assertCheck(validateSnap({ ...good, sourceUrl: 'https://x.it/a\u0000b' }) === null, 'validateSnap: NUL nel sourceUrl rifiutato')
+  assertCheck(snapFromEvent({ ...base, sourceUrl: 'https://x.it/a\nb' }).sourceUrl === null, 'snapFromEvent: sourceUrl con a capo scartato')
   assertCheck(validateSnap({ ...good, sourceUrl: null, place: null, dateEnd: null }) !== null, 'validateSnap: campi nulli ammessi')
   assertCheck(validateSnap({ ...good, category: 'Inventata' }) === null, 'validateSnap: categoria fuori tassonomia')
   assertCheck(validateSnap({ ...good, title: 'x'.repeat(501) }) === null, 'validateSnap: titolo di 501 caratteri')

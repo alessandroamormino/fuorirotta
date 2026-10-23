@@ -84,6 +84,8 @@ const encoder = new TextEncoder()
 
 /** Passo 1: caratteri di controllo (tranne LF/CR, gestiti dall'escape) e DEL diventano spazi. */
 const clean = (s: string) => s.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+/** Valori URI (niente escape del testo): ogni carattere di controllo, CR e LF compresi, si toglie (T-20-09). */
+const cleanUri = (s: string) => s.replace(/[\u0000-\u001f\u007f]/g, '')
 /** Passo 2: \ ; , e a capo secondo RFC 5545 §3.3.11. */
 const escapeText = (s: string) => s.replace(/[\\;,]/g, '\\$&').replace(/\r\n|\r|\n/g, '\\n')
 
@@ -132,7 +134,7 @@ function eventLines(fields: CalendarFields, opts: { uid: string; stamp: Date; al
     ...(fields.location ? [text('LOCATION', fields.location)] : []),
     text('DESCRIPTION', fields.details),
     // Valore URI: niente escape del testo, solo pulizia.
-    `URL:${clean(fields.eventUrl)}`,
+    `URL:${cleanUri(fields.eventUrl)}`,
     'TRANSP:TRANSPARENT',
     ...(opts.alarm ? ['BEGIN:VALARM', 'ACTION:DISPLAY', text('DESCRIPTION', fields.title), 'TRIGGER:-PT6H', 'END:VALARM'] : []),
     'END:VEVENT',
@@ -198,6 +200,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     dateStart: '2026-10-18T00:00:00.000Z',
     dateEnd: '2026-10-18T23:59:59.999Z',
   }
+  const fieldsOf0 = () => calendarFields(base, url)
   const ics = (e: Partial<CalendarSource>, u = url) => buildIcs(calendarFields({ ...base, ...e }, u), { uid: 'event-7@fuori-rotta.it', stamp })
 
   // DTEND esclusivo: un giorno, intervallo, cambio ora legale, fine anno.
@@ -250,6 +253,19 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     assertCheck(!unfold(evil).split('\r\n').some((l) => l.startsWith('ATTENDEE')), `iniezione (${JSON.stringify(sep)}): nessuna ATTENDEE dopo il dispiegamento`)
   }
   assertCheck(!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(ics({ title: 'a\u0000b\u007fc\u001bd' })), 'caratteri di controllo ripuliti')
+
+  // Iniezione dal valore URI: CR/LF dentro eventUrl non deve aprire una riga nuova nel file ne' nel feed.
+  for (const sep of ['\r\n', '\n', '\r']) {
+    const tag = JSON.stringify(sep)
+    const evilUrl = `https://example.invalid/x${sep}ATTENDEE:mailto:x@example.invalid${sep}BEGIN:VALARM`
+    const one = buildIcs({ ...fieldsOf0(), eventUrl: evilUrl }, { uid: 'u', stamp })
+    const feed = buildFeed([{ fields: { ...fieldsOf0(), eventUrl: evilUrl }, uid: 'u', stamp, alarm: false }], { name: 'x' })
+    for (const [what, body] of [['file', one], ['feed', feed]] as const) {
+      assertCheck(!body.split('\r\n').some((l) => l.startsWith('ATTENDEE') || l === 'BEGIN:VALARM'), `URL, iniezione (${tag}, ${what}): nessuna riga iniettata`)
+      assertCheck(!unfold(body).split('\r\n').some((l) => l.startsWith('ATTENDEE')), `URL, iniezione (${tag}, ${what}): nessuna ATTENDEE dopo il dispiegamento`)
+      assertCheck(!/(^|[^\r])\n/.test(body) && !/\r(?!\n)/.test(body), `URL, iniezione (${tag}, ${what}): solo CRLF`)
+    }
+  }
 
   // calendarFields: titolo, luogo, dettagli.
   const f1 = calendarFields({ ...base, title: '  Sagra &amp; musica  ', locationName: 'Piazza Verdi', address: 'Via Roma 1' }, url)
