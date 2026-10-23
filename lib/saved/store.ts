@@ -121,11 +121,15 @@ let authEpoch = 0
 let accountReady = false
 export function setSavedAuth(state: { enabled: boolean | null; signedIn: boolean }): void {
   const modeChanged = state.signedIn !== auth.signedIn
+  // Anche enabled: da null a true per l'ospite cambia useSavedMode ('pending' -> 'guest').
+  const enabledChanged = state.enabled !== auth.enabled
   auth = state
-  if (!modeChanged) return
-  authEpoch += 1
-  accountIds = null
-  accountReady = false
+  if (!modeChanged && !enabledChanged) return
+  if (modeChanged) {
+    authEpoch += 1
+    accountIds = null
+    accountReady = false
+  }
   listeners.forEach((l) => l())
 }
 export function savedAuth(): { enabled: boolean | null; signedIn: boolean } {
