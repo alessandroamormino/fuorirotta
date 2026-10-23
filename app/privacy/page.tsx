@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 		"Quali dati personali tratta Fuorirotta, perché, con quali fornitori, per quanto tempo e come esercitare i tuoi diritti.",
 };
 
-const UPDATED = "18 ottobre 2026";
+const UPDATED = "23 ottobre 2026";
 
 const INDEX = [
 	{ id: "titolare", label: "Titolare del trattamento" },
@@ -35,7 +35,8 @@ export default function PrivacyPage() {
 			<p>
 				Questa informativa spiega quali dati personali tratta Fuorirotta (fuori-rotta.it e, quando uscirà, la
 				sua app) e perché. Vale per chi crea un account; chi si limita a consultare gli eventi non deve
-				registrarsi e per questo non ci lascia alcun dato di account.
+				registrarsi e per questo non ci lascia alcun dato di account. Senza account puoi anche salvare eventi
+				nel browser: di quell&apos;elenco non conserviamo nulla sul nostro server.
 			</p>
 
 			<h2 id="titolare">Titolare del trattamento</h2>
@@ -69,6 +70,16 @@ export default function PrivacyPage() {
 					<strong>Sicurezza</strong>: l&apos;indirizzo IP viene usato anche per limitare i tentativi di
 					accesso ripetuti (rate limiting) e resta registrato per questo scopo per 24 ore.
 				</li>
+				<li>
+					<strong>Eventi salvati</strong>: quando tocchi il cuore su un evento conserviamo quale evento hai
+					salvato, la data in cui l&apos;hai salvato e una copia di titolo, date, comune, categoria, fonte e
+					link alla fonte. La copia serve a mostrarti l&apos;evento in &quot;Passati&quot; anche dopo che esce
+					dal nostro catalogo.
+				</li>
+				<li>
+					<strong>Collegamento al calendario</strong>: se lo crei, è un collegamento segreto, generato a caso,
+					che mostra i tuoi eventi salvati a chiunque lo abbia. Non condividerlo.
+				</li>
 			</ul>
 			<p>Anche senza account, quando usi il sito:</p>
 			<ul>
@@ -87,6 +98,12 @@ export default function PrivacyPage() {
 					nella sezione &quot;Conservazione&quot;.
 				</li>
 				<li>
+					Se salvi eventi senza account, l&apos;elenco resta nella memoria del tuo browser. Per
+					mostrartelo il sito invia al nostro server i numeri degli eventi, solo per leggerne i dati
+					aggiornati: il server non li conserva. Quando accedi, l&apos;elenco viene aggiunto al tuo account e
+					tolto dal browser.
+				</li>
+				<li>
 					Il sito ricorda alcune tue scelte (tema chiaro o scuro, filtri di ricerca, avvisi già mostrati)
 					nella memoria del tuo browser. Restano sul tuo dispositivo e non vengono mai inviate al nostro
 					server.
@@ -101,7 +118,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Finalità",
-								"Fornirti l'account e le sue funzioni: accesso, elenco dei dispositivi, modifica del nome, scarico ed eliminazione dei tuoi dati",
+								"Fornirti l'account e le sue funzioni: accesso, elenco dei dispositivi, modifica del nome, eventi salvati e collegamento al calendario, scarico ed eliminazione dei tuoi dati",
 							],
 							["Base giuridica", "esecuzione del contratto, art. 6.1.b GDPR"],
 						],
@@ -170,6 +187,15 @@ export default function PrivacyPage() {
 						],
 					},
 					{
+						title: "Il calendario che scegli",
+						facts: [
+							[
+								"Ruolo",
+								"Se ti iscrivi al collegamento con un servizio di calendario a tua scelta (per esempio Google Calendar), quel servizio riceve il collegamento e legge dal nostro server l'elenco dei tuoi eventi salvati per mostrartelo. Opera come titolare autonomo del trattamento secondo la propria informativa.",
+							],
+						],
+					},
+					{
 						title: "Google",
 						facts: [
 							[
@@ -198,7 +224,25 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni e il collegamento con Google.",
+								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni, gli eventi salvati, il collegamento al calendario e il collegamento con Google.",
+							],
+						],
+					},
+					{
+						title: "Eventi salvati",
+						facts: [
+							[
+								"Quanto",
+								"Fino a quando non li togli tu o non elimini l'account. Un evento salvato che è finito resta ancora 12 mesi dopo la sua fine, poi lo cancella il controllo giornaliero. Gli stessi 12 mesi valgono per l'elenco conservato nel browser.",
+							],
+						],
+					},
+					{
+						title: "Collegamento al calendario",
+						facts: [
+							[
+								"Quanto",
+								"Fino a quando non lo rigeneri con \"Rigenera link\" (il vecchio collegamento smette di funzionare subito) o non elimini l'account. Come ogni indirizzo richiesto, il collegamento compare nei log di accesso di nginx per circa 14 giorni.",
 							],
 						],
 					},
@@ -229,7 +273,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Indirizzo IP, tipo di browser e indirizzo richiesto (comprese le coordinate di una ricerca \"vicino a me\") sono conservati per circa 14 giorni, poi i log più vecchi vengono sovrascritti.",
+								"Indirizzo IP, tipo di browser e indirizzo richiesto (comprese le coordinate di una ricerca \"vicino a me\" e il collegamento al calendario) sono conservati per circa 14 giorni, poi i log più vecchi vengono sovrascritti.",
 							],
 						],
 					},

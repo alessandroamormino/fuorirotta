@@ -33,7 +33,7 @@ cleanup() {
   rm -f "${tmp_ts}"
   docker compose -f "${repo_root}/docker-compose.dev.yml" exec -T postgres-dev \
     psql -U fuorirotta -d fuorirotta_dev -c \
-    "DELETE FROM events WHERE source = '${test_source}'" >/dev/null 2>&1 || true
+    "DELETE FROM events WHERE source = '${test_source}'; DELETE FROM auth_user WHERE id = '${test_source}'" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -42,6 +42,7 @@ cleanup  # righe orfane di un giro interrotto
 cat > "${tmp_ts}" <<'TS'
 import { prisma } from './lib/prisma'
 import { purgeConcludedEvents, purgeCutoff, RETENTION_DAYS } from './lib/retention/purge'
+import { purgeOldSaves, savedCutoff } from './lib/retention/purgeSaved'
 
 const SRC = '__retention_gate__'
 const day = 24 * 60 * 60 * 1000
@@ -64,7 +65,37 @@ const day = 24 * 60 * 60 * 1000
   const duplicato = await mk('duplicato', new Date(cutoff.getTime() - 30 * day), new Date(Date.now() + day))
   await prisma.event.update({ where: { id: duplicato }, data: { canonicalEventId: canonico } })
 
+  // Salvataggio del solo utente di prova sull'evento 'vecchio', con date
+  // dell'istantanea volutamente 60 giorni PRIMA di quelle dell'evento.
+  const vecchioRow = await prisma.event.findUniqueOrThrow({ where: { id: vecchio } })
+  await prisma.user.create({ data: { id: SRC, name: 'gate', email: 'gate@retention.invalid' } })
+  await prisma.savedEvent.create({ data: {
+    userId: SRC, eventId: vecchio, title: 'gate save', category: 'Altro', source: SRC, sourceId: 'vecchio',
+    dateStart: new Date(vecchioRow.dateStart.getTime() - 60 * day),
+    dateEnd: new Date(vecchioRow.dateEnd!.getTime() - 60 * day)
+  } })
+
   const report = await purgeConcludedEvents({ onlySource: SRC })
+
+  // S5/S6: quattro salvataggi dell'utente di prova per la regola dei 12 mesi.
+  const sc = savedCutoff()
+  const mkSave = (sid: string, end: Date, eventId: number | null) =>
+    prisma.savedEvent.create({ data: {
+      userId: SRC, eventId, title: 'gate ' + sid, category: 'Altro', source: SRC, sourceId: sid,
+      dateStart: new Date(end.getTime() - day), dateEnd: end
+    } })
+  await mkSave('R13', new Date(sc.getTime() - 30 * day), null)
+  await mkSave('R11', new Date(sc.getTime() + 30 * day), null)
+  await mkSave('RCUT', new Date(sc.getTime()), null)
+  await mkSave('RLIVE', new Date(sc.getTime() - 30 * day), inCorso)
+  const saveIds = ['R13', 'R11', 'RCUT', 'RLIVE']
+  const dry = await purgeOldSaves({ onlyUser: SRC, dryRun: true })
+  const countAfterDry = await prisma.savedEvent.count({ where: { userId: SRC, sourceId: { in: saveIds } } })
+  await purgeOldSaves({ onlyUser: SRC })
+  const alive = async (sid: string) =>
+    (await prisma.savedEvent.count({ where: { userId: SRC, sourceId: sid } })) > 0
+
+  const save = await prisma.savedEvent.findUnique({ where: { userId_source_sourceId: { userId: SRC, source: SRC, sourceId: 'vecchio' } } })
 
   const vivo = async (id: number) => (await prisma.event.findUnique({ where: { id } })) !== null
   const dupRow = await prisma.event.findUnique({ where: { id: duplicato } })
@@ -79,7 +110,16 @@ const day = 24 * 60 * 60 * 1000
     inCorsoSopravvive: await vivo(inCorso),
     recenteSopravvive: await vivo(recente),
     canonicoSopravvive: await vivo(canonico),
-    duplicatoAncoraAgganciato: dupRow?.canonicalEventId === canonico
+    duplicatoAncoraAgganciato: dupRow?.canonicalEventId === canonico,
+    saveSopravvive: save !== null,
+    saveEventIdNull: save?.eventId === null,
+    dryEligible: dry.eligible,
+    dryCancellati: 4 - countAfterDry,
+    r13: await alive('R13'),
+    r11: await alive('R11'),
+    rcut: await alive('RCUT'),
+    rlive: await alive('RLIVE'),
+    saveDateFresche: save?.dateStart.getTime() === vecchioRow.dateStart.getTime()
   }))
   process.exit(0)
 })().catch((e) => { console.error('ERRORE: ' + (e?.message ?? e)); process.exit(1) })
@@ -130,9 +170,30 @@ else
   fail "S3: keptAsCanonical vale 0 con un caso costruito apposta — la guardia non e' stata esercitata (prova di non-vacuita')"
 fi
 
+# --- S4: un salvataggio sopravvive al purge, con le date finali --------------
+if [[ "$(get saveSopravvive)" == "true" && "$(get saveEventIdNull)" == "true" && "$(get saveDateFresche)" == "true" ]]; then
+  ok "S4: il salvataggio sopravvive alla cancellazione dell'evento, con event_id NULL e le date finali dell'evento"
+else
+  fail "S4: salvataggio sopravvissuto=$(get saveSopravvive), event_id NULL=$(get saveEventIdNull), date aggiornate=$(get saveDateFresche) — 'Passati' mostrerebbe date vecchie o perderebbe la riga"
+fi
+
+# --- S5: la regola dei 12 mesi ----------------------------------------------
+if [[ "$(get r13)" == "false" && "$(get r11)" == "true" && "$(get rcut)" == "true" && "$(get rlive)" == "true" ]]; then
+  ok "S5: chi e' finito da 13 mesi sparisce; 11 mesi, esattamente alla soglia e un evento ancora vivo restano"
+else
+  fail "S5: R13 presente=$(get r13) (atteso false), R11=$(get r11), RCUT=$(get rcut), RLIVE=$(get rlive) (attesi true)"
+fi
+
+# --- S6: il dryRun conta e non cancella (non-vacuita') -----------------------
+if [[ "$(get dryEligible)" -ge 1 && "$(get dryCancellati)" -eq 0 ]]; then
+  ok "S6: il dryRun trova $(get dryEligible) salvataggio/i cancellabile/i e non ne cancella nessuno"
+else
+  fail "S6: dryRun eligible=$(get dryEligible) (atteso >= 1), cancellati dal dryRun=$(get dryCancellati) (atteso 0)"
+fi
+
 echo ""
 if [[ ${#failures[@]} -eq 0 ]]; then
-  echo "PASS: cancellazione eventi conclusi (S1 cancella, S2 rispetta gli eventi in corso, S3 nessuna resurrezione)"
+  echo "PASS: cancellazione eventi conclusi (S1 cancella, S2 rispetta gli eventi in corso, S3 nessuna resurrezione, S4-S6 salvataggi)"
   exit 0
 else
   echo "FAIL: cancellazione eventi conclusi — ${#failures[@]} sezione/i rossa/e"

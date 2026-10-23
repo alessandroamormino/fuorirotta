@@ -60,7 +60,8 @@ export default function Button({
 					style={{ animation: "spin 1s linear infinite" }}
 				/>
 			) : (
-				<span className={cn("whitespace-nowrap", truncate && "truncate")}>
+				// inline-flex: un'icona (svg, display block) accanto al testo resta sulla stessa riga
+				<span className={cn("whitespace-nowrap", truncate ? "truncate" : "inline-flex items-center gap-2")}>
 					{children}
 				</span>
 			)}

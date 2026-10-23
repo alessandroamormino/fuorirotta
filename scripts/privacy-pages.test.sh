@@ -16,8 +16,11 @@
 #       giorni di backup sono il default di scripts/cron-backup.sh
 #   P5  /cookie apre con la frase fissa e nomina i due cookie che il sign-in imposta
 #       (21-03: session_token e state), con la durata della sessione del codice
-#   P6  nessuna riga per funzioni non ancora uscite (elenco "Da riaggiungere" di 21-02)
+#   P6  nessuna riga per funzioni non ancora uscite (elenco "Da riaggiungere" di 21-02,
+#       meno gli eventi salvati e il calendario, usciti con la fase 22)
 #   P7  il dialogo di accesso e il piede di pagina collegano le pagine
+#   P8  i mesi di conservazione dei salvati sono SAVED_RETENTION_MONTHS (22-05), in /privacy e /cookie
+#   P9  /privacy nomina gli eventi salvati e il rimedio del collegamento al calendario ("Rigenera link")
 #
 # Regola della TAB letterale: niente `\t` nei grep (BSD e GNU differiscono),
 # solo classi [[:space:]]. Dove un grep puo' legittimamente non trovare nulla
@@ -34,6 +37,7 @@ shell="components/legal/LegalPage.tsx"
 purge="lib/retention/purgeAuth.ts"
 auth="lib/auth.ts"
 backup="scripts/cron-backup.sh"
+retention="lib/saved/retention.ts"
 
 fail() {
   echo "FAIL: $1"
@@ -43,7 +47,7 @@ fail() {
 # has <file> <testo letterale>: il testo compare nel file.
 has() { grep -qF -- "$2" "$1"; }
 
-for f in "${privacy}" "${cookie}" "${shell}" "${purge}" "${auth}" "${backup}" \
+for f in "${privacy}" "${cookie}" "${shell}" "${purge}" "${auth}" "${backup}" "${retention}" \
   components/account/SignIn.tsx components/Footer.tsx; do
   [[ -f "${f}" ]] || fail "${f} non esiste"
 done
@@ -112,7 +116,7 @@ echo "ok  P5 /cookie: frase fissa e due cookie con tipo"
 # --- P6 ------------------------------------------------------------------
 # Funzioni di fasi successive (21-02 "Da riaggiungere"): non devono comparire.
 for f in "${privacy}" "${cookie}"; do
-  hit="$(grep -niE 'eventi salvati|luoghi seguiti|categorie seguite|token del dispositivo|device token|notifiche push|notifiche|calendario personale|feed del calendario|token del feed|\.ics|Apple' "${f}" || true)"
+  hit="$(grep -niE 'luoghi seguiti|categorie seguite|token del dispositivo|device token|notifiche push|notifiche|Apple' "${f}" || true)"
   [[ -z "${hit}" ]] || fail "P6 ${f} parla di funzioni non ancora uscite: ${hit}"
 done
 echo "ok  P6 nessuna funzione non ancora uscita"
@@ -122,3 +126,19 @@ has components/account/SignIn.tsx 'href="/privacy"' || fail "P7 SignIn.tsx non c
 has components/Footer.tsx 'href="/privacy"' || fail "P7 Footer.tsx non collega /privacy"
 has components/Footer.tsx 'href="/cookie"' || fail "P7 Footer.tsx non collega /cookie"
 echo "ok  P7 dialogo di accesso e piede di pagina collegano le pagine"
+
+# --- P8 ------------------------------------------------------------------
+months="$(sed -nE 's/.*SAVED_RETENTION_MONTHS[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${retention}" | head -n 1 || true)"
+[[ -n "${months}" ]] || fail "P8 non trovo 'SAVED_RETENTION_MONTHS = N' in ${retention}"
+for f in "${privacy}" "${cookie}"; do
+  has "${f}" "${months} mesi" || fail "P8 ${f} non dice '${months} mesi' per i salvati (SAVED_RETENTION_MONTHS)"
+done
+# Un'altra durata in mesi sarebbe una dichiarazione falsa (specchio di P4).
+other_months="$(grep -oE '[0-9]+ mesi' "${privacy}" | grep -vxF "${months} mesi" || true)"
+[[ -z "${other_months}" ]] || fail "P8 ${privacy} dice anche '${other_months}': solo '${months} mesi' e' nel codice"
+echo "ok  P8 salvati ${months} mesi come il codice"
+
+# --- P9 ------------------------------------------------------------------
+has "${privacy}" "eventi salvati" || fail "P9 ${privacy} non nomina gli eventi salvati"
+has "${privacy}" "Rigenera link" || fail "P9 ${privacy} non nomina il rimedio 'Rigenera link' del collegamento al calendario"
+echo "ok  P9 eventi salvati e rimedio del collegamento al calendario"

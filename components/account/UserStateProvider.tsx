@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SignInDialog from "./SignIn";
+import SavedSync from "../saved/SavedSync";
 
 /**
  * Stato dell'utente per le isole client (D-01, D-07, D-19). Sul server e al
@@ -11,7 +12,10 @@ import SignInDialog from "./SignIn";
  * (React 418). La verita' si chiede dopo il mount a /api/v1/me/state.
  *
  * Qui vive anche l'UNICO dialogo di accesso dell'app: chi vuole farlo aprire
- * (icona della barra, in futuro il cuore della Fase 22) chiama openSignIn().
+ * (icona della barra, le righe di /salvati) chiama openSignIn(); chi sta in
+ * un'altra radice React, come il cuore nel popup della mappa, chiama
+ * requestSignIn(). Il cuore NON apre mai l'accesso a un tocco (D-04): solo
+ * l'azione dell'avviso del tetto dei 100 salvati.
  */
 export interface UserState {
 	/** null finche' lo stato non e' arrivato; false = interruttore spento sul server. */
@@ -23,6 +27,14 @@ export interface UserState {
 const GUEST: UserState = { enabled: null, user: null, openSignIn: () => {} };
 
 const UserStateContext = createContext<UserState>(GUEST);
+
+// Come il listener di notify(): una funzione di modulo, perche' il popup della mappa
+// e' una createRoot a parte e un Context non ci arriva. No-op finche' il provider non e' montato.
+let signInOpener: (() => void) | null = null;
+
+export function requestSignIn(): void {
+	signInOpener?.();
+}
 
 export function useUserState(): UserState {
 	return useContext(UserStateContext);
@@ -56,12 +68,20 @@ export function UserStateProvider({ children }: { children: ReactNode }) {
 		setOpen(true);
 	}, []);
 
+	useEffect(() => {
+		signInOpener = openSignIn;
+		return () => {
+			if (signInOpener === openSignIn) signInOpener = null;
+		};
+	}, [openSignIn]);
+
 	const value = useMemo<UserState>(() => ({ ...remote, openSignIn }), [remote, openSignIn]);
 
 	return (
 		<UserStateContext.Provider value={value}>
 			{children}
 			<SignInDialog open={open} onOpenChange={setOpen} returnFocusTo={returnFocusTo} />
+			<SavedSync />
 		</UserStateContext.Provider>
 	);
 }

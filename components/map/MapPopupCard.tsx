@@ -1,6 +1,7 @@
 "use client";
 
 import ShareButton from "@/components/ShareButton";
+import SaveHeart from "@/components/saved/SaveHeart";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 
 /** Un evento gia' normalizzato dalle properties della feature Mapbox. */
@@ -88,9 +89,16 @@ export default function MapPopupCard({ events, onClose }: MapPopupCardProps) {
 			<div className="flex flex-col gap-2">
 				{events.map((ev) => (
 					// Il bottone e' fratello della card, mai figlio: la radice della
-					// card e' un Link. pr-8 riserva i 32px dell'icona alla riga meta.
+					// card e' un Link. La card tiene pr-8 (il titolo non si stringe), la sola
+					// riga meta riserva 64px per i due pulsanti: cuore a right-8, condividi a right-0.
 					<div key={ev.id} className="relative">
-						<MiniEventCard event={ev} className="hover:bg-surface pr-8" />
+						<MiniEventCard event={ev} className="hover:bg-surface pr-8" metaClassName="pr-8" />
+						<SaveHeart
+							presentation="compact"
+							eventId={ev.id}
+							title={ev.title}
+							className="absolute bottom-1 right-8"
+						/>
 						<ShareButton
 							presentation="popup"
 							eventId={ev.id}

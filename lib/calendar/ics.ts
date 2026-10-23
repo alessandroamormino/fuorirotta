@@ -84,6 +84,8 @@ const encoder = new TextEncoder()
 
 /** Passo 1: caratteri di controllo (tranne LF/CR, gestiti dall'escape) e DEL diventano spazi. */
 const clean = (s: string) => s.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+/** Valori URI (niente escape del testo): ogni carattere di controllo, CR e LF compresi, si toglie (T-20-09). */
+const cleanUri = (s: string) => s.replace(/[\u0000-\u001f\u007f]/g, '')
 /** Passo 2: \ ; , e a capo secondo RFC 5545 §3.3.11. */
 const escapeText = (s: string) => s.replace(/[\\;,]/g, '\\$&').replace(/\r\n|\r|\n/g, '\\n')
 
@@ -112,20 +114,16 @@ function fold(line: string): string {
 const compact = (day: string) => day.replace(/-/g, '')
 const stampFormat = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
 
+const text = (name: string, value: string) => `${name}:${escapeText(clean(value))}`
+
 /**
- * Il file .ics di un evento. `uid` e `stamp` sono parametri (non Date.now()):
- * a input fissi l'output e' identico, quindi testabile. Lo schema dell'UID
- * (event-{id}@fuori-rotta.it) finisce nei calendari che importano il file:
- * il feed in abbonamento della fase 22 deve riusarlo, o compaiono duplicati.
+ * Le righe di un VEVENT, condivise dal file di un evento e dal feed: i due non
+ * possono divergere. Con `alarm`, un VALARM prima di END:VEVENT: TRIGGER -PT6H
+ * rispetto al DTSTART di giorno intero sono le 18:00 della sera prima nel
+ * fuso di chi guarda il calendario.
  */
-export function buildIcs(fields: CalendarFields, opts: { uid: string; stamp: Date }): string {
-  const text = (name: string, value: string) => `${name}:${escapeText(clean(value))}`
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Fuorirotta//Eventi//IT',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
+function eventLines(fields: CalendarFields, opts: { uid: string; stamp: Date; alarm?: boolean }): string[] {
+  return [
     'BEGIN:VEVENT',
     `UID:${clean(opts.uid)}`,
     `DTSTAMP:${stampFormat(opts.stamp)}`,
@@ -136,9 +134,46 @@ export function buildIcs(fields: CalendarFields, opts: { uid: string; stamp: Dat
     ...(fields.location ? [text('LOCATION', fields.location)] : []),
     text('DESCRIPTION', fields.details),
     // Valore URI: niente escape del testo, solo pulizia.
-    `URL:${clean(fields.eventUrl)}`,
+    `URL:${cleanUri(fields.eventUrl)}`,
     'TRANSP:TRANSPARENT',
+    ...(opts.alarm ? ['BEGIN:VALARM', 'ACTION:DISPLAY', text('DESCRIPTION', fields.title), 'TRIGGER:-PT6H', 'END:VALARM'] : []),
     'END:VEVENT',
+  ]
+}
+
+const HEADER = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Fuorirotta//Eventi//IT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH']
+
+/**
+ * Il file .ics di un evento. `uid` e `stamp` sono parametri (non Date.now()):
+ * a input fissi l'output e' identico, quindi testabile. L'UID del download
+ * singolo e' event-{id}@fuori-rotta.it; il feed in abbonamento NON lo riusa
+ * (scelta della fase 22, confermata dall'utente): usa saved-{id della riga
+ * salvata}@fuori-rotta.it, che resta uguale per tutta la vita del salvataggio,
+ * anche dopo il purge (event_id diventa NULL) e le fusioni (cambia l'id
+ * canonico). Il prezzo: chi ha scaricato anche il file singolo vede
+ * l'evento due volte nello stesso calendario.
+ */
+export function buildIcs(fields: CalendarFields, opts: { uid: string; stamp: Date }): string {
+  const lines = [...HEADER, ...eventLines(fields, opts), 'END:VCALENDAR']
+  return lines.map(fold).join(CRLF) + CRLF
+}
+
+/**
+ * Il feed in abbonamento: piu' eventi, ognuno con DTSTAMP dal salvataggio
+ * (mai l'ora della richiesta: due richieste uguali danno gli stessi byte) e,
+ * se `alarm`, il promemoria. REFRESH-INTERVAL e X-PUBLISHED-TTL sono
+ * suggerimenti ai client, mai promessi all'utente.
+ */
+export function buildFeed(
+  events: Array<{ fields: CalendarFields; uid: string; stamp: Date; alarm: boolean }>,
+  opts: { name: string }
+): string {
+  const lines = [
+    ...HEADER,
+    text('X-WR-CALNAME', opts.name),
+    'REFRESH-INTERVAL;VALUE=DURATION:PT12H',
+    'X-PUBLISHED-TTL:PT12H',
+    ...events.flatMap((e) => eventLines(e.fields, e)),
     'END:VCALENDAR',
   ]
   return lines.map(fold).join(CRLF) + CRLF
@@ -165,6 +200,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     dateStart: '2026-10-18T00:00:00.000Z',
     dateEnd: '2026-10-18T23:59:59.999Z',
   }
+  const fieldsOf0 = () => calendarFields(base, url)
   const ics = (e: Partial<CalendarSource>, u = url) => buildIcs(calendarFields({ ...base, ...e }, u), { uid: 'event-7@fuori-rotta.it', stamp })
 
   // DTEND esclusivo: un giorno, intervallo, cambio ora legale, fine anno.
@@ -218,6 +254,19 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   }
   assertCheck(!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(ics({ title: 'a\u0000b\u007fc\u001bd' })), 'caratteri di controllo ripuliti')
 
+  // Iniezione dal valore URI: CR/LF dentro eventUrl non deve aprire una riga nuova nel file ne' nel feed.
+  for (const sep of ['\r\n', '\n', '\r']) {
+    const tag = JSON.stringify(sep)
+    const evilUrl = `https://example.invalid/x${sep}ATTENDEE:mailto:x@example.invalid${sep}BEGIN:VALARM`
+    const one = buildIcs({ ...fieldsOf0(), eventUrl: evilUrl }, { uid: 'u', stamp })
+    const feed = buildFeed([{ fields: { ...fieldsOf0(), eventUrl: evilUrl }, uid: 'u', stamp, alarm: false }], { name: 'x' })
+    for (const [what, body] of [['file', one], ['feed', feed]] as const) {
+      assertCheck(!body.split('\r\n').some((l) => l.startsWith('ATTENDEE') || l === 'BEGIN:VALARM'), `URL, iniezione (${tag}, ${what}): nessuna riga iniettata`)
+      assertCheck(!unfold(body).split('\r\n').some((l) => l.startsWith('ATTENDEE')), `URL, iniezione (${tag}, ${what}): nessuna ATTENDEE dopo il dispiegamento`)
+      assertCheck(!/(^|[^\r])\n/.test(body) && !/\r(?!\n)/.test(body), `URL, iniezione (${tag}, ${what}): solo CRLF`)
+    }
+  }
+
   // calendarFields: titolo, luogo, dettagli.
   const f1 = calendarFields({ ...base, title: '  Sagra &amp; musica  ', locationName: 'Piazza Verdi', address: 'Via Roma 1' }, url)
   assertCheck(f1.title === 'Sagra & musica', `titolo decodificato: "${f1.title}"`)
@@ -236,6 +285,38 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   assertCheck(calendarFields({ ...base, sourceUrl: 'javascript:alert(1)' }, url).details === url, 'sourceUrl javascript: lasciato fuori')
   assertCheck(!ics({ sourceUrl: 'javascript:alert(1)' }).includes('javascript'), 'javascript: assente dal file')
   assertCheck(calendarFields({ ...base, description: 'Breve' }, url).details === `Breve\n\n${url}`, 'estratto breve non tagliato')
+
+  // Feed: zero eventi, due eventi con un solo promemoria, iniezione, forma, stabilita'.
+  const fieldsOf = (e: Partial<CalendarSource>) => calendarFields({ ...base, ...e }, url)
+  const feedOf = (name: string, evs: Array<{ fields: CalendarFields; alarm: boolean }>) =>
+    buildFeed(evs.map((e, i) => ({ ...e, uid: `saved-${i + 1}@fuori-rotta.it`, stamp })), { name })
+  const count = (body: string, line: string) => body.split('\r\n').filter((l) => l === line).length
+  const empty = feedOf('Fuorirotta - Salvati', [])
+  assertCheck(count(empty, 'BEGIN:VCALENDAR') === 1 && count(empty, 'END:VCALENDAR') === 1, 'feed vuoto: un solo VCALENDAR')
+  assertCheck(count(empty, 'BEGIN:VEVENT') === 0, 'feed vuoto: nessun VEVENT')
+  const two = feedOf('Fuorirotta - Salvati', [
+    { fields: fieldsOf({ title: 'Uno' }), alarm: true },
+    { fields: fieldsOf({ title: 'Due; con, virgole' }), alarm: false },
+  ])
+  assertCheck(count(two, 'BEGIN:VEVENT') === 2 && count(two, 'END:VEVENT') === 2, 'feed: due VEVENT')
+  assertCheck(count(two, 'BEGIN:VALARM') === 1 && count(two, 'END:VALARM') === 1, 'feed: un solo VALARM (solo uno ha alarm)')
+  assertCheck(two.includes('TRIGGER:-PT6H\r\n') && two.includes('ACTION:DISPLAY\r\n'), 'feed: TRIGGER:-PT6H e ACTION:DISPLAY')
+  assertCheck(two.includes('X-WR-CALNAME:Fuorirotta - Salvati\r\n'), 'feed: nome del calendario')
+  assertCheck(feedOf('x', [{ fields: fieldsOf({}), alarm: true }]).includes('DESCRIPTION:Sagra\r\nTRIGGER'), 'VALARM: DESCRIPTION e\' il titolo')
+  for (const sep of ['\r\n', '\n', '\r']) {
+    const evil = `Cattivo${sep}END:VEVENT${sep}ATTENDEE:mailto:x@example.invalid${sep}BEGIN:VALARM`
+    const feed = feedOf(evil, [{ fields: fieldsOf({ title: evil }), alarm: true }])
+    const lines = feed.split('\r\n')
+    const tag = JSON.stringify(sep)
+    assertCheck(count(feed, 'BEGIN:VEVENT') === 1 && count(feed, 'END:VEVENT') === 1, `feed, iniezione (${tag}): un solo VEVENT`)
+    assertCheck(count(feed, 'BEGIN:VALARM') === 1 && count(feed, 'END:VALARM') === 1, `feed, iniezione (${tag}): un solo VALARM`)
+    assertCheck(!lines.some((l) => l.startsWith('ATTENDEE')), `feed, iniezione (${tag}): nessuna ATTENDEE`)
+    assertCheck(!unfold(feed).split('\r\n').some((l) => l.startsWith('ATTENDEE')), `feed, iniezione (${tag}): nessuna ATTENDEE dopo il dispiegamento`)
+  }
+  const longFeed = feedOf('Nome ' + 'ò'.repeat(120), [{ fields: fieldsOf({ title: 'T' + 'è'.repeat(120), description: 'parola '.repeat(200) }), alarm: true }])
+  assertCheck(!/(^|[^\r])\n/.test(longFeed) && !/\r(?!\n)/.test(longFeed), 'feed: solo CRLF')
+  assertCheck(Math.max(...longFeed.split('\r\n').map((l) => encoder.encode(l).length)) <= 75, 'feed: righe fino a 75 ottetti')
+  assertCheck(feedOf('a', [{ fields: fieldsOf({}), alarm: true }]) === feedOf('a', [{ fields: fieldsOf({}), alarm: true }]), 'feed stabile a input fissi')
 
   if (failures > 0) {
     console.error(`[ics.ts] ${failures} verifiche fallite`)

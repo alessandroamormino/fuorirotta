@@ -38,7 +38,12 @@
 #       sessione, con il loro h1 (pubbliche anche a interruttore spento, D-16)
 #   A11 il piede "Informazioni legali" e' nell'HTML di /, della pagina evento e di
 #       /lombardia, con e senza sessione (l'identita' byte per byte e' A3)
-#   B2-B4, B7, B10, B11 come A2-A4, A7, A10, A11 con l'interruttore acceso
+#   A12 /salvati: statica (o) nella tabella delle rotte (A1), 200 con e senza sessione,
+#       h1 "Salvati" e robots noindex, stessi byte e header per tutti (D-03)
+#   A13 / e la pagina evento hanno nell'HTML del server il cuore da non salvato
+#       (aria-label "Salva: ...", aria-pressed="false") e il link "Salvati" senza
+#       puntino, con e senza sessione (SAVE-01; l'identita' byte per byte e' A3)
+#   B2-B4, B7, B10-B13 come A2-A4, A7, A10-A13 con l'interruttore acceso
 #   B5  interruttore acceso: /api/auth/ok 200, stato enabled:true e, col cookie,
 #       l'utente di prova
 #   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
@@ -160,7 +165,10 @@ for dyn in '/eventi/\[id\]' '/\[regione\]' '/\[regione\]/\[provincia\]'; do
   [[ "${row}" == *"ƒ"* ]] \
     || { grep -E '^[┌├└] ' "${tmp_dir}/build.log" || true; fail "A1: la rotta ${dyn} non e' dinamica (ƒ): '${row}'"; }
 done
-echo "ok  A1: / statico con 5m; /eventi/[id], /[regione], /[regione]/[provincia] dinamiche"
+row="$(route_row '/salvati')"
+[[ "${row}" == *"○"* ]] \
+  || { grep -E '^[┌├└] ' "${tmp_dir}/build.log" || true; fail "A1: la rotta /salvati non e' statica (○): '${row}'"; }
+echo "ok  A1: / statico con 5m; /salvati statico; /eventi/[id], /[regione], /[regione]/[provincia] dinamiche"
 for legal in /privacy /cookie; do
   row="$(route_row "${legal}")"
   [[ "${row}" == *"○"* ]] \
@@ -294,6 +302,42 @@ check_legal() {
   echo "ok  ${tag}11: il piede \"Informazioni legali\" e' nell'HTML di ${pages[*]}, con e senza sessione"
 }
 
+# check_saved <A|B>: A12/B12 e A13/B13. /salvati e' lo stesso guscio per tutti
+# (la lista arriva dal client); il cuore e il link "Salvati" sono nell'HTML del
+# server come "non salvato", per tutti: lo stato personale nasce solo dopo
+# l'idratazione. Due pagine senza cuore sarebbero identiche lo stesso, quindi
+# si cerca il cuore davvero, e l'assenza di qualunque stato "salvato".
+check_saved() {
+  local tag="$1" code name path i
+  code="$(fetch saved-anon /salvati)"
+  [[ "${code}" == "200" ]] || fail "${tag}12: GET /salvati: atteso 200, ottenuto ${code}"
+  code="$(fetch saved-sess /salvati "${session_cookie}")"
+  [[ "${code}" == "200" ]] || fail "${tag}12: GET /salvati con cookie: atteso 200, ottenuto ${code}"
+  grep -qF '>Salvati</h1>' "${tmp_dir}/saved-anon.b" \
+    || fail "${tag}12: /salvati: manca l'h1 'Salvati' nell'HTML del server"
+  grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/saved-anon.b" \
+    || fail "${tag}12: /salvati: manca il meta robots noindex"
+  same "${tag}12" saved-anon saved-sess \
+    || fail "${tag}12: /salvati: la risposta con la sessione differisce da quella anonima"
+  echo "ok  ${tag}12: /salvati 200, h1 e noindex, uguale con e senza sessione"
+  i=0
+  for path in "/" "/eventi/${event_id}"; do
+    i=$((i + 1))
+    for name in "anon1-${i}" "sess-${i}"; do
+      grep -qF 'aria-label="Salva: ' "${tmp_dir}/${name}.b" \
+        || fail "${tag}13: ${path} (${name}): manca il cuore (aria-label=\"Salva: ...\") nell'HTML del server"
+      grep -qF 'aria-pressed="false"' "${tmp_dir}/${name}.b" \
+        || fail "${tag}13: ${path} (${name}): manca aria-pressed=\"false\" nell'HTML del server"
+      grep -qF 'aria-label="Salvati"' "${tmp_dir}/${name}.b" \
+        || fail "${tag}13: ${path} (${name}): manca il link \"Salvati\" nell'intestazione"
+      if grep -qF 'aria-pressed="true"' "${tmp_dir}/${name}.b" || grep -qF 'data-saved-dot' "${tmp_dir}/${name}.b"; then
+        fail "${tag}13: ${path} (${name}): l'HTML del server contiene uno stato 'salvato' (aria-pressed=true o data-saved-dot)"
+      fi
+    done
+  done
+  echo "ok  ${tag}13: / e la pagina evento hanno il cuore non salvato e il link \"Salvati\" nell'HTML, mai uno stato salvato"
+}
+
 # start_server <env...>: next start di produzione sul DB locale.
 start_server() {
   bash scripts/dev-db.sh env "NEXT_TEST_DIST_DIR=${test_dist_dir}" "$@" npx next start -p "${port}" \
@@ -309,6 +353,7 @@ echo "ok  next start (produzione) sulla porta ${port}, interruttore spento, Post
 check_pages A
 check_icon A
 check_legal A
+check_saved A
 
 code="$(fetch a5ok /api/auth/ok)"
 [[ "${code}" == "404" ]] || fail "A5: /api/auth/ok a interruttore spento: atteso 404, ottenuto ${code}"
@@ -356,6 +401,7 @@ echo "ok  next start (produzione) sulla porta ${port}, interruttore acceso con v
 check_pages B
 check_icon B
 check_legal B
+check_saved B
 
 code="$(fetch b5ok /api/auth/ok)"
 [[ "${code}" == "200" ]] || fail "B5: /api/auth/ok a interruttore acceso: atteso 200, ottenuto ${code}"

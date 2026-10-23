@@ -85,6 +85,7 @@ model Event {
   canonicalEventId Int?     @map("canonical_event_id")
   canonicalEvent   Event?   @relation("EventCanonical", fields: [canonicalEventId], references: [id])
   duplicates       Event[]  @relation("EventCanonical")
+  savedEvents      SavedEvent[]
   mergeScore       Float?   @map("merge_score")
   mergeReason      String?  @map("merge_reason") @db.VarChar(255)
 
@@ -214,6 +215,8 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   sessions      Session[]
   accounts      Account[]
+  savedEvents   SavedEvent[]
+  calendarFeed  CalendarFeed?
 
   @@map("auth_user")
 }
@@ -273,4 +276,47 @@ model RateLimit {
   lastRequest BigInt @map("last_request")
 
   @@map("auth_rate_limit")
+}
+
+// Eventi salvati dall'utente (Fase 22). Ogni riga porta un'ISTANTANEA
+// dell'evento (D1, D-01): la riga in `events` viene cancellata 7 giorni dopo
+// la fine, mentre l'utente tiene il salvato 12 mesi in "Passati". Le colonne
+// dell'istantanea copiano i tipi delle colonne di `events`, cosi' eventDays()
+// legge le stesse cifre. event_id e' ON DELETE SET NULL, con il suo indice:
+// il purge notturno cancella 500 eventi per lotto e ogni cancellazione cerca
+// la colonna. La chiave unica e' (utente, sorgente, id di sorgente) e NON
+// (utente, event_id), perche' event_id diventa NULL e due NULL non
+// confliggono. user_id cancella a cascata come le altre figlie di auth_user.
+model SavedEvent {
+  id        Int       @id @default(autoincrement())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   Int?      @map("event_id")
+  event     Event?    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  title     String    @db.VarChar(500)
+  dateStart DateTime  @map("date_start") @db.Timestamp(6)
+  dateEnd   DateTime? @map("date_end") @db.Timestamp(6)
+  place     String?   @db.VarChar(255)
+  category  String    @map("canonical_category") @db.VarChar(50)
+  source    String    @db.VarChar(50)
+  sourceId  String    @map("source_id") @db.VarChar(255)
+  sourceUrl String?   @map("source_url") @db.VarChar(1000)
+  savedAt   DateTime  @default(now()) @map("saved_at") @db.Timestamptz(6)
+
+  @@unique([userId, source, sourceId])
+  @@index([eventId])
+  @@map("saved_events")
+}
+
+// Link del calendario dell'utente (D-11, D-13): una riga per utente. Il
+// segreto del link sta in chiaro perche' la finestra mostra lo stesso link a
+// ogni apertura, e lo stesso database contiene gia' la lista che il link espone.
+model CalendarFeed {
+  userId    String    @id @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique @db.VarChar(32)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  rotatedAt DateTime? @map("rotated_at") @db.Timestamptz(6)
+
+  @@map("calendar_feeds")
 }

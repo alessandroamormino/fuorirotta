@@ -8,7 +8,8 @@ import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
 import { eventDays } from "@/lib/eventDays";
 import { isEventOver } from "@/lib/eventStatus";
-import { todayInRome } from "@/lib/dateWindow";
+import { todayInRome, windowStartToday } from "@/lib/dateWindow";
+import { findSiblings, siblingKey } from "@/lib/saved/resolve";
 import { formatDayRange } from "@/lib/calendar/links";
 import { ogCardContent } from "@/lib/og/card";
 import { OG_VERSION } from "@/lib/og/brand";
@@ -189,6 +190,21 @@ export default async function EventDetailPage({
 	// Serializza l'evento composto per il client component (Date → string, Decimal → number)
 	const serializedEvent = composedEvent ? serializeEvent(composedEvent) : null;
 
+	// SAVE-06: le altre date della serie (solo altoadige, torino, roma). "Non ancora
+	// finita" lo decide qui il server, come eventOver: l'orologio del browser nel render
+	// darebbe un albero diverso (errore di idratazione di React). Un errore della query
+	// non deve portarsi via la pagina: senza il blocco l'evento resta leggibile.
+	const siblings = event
+		? (
+				await findSiblings([{ source: event.source, sourceId: event.sourceId }], windowStartToday())
+					.then((m) => m.get(siblingKey(event.source, event.sourceId)) ?? [])
+					.catch((err) => {
+						console.error("[eventi/[id]] altre date non disponibili:", err);
+						return [];
+					})
+			).filter((s) => !isEventOver(s.dateStart, s.dateEnd))
+		: [];
+
 	return (
 		<>
 			{jsonLd && (
@@ -211,6 +227,7 @@ export default async function EventDetailPage({
 				// SSR e idratazione stanno a cavallo della mezzanotte di Roma.
 				eventOver={composedEvent ? isEventOver(composedEvent.dateStart, composedEvent.dateEnd) : undefined}
 				canonicalUrl={isNaN(eventId) ? undefined : `${BASE_URL}/eventi/${eventId}`}
+				siblings={siblings}
 			/>
 		</>
 	);

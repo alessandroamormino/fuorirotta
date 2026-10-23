@@ -19,6 +19,8 @@ export interface MiniEventCardData {
 interface MiniEventCardProps {
 	event: MiniEventCardData;
 	className?: string;
+	/** Solo la riga meta: il popup vi riserva lo spazio del secondo pulsante senza stringere il titolo. */
+	metaClassName?: string;
 }
 
 /**
@@ -31,7 +33,7 @@ interface MiniEventCardProps {
  * Coerentemente con 12-03 (D-11): nessuno StatusBadge qui, la data
  * formattata basta — stesso contratto gia' scelto per il popup.
  */
-export default function MiniEventCard({ event, className }: MiniEventCardProps) {
+export default function MiniEventCard({ event, className, metaClassName }: MiniEventCardProps) {
 	return (
 		<Link href={`/eventi/${event.id}`} className={cn("flex gap-3 rounded-md p-1", className)}>
 			<div className="relative h-[62px] w-[62px] shrink-0 overflow-hidden rounded-sm bg-surface">
@@ -59,7 +61,7 @@ export default function MiniEventCard({ event, className }: MiniEventCardProps) 
 				{/* D-21 vincolante: comune+data su foreground-secondary, mai solo sul
 				    grigio debole in deroga WCAG — nessuna informazione qui vive solo
 				    su --muted-foreground-subtle. */}
-				<p className="mt-0.5 truncate text-xs text-foreground-secondary">
+				<p className={cn("mt-0.5 truncate text-xs text-foreground-secondary", metaClassName)}>
 					{event.locationName ? `${decodeHtmlEntities(event.locationName)} · ` : ""}
 					{formatEventRange(event.dateStart, event.dateEnd)}
 				</p>

@@ -5,6 +5,7 @@ import { CircleAlert, Download, LogOut, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import * as Dialog from "@/components/ui/Dialog";
 import { notify, queueNoticeAfterNavigation } from "@/components/account/NoticeHost";
+import { clearDeviceSaves } from "@/lib/saved/store";
 
 /**
  * Le tre azioni di /account che non toccano una lista: scarica i dati, esci,
@@ -80,6 +81,8 @@ export function SignOutButton() {
 		busy.current = true;
 		setPending(true);
 		if (await postEmpty("/api/auth/sign-out")) {
+			// D-07: niente della lista resta sul dispositivo dopo l'uscita.
+			clearDeviceSaves();
 			queueNoticeAfterNavigation("signed-out");
 			// eslint-disable-next-line @next/next/no-location-assign-relative-destination -- navigazione completa voluta: scarta l'albero React e lo stato utente in memoria
 			window.location.assign("/");
@@ -112,6 +115,7 @@ export function DeleteAccountSection() {
 		setPending(true);
 		setFailed(false);
 		if (await postEmpty("/api/auth/delete-user")) {
+			clearDeviceSaves();
 			queueNoticeAfterNavigation("deleted");
 			// eslint-disable-next-line @next/next/no-location-assign-relative-destination -- navigazione completa voluta: scarta l'albero React e lo stato utente in memoria
 			window.location.assign("/");

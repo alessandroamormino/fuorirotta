@@ -143,6 +143,38 @@ server {
 }
 ```
 
+#### Calendar feed (/cal/)
+
+`/cal/{token}.ics` is the personal calendar subscription of a signed-in user. The URL is a **capability**:
+whoever holds it reads that user's saved-events list, with no other credential. Consequences to know:
+
+- The token sits in the nginx access log for the logrotate window above (14 days). Users can invalidate a
+  leaked link with "Rigenera link" in the feed dialog; the old URL answers the same 404 as any unknown one.
+- Guessing is infeasible (128-bit token), but the route still reaches the database per request, so rate-limit
+  it at nginx. Not applied yet: do it on the server at the release that ships this phase.
+
+Sample `limit_req` (the zone goes in the `http` block, the `location` inside the existing `server`; proxy
+settings copied from `location /`):
+
+```nginx
+# http block
+limit_req_zone $binary_remote_addr zone=cal_feed:10m rate=30r/m;
+
+# server block, next to location /
+location /cal/ {
+    limit_req zone=cal_feed burst=10 nodelay;
+    proxy_pass http://fuorirotta-frontend:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_read_timeout 120s;
+}
+```
+
+Then `docker exec nginx nginx -t && docker exec nginx nginx -s reload`.
+
+The same release applies migration `20261023120000_add_saved_events` (it creates `calendar_feeds`):
+`scripts/deploy.sh` runs it before the build.
+
 ### Automated Scraping via Crontab
 
 **Adding a source to an already-scheduled region adds no crontab row.** The schedulable unit is the region, not the source: `trentino-alto-adige` has carried its `5 4 * * *` line since Phase 14, and Phase 19 (`altoadige.ts`) hangs a second source off that same line via `getSourcesByRegion`. For a release like that, skip the "Install it as a BLOCK" procedure below entirely — there is nothing to install — and run only step 4's `--check` to confirm the installed block still matches the registry. Proven by `scripts/crontab-generate.test.sh` S10 (asserts exactly one `trentino-alto-adige` line).
