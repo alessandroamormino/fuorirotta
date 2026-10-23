@@ -96,8 +96,16 @@ export interface DeviceEntry {
 // Larghezze delle colonne di SavedEvent: un'istantanea piu' larga non entrerebbe nella tabella (22-04).
 const MAX_ID = 999_999_999
 const isId = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= MAX_ID
-const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max
-const isDate = (v: unknown): v is string => typeof v === 'string' && !Number.isNaN(Date.parse(v))
+// Postgres rifiuta il NUL nel testo e le date fuori intervallo: la stessa guardia qui e nell'unione.
+const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max && !v.includes('\u0000')
+// Anni 2000..2100: abbastanza per ogni evento vero, ben dentro il range di `timestamp`.
+export const isDate = (v: unknown): v is string => {
+  if (typeof v !== 'string') return false
+  const t = Date.parse(v)
+  if (Number.isNaN(t)) return false
+  const y = new Date(t).getUTCFullYear()
+  return y >= 2000 && y <= 2100
+}
 
 /**
  * Dati altrui, corrotti o scritti a mano (T-22-05): restituisce l'istantanea
@@ -214,6 +222,10 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   assertCheck(validateSnap({ ...good, title: 'x'.repeat(501) }) === null, 'validateSnap: titolo di 501 caratteri')
   assertCheck(validateSnap({ ...good, title: 'x'.repeat(500) }) !== null, 'validateSnap: titolo di 500 caratteri ammesso')
   assertCheck(validateSnap({ ...good, dateStart: 'non una data' }) === null, 'validateSnap: dateStart illeggibile')
+  assertCheck(validateSnap({ ...good, dateStart: '+275760-09-13T00:00:00.000Z' }) === null, 'validateSnap: dateStart oltre il 2100 rifiutata')
+  assertCheck(validateSnap({ ...good, dateEnd: '-271821-04-20T00:00:00.000Z' }) === null, 'validateSnap: dateEnd prima del 2000 rifiutata')
+  assertCheck(validateSnap({ ...good, title: 'a\u0000b' }) === null && validateSnap({ ...good, place: 'a\u0000b' }) === null && validateSnap({ ...good, sourceId: 'a\u0000b' }) === null, 'validateSnap: NUL nei testi rifiutato')
+  assertCheck(parse([entry(1, good, { savedAt: '+275760-09-13T00:00:00.000Z' })]).length === 0, 'parse: savedAt fuori intervallo scartata')
   assertCheck(validateSnap(null) === null && validateSnap('x') === null && validateSnap([]) === null, 'validateSnap: non oggetti')
 
   assertCheck(parseDeviceList(null, NOW).length === 0, 'parse: null -> vuota')

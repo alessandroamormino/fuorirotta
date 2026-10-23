@@ -38,6 +38,8 @@
 #   M4  id sconosciuto con istantanea valida finita 20 giorni fa -> riga con event_id NULL; finita 13 mesi fa,
 #       sourceUrl javascript:, categoria 'Hacker', riga che esiste sotto un altro id -> nessuna riga;
 #       A con snap.title 'EVIL' -> il titolo della riga e' 'Gate A'
+#       date fuori intervallo (2100+), NUL nel titolo, savedAt prima del 2000 -> 200 e nessuna riga, mai 500;
+#       la voce buona accanto alle guaste entra
 #   M5  499 righe + tre elementi nuovi -> added 1, overCap 2
 #   M6  merge senza Origin -> 403, senza cookie -> 401, entrambi private, no-store
 #
@@ -504,6 +506,27 @@ code="$(merge m4f "${u5_cookie}" "{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/m4f.b" 'j.added')" == "1" ]] || fail "M4: A: atteso added 1, ottenuto ${code} '$(cat "${tmp_dir}/m4f.b")'"
 [[ "$(psql_dev "SELECT title FROM saved_events WHERE user_id = '${u5_user}' AND event_id = ${a_id}")" == "Gate A" ]] || fail "M4: il titolo della riga su A deve essere quello del server ('Gate A')"
 echo "ok  M4: sparito valido -> riga con event_id NULL; 13 mesi, javascript:, categoria Hacker, evento vivo sotto altro id -> nessuna riga; A ignora 'EVIL'"
+
+# M4 (WR-02): date fuori intervallo e NUL non fanno 500; la voce guasta si scarta e le buone entrano
+poison_body() { # <guasto: date|nul|savedat> -> corpo con una voce guasta (id 999999997) e una buona (id 999999998)
+  node -e '
+    const [kind, source] = process.argv.slice(1)
+    const d = (days) => new Date(Date.now() - days * 86400000).toISOString()
+    const snap = (sid, o = {}) => ({ title: "Poison", dateStart: d(21), dateEnd: d(20), place: "Altrove (XX)", category: "Sagre e feste", source, sourceId: sid, sourceUrl: "https://example.it/e", ...o })
+    const bad = kind === "date" ? snap("gone-poison", { dateStart: "+275760-09-13T00:00:00.000Z" })
+      : kind === "nul" ? snap("gone-poison", { title: "a\u0000b" })
+      : snap("gone-poison")
+    const badAt = kind === "savedat" ? "-271821-04-20T00:00:00.000Z" : d(1)
+    console.log(JSON.stringify({ items: [{ id: 999999997, savedAt: badAt, snap: bad }, { id: 999999998, savedAt: d(1), snap: snap("gone-mix", { title: "Buona" }) }] }))
+  ' "$1" "${test_source}"
+}
+for kind in date nul savedat; do
+  code="$(merge "m4p-${kind}" "${u5_cookie}" "$(poison_body "${kind}")")"
+  [[ "${code}" == "200" ]] || fail "M4: voce guasta (${kind}): atteso 200 (mai 500), ottenuto ${code} '$(cat "${tmp_dir}/m4p-${kind}.b")'"
+  [[ "$(gone_rows gone-poison)" == "0" ]] || fail "M4: voce guasta (${kind}): non deve entrare nessuna riga"
+done
+[[ "$(gone_rows gone-mix)" == "1" ]] || fail "M4: la voce buona accanto a quelle guaste deve entrare (una riga)"
+echo "ok  M4: date fuori intervallo, NUL nel titolo e savedAt fuori intervallo -> 200 senza 500, voce guasta scartata, voce buona unita"
 
 # --- M5: il tetto di 500 sull'account -----------------------------------------
 mint_user u6

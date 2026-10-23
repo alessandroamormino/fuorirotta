@@ -1,7 +1,7 @@
 import { assertSameOrigin, noStoreJson, requireUser } from '@/lib/account'
 import { prisma } from '@/lib/prisma'
 import { snapshotsForIds } from '@/lib/saved/resolve'
-import { ACCOUNT_CAP, GUEST_CAP, isExpired, validateSnap, type Snap } from '@/lib/saved/snapshot'
+import { ACCOUNT_CAP, GUEST_CAP, isDate, isExpired, validateSnap, type Snap } from '@/lib/saved/snapshot'
 
 // Unione della lista del dispositivo nell'account al primo accesso (AUTH-09).
 // Idempotente: la chiave unica (utente, sorgente, id di sorgente) e
@@ -38,8 +38,9 @@ export async function POST(req: Request): Promise<Response> {
     if (typeof item !== 'object' || item === null) continue
     const { id, savedAt, snap } = item as Record<string, unknown>
     if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1 || id > MAX_ID) continue
-    const at = typeof savedAt === 'string' ? new Date(savedAt) : null
-    if (!at || Number.isNaN(at.getTime())) continue
+    // isDate: anche il range (anni 2000..2100), Postgres rifiuta il resto e farebbe fallire tutta l'unione.
+    if (!isDate(savedAt)) continue
+    const at = new Date(savedAt)
     // Un orologio in anticipo non deve mettere i salvati "nel futuro".
     raw.push({ id, savedAt: at > now ? now : at, snap })
   }
@@ -82,24 +83,33 @@ export async function POST(req: Request): Promise<Response> {
   // D-15: entra quello che ci sta (le righe gia' presenti sono state tolte sopra).
   const room = Math.max(0, ACCOUNT_CAP - held.length)
   const take = fresh.slice(0, room)
-  const created =
-    take.length === 0
-      ? { count: 0 }
-      : await prisma.savedEvent.createMany({
-          data: take.map((c) => ({
-            userId,
-            eventId: c.eventId,
-            title: c.snap.title,
-            dateStart: new Date(c.snap.dateStart),
-            dateEnd: c.snap.dateEnd === null ? null : new Date(c.snap.dateEnd),
-            place: c.snap.place,
-            category: c.snap.category,
-            source: c.snap.source,
-            sourceId: c.snap.sourceId,
-            sourceUrl: c.snap.sourceUrl,
-            savedAt: c.savedAt,
-          })),
-          skipDuplicates: true,
-        })
+  let created: { count: number }
+  try {
+    created =
+      take.length === 0
+        ? { count: 0 }
+        : await prisma.savedEvent.createMany({
+            data: take.map((c) => ({
+              userId,
+              eventId: c.eventId,
+              title: c.snap.title,
+              dateStart: new Date(c.snap.dateStart),
+              dateEnd: c.snap.dateEnd === null ? null : new Date(c.snap.dateEnd),
+              place: c.snap.place,
+              category: c.snap.category,
+              source: c.snap.source,
+              sourceId: c.snap.sourceId,
+              sourceUrl: c.snap.sourceUrl,
+              savedAt: c.savedAt,
+            })),
+            skipDuplicates: true,
+          })
+  } catch (err) {
+    // Rete di sicurezza: un valore che Postgres rifiuta (P2039 = errore del database sul dato) e'
+    // un rifiuto definitivo, non un guasto da ritentare: 400, cosi' il client non ripete all'infinito.
+    // Connessione e resto restano 500 (il client riprova).
+    if ((err as { code?: string } | null)?.code === 'P2039') return noStoreJson({ error: 'bad-request' }, 400)
+    throw err
+  }
   return noStoreJson({ added: created.count, overCap: fresh.length - take.length })
 }
