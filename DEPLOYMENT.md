@@ -618,7 +618,7 @@ The database is managed by Prisma. Key models:
 **Production:** `scripts/deploy.sh` runs them, inside `node:24-alpine` with the
 checkout mounted — never on the host (Node 18; Prisma 7 needs >= 20.19):
 ```bash
-docker run --rm -v "$PWD:/app" -w /app node:24-alpine npx prisma migrate deploy
+docker run --rm -v "$PWD:/app" -w /app node:24.22.1-alpine npx prisma migrate deploy
 ```
 Prisma 7 no longer reads `.env` by itself: `prisma.config.ts` loads it with
 dotenv and points the CLI at `DIRECT_URL`.

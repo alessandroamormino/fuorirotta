@@ -10,7 +10,7 @@
  *
  * Uso, sull'host, dentro node:24-alpine col checkout montato — l'engine
  * Prisma in node_modules e' compilato per musl:
- *   docker run --rm -v $PWD:/app -w /app -e DATABASE_URL="$DB" node:24-alpine npx --yes tsx scripts/rls-check.ts
+ *   docker run --rm -v $PWD:/app -w /app -e DATABASE_URL="$DB" node:24.22.1-alpine npx --yes tsx scripts/rls-check.ts
  */
 import { prisma } from '../lib/prisma'
 
