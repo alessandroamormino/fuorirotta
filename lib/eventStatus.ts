@@ -31,7 +31,7 @@ const romeDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome'
  * Il giorno di calendario A ROMA dell'istante, come mezzanotte locale del
  * processo che gira. Gli scraper scrivono mezzanotte di Roma (2 settembre =
  * 2026-09-01T22:00Z, vedi lib/dateWindow.ts): `setHours(0)` sul server in UTC
- * dava "1 set", nel browser a Roma "2 set" — React #418 su ogni card in
+ * dava "1 set", nel browser a Roma "2 set" — errore React 418 su ogni card in
  * produzione (2026-10-16). Le cifre di Roma, rimesse in un Date locale, si
  * formattano e si confrontano uguali in qualunque fuso.
  */

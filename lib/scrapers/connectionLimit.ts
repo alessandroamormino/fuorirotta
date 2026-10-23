@@ -15,7 +15,7 @@
 
 // Fallback dichiarato: NON viene ricalcolato da `os.cpus()` perche' in un
 // container Docker `os.cpus().length` ignora i limiti cgroup e riporta le
-// CPU dell'HOST, non quelle assegnate al container (nodejs/node#28762). Se
+// CPU dell'HOST, non quelle assegnate al container (nodejs/node, issue 28762). Se
 // in futuro `DATABASE_URL` smette di dichiarare `connection_limit`, questo
 // valore va aggiornato A MANO, QUI E IN NESSUN ALTRO PUNTO, confrontandolo
 // con quanto osservato in produzione (vedi user_setup di 14-05-PLAN.md) —
