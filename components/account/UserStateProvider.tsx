@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SignInDialog from "./SignIn";
 import SavedSync from "../saved/SavedSync";
+import FollowSync from "../follow/FollowSync";
 
 /**
  * Stato dell'utente per le isole client (D-01, D-07, D-19). Sul server e al
@@ -82,6 +83,7 @@ export function UserStateProvider({ children }: { children: ReactNode }) {
 			{children}
 			<SignInDialog open={open} onOpenChange={setOpen} returnFocusTo={returnFocusTo} />
 			<SavedSync />
+			<FollowSync />
 		</UserStateContext.Provider>
 	);
 }
