@@ -95,7 +95,7 @@ timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 if docker run --rm \
   -v "${root_dir}:/app" -w /app \
   -e DATABASE_URL="${database_url}" \
-  node:24-alpine \
+  node:24.22.1-alpine \
   npx --yes tsx scripts/maintenance-job.ts; then
   status_word="ok"
 else
