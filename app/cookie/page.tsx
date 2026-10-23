@@ -55,9 +55,16 @@ export default function CookiePage() {
 
 			<h2 id="memoria-del-browser">Memoria del browser</h2>
 			<p>
-				Il sito salva alcune scelte nella memoria del tuo browser: il tema chiaro o scuro (localStorage) e, per
-				la sola scheda aperta, i filtri di ricerca e gli avvisi già mostrati (sessionStorage). Queste
-				informazioni restano sul tuo dispositivo e non vengono mai inviate al nostro server.
+				Il sito salva alcune scelte nella memoria del tuo browser: il tema chiaro o scuro (localStorage),
+				l&apos;elenco degli eventi salvati senza account (localStorage) e, per la sola scheda aperta, i filtri
+				di ricerca e gli avvisi già mostrati (sessionStorage).
+			</p>
+			<p>
+				L&apos;elenco degli eventi salvati contiene fino a 100 eventi; ogni voce si cancella da sola 12 mesi
+				dopo la fine dell&apos;evento. Per mostrartelo il sito invia al nostro server i numeri degli eventi,
+				solo per leggerne i dati aggiornati: il server non li conserva. L&apos;elenco si svuota quando viene
+				aggiunto al tuo account, all&apos;accesso, e quando esci. Le altre scelte (tema, filtri, avvisi
+				mostrati) restano sul tuo dispositivo e non vengono mai inviate al nostro server.
 			</p>
 
 			<h2 id="strumenti-di-terzi">Strumenti di terzi</h2>

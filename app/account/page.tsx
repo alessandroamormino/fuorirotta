@@ -65,7 +65,7 @@ export default async function AccountPage() {
 						</h2>
 						<Card className="p-6">
 							<p className="text-base text-foreground">
-								Scarica una copia di tutti i dati che abbiamo su di te: profilo, account collegati e sessioni, in formato JSON.
+								Scarica una copia di tutti i dati che abbiamo su di te: profilo, account collegati, sessioni, eventi salvati e collegamento al calendario, in formato JSON.
 							</p>
 							<div className="mt-4">
 								<ExportButton />
