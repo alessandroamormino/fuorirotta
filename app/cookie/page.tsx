@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 		"Quali cookie usa Fuorirotta: solo cookie tecnici necessari all'accesso, nessun cookie di profilazione o di terze parti.",
 };
 
-const UPDATED = "17 ottobre 2026";
+const UPDATED = "23 ottobre 2026";
 
 export default function CookiePage() {
 	return (
