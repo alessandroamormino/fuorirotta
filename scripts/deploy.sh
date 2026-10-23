@@ -87,8 +87,9 @@ log "checkout su $(git rev-parse --short HEAD)"
 # stanno qui: `npm ci` li riallinea alla versione, e il postinstall rigenera
 # il client. La CLI di Prisma legge .env tramite prisma.config.ts (dotenv
 # toglie da se' le virgolette) e migra su DIRECT_URL.
-in_node() { docker run --rm -v "${ROOT}:/app" -w /app node:24-alpine "$@"; }
-log "npm ci sul checkout (node:24-alpine)"
+# Versione esatta come nel Dockerfile: un tag mobile resterebbe quello in cache.
+in_node() { docker run --rm -v "${ROOT}:/app" -w /app node:24.22.1-alpine "$@"; }
+log "npm ci sul checkout (node:24.22.1-alpine)"
 in_node npm ci --no-audit --no-fund >/dev/null
 log "migrate deploy"
 in_node npx prisma migrate deploy

@@ -1,8 +1,11 @@
 # Dockerfile per Fuorirotta Frontend (Next.js)
 
 # Node 24 (LTS attiva): Node 20 e' a fine vita da aprile 2026, e Prisma 7
-# vuole almeno 20.19.
-FROM node:24-alpine AS base
+# vuole almeno 20.19. Versione esatta, non `node:24-alpine`: quel tag si muove
+# ma `docker compose build` riusa quello in cache, quindi una correzione di
+# sicurezza di Node non arriva mai da sola (CVE-2026-111497, ottobre 2026).
+# Stessa versione in scripts/deploy.sh e scripts/cron-maintenance.sh.
+FROM node:24.22.1-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
