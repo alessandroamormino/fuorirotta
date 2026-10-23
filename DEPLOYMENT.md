@@ -151,7 +151,7 @@ whoever holds it reads that user's saved-events list, with no other credential. 
 - The token sits in the nginx access log for the logrotate window above (14 days). Users can invalidate a
   leaked link with "Rigenera link" in the feed dialog; the old URL answers the same 404 as any unknown one.
 - Guessing is infeasible (128-bit token), but the route still reaches the database per request, so rate-limit
-  it at nginx. Not applied yet: do it on the server at the release that ships this phase.
+  it at nginx. Applied on the server with v2.7.0 (Phase 22, review WR-03).
 
 Sample `limit_req` (the zone goes in the `http` block, the `location` inside the existing `server`; proxy
 settings copied from `location /`):
