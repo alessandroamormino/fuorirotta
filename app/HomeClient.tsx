@@ -1246,7 +1246,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 				// la lista scorre SOTTO l'intestazione (barra, chip, Lista/Mappa)
 				// e l'intestazione scorre via con lei. A lg la barra e' sticky e
 				// <main> resta sotto, come prima.
-				className="fixed left-0 right-0 bottom-0 top-0 overflow-hidden lg:top-[var(--nav-h)]"
+				// A lg il guscio e' nel flusso, alto quanto lo schermo meno la barra:
+				// il footer sta sotto di lui, fuori vista finche' non si scorre oltre
+				// la fine della lista (lo scroll a catena porta su la pagina).
+				className="fixed left-0 right-0 bottom-0 top-0 overflow-hidden lg:relative lg:h-[calc(100dvh-var(--nav-h))]"
 				style={
 					{
 						"--nav-h": `${navHeight}px`,
@@ -1559,8 +1562,10 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								{/* D-13: piede statico in fondo alla lista, dentro lo scroller:
 								    scorre con le card e non esiste nella vista mappa a tutto
 								    schermo. Solo markup, nessuna sonda della vista in render, cosi'
-								    HTML del server e primo render del client coincidono. */}
-								<Footer />
+								    HTML del server e primo render del client coincidono. Solo
+								    mobile: a lg qui finirebbe sopra la paginazione ancorata,
+								    quindi vive sotto <main>. */}
+								<Footer className="lg:hidden" />
 							</div>
 						</div>
 						{/* D-6: paginazione numerata desktop, ANCORATA FUORI dallo
@@ -1815,6 +1820,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					</div>
 				</div>
 			</main>
+			<Footer className="hidden lg:block" />
 		</div>
 	);
 }
