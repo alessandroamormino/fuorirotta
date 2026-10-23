@@ -184,14 +184,16 @@ export default function CalendarFeedDialog() {
 								<div aria-hidden="true" className="h-11 rounded-md bg-muted-strong" />
 							) : (
 								<div className="flex flex-col gap-2 sm:flex-row">
-									<Input
-										id="feed-link"
-										readOnly
-										value={https}
-										size="md"
-										className="w-full min-w-0 bg-background"
-										onFocus={(event) => event.currentTarget.select()}
-									/>
+									<div className="min-w-0 flex-1">
+										<Input
+											id="feed-link"
+											readOnly
+											value={https}
+											size="md"
+											className="w-full min-w-0 bg-background"
+											onFocus={(event) => event.currentTarget.select()}
+										/>
+									</div>
 									<Button variant="secondary" size="md" className="flex-none" onClick={onCopy}>
 										{copy === "copied" ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
 										{copy === "copied" ? "Link copiato" : "Copia link"}
