@@ -24,6 +24,7 @@
 #   FE9  solo categoria Sagre e feste -> E1 e E3 presenti, total = tutti i canonici disponibili Sagre
 #   FE10 limit=2, offset=2&limit=2, limit=999 (al piu' 24), limit=abc (al piu' 10)
 #   FE11 utente senza follow -> {items:[], total:0, follows:0}
+#   FE15 con AUTH_ENABLED=false: /per-te 200 (guscio) e /api/v1/me/state -> {"enabled":false,"user":null}
 #   FE13 GET /per-te con e senza sessione -> 200, h1 'Per te', meta robots noindex, corpi identici
 #   FE14 utente con follow su R -> total 5 con limit=12 (una pagina); limit=2 a offset 0, 2, 4 -> 2, 2, 1 voci
 #   FE12 senza cookie -> 401 private, no-store; server riavviato con AUTH_ENABLED=false -> 404
@@ -340,4 +341,13 @@ code="$(get_feed fe12b "${u1_cookie}")"
 no_store fe12b FE12
 echo "ok  FE12: senza cookie 401 private, no-store; con AUTH_ENABLED=false 404 private, no-store"
 
-echo "Riepilogo: FE1-FE14 verdi"
+# --- FE15: accesso spento sul server, flag di build acceso -------------------------
+# Il guscio resta 200 (statico) e lo stato risponde enabled:false: su questa risposta il client
+# mostra "Per te non è disponibile". Solo la build senza flag e' un 404 (ramo di notFound).
+code="$(call fe15a GET /per-te)"
+[[ "${code}" == "200" ]] || fail "FE15: GET /per-te con AUTH_ENABLED=false: atteso 200, ottenuto ${code}"
+code="$(call fe15b GET /api/v1/me/state)"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/fe15b.b" 'JSON.stringify(j)')" == '{"enabled":false,"user":null}' ]] || fail "FE15: /api/v1/me/state atteso {\"enabled\":false,\"user\":null}, ottenuto ${code} '$(cat "${tmp_dir}/fe15b.b")'"
+echo "ok  FE15: AUTH_ENABLED=false -> /per-te 200 (guscio statico) e /api/v1/me/state {enabled:false,user:null}"
+
+echo "Riepilogo: FE1-FE15 verdi"
