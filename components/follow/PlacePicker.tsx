@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 import Input from "@/components/ui/Input";
 import { followId, type FollowItem, type PlaceKind } from "@/lib/follows/keys";
+import { cn } from "@/lib/utils";
 import { normalizeComuneName } from "@/lib/territorial/normalize";
 
 /**
@@ -48,6 +49,10 @@ export default function PlacePicker({
 	const [query, setQuery] = useState("");
 	const [options, setOptions] = useState<Option[]>([]);
 	const [open, setOpen] = useState(false);
+	const [active, setActive] = useState(-1);
+	// Testo dell'ultima ricerca finita bene e esito dell'ultima richiesta: servono alle righe "nessun luogo" e "errore".
+	const [searched, setSearched] = useState("");
+	const [failed, setFailed] = useState(false);
 	const [announce, setAnnounce] = useState("");
 
 	useEffect(
@@ -66,9 +71,16 @@ export default function PlacePicker({
 			.then((res) => (res.ok ? (res.json() as Promise<{ results: Option[] }>) : Promise.reject(new Error("search"))))
 			.then((json) => {
 				setOptions(json.results);
+				setSearched(text);
+				setFailed(false);
+				setActive(-1);
 				setOpen(true);
 			})
-			.catch(() => {});
+			.catch((err: unknown) => {
+				if (err instanceof DOMException && err.name === "AbortError") return;
+				setFailed(true);
+				setOpen(true);
+			});
 	};
 
 	const onChange = (text: string) => {
@@ -77,6 +89,7 @@ export default function PlacePicker({
 		if (normalizeComuneName(text).length < MIN_CHARS) {
 			abort.current?.abort();
 			setOptions([]);
+			setFailed(false);
 			setOpen(false);
 			return;
 		}
@@ -97,7 +110,27 @@ export default function PlacePicker({
 		document.getElementById(inputId)?.focus();
 	};
 
-	const listVisible = open && options.length > 0;
+	const listVisible = open && !failed && options.length > 0;
+	const message = open && !capReached ? (failed ? "Non riusciamo a cercare adesso. Riprova tra poco." : options.length === 0 && searched ? `Nessun luogo trovato per «${searched}».` : null) : null;
+
+	// Escape chiude SOLO la lista e, se era aperta, consuma l'evento: dentro una finestra il primo Escape non la chiude.
+	const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Escape") {
+			if (open) {
+				e.stopPropagation();
+				setOpen(false);
+			}
+		} else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			if (options.length === 0) return;
+			e.preventDefault();
+			setOpen(true);
+			const step = e.key === "ArrowDown" ? 1 : -1;
+			setActive((a) => (a < 0 ? (step > 0 ? 0 : options.length - 1) : (a + step + options.length) % options.length));
+		} else if (e.key === "Enter" && listVisible && active >= 0) {
+			e.preventDefault();
+			pick(options[active]);
+		}
+	};
 
 	return (
 		<div>
@@ -113,6 +146,7 @@ export default function PlacePicker({
 					aria-labelledby={labelId}
 					aria-expanded={listVisible}
 					aria-controls={listId}
+					aria-activedescendant={listVisible && active >= 0 ? `${listId}-${active}` : undefined}
 					aria-autocomplete="list"
 					placeholder="Cerca comune, provincia o regione"
 					autoComplete="off"
@@ -122,10 +156,19 @@ export default function PlacePicker({
 					value={query}
 					disabled={disabled || capReached}
 					onChange={(e) => onChange(e.target.value)}
+					onKeyDown={onKeyDown}
 				/>
 			</div>
 
-			{listVisible && (
+			{capReached && <p className="mt-2 text-sm text-foreground-secondary">Hai raggiunto il limite di 50 luoghi seguiti</p>}
+
+			{message && (
+				<p role="status" className="mt-2 text-sm text-foreground-secondary">
+					{message}
+				</p>
+			)}
+
+			{listVisible && !capReached && (
 				<ul
 					id={listId}
 					role="listbox"
@@ -139,9 +182,9 @@ export default function PlacePicker({
 								key={followId(o.kind, o.key)}
 								id={`${listId}-${i}`}
 								role="option"
-								aria-selected={false}
+								aria-selected={i === active}
 								aria-disabled={already || undefined}
-								className={i > 0 ? "border-t border-border-soft" : undefined}
+								className={cn(i > 0 && "border-t border-border-soft", i === active && "bg-muted-strong")}
 							>
 								<button
 									type="button"
