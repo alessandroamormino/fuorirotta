@@ -96,6 +96,12 @@ export async function loadFollows(): Promise<{ onboarded: boolean } | null> {
     for (const f of json.follows as FollowItem[]) {
       if (f && typeof f.kind === 'string' && typeof f.key === 'string') next.set(followId(f.kind, f.key), f)
     }
+    // Le chiavi con una richiesta in volo vincono sulla fotografia: il server non l'ha ancora vista.
+    for (const id of pending) {
+      const cur = items?.get(id)
+      if (cur) next.set(id, cur)
+      else next.delete(id)
+    }
     setItems(next, 'ready')
     return { onboarded: json.onboarded === true }
   } catch {
