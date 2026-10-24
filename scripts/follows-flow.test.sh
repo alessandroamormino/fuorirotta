@@ -32,6 +32,11 @@
 #   O2  POST onboarding {places:[],categories:[]} -> 200, GET onboarded true e follows [], una riga
 #       user_preferences con onboarded_at e zero follow
 #   O3  secondo POST -> 200 e onboarded_at invariato
+#   O4  Fatto con regione, comune e categoria -> 200 added 3, tre righe, onboarded true
+#   O5  49 luoghi + 2 nuovi -> 409 cap, ancora 49 righe e nessuna riga user_preferences
+#   O6  51 luoghi, categoria ignota, 8 categorie, comune/provincia ignoti, non JSON -> 400, zero righe
+#   O7  senza Origin 403, senza cookie 401, private, no-store
+#   O8  user_preferences ha solo user_id e onboarded_at; l'export di chi ha saltato e' pulito
 #   S9  server riavviato con AUTH_ENABLED=false: GET e PUT con cookie -> 404 private, no-store;
 #       GET /api/v1/me/state -> {"enabled":false,"user":null}
 set -euo pipefail
@@ -352,6 +357,53 @@ after="$(psql_dev "SELECT onboarded_at FROM user_preferences WHERE user_id = '${
 [[ "${code}" == "200" && -n "${before}" && "${before}" == "${after}" ]] || fail "O3: secondo POST: atteso 200 e onboarded_at invariato (prima '${before}', dopo '${after}', codice ${code})"
 echo "ok  O3: secondo POST -> 200 e onboarded_at invariato"
 
+# --- O4-O8: validazione, tetto, atomicita', nessun consenso -------------------------
+rows_of() { # <utente> -> "follow|preferenze"
+  echo "$(psql_dev "SELECT count(*) FROM user_follows WHERE user_id = '$1'")|$(psql_dev "SELECT count(*) FROM user_preferences WHERE user_id = '$1'")"
+}
+
+mint_user o4
+code="$(onboard o4p "${o4_cookie}" '{"places":[{"kind":"region","key":"lombardia"},{"kind":"comune","key":"016024"}],"categories":["Altro"]}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/o4p.b" 'j.onboarded + "|" + j.added')" == "true|3" ]] || fail "O4: attesi 200 e added 3, ottenuto ${code} ($(cat "${tmp_dir}/o4p.b"))"
+[[ "$(rows_of "${o4_user}")" == "3|1" ]] || fail "O4: attese tre righe di follow e una di preferenze, ottenuto '$(rows_of "${o4_user}")'"
+get_follows o4g "${o4_cookie}" >/dev/null
+[[ "$(json_get "${tmp_dir}/o4g.b" 'j.onboarded')" == "true" ]] || fail "O4: dopo Fatto onboarded deve essere true"
+echo "ok  O4: Fatto con regione, comune e categoria -> 200 added 3, tre righe, onboarded true"
+
+mint_user o5
+psql_dev "INSERT INTO user_follows (user_id, kind, key) SELECT '${o5_user}', 'comune', istat_code FROM comuni WHERE istat_code <> '016024' ORDER BY istat_code LIMIT 49" >/dev/null
+[[ "$(psql_dev "SELECT count(*) FROM user_follows WHERE user_id = '${o5_user}'")" == "49" ]] || fail "O5: fixture attesa di 49 righe (comuni nel DB locale?)"
+code="$(onboard o5p "${o5_cookie}" '{"places":[{"kind":"region","key":"lombardia"},{"kind":"comune","key":"016024"}],"categories":[]}')"
+[[ "${code}" == "409" && "$(json_get "${tmp_dir}/o5p.b" 'j.error')" == "cap" ]] || fail "O5: 49 + 2 nuovi: atteso 409 cap, ottenuto ${code} ($(cat "${tmp_dir}/o5p.b"))"
+[[ "$(rows_of "${o5_user}")" == "49|0" ]] || fail "O5: dopo il 409 devono restare 49 righe e nessuna preferenza, ottenuto '$(rows_of "${o5_user}")'"
+echo "ok  O5: 49 luoghi + 2 nuovi -> 409 cap, ancora 49 righe e nessuna riga user_preferences"
+
+mint_user o6
+fifty_one="$(node -e 'console.log(JSON.stringify({places: Array.from({length: 51}, () => ({kind: "region", key: "lombardia"})), categories: []}))')"
+eight="$(node -e 'console.log(JSON.stringify({places: [], categories: Array.from({length: 8}, () => "Altro")}))')"
+for bad in "${fifty_one}" '{"places":[],"categories":["Hacker"]}' "${eight}" '{"places":[{"kind":"comune","key":"999999"}],"categories":[]}' '{"places":[{"kind":"region","key":"lombardia"},{"kind":"province","key":"ZZ"}],"categories":[]}' '{"places":[{"kind":"category","key":"Altro"}],"categories":[]}' 'non json'; do
+  code="$(onboard o6b "${o6_cookie}" "${bad}")"
+  [[ "${code}" == "400" && "$(json_get "${tmp_dir}/o6b.b" 'j.error')" == "bad-request" ]] || fail "O6: ${bad:0:60}: atteso 400 bad-request, ottenuto ${code} ($(cat "${tmp_dir}/o6b.b"))"
+  no_store o6b O6
+  [[ "$(rows_of "${o6_user}")" == "0|0" ]] || fail "O6: una richiesta rifiutata ha scritto qualcosa ('$(rows_of "${o6_user}")')"
+done
+echo "ok  O6: 51 luoghi, categoria ignota, 8 categorie, comune e provincia ignoti, kind category fra i luoghi, non JSON -> 400 e zero righe"
+
+code="$(call o7a POST /api/v1/me/onboarding -H "${o6_cookie}" -H 'Content-Type: application/json' --data '{"places":[],"categories":[]}')"
+[[ "${code}" == "403" ]] || fail "O7: senza Origin: atteso 403, ottenuto ${code}"
+no_store o7a O7
+code="$(call o7b POST /api/v1/me/onboarding -H "Origin: ${origin}" -H 'Content-Type: application/json' --data '{"places":[],"categories":[]}')"
+[[ "${code}" == "401" ]] || fail "O7: senza cookie: atteso 401, ottenuto ${code}"
+no_store o7b O7
+[[ "$(rows_of "${o6_user}")" == "0|0" ]] || fail "O7: una richiesta rifiutata ha scritto qualcosa"
+echo "ok  O7: senza Origin 403, senza cookie 401, private, no-store, nessuna riga"
+
+[[ "$(psql_dev "SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.columns WHERE table_name = 'user_preferences'")" == "onboarded_at,user_id" ]] || fail "O8: user_preferences deve avere solo user_id e onboarded_at (nessuna colonna di consenso)"
+code="$(call o8 GET /api/v1/me/export -H "${o1_cookie}")"
+[[ "${code}" == "200" ]] || fail "O8: export: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/o8.b" 'j.follows.length + "|" + j.preferences.length + "|" + Object.keys(j.preferences[0]).join()')" == "0|1|onboardedAt" ]] || fail "O8: l'export di chi ha saltato deve avere follows [] e preferences [{onboardedAt}], ottenuto '$(json_get "${tmp_dir}/o8.b" 'JSON.stringify({f: j.follows, p: j.preferences})')'"
+echo "ok  O8: user_preferences ha solo user_id e onboarded_at; l'export di chi ha saltato: follows [] e preferences [{onboardedAt}]"
+
 # --- S9: con l'accesso spento (a runtime) l'API non esiste piu' -----------------
 stop_server
 bash scripts/dev-db.sh env "${auth_env[@]}" AUTH_ENABLED=false npx next dev -p "${port}" >"${tmp_dir}/dev-server-off.log" 2>&1 &
@@ -367,4 +419,4 @@ code="$(call s9s GET /api/v1/me/state -H "${u1_cookie}")"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/s9s.b" 'JSON.stringify(j)')" == '{"enabled":false,"user":null}' ]] || fail "S9: state con accesso spento: atteso {enabled:false,user:null}, ottenuto ${code} '$(cat "${tmp_dir}/s9s.b")'"
 echo "ok  S9: accesso spento -> GET e PUT 404 private, no-store; state {enabled:false,user:null}"
 
-echo "Riepilogo: S1-S9, H1-H3 e O1-O3 verdi"
+echo "Riepilogo: S1-S9, H1-H3 e O1-O8 verdi"

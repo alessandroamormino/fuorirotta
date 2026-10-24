@@ -11,7 +11,9 @@ import {
   regionChip,
   sortFollows,
   type FollowItem,
+  followId,
   type FollowKind,
+  type PlaceKind,
 } from '@/lib/follows/keys'
 
 /** Etichetta di una chiave gia' ben formata; null = comune o provincia che non esistono. */
@@ -30,6 +32,23 @@ export async function resolveFollowLabel(kind: FollowKind, key: string): Promise
       return c ? comuneChip(c.name, c.provinceCode) : null
     }
   }
+}
+
+/** followId dei luoghi che esistono davvero: una query sui comuni, una lettura dell'elenco province, le regioni (gia' a insieme chiuso) in memoria. */
+export async function existingPlaceKeys(places: readonly { kind: PlaceKind; key: string }[]): Promise<Set<string>> {
+  const comuneKeys = places.filter((p) => p.kind === 'comune').map((p) => p.key)
+  const [comuni, provinces] = await Promise.all([
+    comuneKeys.length ? prisma.comune.findMany({ where: { istatCode: { in: comuneKeys } }, select: { istatCode: true } }) : [],
+    places.some((p) => p.kind === 'province') ? getProvinceDirectory() : [],
+  ])
+  const codes = new Set(provinces.map((p) => p.provinceCode))
+  const found = new Set<string>()
+  for (const c of comuni) found.add(followId('comune', c.istatCode))
+  for (const p of places) {
+    if (p.kind === 'region' && VALID_REGION_SLUGS.has(p.key)) found.add(followId('region', p.key))
+    else if (p.kind === 'province' && codes.has(p.key)) found.add(followId('province', p.key))
+  }
+  return found
 }
 
 /** Lista dell'utente con le etichette: tre letture in tutto, niente N+1. */
