@@ -220,6 +220,47 @@ http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.
 [[ "${http_code}" == "404" ]] || fail "prova di non-vacuita': /api/comuni/search-inesistente atteso 404, ottenuto ${http_code} — il controllo del codice HTTP non sa fallire"
 echo "ok  GET /api/comuni/search-inesistente risponde 404 — il gate e' dimostrato capace di fallire"
 
+# --- PS1-PS3. /api/places/search: regioni, province, comuni (Fase 23, D-09) --
+places_url="http://127.0.0.1:${port}/api/places/search"
+
+resp_ps1="${tmp_dir}/ps1.json"
+http_code="$(curl -s -o "${resp_ps1}" -w '%{http_code}' --max-time 15 "${places_url}?q=lomb")"
+[[ "${http_code}" == "200" ]] || fail "PS1: atteso 200 su q=lomb, ottenuto ${http_code}"
+node -e "
+  const r = require('${resp_ps1}').results[0];
+  if (!r) throw new Error('nessun risultato per q=lomb');
+  const want = { kind: 'region', key: 'lombardia', label: 'Lombardia', sublabel: 'Regione', chip: 'Lombardia' };
+  for (const k of Object.keys(want)) if (r[k] !== want[k]) throw new Error(k + ': atteso ' + want[k] + ', ottenuto ' + r[k]);
+" || fail "PS1: il primo risultato di q=lomb non e' la regione Lombardia"
+echo "ok  PS1 GET /api/places/search?q=lomb: per prima la regione Lombardia (sublabel Regione, chip Lombardia)"
+
+resp_ps2="${tmp_dir}/ps2.json"
+http_code="$(curl -s -o "${resp_ps2}" -w '%{http_code}' --max-time 15 "${places_url}?q=berg")"
+[[ "${http_code}" == "200" ]] || fail "PS2: atteso 200 su q=berg, ottenuto ${http_code}"
+node -e "
+  const res = require('${resp_ps2}').results;
+  const pi = res.findIndex((r) => r.kind === 'province' && r.key === 'BG');
+  const ci = res.findIndex((r) => r.kind === 'comune' && r.key === '016024');
+  if (pi < 0) throw new Error('provincia BG assente');
+  if (ci < 0) throw new Error('comune 016024 assente');
+  if (pi > ci) throw new Error('la provincia deve precedere il comune');
+  const p = res[pi], c = res[ci];
+  if (p.label !== 'Bergamo' || p.sublabel !== 'Provincia · Lombardia' || p.chip !== 'Provincia di Bergamo') throw new Error('provincia: ' + JSON.stringify(p));
+  if (c.label !== 'Bergamo' || c.sublabel !== 'Comune · provincia di Bergamo' || c.chip !== 'Bergamo (BG)') throw new Error('comune: ' + JSON.stringify(c));
+" || fail "PS2: q=berg non da' provincia e comune di Bergamo nella forma attesa"
+echo "ok  PS2 q=berg: provincia BG (Provincia di Bergamo) prima del comune 016024 (Bergamo (BG))"
+
+resp_ps3="${tmp_dir}/ps3.json"
+http_code="$(curl -s -o "${resp_ps3}" -w '%{http_code}' --max-time 15 "${places_url}?q=san")"
+[[ "${http_code}" == "200" ]] || fail "PS3: atteso 200 su q=san, ottenuto ${http_code}"
+node -e "
+  const res = require('${resp_ps3}').results;
+  if (res.length === 0 || res.length > 8) throw new Error('numero di risultati fuori da 1..8: ' + res.length);
+  for (const r of res) for (const k of ['kind', 'key', 'label', 'sublabel', 'chip'])
+    if (typeof r[k] !== 'string' || !r[k]) throw new Error(k + ' vuoto in ' + JSON.stringify(r));
+" || fail "PS3: q=san supera 8 risultati o una riga ha campi vuoti"
+echo "ok  PS3 q=san: al massimo 8 risultati, ogni riga con kind/key/label/sublabel/chip non vuoti"
+
 stop_server
 
 echo "PASS: contratto autocomplete comuni (UI-02, D-01, D-03, D-04, D-07, T-09-01, T-09-05)"
