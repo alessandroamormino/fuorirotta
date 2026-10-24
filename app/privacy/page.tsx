@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 		"Quali dati personali tratta Fuorirotta, perché, con quali fornitori, per quanto tempo e come esercitare i tuoi diritti.",
 };
 
-const UPDATED = "23 ottobre 2026";
+const UPDATED = "24 ottobre 2026";
 
 const INDEX = [
 	{ id: "titolare", label: "Titolare del trattamento" },
