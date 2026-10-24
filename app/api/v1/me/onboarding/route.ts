@@ -1,4 +1,5 @@
 import { assertSameOrigin, noStoreJson, requireUser } from '@/lib/account'
+import { CANONICAL_CATEGORIES } from '@/lib/categories/taxonomy'
 import { prisma } from '@/lib/prisma'
 import { PLACE_CAP, followId, isPlaceKind, isWellFormed, type FollowKind, type PlaceKind } from '@/lib/follows/keys'
 import { existingPlaceKeys } from '@/lib/follows/server'
@@ -10,7 +11,6 @@ import { existingPlaceKeys } from '@/lib/follows/server'
 export const dynamic = 'force-dynamic'
 
 type Pick = { kind: FollowKind; key: string }
-const MAX_CATEGORIES = 7
 
 export async function POST(req: Request): Promise<Response> {
   const blocked = assertSameOrigin(req)
@@ -24,7 +24,7 @@ export async function POST(req: Request): Promise<Response> {
     return noStoreJson({ error: 'bad-request' }, 400)
   }
   const { places, categories } = (body ?? {}) as { places?: unknown; categories?: unknown }
-  if (!Array.isArray(places) || !Array.isArray(categories) || places.length > PLACE_CAP || categories.length > MAX_CATEGORIES) {
+  if (!Array.isArray(places) || !Array.isArray(categories) || places.length > PLACE_CAP || categories.length > CANONICAL_CATEGORIES.length) {
     return noStoreJson({ error: 'bad-request' }, 400)
   }
 
