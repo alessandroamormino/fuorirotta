@@ -24,6 +24,8 @@
 #   FE9  solo categoria Sagre e feste -> E1 e E3 presenti, total = tutti i canonici disponibili Sagre
 #   FE10 limit=2, offset=2&limit=2, limit=999 (al piu' 24), limit=abc (al piu' 10)
 #   FE11 utente senza follow -> {items:[], total:0, follows:0}
+#   FE13 GET /per-te con e senza sessione -> 200, h1 'Per te', meta robots noindex, corpi identici
+#   FE14 utente con follow su R -> total 5 con limit=12 (una pagina); limit=2 a offset 0, 2, 4 -> 2, 2, 1 voci
 #   FE12 senza cookie -> 401 private, no-store; server riavviato con AUTH_ENABLED=false -> 404
 set -euo pipefail
 
@@ -303,6 +305,28 @@ code="$(get_feed fe11 "${fx_cookie}")"
 no_store fe11 FE11
 echo "ok  FE11: utente senza follow -> {items:[], total:0, follows:0}"
 
+# --- FE13: /per-te e' un guscio statico, uguale per tutti ---------------------------
+for who in anon session; do
+  if [[ "${who}" == "anon" ]]; then code="$(call "fe13${who}" GET /per-te)"; else code="$(call "fe13${who}" GET /per-te -H "${u1_cookie}")"; fi
+  [[ "${code}" == "200" ]] || fail "FE13 (${who}): GET /per-te: atteso 200, ottenuto ${code}"
+  grep -q '>Per te</h1>' "${tmp_dir}/fe13${who}.b" || fail "FE13 (${who}): manca l'h1 'Per te'"
+  grep -qE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/fe13${who}.b" || fail "FE13 (${who}): manca il meta robots noindex"
+done
+# Il dev server stampa un id casuale per richiesta (self.__next_r): fuori dal confronto, il resto deve coincidere.
+[[ "$(sed 's/__next_r="[^"]*"//' "${tmp_dir}/fe13anon.b" | cksum)" == "$(sed 's/__next_r="[^"]*"//' "${tmp_dir}/fe13session.b" | cksum)" ]] || fail "FE13: /per-te con e senza sessione ha corpi diversi"
+echo "ok  FE13: /per-te con e senza sessione -> 200, h1 'Per te', noindex, corpi identici"
+
+# --- FE14: l'aritmetica di pagina del client (12 per pagina) ---------------------
+set_follows "region:${region_slug}"
+get_feed fe14a "${fx_cookie}" '?limit=12' >/dev/null
+[[ "$(total_of fe14a)" == "5" && "$(json_get "${tmp_dir}/fe14a.b" 'j.items.length')" == "5" ]] || fail "FE14: limit=12 -> attesi total 5 e 5 voci (una sola pagina), ottenuti total $(total_of fe14a)"
+get_feed fe14b "${fx_cookie}" '?limit=2&offset=0' >/dev/null
+get_feed fe14c "${fx_cookie}" '?limit=2&offset=2' >/dev/null
+get_feed fe14d "${fx_cookie}" '?limit=2&offset=4' >/dev/null
+[[ "$(ids_of fe14b),$(ids_of fe14c),$(ids_of fe14d)" == "${e7},${e1},${e3},${e2},${e6}" ]] || fail "FE14: pagine da 2 attese E7,E1 | E3,E2 | E6, ottenuto $(ids_of fe14b) | $(ids_of fe14c) | $(ids_of fe14d)"
+[[ "$(json_get "${tmp_dir}/fe14d.b" 'j.items.length')" == "1" && "$(total_of fe14d)" == "5" ]] || fail "FE14: l'ultima pagina attesa di 1 voce con total 5"
+echo "ok  FE14: limit=12 -> 5 voci in una pagina; limit=2 a offset 0, 2, 4 -> 2, 2, 1 voci nell'ordine di FE4"
+
 # --- FE12: sessione e interruttore --------------------------------------------------
 code="$(call fe12a GET /api/v1/me/feed)"
 [[ "${code}" == "401" ]] || fail "FE12: senza cookie atteso 401, ottenuto ${code}"
@@ -316,4 +340,4 @@ code="$(get_feed fe12b "${u1_cookie}")"
 no_store fe12b FE12
 echo "ok  FE12: senza cookie 401 private, no-store; con AUTH_ENABLED=false 404 private, no-store"
 
-echo "Riepilogo: FE1-FE12 verdi"
+echo "Riepilogo: FE1-FE14 verdi"
