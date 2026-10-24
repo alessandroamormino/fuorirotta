@@ -22,6 +22,10 @@
 #   S7  tetto: 49 luoghi per INSERT ... SELECT, il 50o (016024) -> 200, il 51o (regione) -> 409 cap e
 #       50 righe, 016024 di nuovo -> 200, categoria -> 200 (esente); un comune sparito dai comuni
 #       si legge 'Comune non più disponibile'
+#   S8  DELETE di un altro utente su un follow di u1 -> 200 removed 0 e la riga resta; PUT senza Origin
+#       -> 403, senza cookie -> 401, GET senza cookie -> 401, tutto private, no-store
+#   S9  server riavviato con AUTH_ENABLED=false: GET e PUT con cookie -> 404 private, no-store;
+#       GET /api/v1/me/state -> {"enabled":false,"user":null}
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -257,4 +261,37 @@ get_follows s7get "${u2_cookie}" >/dev/null
 [[ "$(json_get "${tmp_dir}/s7get.b" 'j.follows.filter((f) => f.key === "000000").map((f) => f.label).join()')" == "Comune non più disponibile" ]] || fail "S7: un comune sparito deve leggersi 'Comune non più disponibile'"
 echo "ok  S7: 50o -> 200, 51o -> 409 cap con 50 luoghi, gia' seguito -> 200, categoria esente, comune sparito etichettato"
 
-echo "Riepilogo: S1-S7 verdi"
+
+# --- S8: la cancellazione e' dell'utente della sessione; Origin e sessione ------
+code="$(del s8 region toscana "${u2_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s8.b" 'j.removed')" == "0" ]] || fail "S8: DELETE di un altro utente: atteso 200 removed 0, ottenuto ${code} '$(cat "${tmp_dir}/s8.b")'"
+no_store s8 S8
+[[ "$(follow_rows "${u1_user}" region toscana)" == "1" ]] || fail "S8: il DELETE di un altro utente ha tolto la riga di u1"
+code="$(call s8a PUT /api/v1/me/follows -H "${u1_cookie}" -H 'Content-Type: application/json' --data '{"kind":"region","key":"lombardia"}')"
+[[ "${code}" == "403" ]] || fail "S8: PUT senza Origin: atteso 403, ottenuto ${code}"
+no_store s8a S8
+code="$(call s8b PUT /api/v1/me/follows -H "Origin: ${origin}" -H 'Content-Type: application/json' --data '{"kind":"region","key":"lombardia"}')"
+[[ "${code}" == "401" ]] || fail "S8: PUT senza cookie: atteso 401, ottenuto ${code}"
+no_store s8b S8
+code="$(call s8c GET /api/v1/me/follows)"
+[[ "${code}" == "401" ]] || fail "S8: GET senza cookie: atteso 401, ottenuto ${code}"
+no_store s8c S8
+[[ "$(follow_rows "${u1_user}" region lombardia)" == "0" ]] || fail "S8: una richiesta rifiutata ha scritto una riga"
+echo "ok  S8: DELETE di un altro utente -> removed 0 e la riga resta; PUT senza Origin 403, senza cookie 401, GET senza cookie 401, private, no-store"
+
+# --- S9: con l'accesso spento (a runtime) l'API non esiste piu' -----------------
+stop_server
+bash scripts/dev-db.sh env "${auth_env[@]}" AUTH_ENABLED=false npx next dev -p "${port}" >"${tmp_dir}/dev-server-off.log" 2>&1 &
+server_pid=$!
+wait_for_port "${port}"
+code="$(get_follows s9g "${u1_cookie}")"
+[[ "${code}" == "404" ]] || fail "S9: GET con accesso spento: atteso 404, ottenuto ${code}"
+no_store s9g S9
+code="$(put s9p region lombardia "${u1_cookie}")"
+[[ "${code}" == "404" ]] || fail "S9: PUT con accesso spento: atteso 404, ottenuto ${code}"
+no_store s9p S9
+code="$(call s9s GET /api/v1/me/state -H "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s9s.b" 'JSON.stringify(j)')" == '{"enabled":false,"user":null}' ]] || fail "S9: state con accesso spento: atteso {enabled:false,user:null}, ottenuto ${code} '$(cat "${tmp_dir}/s9s.b")'"
+echo "ok  S9: accesso spento -> GET e PUT 404 private, no-store; state {enabled:false,user:null}"
+
+echo "Riepilogo: S1-S9 verdi"
