@@ -483,3 +483,18 @@ input[type="range"].slider::-moz-range-thumb:hover {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+/* "Per te" (Fase 23): il riquadro riservato in cima alla lista della home.
+   Esiste vuoto nell'HTML di tutti (solo con l'accesso attivo alla build) e si
+   apre prima del primo paint quando lo script nel <head> trova il suggerimento
+   del dispositivo (html[data-perte]). --per-te-h sta qui, NON in :root/.dark:
+   e' una misura di layout, non un token di colore. 148px = intestazione 44 +
+   riga 80 + margine 24; e' l'unico posto in cui correggerla dopo averla misurata. */
+.per-te-slot {
+  --per-te-h: 148px;
+  height: 0;
+  overflow: hidden;
+}
+html[data-perte] .per-te-slot {
+  height: var(--per-te-h);
+}

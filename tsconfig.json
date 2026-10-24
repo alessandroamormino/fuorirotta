@@ -55,7 +55,9 @@
     ".next-saved-flow-test/types/**/*.ts",
     ".next-saved-flow-test/dev/types/**/*.ts",
     ".next-follows-flow-test/types/**/*.ts",
-    ".next-follows-flow-test/dev/types/**/*.ts"
+    ".next-follows-flow-test/dev/types/**/*.ts",
+    ".next-follows-feed-test/types/**/*.ts",
+    ".next-follows-feed-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
