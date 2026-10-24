@@ -24,6 +24,8 @@
 #       si legge 'Comune non più disponibile'
 #   S8  DELETE di un altro utente su un follow di u1 -> 200 removed 0 e la riga resta; PUT senza Origin
 #       -> 403, senza cookie -> 401, GET senza cookie -> 401, tutto private, no-store
+#   H1  GET /lombardia/bergamo con e senza cookie: aria-label "Segui provincia di Bergamo", aria-pressed="false", mai "true"
+#   H2  PUT {province, BG} con un utente nuovo -> 200 label 'Provincia di Bergamo' e GET la elenca
 #   S9  server riavviato con AUTH_ENABLED=false: GET e PUT con cookie -> 404 private, no-store;
 #       GET /api/v1/me/state -> {"enabled":false,"user":null}
 set -euo pipefail
@@ -279,6 +281,24 @@ no_store s8c S8
 [[ "$(follow_rows "${u1_user}" region lombardia)" == "0" ]] || fail "S8: una richiesta rifiutata ha scritto una riga"
 echo "ok  S8: DELETE di un altro utente -> removed 0 e la riga resta; PUT senza Origin 403, senza cookie 401, GET senza cookie 401, private, no-store"
 
+# --- H1: la provincia si segue dalla sua pagina; HTML del server uguale per tutti --
+for who in anon session; do
+  if [[ "${who}" == "anon" ]]; then code="$(call "h1${who}" GET /lombardia/bergamo)"; else code="$(call "h1${who}" GET /lombardia/bergamo -H "${u1_cookie}")"; fi
+  [[ "${code}" == "200" ]] || fail "H1 (${who}): GET /lombardia/bergamo: atteso 200, ottenuto ${code}"
+  grep -q 'aria-label="Segui provincia di Bergamo"' "${tmp_dir}/h1${who}.b" || fail "H1 (${who}): manca aria-label=\"Segui provincia di Bergamo\" (BG non e' il ramo live in locale? aveva 25 eventi futuri il 2026-10-23)"
+  grep -q 'aria-pressed="false"' "${tmp_dir}/h1${who}.b" || fail "H1 (${who}): manca aria-pressed=\"false\""
+  if grep -q 'aria-pressed="true"' "${tmp_dir}/h1${who}.b"; then fail "H1 (${who}): il server non puo' rendere un bottone seguito"; fi
+done
+echo "ok  H1: /lombardia/bergamo con e senza sessione contiene 'Segui provincia di Bergamo' con aria-pressed=\"false\", mai \"true\""
+
+# --- H2: PUT della provincia con un utente nuovo -> etichetta del server e GET --
+mint_user h2
+code="$(put h2p province BG "${h2_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/h2p.b" 'j.label')" == "Provincia di Bergamo" ]] || fail "H2: PUT BG: atteso 200 label 'Provincia di Bergamo', ottenuto ${code} ($(cat "${tmp_dir}/h2p.b"))"
+get_follows h2g "${h2_cookie}" >/dev/null
+[[ "$(json_get "${tmp_dir}/h2g.b" 'j.follows.map((f) => f.kind + ":" + f.key + ":" + f.label).join()')" == "province:BG:Provincia di Bergamo" ]] || fail "H2: GET deve elencare la provincia BG, corpo '$(cat "${tmp_dir}/h2g.b")'"
+echo "ok  H2: PUT province BG -> 200 'Provincia di Bergamo' e GET la elenca"
+
 # --- S9: con l'accesso spento (a runtime) l'API non esiste piu' -----------------
 stop_server
 bash scripts/dev-db.sh env "${auth_env[@]}" AUTH_ENABLED=false npx next dev -p "${port}" >"${tmp_dir}/dev-server-off.log" 2>&1 &
@@ -294,4 +314,4 @@ code="$(call s9s GET /api/v1/me/state -H "${u1_cookie}")"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/s9s.b" 'JSON.stringify(j)')" == '{"enabled":false,"user":null}' ]] || fail "S9: state con accesso spento: atteso {enabled:false,user:null}, ottenuto ${code} '$(cat "${tmp_dir}/s9s.b")'"
 echo "ok  S9: accesso spento -> GET e PUT 404 private, no-store; state {enabled:false,user:null}"
 
-echo "Riepilogo: S1-S9 verdi"
+echo "Riepilogo: S1-S9 e H1-H2 verdi"
