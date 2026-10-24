@@ -13,6 +13,18 @@
 #        clausola della pagina regione, finestra = mezzanotte di oggi a Roma)
 #   FE3  GET / con e senza sessione: un div.per-te-slot vuoto e la riga data-perte nello
 #        script del <head>, uguali per tutti
+#   Eventi di prova in una regione R senza eventi veri, con due comuni C1, C2 della stessa
+#   provincia P: E1 C1 Sagre +3, E2 C1 Musica +5, E3 senza comune Sagre +4, E4 membro di E1,
+#   E5 C1 passato, E6 C2 Arte +6, E7 C1 Altro in corso (da -10 a +10 giorni).
+#   FE4  segui R -> total 5, ordine E7, E1, E3, E2, E6 (l'in corso conta da oggi), E4 e E5 assenti
+#   FE5  segui solo P -> total 4 (E3 non ha comune)
+#   FE6  segui solo C1 -> total 3 (E7, E1, E2)
+#   FE7  C1 + categoria Sagre e feste -> esattamente E1 (AND)
+#   FE8  R + P + C1 -> total 5 e nessun id ripetuto
+#   FE9  solo categoria Sagre e feste -> E1 e E3 presenti, total = tutti i canonici disponibili Sagre
+#   FE10 limit=2, offset=2&limit=2, limit=999 (al piu' 24), limit=abc (al piu' 10)
+#   FE11 utente senza follow -> {items:[], total:0, follows:0}
+#   FE12 senza cookie -> 401 private, no-store; server riavviato con AUTH_ENABLED=false -> 404
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -182,4 +194,126 @@ for who in anon session; do
 done
 echo "ok  FE3: / con e senza sessione contiene div.per-te-slot vuoto e data-perte nello script"
 
-echo "Riepilogo: FE1-FE3 verdi"
+# --- Eventi di prova: una regione senza eventi veri e due comuni della stessa provincia --
+region_slug="" ; region_name=""
+for cand in "molise|Molise" "basilicata|Basilicata" "umbria|Umbria" "calabria|Calabria"; do
+  slug="${cand%%|*}"
+  if [[ "$(psql_dev "SELECT count(*) FROM events WHERE region = '${slug}' AND source <> '__follows_feed_gate__'")" == "0" ]]; then
+    region_slug="${slug}" ; region_name="${cand##*|}" ; break
+  fi
+done
+[[ -n "${region_slug}" ]] || fail "nessuna regione silenziosa fra molise, basilicata, umbria, calabria: il DB locale ha eventi dappertutto?"
+prov="$(psql_dev "SELECT province_code FROM comuni WHERE region_name = '${region_name}' GROUP BY province_code HAVING count(*) >= 2 ORDER BY province_code LIMIT 1")"
+[[ -n "${prov}" ]] || fail "nessuna provincia di ${region_name} con due comuni"
+c1="$(psql_dev "SELECT istat_code FROM comuni WHERE province_code = '${prov}' ORDER BY istat_code LIMIT 1")"
+c2="$(psql_dev "SELECT istat_code FROM comuni WHERE province_code = '${prov}' ORDER BY istat_code OFFSET 1 LIMIT 1")"
+[[ -n "${c1}" && -n "${c2}" && "${c1}" != "${c2}" ]] || fail "due comuni distinti di ${prov} non trovati"
+
+# new_event <sorgente-id> <titolo> <comune|-> <categoria> <da giorni> <a giorni|-> [canonica]
+new_event() {
+  local sid="$1" title="$2" comune="$3" cat="$4" from="$5" to="$6" canonical="${7:-NULL}" cid end
+  if [[ "${comune}" == "-" ]]; then cid="NULL"; else cid="(SELECT id FROM comuni WHERE istat_code = '${comune}')"; fi
+  if [[ "${to}" == "-" ]]; then end="NULL"; else end="now() + interval '${to} days'"; fi
+  psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, comune_id, location_name, region, canonical_category, canonical_event_id) VALUES ('__follows_feed_gate__', '${sid}', '${title}', now() + interval '${from} days', ${end}, ${cid}, 'Piazza di prova', '${region_slug}', '${cat}', ${canonical}) RETURNING id" | head -n 1
+}
+e1="$(new_event e1 'Gate feed E1' "${c1}" 'Sagre e feste' 3 4)"
+e2="$(new_event e2 'Gate feed E2' "${c1}" 'Musica e spettacolo' 5 6)"
+e3="$(new_event e3 'Gate feed E3' - 'Sagre e feste' 4 5)"
+e4="$(new_event e4 'Gate feed E4' "${c1}" 'Sagre e feste' 3 4 "${e1}")"
+e5="$(new_event e5 'Gate feed E5' "${c1}" 'Sagre e feste' -20 -19)"
+e6="$(new_event e6 'Gate feed E6' "${c2}" 'Arte e cultura' 6 7)"
+e7="$(new_event e7 'Gate feed E7' "${c1}" 'Altro' -10 10)"
+for v in e1 e2 e3 e4 e5 e6 e7; do [[ -n "${!v}" ]] || fail "fixture ${v} non creata"; done
+
+mint_user fx
+# follows <kind:key> ... : sostituisce i follow di fx con quelli indicati
+set_follows() {
+  psql_dev "DELETE FROM user_follows WHERE user_id = '${fx_user}'" >/dev/null
+  local f
+  for f in "$@"; do add_follow "${fx_user}" "${f%%:*}" "${f#*:}"; done
+}
+ids_of() { json_get "${tmp_dir}/$1.b" 'j.items.map((e) => e.id).join(",")'; }
+total_of() { json_get "${tmp_dir}/$1.b" 'j.total'; }
+
+# --- FE4: la regione, l'in corso conta da oggi, il membro e il passato fuori -----
+set_follows "region:${region_slug}"
+code="$(get_feed fe4 "${fx_cookie}" '?limit=24')"
+[[ "${code}" == "200" ]] || fail "FE4: atteso 200, ottenuto ${code}"
+[[ "$(total_of fe4)" == "5" ]] || fail "FE4: total atteso 5, ottenuto $(total_of fe4) ($(ids_of fe4))"
+[[ "$(ids_of fe4)" == "${e7},${e1},${e3},${e2},${e6}" ]] || fail "FE4: ordine atteso E7,E1,E3,E2,E6 (${e7},${e1},${e3},${e2},${e6}), ottenuto $(ids_of fe4) (E4=${e4} E5=${e5})"
+echo "ok  FE4: regione ${region_slug} -> total 5, ordine E7,E1,E3,E2,E6; membro E4 e passato E5 assenti"
+
+# --- FE5: la provincia non prende gli eventi senza comune -------------------------
+set_follows "province:${prov}"
+get_feed fe5 "${fx_cookie}" '?limit=24' >/dev/null
+[[ "$(total_of fe5)" == "4" && "$(ids_of fe5)" == "${e7},${e1},${e2},${e6}" ]] || fail "FE5: attesi E7,E1,E2,E6 (total 4), ottenuti $(ids_of fe5) (total $(total_of fe5))"
+echo "ok  FE5: provincia ${prov} -> total 4 (E3 senza comune resta fuori)"
+
+# --- FE6: il comune ---------------------------------------------------------------
+set_follows "comune:${c1}"
+get_feed fe6 "${fx_cookie}" '?limit=24' >/dev/null
+[[ "$(total_of fe6)" == "3" && "$(ids_of fe6)" == "${e7},${e1},${e2}" ]] || fail "FE6: attesi E7,E1,E2 (total 3), ottenuti $(ids_of fe6) (total $(total_of fe6))"
+echo "ok  FE6: comune ${c1} -> total 3 (E7, E1, E2)"
+
+# --- FE7: luogo E categoria sono in AND -------------------------------------------
+set_follows "comune:${c1}" "category:Sagre e feste"
+get_feed fe7 "${fx_cookie}" '?limit=24' >/dev/null
+[[ "$(total_of fe7)" == "1" && "$(ids_of fe7)" == "${e1}" ]] || fail "FE7: atteso solo E1 (${e1}), ottenuti $(ids_of fe7) (total $(total_of fe7))"
+echo "ok  FE7: comune ${c1} + categoria Sagre e feste -> solo E1 (AND)"
+
+# --- FE8: follow sovrapposti non duplicano ----------------------------------------
+set_follows "region:${region_slug}" "province:${prov}" "comune:${c1}"
+get_feed fe8 "${fx_cookie}" '?limit=24' >/dev/null
+[[ "$(total_of fe8)" == "5" ]] || fail "FE8: total atteso 5, ottenuto $(total_of fe8)"
+[[ "$(json_get "${tmp_dir}/fe8.b" 'new Set(j.items.map((e) => e.id)).size === j.items.length')" == "true" ]] || fail "FE8: un id compare due volte ($(ids_of fe8))"
+echo "ok  FE8: regione + provincia + comune -> total 5 e nessun id ripetuto"
+
+# --- FE9: solo la categoria, in tutte le regioni ----------------------------------
+set_follows "category:Sagre e feste"
+get_feed fe9 "${fx_cookie}" '?limit=24' >/dev/null
+want="$(psql_dev "SELECT count(*) FROM events WHERE canonical_category = 'Sagre e feste' AND canonical_event_id IS NULL AND (date_end >= '${window_start}' OR (date_end IS NULL AND date_start >= '${window_start}'))")"
+[[ "$(total_of fe9)" == "${want}" ]] || fail "FE9: total $(total_of fe9), atteso ${want} (tutti i canonici disponibili Sagre e feste)"
+# Il feed e' limitato a 24, E1 ed E3 possono non stare nella prima pagina: si leggono tutte le pagine.
+all_ids=""
+off=0
+while [[ "${off}" -lt "${want}" ]]; do
+  get_feed fe9p "${fx_cookie}" "?limit=24&offset=${off}" >/dev/null
+  all_ids="${all_ids},$(ids_of fe9p),"
+  off=$((off + 24))
+done
+[[ "${all_ids}" == *",${e1},"* && "${all_ids}" == *",${e3},"* ]] || fail "FE9: E1 (${e1}) e E3 (${e3}) devono comparire fra le pagine"
+echo "ok  FE9: categoria Sagre e feste -> total ${want}, E1 ed E3 presenti"
+
+# --- FE10: paginazione e limiti ----------------------------------------------------
+set_follows "region:${region_slug}"
+get_feed fe10a "${fx_cookie}" '?limit=2' >/dev/null
+[[ "$(ids_of fe10a)" == "${e7},${e1}" ]] || fail "FE10: limit=2 -> attesi E7,E1, ottenuti $(ids_of fe10a)"
+get_feed fe10b "${fx_cookie}" '?limit=2&offset=2' >/dev/null
+[[ "$(ids_of fe10b)" == "${e3},${e2}" && "$(total_of fe10b)" == "5" ]] || fail "FE10: offset=2&limit=2 -> attesi E3,E2 con total 5, ottenuti $(ids_of fe10b)"
+get_feed fe10c "${u1_cookie}" '?limit=999' >/dev/null
+[[ "$(json_get "${tmp_dir}/fe10c.b" 'j.items.length')" == "24" ]] || fail "FE10: limit=999 -> attese 24 voci, ottenute $(json_get "${tmp_dir}/fe10c.b" 'j.items.length')"
+get_feed fe10d "${u1_cookie}" '?limit=abc&offset=x' >/dev/null
+[[ "$(json_get "${tmp_dir}/fe10d.b" 'j.items.length')" == "10" ]] || fail "FE10: limit=abc -> attese 10 voci, ottenute $(json_get "${tmp_dir}/fe10d.b" 'j.items.length')"
+echo "ok  FE10: limit=2, offset=2, limit=999 -> 24, limit=abc -> 10"
+
+# --- FE11: nessun follow -----------------------------------------------------------
+set_follows
+code="$(get_feed fe11 "${fx_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/fe11.b" 'JSON.stringify(j)')" == '{"items":[],"total":0,"follows":0}' ]] || fail "FE11: atteso {items:[],total:0,follows:0}, ottenuto ${code} '$(cat "${tmp_dir}/fe11.b")'"
+no_store fe11 FE11
+echo "ok  FE11: utente senza follow -> {items:[], total:0, follows:0}"
+
+# --- FE12: sessione e interruttore --------------------------------------------------
+code="$(call fe12a GET /api/v1/me/feed)"
+[[ "${code}" == "401" ]] || fail "FE12: senza cookie atteso 401, ottenuto ${code}"
+no_store fe12a FE12
+stop_server
+bash scripts/dev-db.sh env "${auth_env[@]}" AUTH_ENABLED=false npx next dev -p "${port}" >"${tmp_dir}/dev-server-off.log" 2>&1 &
+server_pid=$!
+wait_for_port "${port}"
+code="$(get_feed fe12b "${u1_cookie}")"
+[[ "${code}" == "404" ]] || fail "FE12: con l'accesso spento atteso 404, ottenuto ${code}"
+no_store fe12b FE12
+echo "ok  FE12: senza cookie 401 private, no-store; con AUTH_ENABLED=false 404 private, no-store"
+
+echo "Riepilogo: FE1-FE12 verdi"
