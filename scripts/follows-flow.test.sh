@@ -26,6 +26,8 @@
 #       -> 403, senza cookie -> 401, GET senza cookie -> 401, tutto private, no-store
 #   H1  GET /lombardia/bergamo con e senza cookie: aria-label "Segui provincia di Bergamo", aria-pressed="false", mai "true"
 #   H2  PUT {province, BG} con un utente nuovo -> 200 label 'Provincia di Bergamo' e GET la elenca
+#   H3  due eventi di prova (sorgente __follows_gate__): con comune 016024 il dettaglio ha "Segui Bergamo (BG)",
+#       senza comune nessun Segui e la riga Dove resta (locationName)
 #   S9  server riavviato con AUTH_ENABLED=false: GET e PUT con cookie -> 404 private, no-store;
 #       GET /api/v1/me/state -> {"enabled":false,"user":null}
 set -euo pipefail
@@ -96,9 +98,15 @@ delete_users() {
   psql_dev "DELETE FROM auth_user WHERE email LIKE '%@fixture.invalid'" >/dev/null 2>&1 || true
 }
 
+# Gli eventi di prova di H3 (sorgente riservata): niente altro nel DB li usa.
+delete_fixture_events() {
+  psql_dev "DELETE FROM events WHERE source = '__follows_gate__'" >/dev/null 2>&1 || true
+}
+
 cleanup() {
   stop_server
   delete_users
+  delete_fixture_events
   rm -rf "${tmp_dir:?}"
   rm -rf "${repo_root:?}/${test_dist_dir:?}"
 }
@@ -110,8 +118,9 @@ if ! docker compose -f "${compose_file}" ps postgres-dev 2>/dev/null | grep -q "
   fail "il container postgres-dev non e' in esecuzione. Esegui 'npm run db:dev:up'."
 fi
 
-# Parte pulita: utenti di un giro interrotto.
+# Parte pulita: utenti ed eventi di un giro interrotto.
 delete_users
+delete_fixture_events
 
 # --- Dev server effimero, Postgres locale reale -----------------------------
 bash scripts/dev-db.sh env "${auth_env[@]}" npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
@@ -299,6 +308,22 @@ get_follows h2g "${h2_cookie}" >/dev/null
 [[ "$(json_get "${tmp_dir}/h2g.b" 'j.follows.map((f) => f.kind + ":" + f.key + ":" + f.label).join()')" == "province:BG:Provincia di Bergamo" ]] || fail "H2: GET deve elencare la provincia BG, corpo '$(cat "${tmp_dir}/h2g.b")'"
 echo "ok  H2: PUT province BG -> 200 'Provincia di Bergamo' e GET la elenca"
 
+# --- H3: "Segui {comune}" nella riga Dove del dettaglio, solo con un comune risolto --
+h3_with="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, comune_id, location_name) SELECT '__follows_gate__', 'h3-con-comune', 'Gate Segui comune', now() + interval '5 days', now() + interval '6 days', id, 'Piazza di prova' FROM comuni WHERE istat_code = '016024' RETURNING id" | head -n 1)"
+h3_without="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, comune_id, location_name) VALUES ('__follows_gate__', 'h3-senza-comune', 'Gate senza comune', now() + interval '5 days', now() + interval '6 days', NULL, 'Piazza di prova') RETURNING id" | head -n 1)"
+[[ -n "${h3_with}" && -n "${h3_without}" ]] || fail "H3: fixture non create (con='${h3_with}' senza='${h3_without}'; comune 016024 nel DB locale?)"
+code="$(call h3with GET "/eventi/${h3_with}")"
+[[ "${code}" == "200" ]] || fail "H3: GET /eventi/${h3_with}: atteso 200, ottenuto ${code}"
+grep -q 'aria-label="Segui Bergamo (BG)"' "${tmp_dir}/h3with.b" || fail "H3: manca aria-label=\"Segui Bergamo (BG)\" sull'evento con comune"
+grep -q 'aria-pressed="false"' "${tmp_dir}/h3with.b" || fail "H3: manca aria-pressed=\"false\" sull'evento con comune"
+grep -q '>Segui Bergamo<' "${tmp_dir}/h3with.b" || fail "H3: manca il testo visibile 'Segui Bergamo' sull'evento con comune"
+if grep -q 'aria-pressed="true"' "${tmp_dir}/h3with.b"; then fail "H3: il server non puo' rendere un bottone seguito"; fi
+code="$(call h3without GET "/eventi/${h3_without}")"
+[[ "${code}" == "200" ]] || fail "H3: GET /eventi/${h3_without}: atteso 200, ottenuto ${code}"
+if grep -q 'aria-label="Segui ' "${tmp_dir}/h3without.b"; then fail "H3: un evento senza comune risolto non deve avere nessun Segui"; fi
+grep -q '>Dove<' "${tmp_dir}/h3without.b" || fail "H3: la riga Dove deve esserci anche senza comune (locationName)"
+echo "ok  H3: evento con comune -> 'Segui Bergamo (BG)' aria-pressed=\"false\"; senza comune -> nessun Segui e riga Dove presente"
+
 # --- S9: con l'accesso spento (a runtime) l'API non esiste piu' -----------------
 stop_server
 bash scripts/dev-db.sh env "${auth_env[@]}" AUTH_ENABLED=false npx next dev -p "${port}" >"${tmp_dir}/dev-server-off.log" 2>&1 &
@@ -314,4 +339,4 @@ code="$(call s9s GET /api/v1/me/state -H "${u1_cookie}")"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/s9s.b" 'JSON.stringify(j)')" == '{"enabled":false,"user":null}' ]] || fail "S9: state con accesso spento: atteso {enabled:false,user:null}, ottenuto ${code} '$(cat "${tmp_dir}/s9s.b")'"
 echo "ok  S9: accesso spento -> GET e PUT 404 private, no-store; state {enabled:false,user:null}"
 
-echo "Riepilogo: S1-S9 e H1-H2 verdi"
+echo "Riepilogo: S1-S9 e H1-H3 verdi"

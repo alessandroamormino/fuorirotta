@@ -31,9 +31,10 @@ const getEvent = cache(
 		// intera — stessa select ristretta di app/page.tsx. Senza questo
 		// include, event.comune e' undefined e la terza briciola di
 		// navigazione cadrebbe sul ripiego locationName in silenzio.
+		// istatCode (Fase 23) e' la chiave del follow "Segui {comune}".
 		const event = await prisma.event.findUnique({
 			where: { id },
-			include: { comune: { select: { name: true, provinceCode: true } } },
+			include: { comune: { select: { name: true, provinceCode: true, istatCode: true } } },
 		});
 		if (!event || event.canonicalEventId !== null) {
 			return { event, members: [] };

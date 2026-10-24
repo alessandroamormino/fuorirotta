@@ -15,6 +15,8 @@ import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import ShareButton from "@/components/ShareButton";
 import SaveHeart from "@/components/saved/SaveHeart";
+import FollowButton from "@/components/follow/FollowButton";
+import { comuneChip } from "@/lib/follows/keys";
 import Button from "@/components/ui/Button";
 import type { Sibling } from "@/lib/saved/series";
 import AddToCalendar from "@/components/calendar/AddToCalendar";
@@ -610,15 +612,25 @@ export default function EventDetailClient({ initialEvent, canonicalUrl, eventOve
 										}
 									/>
 
-									{event.locationName && (
+									{(event.locationName || event.comune?.name) && (
 										<InfoRow
 											icon={<MapPin className="h-[17px] w-[17px]" strokeWidth={1.8} />}
 											label="Dove"
 											value={
 												<>
-													{decodeHtmlEntities(event.locationName)}
+													{decodeHtmlEntities(event.locationName || event.comune?.name || "")}
 													{event.address && (
 														<span className="block font-normal text-muted-foreground">{event.address}</span>
+													)}
+													{event.comune?.istatCode && (
+														<span className="mt-2 block">
+															<FollowButton
+																kind="comune"
+																followKey={event.comune.istatCode}
+																chip={comuneChip(event.comune.name, event.comune.provinceCode)}
+																text={`Segui ${decodeHtmlEntities(event.comune.name)}`}
+															/>
+														</span>
 													)}
 												</>
 											}

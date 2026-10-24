@@ -13,7 +13,8 @@ export type Event = Omit<
   // agganciata a comuneId/istatCode via include Prisma (app/api/events/route.ts,
   // app/page.tsx). ~1/3 delle righe non ha comuneId (862/2652, Fase 6) e la
   // relazione arriva null: la card cade su locationName, non su un buco.
-  comune?: { name: string; provinceCode: string } | null
+  // istatCode (Fase 23, chiave di "Segui {comune}"): lo seleziona solo la pagina dettaglio.
+  comune?: { name: string; provinceCode: string; istatCode?: string } | null
 }
 
 // Filtri di ricerca della Navbar (D-01). comuneId e comuneIstatCode
