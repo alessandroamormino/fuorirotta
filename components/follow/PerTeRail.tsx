@@ -107,7 +107,9 @@ export default function PerTeRail() {
 	if (feed === "gone" || (feed !== null && feed !== "error" && feed.follows === 0)) return null;
 
 	const items = feed !== null && feed !== "error" ? feed.items : [];
-	const pending = feed === null || !listReady;
+	// La lista non si carica: stesso riquadro d'errore del feed, con "Riprova" (che rilancia loadFollows).
+	const failed = feed === "error" || (signedIn && list === null && status === "error");
+	const pending = !failed && (feed === null || !listReady);
 
 	function retryFeed() {
 		if (status === "error") void loadFollows();
@@ -137,7 +139,7 @@ export default function PerTeRail() {
 			</div>
 			{pending ? (
 				<Skeleton />
-			) : feed === "error" ? (
+			) : failed ? (
 				<div className={ROW}>
 					<div className={BLOCK}>
 						<p className="text-sm text-foreground-secondary">Non riusciamo a caricare Per te. Riprova tra poco.</p>
