@@ -74,5 +74,26 @@ export const USER_DATA_REGISTRY: readonly UserDataEntry[] = [
         where: { userId },
         select: { createdAt: true, rotatedAt: true }
       })
+  },
+  {
+    table: 'user_follows',
+    exportKey: 'follows',
+    // Niente id interni: cosa segue (kind, key) e da quando.
+    exportRows: async (userId) =>
+      prisma.userFollow.findMany({
+        where: { userId },
+        select: { kind: true, key: true, createdAt: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+      })
+  },
+  {
+    table: 'user_preferences',
+    exportKey: 'preferences',
+    // onboardedAt dice solo che la finestra di benvenuto e' stata mostrata: nessun consenso e' registrato.
+    exportRows: async (userId) =>
+      prisma.userPreference.findMany({
+        where: { userId },
+        select: { onboardedAt: true }
+      })
   }
 ]
