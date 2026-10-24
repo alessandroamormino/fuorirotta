@@ -69,7 +69,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   // solo categorie: regola di data + categoria, nessun OR di luoghi
   assert.deepStrictEqual(buildFeedWhere({ ...none, categories: ['Altro'] }, ws), {
     canonicalEventId: null,
-    AND: [date, { canonicalCategory: { in: ['Altro'] } }, { canonicalCategory: { in: ['Altro'] } }],
+    AND: [date, { canonicalCategory: { in: ['Altro'] } }],
   })
 
   // solo una regione: l'OR dei luoghi ha UN ramo
