@@ -148,6 +148,7 @@ export default function PlacePicker({
 					aria-controls={listId}
 					aria-activedescendant={listVisible && active >= 0 ? `${listId}-${active}` : undefined}
 					aria-autocomplete="list"
+					data-picker-open={open || undefined}
 					placeholder="Cerca comune, provincia o regione"
 					autoComplete="off"
 					inputMode="search"
