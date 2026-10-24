@@ -59,3 +59,44 @@ export function sortFollows<T extends FollowItem>(list: readonly T[]): T[] {
       (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
   )
 }
+
+// Self-check (check:follows, test:ci, quattro fusi orari). La guardia su `typeof`
+// non e' cerimonia: il modulo e' raggiungibile da componenti "use client".
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+  let failures = 0
+  const check = (cond: boolean, msg: string) => {
+    if (!cond) {
+      console.error(`  FAIL: ${msg}`)
+      failures++
+    }
+  }
+  for (const [k, v] of [['comune', '016024'], ['province', 'BG'], ['region', 'lombardia'], ['category', 'Altro']]) {
+    check(isWellFormed(k, v), `${k} ${v} deve essere accettato`)
+  }
+  for (const [k, v] of [['comune', '16024'], ['comune', '0160245'], ['province', 'bg'], ['region', 'atlantide'], ['category', 'Hacker'], ['hacker', 'lombardia']]) {
+    check(!isWellFormed(k, v), `${k} ${v} deve essere rifiutato`)
+  }
+  check(followId('region', 'lombardia') === 'region:lombardia', 'followId')
+  check(provinceChip('Bergamo') === 'Provincia di Bergamo', 'provinceChip')
+  check(comuneChip('Bergamo', 'BG') === 'Bergamo (BG)', 'comuneChip')
+  check(noticeName('Provincia di Bergamo') === 'provincia di Bergamo', 'noticeName provincia')
+  check(noticeName('Lombardia') === 'Lombardia', 'noticeName regione')
+  check(PLACE_CAP === 50, 'PLACE_CAP')
+  // L'unica fonte dell'ordine delle categorie e' la tassonomia, mai una lista scritta qui.
+  const [c0, c1] = CANONICAL_CATEGORIES
+  const mixed: FollowItem[] = [
+    { kind: 'category', key: c1, label: c1 },
+    { kind: 'comune', key: '016024', label: 'Bergamo (BG)' },
+    { kind: 'category', key: c0, label: c0 },
+    { kind: 'province', key: 'BG', label: 'Provincia di Bergamo' },
+    { kind: 'region', key: 'lombardia', label: 'Lombardia' },
+  ]
+  const order = sortFollows(mixed).map((f) => `${f.kind}:${f.key}`).join()
+  const expected = ['region:lombardia', 'province:BG', 'comune:016024', `category:${c0}`, `category:${c1}`].join()
+  check(order === expected, `sortFollows: atteso ${expected}, ottenuto ${order}`)
+  if (failures > 0) {
+    console.error(`self-check FAILED: ${failures}`)
+    process.exit(1)
+  }
+  console.log('self-check OK')
+}
