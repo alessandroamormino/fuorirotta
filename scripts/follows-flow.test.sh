@@ -28,6 +28,10 @@
 #   H2  PUT {province, BG} con un utente nuovo -> 200 label 'Provincia di Bergamo' e GET la elenca
 #   H3  due eventi di prova (sorgente __follows_gate__): con comune 016024 il dettaglio ha "Segui Bergamo (BG)",
 #       senza comune nessun Segui e la riga Dove resta (locationName)
+#   O1  utente nuovo: GET -> onboarded false
+#   O2  POST onboarding {places:[],categories:[]} -> 200, GET onboarded true e follows [], una riga
+#       user_preferences con onboarded_at e zero follow
+#   O3  secondo POST -> 200 e onboarded_at invariato
 #   S9  server riavviato con AUTH_ENABLED=false: GET e PUT con cookie -> 404 private, no-store;
 #       GET /api/v1/me/state -> {"enabled":false,"user":null}
 set -euo pipefail
@@ -324,6 +328,30 @@ if grep -q 'aria-label="Segui ' "${tmp_dir}/h3without.b"; then fail "H3: un even
 grep -q '>Dove<' "${tmp_dir}/h3without.b" || fail "H3: la riga Dove deve esserci anche senza comune (locationName)"
 echo "ok  H3: evento con comune -> 'Segui Bergamo (BG)' aria-pressed=\"false\"; senza comune -> nessun Segui e riga Dove presente"
 
+# --- O1-O3: finestra di benvenuto, il solo segno "vista" ------------------------
+onboard() { # <nome> <cookie> <json>
+  call "$1" POST /api/v1/me/onboarding -H "Origin: ${origin}" -H "$2" -H 'Content-Type: application/json' --data "$3"
+}
+mint_user o1
+get_follows o1g "${o1_cookie}" >/dev/null
+[[ "$(json_get "${tmp_dir}/o1g.b" 'j.onboarded')" == "false" ]] || fail "O1: un utente nuovo deve avere onboarded false, corpo '$(cat "${tmp_dir}/o1g.b")'"
+echo "ok  O1: utente nuovo -> onboarded false"
+
+code="$(onboard o2 "${o1_cookie}" '{"places":[],"categories":[]}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/o2.b" 'j.onboarded + "|" + j.added')" == "true|0" ]] || fail "O2: POST vuoto: atteso 200 {onboarded:true,added:0}, ottenuto ${code} ($(cat "${tmp_dir}/o2.b"))"
+get_follows o2g "${o1_cookie}" >/dev/null
+[[ "$(json_get "${tmp_dir}/o2g.b" 'j.onboarded + "|" + j.follows.length')" == "true|0" ]] || fail "O2: dopo Salta attesi onboarded true e follows [], corpo '$(cat "${tmp_dir}/o2g.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM user_preferences WHERE user_id = '${o1_user}' AND onboarded_at IS NOT NULL")" == "1" ]] || fail "O2: attesa una riga user_preferences con onboarded_at"
+[[ "$(psql_dev "SELECT count(*) FROM user_follows WHERE user_id = '${o1_user}'")" == "0" ]] || fail "O2: saltare non deve scrivere follow"
+echo "ok  O2: POST vuoto -> 200, onboarded true, follows [], una riga user_preferences e zero follow"
+
+before="$(psql_dev "SELECT onboarded_at FROM user_preferences WHERE user_id = '${o1_user}'")"
+sleep 1
+code="$(onboard o3 "${o1_cookie}" '{"places":[],"categories":[]}')"
+after="$(psql_dev "SELECT onboarded_at FROM user_preferences WHERE user_id = '${o1_user}'")"
+[[ "${code}" == "200" && -n "${before}" && "${before}" == "${after}" ]] || fail "O3: secondo POST: atteso 200 e onboarded_at invariato (prima '${before}', dopo '${after}', codice ${code})"
+echo "ok  O3: secondo POST -> 200 e onboarded_at invariato"
+
 # --- S9: con l'accesso spento (a runtime) l'API non esiste piu' -----------------
 stop_server
 bash scripts/dev-db.sh env "${auth_env[@]}" AUTH_ENABLED=false npx next dev -p "${port}" >"${tmp_dir}/dev-server-off.log" 2>&1 &
@@ -339,4 +367,4 @@ code="$(call s9s GET /api/v1/me/state -H "${u1_cookie}")"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/s9s.b" 'JSON.stringify(j)')" == '{"enabled":false,"user":null}' ]] || fail "S9: state con accesso spento: atteso {enabled:false,user:null}, ottenuto ${code} '$(cat "${tmp_dir}/s9s.b")'"
 echo "ok  S9: accesso spento -> GET e PUT 404 private, no-store; state {enabled:false,user:null}"
 
-echo "Riepilogo: S1-S9 e H1-H3 verdi"
+echo "Riepilogo: S1-S9, H1-H3 e O1-O3 verdi"

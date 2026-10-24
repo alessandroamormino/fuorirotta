@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useUserState } from "@/components/account/UserStateProvider";
+import OnboardingDialog from "@/components/follow/OnboardingDialog";
 import { notify } from "@/components/account/NoticeHost";
 import { takeFollowIntent } from "@/lib/follows/intent";
 import { noticeName } from "@/lib/follows/keys";
@@ -17,6 +18,10 @@ import { loadFollows, setFollowAuth, setFollowed } from "@/lib/follows/store";
 
 // Una sola ripetizione alla volta in questa pagina (come l'unione di SavedSync).
 let replaying: Promise<void> | null = null;
+// La finestra di benvenuto si offre una volta sola per caricamento di pagina (mai riaperta dopo Salta, nemmeno se il segno non si salva).
+let offered = false;
+// Pagine dove non compare mai: sono gia' il luogo dell'accesso o testi legali.
+const ONBOARDING_SKIP_PATHS = ['/accedi', '/privacy', '/cookie'];
 
 async function replayIntent(): Promise<void> {
 	const intent = takeFollowIntent();
@@ -31,15 +36,23 @@ export default function FollowSync() {
 	const { enabled, user } = useUserState();
 	const signedIn = user !== null;
 	const userKey = user?.email ?? null;
+	const [onboarding, setOnboarding] = useState(false);
 
 	useEffect(() => {
 		setFollowAuth({ enabled, signedIn });
 		if (!userKey) return;
 		// Se la lista non si carica l'intento resta (scade in 15 minuti) e riprova al prossimo caricamento.
-		void loadFollows().then((loaded) => {
-			if (loaded && !replaying) replaying = replayIntent().finally(() => (replaying = null));
+		void loadFollows().then(async (loaded) => {
+			if (!loaded) return;
+			if (!replaying) replaying = replayIntent().finally(() => (replaying = null));
+			await replaying;
+			// Dopo la ripetizione: un luogo appena seguito e' gia' nella lista quando la finestra si apre.
+			if (!loaded.onboarded && enabled && !offered && !ONBOARDING_SKIP_PATHS.includes(window.location.pathname)) {
+				offered = true;
+				setOnboarding(true);
+			}
 		});
 	}, [enabled, signedIn, userKey]);
 
-	return null;
+	return onboarding ? <OnboardingDialog open onClose={() => setOnboarding(false)} /> : null;
 }
