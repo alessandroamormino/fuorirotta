@@ -3,6 +3,7 @@
 import { Check, Plus } from "lucide-react";
 import { notify } from "@/components/account/NoticeHost";
 import { requestSignIn } from "@/components/account/UserStateProvider";
+import { writeFollowIntent } from "@/lib/follows/intent";
 import { noticeName, type PlaceKind } from "@/lib/follows/keys";
 import { toggleFollow, useFollowAuth, useIsFollowing } from "@/lib/follows/store";
 import { cn } from "@/lib/utils";
@@ -42,8 +43,11 @@ export default function FollowButton({ kind, followKey, chip, text, className }:
 			type="button"
 			onClick={() => {
 				if (auth.enabled !== true) return;
-				// L'ospite apre l'accesso; ricordare cosa voleva seguire e' del piano 03.
-				if (!auth.signedIn) return requestSignIn();
+				// L'ospite apre l'accesso (D-01): l'unica traccia e' l'intento di una volta, in sessionStorage.
+				if (!auth.signedIn) {
+					writeFollowIntent({ kind, key: followKey, chip });
+					return requestSignIn();
+				}
 				void toggleFollow(kind, followKey, chip).then((result) => {
 					if (result === "cap") notify("Hai raggiunto il limite di 50 luoghi seguiti");
 					else if (result === "error-follow") notify(`Non siamo riusciti a seguire ${noticeName(chip)}. Riprova tra poco.`);

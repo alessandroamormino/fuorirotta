@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import SignInDialog from "./SignIn";
 import SavedSync from "../saved/SavedSync";
 import FollowSync from "../follow/FollowSync";
+import { clearFollowIntent } from "@/lib/follows/intent";
 
 /**
  * Stato dell'utente per le isole client (D-01, D-07, D-19). Sul server e al
@@ -76,12 +77,19 @@ export function UserStateProvider({ children }: { children: ReactNode }) {
 		};
 	}, [openSignIn]);
 
+	// Chiudere il dialogo senza accedere scarta l'intento di follow (D-01). Il rimando a Google e'
+	// una navigazione completa che non passa di qui: l'intento sopravvive al giro.
+	const onOpenChange = useCallback((next: boolean) => {
+		if (!next) clearFollowIntent();
+		setOpen(next);
+	}, []);
+
 	const value = useMemo<UserState>(() => ({ ...remote, openSignIn }), [remote, openSignIn]);
 
 	return (
 		<UserStateContext.Provider value={value}>
 			{children}
-			<SignInDialog open={open} onOpenChange={setOpen} returnFocusTo={returnFocusTo} />
+			<SignInDialog open={open} onOpenChange={onOpenChange} returnFocusTo={returnFocusTo} />
 			<SavedSync />
 			<FollowSync />
 		</UserStateContext.Provider>
