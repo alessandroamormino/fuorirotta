@@ -1,19 +1,13 @@
 import { assertSameOrigin, noStoreJson, requireUser } from '@/lib/account'
 import { prisma } from '@/lib/prisma'
-import { VALID_REGION_SLUGS } from '@/lib/scrapers/regionSlug'
-import { isWellFormed, regionChip, sortFollows, type FollowItem, type FollowKind } from '@/lib/follows/keys'
+import { PLACE_CAP, isPlaceKind, isWellFormed, type FollowKind } from '@/lib/follows/keys'
+import { listFollows, resolveFollowLabel } from '@/lib/follows/server'
 
 // Cosa segue l'utente (Fase 23, PREF-01). Il corpo porta (kind, key) in JSON,
 // MAI nel percorso o nella query: finirebbe nei log di nginx (T-23-05).
 // Ogni query porta l'utente della sessione, mai uno del corpo (T-23-01, IDOR).
-// Il tetto dei 50 luoghi e il controllo di esistenza arrivano col piano 09.
+// Chiave: forma (isWellFormed) -> esistenza (resolveFollowLabel, 404) -> tetto dei 50 luoghi (409).
 export const dynamic = 'force-dynamic'
-
-// Etichetta provvisoria: regioni e categorie si sanno dalle liste in memoria;
-// per comuni e province il piano 09 sposta tutto in lib/follows/server.ts.
-function labelFor(kind: FollowKind, key: string): string {
-  return kind === 'region' ? regionChip(VALID_REGION_SLUGS.get(key) ?? key) : key
-}
 
 // Ordine delle guardie: Origin, sessione, corpo ben formato. Nessuna query prima.
 async function guard(req: Request) {
@@ -38,15 +32,7 @@ async function guard(req: Request) {
 export async function GET(req: Request): Promise<Response> {
   const ctx = await requireUser(req)
   if (ctx instanceof Response) return ctx
-  const userId = ctx.user.id
-  const [rows, pref] = await Promise.all([
-    prisma.userFollow.findMany({ where: { userId }, select: { kind: true, key: true } }),
-    prisma.userPreference.findUnique({ where: { userId }, select: { onboardedAt: true } }),
-  ])
-  const follows: FollowItem[] = sortFollows(
-    rows.filter((r) => isWellFormed(r.kind, r.key)).map((r) => ({ kind: r.kind as FollowKind, key: r.key, label: labelFor(r.kind as FollowKind, r.key) }))
-  )
-  return noStoreJson({ onboarded: pref?.onboardedAt != null, follows })
+  return noStoreJson(await listFollows(ctx.user.id))
 }
 
 export async function PUT(req: Request): Promise<Response> {
@@ -54,9 +40,17 @@ export async function PUT(req: Request): Promise<Response> {
   if (g instanceof Response) return g
   const { ctx, kind, key } = g
   const userId = ctx.user.id
+  const label = await resolveFollowLabel(kind, key)
+  if (label === null) return noStoreJson({ error: 'not-found' }, 404)
+  // Gia' seguito: 200 anche al tetto. Le categorie non contano (D-04).
+  // ponytail: controllo prima dell'insert, due richieste a 49 possono arrivare a 51; il tetto frena la crescita, non e' una quota esatta.
+  const exists = await prisma.userFollow.findUnique({ where: { userId_kind_key: { userId, kind, key } }, select: { id: true } })
+  if (!exists && isPlaceKind(kind) && (await prisma.userFollow.count({ where: { userId, kind: { not: 'category' } } })) >= PLACE_CAP) {
+    return noStoreJson({ error: 'cap' }, 409)
+  }
   // La chiave unica (utente, kind, key) assorbe il doppio tocco concorrente.
   await prisma.userFollow.createMany({ data: [{ userId, kind, key }], skipDuplicates: true })
-  return noStoreJson({ followed: true, label: labelFor(kind, key) })
+  return noStoreJson({ followed: true, label })
 }
 
 export async function DELETE(req: Request): Promise<Response> {

@@ -16,6 +16,12 @@
 #   S4  DELETE lombardia -> removed 1, di nuovo -> removed 0
 #   S5  GET /lombardia con e senza cookie: aria-label "Segui Lombardia" e aria-pressed="false",
 #       mai aria-pressed="true" (l'HTML del server e' lo stesso per tutti)
+#   S6  validazione: forma sbagliata o corpo non JSON -> 400; comune/provincia ben formati ma ignoti
+#       (o abolita, OT) -> 404; comune 016024 -> label 'Bergamo (BG)', provincia BG -> 'Provincia di
+#       Bergamo', categoria Altro -> 200; GET elenca le etichette del server; tutto private, no-store
+#   S7  tetto: 49 luoghi per INSERT ... SELECT, il 50o (016024) -> 200, il 51o (regione) -> 409 cap e
+#       50 righe, 016024 di nuovo -> 200, categoria -> 200 (esente); un comune sparito dai comuni
+#       si legge 'Comune non più disponibile'
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -147,6 +153,12 @@ del() { # <nome> <kind> <key> <cookie>
 }
 get_follows() { call "$1" GET /api/v1/me/follows -H "$2"; }
 
+no_store() { # <nome-file> <sezione>
+  local cc
+  cc="$(grep -i '^cache-control:' "${tmp_dir}/$1.h" | head -n 1 | cut -d: -f2- | sed 's/^ *//' | tr -d '\r')"
+  [[ "${cc}" == "private, no-store" ]] || fail "$2: cache-control atteso 'private, no-store' su $1, ottenuto '${cc}'"
+}
+
 mint_user u1
 
 # --- S1: utente nuovo, nessun follow, nessuna cache condivisa -----------------
@@ -199,4 +211,50 @@ for who in anon session; do
 done
 echo "ok  S5: /lombardia con e senza sessione contiene 'Segui Lombardia' con aria-pressed=\"false\", mai \"true\""
 
-echo "Riepilogo: S1-S5 verdi"
+
+# --- S6: validazione, esistenza, etichette del server --------------------------
+for bad in "hacker|lombardia" "region|atlantide" "comune|12345" "province|bg" "category|Hacker"; do
+  code="$(put s6bad "${bad%%|*}" "${bad##*|}" "${u1_cookie}")"
+  [[ "${code}" == "400" ]] || fail "S6: ${bad}: atteso 400, ottenuto ${code} ($(cat "${tmp_dir}/s6bad.b"))"
+  no_store s6bad S6
+done
+code="$(call s6json PUT /api/v1/me/follows -H "Origin: ${origin}" -H "${u1_cookie}" -H 'Content-Type: application/json' --data 'non json')"
+[[ "${code}" == "400" ]] || fail "S6: corpo non JSON: atteso 400, ottenuto ${code}"
+for unk in "comune|999999" "province|ZZ" "province|OT"; do
+  code="$(put s6unk "${unk%%|*}" "${unk##*|}" "${u1_cookie}")"
+  [[ "${code}" == "404" && "$(json_get "${tmp_dir}/s6unk.b" 'j.error')" == "not-found" ]] || fail "S6: ${unk}: atteso 404 not-found, ottenuto ${code} ($(cat "${tmp_dir}/s6unk.b"))"
+  no_store s6unk S6
+done
+for ok in "comune|016024|Bergamo (BG)" "province|BG|Provincia di Bergamo" "category|Altro|Altro"; do
+  IFS='|' read -r k v want <<<"${ok}"
+  code="$(put s6ok "${k}" "${v}" "${u1_cookie}")"
+  [[ "${code}" == "200" && "$(json_get "${tmp_dir}/s6ok.b" 'j.label')" == "${want}" ]] || fail "S6: ${k} ${v}: atteso 200 label '${want}', ottenuto ${code} ($(cat "${tmp_dir}/s6ok.b"))"
+  no_store s6ok S6
+done
+get_follows s6get "${u1_cookie}" >/dev/null
+no_store s6get S6
+labels="$(json_get "${tmp_dir}/s6get.b" 'j.follows.map((f) => f.label).join("|")')"
+[[ "${labels}" == *"Bergamo (BG)"* && "${labels}" == *"Provincia di Bergamo"* ]] || fail "S6: GET deve elencare le etichette del server, ottenuto '${labels}'"
+[[ "$(psql_dev "SELECT count(*) FROM user_follows WHERE user_id = '${u1_user}' AND (key IN ('atlantide','12345','bg','Hacker','999999','ZZ','OT') OR kind = 'hacker')")" == "0" ]] || fail "S6: una richiesta rifiutata ha scritto una riga"
+echo "ok  S6: forma sbagliata -> 400, ignoti -> 404, 016024 'Bergamo (BG)', BG 'Provincia di Bergamo', GET con le etichette del server, private, no-store"
+
+# --- S7: tetto dei 50 luoghi ----------------------------------------------------
+mint_user u2
+psql_dev "INSERT INTO user_follows (user_id, kind, key) SELECT '${u2_user}', 'comune', istat_code FROM comuni WHERE istat_code <> '016024' ORDER BY istat_code LIMIT 49" >/dev/null
+[[ "$(psql_dev "SELECT count(*) FROM user_follows WHERE user_id = '${u2_user}'")" == "49" ]] || fail "S7: fixture attesa di 49 righe (comuni nel DB locale?)"
+code="$(put s7a comune 016024 "${u2_cookie}")"
+[[ "${code}" == "200" ]] || fail "S7: il 50o luogo: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/s7a.b"))"
+code="$(put s7b region lombardia "${u2_cookie}")"
+[[ "${code}" == "409" && "$(json_get "${tmp_dir}/s7b.b" 'j.error')" == "cap" ]] || fail "S7: il 51o luogo: atteso 409 cap, ottenuto ${code} ($(cat "${tmp_dir}/s7b.b"))"
+no_store s7b S7
+[[ "$(psql_dev "SELECT count(*) FROM user_follows WHERE user_id = '${u2_user}' AND kind <> 'category'")" == "50" ]] || fail "S7: dopo il 409 devono restare 50 luoghi"
+code="$(put s7c comune 016024 "${u2_cookie}")"
+[[ "${code}" == "200" ]] || fail "S7: luogo gia' seguito al tetto: atteso 200, ottenuto ${code}"
+code="$(put s7d category Altro "${u2_cookie}")"
+[[ "${code}" == "200" ]] || fail "S7: le categorie sono esenti dal tetto: atteso 200, ottenuto ${code}"
+psql_dev "INSERT INTO user_follows (user_id, kind, key) VALUES ('${u2_user}', 'comune', '000000')" >/dev/null
+get_follows s7get "${u2_cookie}" >/dev/null
+[[ "$(json_get "${tmp_dir}/s7get.b" 'j.follows.filter((f) => f.key === "000000").map((f) => f.label).join()')" == "Comune non più disponibile" ]] || fail "S7: un comune sparito deve leggersi 'Comune non più disponibile'"
+echo "ok  S7: 50o -> 200, 51o -> 409 cap con 50 luoghi, gia' seguito -> 200, categoria esente, comune sparito etichettato"
+
+echo "Riepilogo: S1-S7 verdi"
