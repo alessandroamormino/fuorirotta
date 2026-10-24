@@ -4,6 +4,8 @@
 // canonici, disponibili da oggi con la regola unica di lib/dateWindow.ts.
 import type { Prisma } from '../generated/prisma/client'
 import { availableEventsWhere } from '../dateWindow'
+// Solo per il self-check in fondo: questo modulo e' lato server e non entra mai nel bundle del browser.
+import assert from 'node:assert'
 
 export type FollowSets = { comuni: string[]; province: string[]; regions: string[]; categories: string[] }
 
@@ -52,4 +54,59 @@ export function clampFeedParams(limit: string | null, offset: string | null): { 
     limit: Math.min(FEED_MAX_LIMIT, Math.max(1, intOr(limit, DEFAULT_LIMIT))),
     offset: Math.min(MAX_OFFSET, Math.max(0, intOr(offset, 0))),
   }
+}
+
+// Self-check: `npx tsx lib/follows/where.ts` (check:follows, in quattro fusi).
+// Guardia a tre condizioni come lib/dateWindow.ts.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+  const ws = new Date('2026-09-10T00:00:00.000Z')
+  const date = availableEventsWhere(ws)
+  const none: FollowSets = { comuni: [], province: [], regions: [], categories: [] }
+
+  // nessun follow -> nulla da mostrare
+  assert.strictEqual(buildFeedWhere(none, ws), null)
+
+  // solo categorie: regola di data + categoria, nessun OR di luoghi
+  assert.deepStrictEqual(buildFeedWhere({ ...none, categories: ['Altro'] }, ws), {
+    canonicalEventId: null,
+    AND: [date, { canonicalCategory: { in: ['Altro'] } }, { canonicalCategory: { in: ['Altro'] } }],
+  })
+
+  // solo una regione: l'OR dei luoghi ha UN ramo
+  assert.deepStrictEqual(buildFeedWhere({ ...none, regions: ['lombardia'] }, ws), {
+    canonicalEventId: null,
+    AND: [date, { OR: [{ region: { in: ['lombardia'] } }] }],
+  })
+
+  // tutti e quattro: tre rami nell'ordine comune, provincia, regione + categorie
+  const all = buildFeedWhere({ comuni: ['016024'], province: ['BG'], regions: ['lombardia'], categories: ['Altro'] }, ws)
+  assert.deepStrictEqual(all, {
+    canonicalEventId: null,
+    AND: [
+      date,
+      { OR: [{ comune: { istatCode: { in: ['016024'] } } }, { comune: { provinceCode: { in: ['BG'] } } }, { region: { in: ['lombardia'] } }] },
+      { canonicalCategory: { in: ['Altro'] } },
+    ],
+  })
+
+  // splitFollows: raggruppa e ignora i tipi ignoti
+  assert.deepStrictEqual(
+    splitFollows([
+      { kind: 'comune', key: '016024' },
+      { kind: 'province', key: 'BG' },
+      { kind: 'region', key: 'lombardia' },
+      { kind: 'category', key: 'Altro' },
+      { kind: 'hacker', key: 'x' },
+    ]),
+    { comuni: ['016024'], province: ['BG'], regions: ['lombardia'], categories: ['Altro'] }
+  )
+
+  // parametri: default, estremi, non numerici
+  assert.deepStrictEqual(clampFeedParams(null, null), { limit: 10, offset: 0 })
+  assert.deepStrictEqual(clampFeedParams('0', '-5'), { limit: 1, offset: 0 })
+  assert.deepStrictEqual(clampFeedParams('999', '20000'), { limit: FEED_MAX_LIMIT, offset: 10000 })
+  assert.deepStrictEqual(clampFeedParams('abc', 'x'), { limit: 10, offset: 0 })
+  assert.deepStrictEqual(clampFeedParams('5', '30'), { limit: 5, offset: 30 })
+
+  console.log('self-check OK')
 }
