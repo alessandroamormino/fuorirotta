@@ -23,6 +23,8 @@
 #   P9  /privacy nomina gli eventi salvati e il rimedio del collegamento al calendario ("Rigenera link")
 #   P10 /privacy nomina luoghi seguiti e categorie seguite (23-07); /cookie nomina le due chiavi del
 #       browser lette da lib/follows/device.ts e i minuti dell'intento di lib/follows/intent.ts
+#   P11 /privacy nomina il link di condivisione della lista e i suoi due rimedi ("Disattiva link",
+#       "Genera nuovo link"), gli stessi nomi dei bottoni del dialogo (24-04)
 #
 # Regola della TAB letterale: niente `\t` nei grep (BSD e GNU differiscono),
 # solo classi [[:space:]]. Dove un grep puo' legittimamente non trovare nulla
@@ -160,3 +162,10 @@ intent_min="$(sed -nE 's/.*INTENT_MAX_AGE_MS[[:space:]]*=[[:space:]]*([0-9]+)[[:
 [[ -n "${intent_min}" ]] || fail "P10 non trovo 'INTENT_MAX_AGE_MS = N * 60 * 1000' in ${intent}"
 has "${cookie}" "${intent_min} minuti" || fail "P10 ${cookie} non dice '${intent_min} minuti' per l'intento di follow (INTENT_MAX_AGE_MS)"
 echo "ok  P10 luoghi e categorie seguiti, chiavi del browser e ${intent_min} minuti come il codice"
+
+# --- P11 -----------------------------------------------------------------
+# Needle senza apostrofi e in minuscolo: nel testo corrente compare cosi'.
+has "${privacy}" "link di condivisione della lista" || fail "P11 ${privacy} non nomina il link di condivisione della lista"
+has "${privacy}" "Disattiva link" || fail "P11 ${privacy} non nomina il rimedio 'Disattiva link'"
+has "${privacy}" "Genera nuovo link" || fail "P11 ${privacy} non nomina il rimedio 'Genera nuovo link'"
+echo "ok  P11 link di condivisione della lista e i suoi due rimedi"
