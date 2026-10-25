@@ -334,3 +334,117 @@ for name in d2old d2a d2b d2oldagain; do
   [[ "$(hdr "${name}" cache-control)" == "no-store" ]] || fail "H2: ${name}: cache-control '$(hdr "${name}" cache-control)'"
 done
 echo "ok  H2: i 404 dei link disattivati e mai esistiti portano no-referrer, 'noindex, nofollow' e no-store"
+
+# --- Rotazione e nome: le rotte del proprietario (O2-O6, D3) ---------------------------
+mint_user u3 'Senza Link'
+mint_user u6 'Altro Estraneo'
+share_patch() { call "$1" PATCH /api/v1/me/share -H "Origin: ${origin}" -H "$2" -H 'Content-Type: application/json' --data "$3"; }
+share_del() { call "$1" DELETE /api/v1/me/share -H "Origin: ${origin}" -H "$2"; }
+share_rot() { call "$1" POST /api/v1/me/share/rotate -H "Origin: ${origin}" -H "$2"; }
+tok() { printf '%s' "${1#/l/}"; }
+
+# --- O2: rigenera; il vecchio indirizzo muore subito, vale solo l'ultimo ---------------
+path0="${share_path}"
+code="$(share_rot o2r1 "${u1_cookie}")"
+[[ "${code}" == "200" ]] || fail "O2: rotate: atteso 200, ottenuto ${code} '$(cat "${tmp_dir}/o2r1.b")'"
+path1="$(json_get "${tmp_dir}/o2r1.b" 'j.path')"
+[[ "${path1}" =~ ^/l/[A-Za-z0-9_-]{22}$ && "${path1}" != "${path0}" ]] || fail "O2: il path dopo rotate deve essere nuovo, prima '${path0}' dopo '${path1}'"
+[[ "$(json_get "${tmp_dir}/o2r1.b" 'j.showName')" == "false" ]] || fail "O2: rotate deve lasciare showName com'era (false)"
+[[ "$(dead o2dead0 "$(tok "${path0}")")" == "404" ]] || fail "O2: il path precedente deve dare 404 subito dopo rotate"
+[[ "$(call o2live1 GET "${path1}")" == "200" ]] || fail "O2: il path nuovo deve dare 200 subito"
+code="$(share_rot o2r2 "${u1_cookie}")"
+path2="$(json_get "${tmp_dir}/o2r2.b" 'j.path')"
+[[ "${code}" == "200" && "${path2}" =~ ^/l/[A-Za-z0-9_-]{22}$ && "${path2}" != "${path1}" && "${path2}" != "${path0}" ]] || fail "O2: secondo rotate: atteso un terzo path diverso, ottenuto ${code} '${path2}'"
+[[ "$(dead o2dead1 "$(tok "${path1}")")" == "404" ]] || fail "O2: dopo il secondo rotate anche il secondo path deve dare 404"
+[[ "$(dead o2dead0b "$(tok "${path0}")")" == "404" ]] || fail "O2: il primo path resta morto"
+[[ "$(call o2live2 GET "${path2}")" == "200" ]] || fail "O2: l'ultimo path deve dare 200"
+[[ "$(share_rows "${u1_user}")" == "1" ]] || fail "O2: rotate non deve moltiplicare le righe di u1"
+code="$(share_rot o2none "${u3_cookie}")"
+[[ "${code}" == "404" && "$(json_get "${tmp_dir}/o2none.b" 'j.error')" == "not-found" ]] || fail "O2: rotate senza link: atteso 404 not-found, ottenuto ${code} '$(cat "${tmp_dir}/o2none.b")'"
+[[ "$(share_rows "${u3_user}")" == "0" ]] || fail "O2: rotate senza link non deve creare nessuna riga"
+share_path="${path2}"
+echo "ok  O2: rotate -> path nuovo subito vivo, precedente morto; secondo rotate uccide anche il secondo, vale solo l'ultimo; senza link 404 e nessuna riga"
+
+# --- D3: i link rigenerati sono un 404 come quello di un codice mai esistito ----------------
+same_dead "D3 (primo path)" o2dead0 "$(tok "${path0}")" d2a "${unknown_a}"
+same_dead "D3 (secondo path)" o2dead1 "$(tok "${path1}")" d2a "${unknown_a}"
+same_dead "D3 (primo path, dopo il secondo rotate)" o2dead0b "$(tok "${path0}")" d2b "${unknown_b}"
+echo "ok  D3: i link rigenerati rispondono il 404 dei codici ignoti (stato, header, byte normalizzati)"
+
+# --- O3: "Mostra il mio nome" sullo stesso codice ----------------------------------------
+code="$(share_patch o3on "${u1_cookie}" '{"showName":true}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/o3on.b" 'j.showName')" == "true" ]] || fail "O3: PATCH true: atteso 200 {showName:true}, ottenuto ${code} '$(cat "${tmp_dir}/o3on.b")'"
+share_get o3get "${u1_cookie}" >/dev/null
+[[ "$(json_get "${tmp_dir}/o3get.b" 'j.link.path')" == "${share_path}" ]] || fail "O3: il codice non deve cambiare con un PATCH"
+call o3page GET "${share_path}" >/dev/null
+grep -q '>I salvati di Proprietaria Prova</h1>' "${tmp_dir}/o3page.b" || fail "O3: manca l'h1 'I salvati di Proprietaria Prova'"
+grep -qF '<title>I salvati di Proprietaria Prova' "${tmp_dir}/o3page.b" || fail "O3: manca il titolo 'I salvati di Proprietaria Prova'"
+psql_dev "UPDATE auth_user SET name = 'Proprietaria Rinominata' WHERE id = '${u1_user}'" >/dev/null
+call o3renamed GET "${share_path}" >/dev/null
+grep -q '>I salvati di Proprietaria Rinominata</h1>' "${tmp_dir}/o3renamed.b" || fail "O3: dopo il cambio di nome manca l'h1 con il nome nuovo"
+grep -qF '<title>I salvati di Proprietaria Rinominata' "${tmp_dir}/o3renamed.b" || fail "O3: dopo il cambio di nome manca il titolo con il nome nuovo"
+share_get o3get2 "${u1_cookie}" >/dev/null
+[[ "$(json_get "${tmp_dir}/o3get2.b" 'j.link.path')" == "${share_path}" ]] || fail "O3: il cambio di nome non deve cambiare il codice"
+code="$(share_patch o3off "${u1_cookie}" '{"showName":false}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/o3off.b" 'j.showName')" == "false" ]] || fail "O3: PATCH false: atteso 200 {showName:false}, ottenuto ${code}"
+call o3back GET "${share_path}" >/dev/null
+grep -q '>Eventi salvati</h1>' "${tmp_dir}/o3back.b" || fail "O3: con showName false deve tornare 'Eventi salvati'"
+if grep -q 'Proprietaria' "${tmp_dir}/o3back.b"; then fail "O3: con showName false il nome non deve comparire"; fi
+for bad in '{"showName":"yes"}' '{}' 'non json' 'null' '{"showName":1}'; do
+  code="$(share_patch o3bad "${u1_cookie}" "${bad}")"
+  [[ "${code}" == "400" && "$(json_get "${tmp_dir}/o3bad.b" 'j.error')" == "bad-request" ]] || fail "O3: PATCH '${bad}': atteso 400 bad-request, ottenuto ${code} '$(cat "${tmp_dir}/o3bad.b")'"
+done
+code="$(share_patch o3none "${u3_cookie}" '{"showName":true}')"
+[[ "${code}" == "404" ]] || fail "O3: PATCH senza link: atteso 404, ottenuto ${code}"
+[[ "$(share_rows "${u3_user}")" == "0" ]] || fail "O3: PATCH senza link non deve creare righe"
+echo "ok  O3: PATCH true -> titolo e h1 'I salvati di {nome}' sullo stesso codice, il nome nuovo vale alla richiesta dopo, false -> 'Eventi salvati'; corpi non validi 400; senza link 404"
+
+# --- O4: rigenerare tiene il nome, disattivare lo azzera -------------------------------------
+code="$(share_patch o4on "${u1_cookie}" '{"showName":true}')"
+[[ "${code}" == "200" ]] || fail "O4: PATCH true: ${code}"
+code="$(share_rot o4rot "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/o4rot.b" 'j.showName')" == "true" ]] || fail "O4: rotate deve tenere showName true, ottenuto ${code} '$(cat "${tmp_dir}/o4rot.b")'"
+share_path="$(json_get "${tmp_dir}/o4rot.b" 'j.path')"
+call o4page GET "${share_path}" >/dev/null
+grep -q '>I salvati di Proprietaria Rinominata</h1>' "${tmp_dir}/o4page.b" || fail "O4: dopo rotate la pagina deve mostrare ancora il nome"
+code="$(share_del o4del "${u1_cookie}")"
+[[ "${code}" == "200" ]] || fail "O4: DELETE: ${code}"
+code="$(share_post o4new "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/o4new.b" 'j.showName')" == "false" ]] || fail "O4: dopo DELETE il POST deve dare showName false, ottenuto ${code} '$(cat "${tmp_dir}/o4new.b")'"
+share_path="$(json_get "${tmp_dir}/o4new.b" 'j.path')"
+call o4page2 GET "${share_path}" >/dev/null
+grep -q '>Eventi salvati</h1>' "${tmp_dir}/o4page2.b" || fail "O4: dopo DELETE e POST la pagina deve dire 'Eventi salvati'"
+if grep -q 'Proprietaria' "${tmp_dir}/o4page2.b"; then fail "O4: dopo DELETE e POST il nome non deve comparire"; fi
+echo "ok  O4: rotate tiene showName true, DELETE poi POST riparte con showName false (risposta e pagina)"
+
+# --- O5: stesse guardie di ogni scrittura /api/v1/me -----------------------------------------
+check_cc() { # <nome> <etichetta>
+  local cc
+  cc="$(hdr "$1" cache-control)"
+  [[ "${cc}" == *private* && "${cc}" == *no-store* ]] || fail "O5: $2: cache-control '${cc}'"
+}
+code="$(call o5a POST /api/v1/me/share -H "${u1_cookie}")";                       [[ "${code}" == "403" ]] || fail "O5: POST create senza Origin: atteso 403, ottenuto ${code}"; check_cc o5a "POST create senza Origin"
+code="$(call o5b PATCH /api/v1/me/share -H "${u1_cookie}" -H 'Content-Type: application/json' --data '{"showName":true}')"; [[ "${code}" == "403" ]] || fail "O5: PATCH senza Origin: atteso 403, ottenuto ${code}"; check_cc o5b "PATCH senza Origin"
+code="$(call o5c DELETE /api/v1/me/share -H "${u1_cookie}")";                      [[ "${code}" == "403" ]] || fail "O5: DELETE senza Origin: atteso 403, ottenuto ${code}"; check_cc o5c "DELETE senza Origin"
+code="$(call o5d POST /api/v1/me/share/rotate -H "${u1_cookie}")";                 [[ "${code}" == "403" ]] || fail "O5: rotate senza Origin: atteso 403, ottenuto ${code}"; check_cc o5d "rotate senza Origin"
+code="$(call o5e POST /api/v1/me/share -H "Origin: ${origin}")";                   [[ "${code}" == "401" ]] || fail "O5: POST create senza sessione: atteso 401, ottenuto ${code}"; check_cc o5e "POST create senza sessione"
+code="$(call o5f PATCH /api/v1/me/share -H "Origin: ${origin}" -H 'Content-Type: application/json' --data '{"showName":true}')"; [[ "${code}" == "401" ]] || fail "O5: PATCH senza sessione: atteso 401, ottenuto ${code}"; check_cc o5f "PATCH senza sessione"
+code="$(call o5g DELETE /api/v1/me/share -H "Origin: ${origin}")";                 [[ "${code}" == "401" ]] || fail "O5: DELETE senza sessione: atteso 401, ottenuto ${code}"; check_cc o5g "DELETE senza sessione"
+code="$(call o5h POST /api/v1/me/share/rotate -H "Origin: ${origin}")";            [[ "${code}" == "401" ]] || fail "O5: rotate senza sessione: atteso 401, ottenuto ${code}"; check_cc o5h "rotate senza sessione"
+code="$(call o5i GET /api/v1/me/share)";                                           [[ "${code}" == "401" ]] || fail "O5: GET senza sessione: atteso 401, ottenuto ${code}"; check_cc o5i "GET senza sessione"
+# Le scritture respinte non hanno toccato la riga: ancora showName false e lo stesso codice.
+[[ "$(psql_dev "SELECT token || '|' || show_name FROM share_links WHERE user_id = '${u1_user}'")" == "$(tok "${share_path}")|false" ]] || fail "O5: una scrittura respinta ha cambiato la riga di u1"
+echo "ok  O5: senza Origin 403 e senza sessione 401 su POST, PATCH, DELETE e rotate (GET senza sessione 401); sempre private, no-store; la riga non cambia"
+
+# --- O6: l'utente viene solo dalla sessione ------------------------------------------------------
+before="$(psql_dev "SELECT token || '|' || show_name FROM share_links WHERE user_id = '${u1_user}'")"
+code="$(share_del o6del "${u6_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/o6del.b" 'j.removed')" == "0" ]] || fail "O6: DELETE di u6: atteso 200 {removed:0}, ottenuto ${code} '$(cat "${tmp_dir}/o6del.b")'"
+code="$(share_patch o6patch "${u6_cookie}" '{"showName":true}')"
+[[ "${code}" == "404" ]] || fail "O6: PATCH di u6: atteso 404, ottenuto ${code}"
+code="$(share_rot o6rot "${u6_cookie}")"
+[[ "${code}" == "404" ]] || fail "O6: rotate di u6: atteso 404, ottenuto ${code}"
+[[ "$(psql_dev "SELECT token || '|' || show_name FROM share_links WHERE user_id = '${u1_user}'")" == "${before}" ]] || fail "O6: le scritture di u6 hanno cambiato la riga di u1"
+[[ "$(share_rows "${u6_user}")" == "0" ]] || fail "O6: le scritture di u6 non devono creare righe"
+[[ "$(call o6page GET "${share_path}")" == "200" ]] || fail "O6: il link di u1 deve restare vivo"
+echo "ok  O6: DELETE, PATCH e rotate di un altro utente -> {removed:0}, 404, 404; la riga e il link di u1 restano uguali"

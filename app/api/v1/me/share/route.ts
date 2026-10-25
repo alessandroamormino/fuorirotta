@@ -50,3 +50,25 @@ export async function DELETE(req: Request): Promise<Response> {
   const { count } = await prisma.shareLink.deleteMany({ where: { userId: ctx.user.id } })
   return noStoreJson({ removed: count })
 }
+
+// Mostra il nome del proprietario sulla pagina pubblica (D-04, D-05). Il corpo deve essere
+// un oggetto con showName booleano: tutto il resto e' 400 prima di ogni query. Il codice
+// del link non cambia mai con un PATCH; senza link e' 404 (non lo crea).
+export async function PATCH(req: Request): Promise<Response> {
+  const blocked = assertSameOrigin(req)
+  if (blocked) return blocked
+  const ctx = await requireUser(req)
+  if (ctx instanceof Response) return ctx
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return noStoreJson({ error: 'bad-request' }, 400)
+  }
+  const showName = (body as { showName?: unknown } | null)?.showName
+  if (typeof showName !== 'boolean') return noStoreJson({ error: 'bad-request' }, 400)
+
+  const { count } = await prisma.shareLink.updateMany({ where: { userId: ctx.user.id }, data: { showName } })
+  if (count === 0) return noStoreJson({ error: 'not-found' }, 404)
+  return noStoreJson({ showName })
+}
