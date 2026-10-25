@@ -144,9 +144,16 @@ export default function ShareListDialog() {
 		setNameError(false);
 	};
 
-	// Il focus va alla scelta sicura quando la conferma si apre.
+	// Il focus va alla scelta sicura quando la conferma si apre, e torna al
+	// bottone che l'ha aperta quando si annulla: quel bottone esiste di nuovo
+	// solo dopo il render, quindi lo si cerca qui e non in closeConfirm.
+	const returnFocus = useRef<string | null>(null);
 	useEffect(() => {
 		if (confirm) document.getElementById("share-keep")?.focus();
+		else if (returnFocus.current) {
+			document.getElementById(returnFocus.current)?.focus();
+			returnFocus.current = null;
+		}
 	}, [confirm]);
 
 	const openConfirm = (kind: "off" | "regen") => {
@@ -155,10 +162,9 @@ export default function ShareListDialog() {
 	};
 
 	const closeConfirm = () => {
-		const opener = confirm === "off" ? "share-off" : "share-regen";
+		returnFocus.current = confirm === "off" ? "share-off" : "share-regen";
 		setConfirm(null);
 		setConfirmError("");
-		document.getElementById(opener)?.focus();
 	};
 
 	// Un'altra scheda ha gia' tolto il link: si riparte dallo stato vero.
@@ -396,17 +402,14 @@ export default function ShareListDialog() {
 							</div>
 
 							<div className="border-t border-border-soft pt-6">
-								<div className="flex flex-wrap gap-2">
-									<Button id="share-off" variant="ghost" size="sm" disabled={busy !== null} aria-expanded={confirm === "off"} aria-controls="share-off-confirm" onClick={() => openConfirm("off")}>
-										Disattiva link
-									</Button>
-									<Button id="share-regen" variant="ghost" size="sm" disabled={busy !== null} aria-expanded={confirm === "regen"} aria-controls="share-regen-confirm" onClick={() => openConfirm("regen")}>
-										Genera nuovo link
-									</Button>
-								</div>
-								{confirm && (
-									<div id={confirm === "off" ? "share-off-confirm" : "share-regen-confirm"} className="mt-4">
-										<p className="text-sm text-foreground">
+								{/* La conferma PRENDE IL POSTO dei due bottoni (UAT 2026-10-25): sotto i
+								    bottoni originali sembrava un doppione di "Disattiva". */}
+								{confirm ? (
+									<div id={confirm === "off" ? "share-off-confirm" : "share-regen-confirm"} role="group" aria-labelledby="share-confirm-title">
+										<p id="share-confirm-title" className="text-sm font-semibold text-foreground">
+											{confirm === "off" ? "Disattivare il link?" : "Generare un nuovo link?"}
+										</p>
+										<p className="mt-1 text-sm text-foreground-secondary">
 											{confirm === "off"
 												? "Chi ha il link attuale non potrà più aprirlo. Potrai crearne uno nuovo quando vuoi."
 												: "Chi ha il link attuale non potrà più aprirlo. Il nuovo link funziona subito."}
@@ -416,14 +419,23 @@ export default function ShareListDialog() {
 												<Alert>{confirmError}</Alert>
 											</div>
 										)}
-										<div className="mt-4 flex gap-2">
+										<div className="mt-4 flex flex-wrap gap-2">
 											<Button variant="destructive" size="sm" loading={busy === (confirm === "off" ? "off" : "rotate")} onClick={confirm === "off" ? deactivate : rotate}>
-												{confirm === "off" ? "Disattiva link" : "Genera nuovo link"}
+												{confirm === "off" ? "Sì, disattiva" : "Sì, genera"}
 											</Button>
 											<Button id="share-keep" variant="ghost" size="sm" disabled={busy !== null} onClick={closeConfirm}>
-												Mantieni il link attuale
+												Annulla
 											</Button>
 										</div>
+									</div>
+								) : (
+									<div className="flex flex-wrap gap-2">
+										<Button id="share-off" variant="ghost" size="sm" disabled={busy !== null} onClick={() => openConfirm("off")}>
+											Disattiva link
+										</Button>
+										<Button id="share-regen" variant="ghost" size="sm" disabled={busy !== null} onClick={() => openConfirm("regen")}>
+											Genera nuovo link
+										</Button>
 									</div>
 								)}
 							</div>
