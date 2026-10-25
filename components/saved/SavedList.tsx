@@ -237,20 +237,19 @@ function HeaderSlot({ mode, accountTotal }: { mode: SavedMode; accountTotal: num
 	return (
 		<div className="mt-2 mb-6 min-h-11">
 			<button type="button" aria-haspopup="dialog" onClick={openSignIn} className={textButton}>
-				Accedi per ritrovarli su tutti i tuoi dispositivi
+				Accedi per ritrovarli su tutti i tuoi dispositivi, averli nel calendario e condividerli
 			</button>
 		</div>
 	);
 }
 
 /**
- * "Aggiungi al calendario" (22-UI-SPEC Surface 3 punto 3, D-11): per chi ha l'account, sempre, anche
- * a lista vuota; l'ospite con l'accesso disponibile lo vede come invito solo se ha gia' salvato
- * qualcosa; senza accesso nessuno dei due. Lo stato in arrivo tiene lo spazio.
+ * Riga dell'account (22-UI-SPEC Surface 3 punto 3, D-11; 24-UI-SPEC Surface 1): "Aggiungi al
+ * calendario" e "Condividi la lista", sempre, anche a lista vuota. L'ospite non ha nulla qui:
+ * il suo unico invito ad accedere e' la riga di HeaderSlot (D-03). Senza accesso nessuno dei due.
+ * Lo stato in arrivo tiene lo spazio, cosi' l'HTML del server non contiene le pillole.
  */
 function CalendarEntry({ mode }: { mode: SavedMode }) {
-	const { enabled, openSignIn } = useUserState();
-	const guestCount = useSavedCount();
 	if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== "true") return null;
 	if (mode === "pending") return <div className="mt-4 min-h-12" />;
 	if (mode === "account") {
@@ -261,19 +260,7 @@ function CalendarEntry({ mode }: { mode: SavedMode }) {
 			</div>
 		);
 	}
-	if (enabled !== true || guestCount < 1) return null;
-	return (
-		<div className="mb-6 min-h-11">
-			<button
-				type="button"
-				aria-haspopup="dialog"
-				onClick={openSignIn}
-				className={`min-h-11 text-left text-sm text-foreground-secondary underline underline-offset-4 ${FOCUS_RING}`}
-			>
-				Accedi per avere i salvati nel calendario
-			</button>
-		</div>
-	);
+	return null;
 }
 
 function EmptyBlock({ heading, body, cta = false }: { heading: string; body: string; cta?: boolean }) {
