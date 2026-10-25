@@ -17,7 +17,8 @@
 #   P5  /cookie apre con la frase fissa e nomina i due cookie che il sign-in imposta
 #       (21-03: session_token e state), con la durata della sessione del codice
 #   P6  nessuna riga per funzioni non ancora uscite (elenco "Da riaggiungere" di 21-02,
-#       meno gli eventi salvati e il calendario, usciti con la fase 22)
+#       meno gli eventi salvati e il calendario, usciti con la fase 22, e Apple, uscita con la 25;
+#       restano vietati token del dispositivo e notifiche, fase 28)
 #   P7  il dialogo di accesso e il piede di pagina collegano le pagine
 #   P8  i mesi di conservazione dei salvati sono SAVED_RETENTION_MONTHS (22-05), in /privacy e /cookie
 #   P9  /privacy nomina gli eventi salvati e il rimedio del collegamento al calendario ("Rigenera link")
@@ -25,6 +26,8 @@
 #       browser lette da lib/follows/device.ts e i minuti dell'intento di lib/follows/intent.ts
 #   P11 /privacy nomina il link di condivisione della lista e i suoi due rimedi ("Disattiva link",
 #       "Genera nuovo link"), gli stessi nomi dei bottoni del dialogo (24-04)
+#   P12 /privacy nomina Apple come fornitore, l'indirizzo privato (relay) e il token tenuto solo
+#       per revocare (25-06); P6 non vieta piu' Apple, esce con la fase 25
 #
 # Regola della TAB letterale: niente `\t` nei grep (BSD e GNU differiscono),
 # solo classi [[:space:]]. Dove un grep puo' legittimamente non trovare nulla
@@ -123,7 +126,7 @@ echo "ok  P5 /cookie: frase fissa e due cookie con tipo"
 # Funzioni di fasi successive (21-02 "Da riaggiungere"): non devono comparire.
 # Luoghi e categorie seguiti sono usciti con la fase 23: ora li esige P10.
 for f in "${privacy}" "${cookie}"; do
-  hit="$(grep -niE 'token del dispositivo|device token|notifiche push|notifiche|Apple' "${f}" || true)"
+  hit="$(grep -niE 'token del dispositivo|device token|notifiche push|notifiche' "${f}" || true)"
   [[ -z "${hit}" ]] || fail "P6 ${f} parla di funzioni non ancora uscite: ${hit}"
 done
 echo "ok  P6 nessuna funzione non ancora uscita"
@@ -169,3 +172,10 @@ has "${privacy}" "link di condivisione della lista" || fail "P11 ${privacy} non 
 has "${privacy}" "Disattiva link" || fail "P11 ${privacy} non nomina il rimedio 'Disattiva link'"
 has "${privacy}" "Genera nuovo link" || fail "P11 ${privacy} non nomina il rimedio 'Genera nuovo link'"
 echo "ok  P11 link di condivisione della lista e i suoi due rimedi"
+
+# --- P12 -----------------------------------------------------------------
+# Needle senza apostrofi e in minuscolo dove il testo e' minuscolo (25-06).
+has "${privacy}" "Apple" || fail "P12 ${privacy} non nomina Apple"
+has "${privacy}" "indirizzo privato" || fail "P12 ${privacy} non descrive l'indirizzo privato di Apple (relay)"
+has "${privacy}" "revocare" || fail "P12 ${privacy} non dice che il codice di Apple e' tenuto solo per revocare l'autorizzazione"
+echo "ok  P12 Apple: fornitore, indirizzo privato e token tenuto solo per revocare"
