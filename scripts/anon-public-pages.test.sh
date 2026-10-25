@@ -49,7 +49,14 @@
 #       evento senza comune non ne ha nessuno; mai un aria-pressed="true"
 #   A15 /per-te: statica (o) (A1), h1 "Per te" e robots noindex, stessi byte per tutti
 #   A16 il CSS compilato contiene .per-te-slot e html[data-perte] .per-te-slot
-#   B2-B4, B7, B10-B15 come A2-A4, A7, A10-A15 con l'interruttore acceso
+#   A12 (Fase 24) in piu': l'HTML del server di /salvati non contiene "Condividi la lista"
+#       ne' la riga da ospite "averli nel calendario e condividerli" (nascono solo dopo
+#       che il client conosce la modalita'), con e senza sessione
+#   A17 Fase 24 (SHARE-03): un /l/ morto risponde 404 con l'h1 "Questo link non e'
+#       disponibile", stessi byte e header con e senza cookie di sessione
+#   A18 robots.txt e sitemap.xml non nominano /l/ (nessun Disallow che nasconda il noindex,
+#       nessun indirizzo condiviso pubblicizzato)
+#   B2-B4, B7, B10-B15, B17 come A2-A4, A7, A10-A15, A17 con l'interruttore acceso
 #   B5  interruttore acceso: /api/auth/ok 200, stato enabled:true e, col cookie,
 #       l'utente di prova
 #   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
@@ -332,9 +339,16 @@ check_saved() {
     || fail "${tag}12: /salvati: manca l'h1 'Salvati' nell'HTML del server"
   grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/saved-anon.b" \
     || fail "${tag}12: /salvati: manca il meta robots noindex"
+  for name in saved-anon saved-sess; do
+    for frag in 'Condividi la lista' 'averli nel calendario e condividerli'; do
+      if grep -qF "${frag}" "${tmp_dir}/${name}.b"; then
+        fail "${tag}12: /salvati (${name}): l'HTML del server contiene '${frag}' (nasce solo dopo che il client conosce la modalita')"
+      fi
+    done
+  done
   same "${tag}12" saved-anon saved-sess \
     || fail "${tag}12: /salvati: la risposta con la sessione differisce da quella anonima"
-  echo "ok  ${tag}12: /salvati 200, h1 e noindex, uguale con e senza sessione"
+  echo "ok  ${tag}12: /salvati 200, h1 e noindex, senza pillola di condivisione ne' riga da ospite, uguale con e senza sessione"
   i=0
   for path in "/" "/eventi/${event_id}"; do
     i=$((i + 1))
@@ -403,6 +417,27 @@ check_follow() {
   echo "ok  ${tag}15: /per-te ha l'h1 \"Per te\" e noindex, uguale con e senza sessione (A3/B3)"
 }
 
+# check_share <A|B>: A17/B17 (Fase 24, SHARE-03). Il link morto e' l'UNICA risposta
+# per codice ignoto, malformato, disattivato o sostituito: uguale per tutti. Un
+# token ben formato che non esiste e' il caso piu' semplice da riprodurre; stesso
+# URL con e senza sessione, quindi nessuna normalizzazione. Il testo si cerca nei
+# byte della risposta (Next 16.4.1 dopo notFound() lo porta nel payload della
+# pagina, non necessariamente come <h1> nell'HTML del server), come fa check:share.
+check_share() {
+  local tag="$1" code
+  code="$(fetch share-anon /l/AAAAAAAAAAAAAAAAAAAAAA)"
+  [[ "${code}" == "404" ]] || fail "${tag}17: GET /l/<morto>: atteso 404, ottenuto ${code}"
+  code="$(fetch share-sess /l/AAAAAAAAAAAAAAAAAAAAAA "${session_cookie}")"
+  [[ "${code}" == "404" ]] || fail "${tag}17: GET /l/<morto> con cookie: atteso 404, ottenuto ${code}"
+  for name in share-anon share-sess; do
+    grep -qF 'Questo link non è disponibile' "${tmp_dir}/${name}.b" \
+      || fail "${tag}17: /l/<morto> (${name}): manca l'h1 'Questo link non è disponibile'"
+  done
+  same "${tag}17" share-anon share-sess \
+    || fail "${tag}17: /l/<morto>: la risposta con la sessione differisce da quella anonima"
+  echo "ok  ${tag}17: /l/<morto> 404 con il suo h1, stessi byte e header con e senza sessione"
+}
+
 # start_server <env...>: next start di produzione sul DB locale.
 start_server() {
   bash scripts/dev-db.sh env "NEXT_TEST_DIST_DIR=${test_dist_dir}" "$@" npx next start -p "${port}" \
@@ -420,6 +455,7 @@ check_icon A
 check_legal A
 check_saved A
 check_follow A
+check_share A
 
 # --- A16: il CSS compilato porta le regole del riquadro (una volta, dopo la build) ----
 css_files="$(find "${test_dist_dir}/static" -name '*.css' 2>/dev/null || true)"
@@ -429,6 +465,18 @@ grep -q 'per-te-slot' ${css_files} || fail "A16: il CSS compilato non contiene .
 # shellcheck disable=SC2086
 grep -qF 'html[data-perte] .per-te-slot' ${css_files} || fail "A16: il CSS compilato non contiene html[data-perte] .per-te-slot"
 echo "ok  A16: il CSS compilato contiene .per-te-slot e html[data-perte] .per-te-slot"
+
+# --- A18: nessun /l/ ai crawler (T-24-25) -----------------------------------------------
+# Un Disallow su /l/ nasconderebbe il noindex della pagina; la sitemap non deve
+# pubblicizzare indirizzi condivisi. Si cerca "/l/" nei due file serviti dalla build.
+for f in robots.txt sitemap.xml; do
+  code="$(fetch "a18-${f%%.*}" "/${f}")"
+  [[ "${code}" == "200" ]] || fail "A18: GET /${f}: atteso 200, ottenuto ${code}"
+  if grep -qF '/l/' "${tmp_dir}/a18-${f%%.*}.b"; then
+    fail "A18: /${f} nomina /l/"
+  fi
+done
+echo "ok  A18: robots.txt e sitemap.xml non nominano /l/"
 
 code="$(fetch a5ok /api/auth/ok)"
 [[ "${code}" == "404" ]] || fail "A5: /api/auth/ok a interruttore spento: atteso 404, ottenuto ${code}"
@@ -478,6 +526,7 @@ check_icon B
 check_legal B
 check_saved B
 check_follow B
+check_share B
 
 code="$(fetch b5ok /api/auth/ok)"
 [[ "${code}" == "200" ]] || fail "B5: /api/auth/ok a interruttore acceso: atteso 200, ottenuto ${code}"

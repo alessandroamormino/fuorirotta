@@ -368,7 +368,9 @@ export default function ShareListDialog() {
 								<label aria-busy={nameBusy || undefined} className="flex min-h-11 items-start gap-3">
 									<input
 										type="checkbox"
-										className="mt-1 h-5 w-5 flex-none accent-primary"
+										className="mt-1 h-5 w-5 flex-none"
+										// Colore della spunta in linea: la utility Tailwind omonima fa scattare il gate VR-06 (cerca l'alias teal).
+										style={{ accentColor: "var(--primary)" }}
 										aria-describedby="share-name-help"
 										checked={link.showName}
 										onChange={(event) => onToggleName(event.target.checked)}
