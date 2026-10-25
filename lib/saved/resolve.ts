@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { composeEvent, groupMembersByCanonical } from '@/lib/dedup/compose'
 import { snapFromEvent, type ResolvedItem, type Snap } from '@/lib/saved/snapshot'
 import { seriesOf, type Sibling } from '@/lib/saved/series'
-import { windowEndFloor, windowStartToday } from '@/lib/dateWindow'
+import { endWindow, windowStartToday } from '@/lib/dateWindow'
 import type { SavedItemData } from '@/lib/saved/view'
 
 export async function resolveIds(ids: number[]): Promise<ResolvedItem[]> {
@@ -76,6 +76,7 @@ export async function findSiblings(
     wanted.push({ key, sourceId, source, ...series })
   }
   if (wanted.length === 0) return out
+  const { floor, utcEndOfDayStart } = endWindow(windowStart)
 
   // ponytail: al massimo 100 righe per serie (un evento altoadige giornaliero puo' durare mesi);
   // alzare il tetto, o paginare, solo se "Altre date" deve davvero elencarne di piu'.
@@ -90,7 +91,7 @@ export async function findSiblings(
         AND starts_with(e.source_id, k.prefix)
         AND (k.tail = '' OR right(e.source_id, length(k.tail)) = k.tail)
       WHERE e.canonical_event_id IS NULL
-        AND (e.date_end >= ${windowEndFloor(windowStart)} OR (e.date_end IS NULL AND e.date_start >= ${windowStart}))
+        AND (e.date_end >= ${floor} OR (e.date_end >= ${windowStart} AND e.date_end < ${utcEndOfDayStart}) OR (e.date_end IS NULL AND e.date_start >= ${windowStart}))
     ) s
     WHERE s.rn <= 100
     ORDER BY s.k, s.date_start, s.id
