@@ -8,6 +8,7 @@
 // offline (21-RESEARCH ipotesi A6) e gli hook sono funzioni pure.
 //
 // Esce con 1 al primo controllo fallito. Stampa "ok  <caso>" per ognuno.
+import { generateKeyPairSync } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -24,6 +25,15 @@ Object.assign(process.env, {
   GOOGLE_CLIENT_ID: 'test-client-id.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
   DATABASE_URL: 'postgresql://fuorirotta:fuorirotta@localhost:5433/fuorirotta_dev',
+  // Apple (Fase 25): stessi identificativi di prova di apple-flow, chiave P-256 generata qui.
+  APPLE_AUTH_ENABLED: 'true',
+  APPLE_CLIENT_ID: 'it.fuorirotta.web.test',
+  APPLE_APP_BUNDLE_ID: 'it.fuorirotta.app.test',
+  APPLE_TEAM_ID: 'TEAMID1234',
+  APPLE_KEY_ID: 'KEYID12345',
+  APPLE_PRIVATE_KEY_B64: Buffer.from(
+    generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'pem' }) as string,
+  ).toString('base64'),
 })
 
 function check(name: string, condition: boolean, detail = ''): void {
@@ -41,11 +51,24 @@ type Hook = (data: Record<string, unknown>) => Promise<HookResult> | HookResult
 // a cio' che abbiamo scritto e non lasciano chiedere "e' assente?".
 type ResolvedOptions = {
   session?: { cookieCache?: { enabled?: boolean } }
-  account?: { accountLinking?: { enabled?: boolean; disableImplicitLinking?: boolean; trustedProviders?: unknown } }
+  account?: {
+    accountLinking?: { enabled?: boolean; disableImplicitLinking?: boolean; allowDifferentEmails?: boolean; trustedProviders?: unknown }
+    encryptOAuthTokens?: boolean
+  }
+  trustedOrigins?: string[]
   advanced?: { ipAddress?: { ipAddressHeaders?: string[] } }
   plugins?: { id: string; options?: { requireSignature?: boolean } }[]
   telemetry?: { enabled?: boolean }
-  socialProviders?: { google?: { includeGrantedScopes?: boolean; overrideUserInfoOnSignIn?: boolean; mapProfileToUser?: unknown } }
+  socialProviders?: {
+    google?: { includeGrantedScopes?: boolean; overrideUserInfoOnSignIn?: boolean; mapProfileToUser?: unknown }
+    apple?: {
+      clientId?: string | string[]
+      audience?: string[]
+      appBundleIdentifier?: string
+      overrideUserInfoOnSignIn?: boolean
+      clientSecret?: string
+    }
+  }
   user?: { deleteUser?: { enabled?: boolean; sendDeleteAccountVerification?: unknown } }
   databaseHooks: {
     user: { create: { before: Hook }; update: { before: Hook } }
@@ -54,7 +77,7 @@ type ResolvedOptions = {
 }
 
 async function main(): Promise<void> {
-  const { authEnabled, getAuth } = await import('../lib/auth')
+  const { authEnabled, appleEnabled, getAuth } = await import('../lib/auth')
   const display = await import('../lib/displayName')
 
   // --- Nome visualizzato: punti di codice, dopo NFC e trim (D-09) -------------
@@ -74,6 +97,17 @@ async function main(): Promise<void> {
   )
   check('displayName: nome assente -> parte locale dell\'e-mail', display.displayNameFromProvider(undefined, 'mario.rossi@example.it') === 'mario.rossi')
   check('displayName: nome vuoto -> parte locale dell\'e-mail', display.displayNameFromProvider('   ', 'zoe@y.it') === 'zoe')
+  check('displayName: relay di Apple senza nome -> "Utente Fuorirotta"', display.displayNameFromProvider('', 'abc123@privaterelay.appleid.com') === 'Utente Fuorirotta')
+  check('displayName: il relay si riconosce senza badare a maiuscole e spazi', display.displayNameFromProvider(undefined, ' x@PrivateRelay.AppleID.com ') === 'Utente Fuorirotta')
+  check('displayName: relay con nome "Anna" -> Anna', display.displayNameFromProvider('Anna', 'x@privaterelay.appleid.com') === 'Anna')
+  check(
+    'isAppleRelayEmail: vero per il relay in maiuscole, falso per un dominio che lo contiene, per gmail, per un numero e per null',
+    display.isAppleRelayEmail(' x@PrivateRelay.AppleID.com ') &&
+      !display.isAppleRelayEmail('x@privaterelay.appleid.com.evil.it') &&
+      !display.isAppleRelayEmail('x@gmail.com') &&
+      !display.isAppleRelayEmail(42) &&
+      !display.isAppleRelayEmail(null),
+  )
   check('displayName: iniziale in maiuscolo del nome', display.displayInitial('éva', 'x@y.it') === 'É')
   check('displayName: iniziale dall\'e-mail se il nome e vuoto', display.displayInitial('', 'zoe@y.it') === 'Z')
 
@@ -130,6 +164,50 @@ async function main(): Promise<void> {
   }
   check('authEnabled: ripristinato, torna attivo', authEnabled() === true)
 
+  // --- appleEnabled(): interruttore proprio, nomi nel log e mai i valori (D-04) --
+  // Prima del primo getAuth(): l'istanza si costruisce una volta sola.
+  const appleNames = Object.keys(process.env).filter((name) => name.startsWith('APPLE_'))
+  const appleSaved = Object.fromEntries(appleNames.map((name) => [name, process.env[name]]))
+  const appleLogged: string[] = []
+  console.error = (...args: unknown[]) => { appleLogged.push(args.map(String).join(' ')) }
+  try {
+    check('appleEnabled: attivo con la configurazione completa', appleEnabled() === true && appleLogged.length === 0)
+    process.env.APPLE_AUTH_ENABLED = 'false'
+    check("appleEnabled: APPLE_AUTH_ENABLED='false' -> spento e senza log", appleEnabled() === false && appleLogged.length === 0)
+    delete process.env.APPLE_AUTH_ENABLED
+    check('appleEnabled: interruttore non impostato -> spento e senza log', appleEnabled() === false && appleLogged.length === 0)
+    process.env.APPLE_AUTH_ENABLED = 'true'
+    process.env.APPLE_KEY_ID = ''
+    check('appleEnabled: APPLE_KEY_ID vuoto -> spento', appleEnabled() === false)
+    const leaks = [appleSaved.APPLE_CLIENT_ID, appleSaved.APPLE_TEAM_ID, appleSaved.APPLE_KEY_ID, appleSaved.APPLE_PRIVATE_KEY_B64].filter((v): v is string => !!v)
+    check(
+      'appleEnabled: il log nomina APPLE_KEY_ID e nessun valore di prova',
+      appleLogged.length === 1 && appleLogged[0].includes('APPLE_KEY_ID') && leaks.every((value) => !appleLogged[0].includes(value)),
+      appleLogged.join(' | '),
+    )
+    appleEnabled()
+    check('appleEnabled: lo stesso insieme di mancanti si logga una volta sola', appleLogged.length === 1)
+    process.env.APPLE_KEY_ID = appleSaved.APPLE_KEY_ID
+    process.env.APPLE_PRIVATE_KEY_B64 = Buffer.from('non e una chiave').toString('base64')
+    check('appleEnabled: una chiave che non e EC P-256 -> spento', appleEnabled() === false)
+    check(
+      'appleEnabled: il log nomina APPLE_PRIVATE_KEY_B64',
+      appleLogged.length === 2 && appleLogged[1].includes('APPLE_PRIVATE_KEY_B64') && !appleLogged[1].includes(String(process.env.APPLE_PRIVATE_KEY_B64)),
+      appleLogged.join(' | '),
+    )
+    process.env.APPLE_PRIVATE_KEY_B64 = appleSaved.APPLE_PRIVATE_KEY_B64
+    process.env.AUTH_ENABLED = 'false'
+    check('appleEnabled: AUTH_ENABLED spento -> Apple spento', appleEnabled() === false)
+  } finally {
+    console.error = originalError
+    for (const name of appleNames) {
+      if (appleSaved[name] === undefined) delete process.env[name]
+      else process.env[name] = appleSaved[name]
+    }
+    process.env.AUTH_ENABLED = 'true'
+  }
+  check('appleEnabled: ripristinato, torna attivo', appleEnabled() === true)
+
   // --- Il contesto risolto: i default pericolosi, cambiati e fissati --------
   const auth = getAuth()
   check('getAuth: istanza con la configurazione completa', auth !== null)
@@ -155,7 +233,9 @@ async function main(): Promise<void> {
   )
   check('linking: trustedProviders vuoto', Array.isArray(ctx.trustedProviders) && ctx.trustedProviders.length === 0)
   check('linking: disableImplicitLinking true', options.account?.accountLinking?.disableImplicitLinking === true)
-  check('linking: accountLinking attivo (serve al collegamento esplicito della Fase 25)', options.account?.accountLinking?.enabled === true)
+  check('linking: accountLinking attivo (serve al collegamento esplicito dal profilo)', options.account?.accountLinking?.enabled === true)
+  check('linking: allowDifferentEmails (il relay di Apple ha un\'e-mail diversa), solo per il collegamento esplicito', options.account?.accountLinking?.allowDifferentEmails === true)
+  check('token: encryptOAuthTokens attivo (il refresh token di Apple e cifrato a riposo)', options.account?.encryptOAuthTokens === true)
   check('linking: nessun trustedProviders nelle opzioni', options.account?.accountLinking?.trustedProviders === undefined)
   check('rate limit: attivo, storage database', ctx.rateLimit.enabled === true && ctx.rateLimit.storage === 'database')
   const rule = ctx.rateLimit.customRules?.['/sign-in/social']
@@ -168,6 +248,24 @@ async function main(): Promise<void> {
   check('plugin: nessun next-cookies', !plugins.some((p) => p.id === 'next-cookies'))
   check('telemetria spenta', options.telemetry?.enabled === false)
   check('google: includeGrantedScopes false', options.socialProviders?.google?.includeGrantedScopes === false)
+  const apple = options.socialProviders?.apple
+  check('apple: trustedOrigins contiene https://appleid.apple.com', (options.trustedOrigins ?? []).includes('https://appleid.apple.com') || ctx.trustedOrigins.includes('https://appleid.apple.com'))
+  const primary = Array.isArray(apple?.clientId) ? apple.clientId[0] : apple?.clientId
+  check('apple: clientId primario = Services ID', primary === 'it.fuorirotta.web.test', JSON.stringify(apple?.clientId))
+  check(
+    'apple: audience = [Services ID, bundle ID], senza appBundleIdentifier (che la sostituirebbe)',
+    JSON.stringify(apple?.audience) === '["it.fuorirotta.web.test","it.fuorirotta.app.test"]' && apple?.appBundleIdentifier === undefined,
+    JSON.stringify(apple?.audience),
+  )
+  check('apple: nessun overrideUserInfoOnSignIn (la foto di Google non si tocca)', apple?.overrideUserInfoOnSignIn !== true)
+  const secretA = apple?.clientSecret ?? ''
+  const secretB = apple?.clientSecret ?? ''
+  const secretHeader = secretA.split('.').length === 3 ? (JSON.parse(Buffer.from(secretA.split('.')[0], 'base64url').toString('utf8')) as { alg?: string; kid?: string }) : {}
+  check(
+    'apple: clientSecret letto due volte e lo stesso JWT a tre parti, ES256 con il kid di prova',
+    secretA !== '' && secretA === secretB && secretHeader.alg === 'ES256' && secretHeader.kid === 'KEYID12345',
+    JSON.stringify(secretHeader),
+  )
   check('eliminazione: deleteUser attivo senza callback di verifica', options.user?.deleteUser?.enabled === true && options.user.deleteUser.sendDeleteAccountVerification === undefined)
 
   // --- Hook del database: nome valido, nessun token, foto solo di Google -------------
@@ -210,6 +308,19 @@ async function main(): Promise<void> {
     check(
       `hook account.${op}: access, refresh e id token azzerati`,
       !!out && out.data.accessToken === null && out.data.refreshToken === null && out.data.idToken === null && out.data.providerId === 'google',
+    )
+  }
+
+  for (const op of ['create', 'update'] as const) {
+    const apple = await hooks.account[op].before({ providerId: 'apple', accessToken: 'a', refreshToken: 'r', idToken: 'i' })
+    check(
+      `hook account.${op}: apple tiene il refresh token e perde access e id token`,
+      !!apple && apple.data.refreshToken === 'r' && apple.data.accessToken === null && apple.data.idToken === null,
+    )
+    const bare = await hooks.account[op].before({ accessToken: 'a', refreshToken: 'r', idToken: 'i' })
+    check(
+      `hook account.${op}: senza providerId perde tutti e tre i token (fallisce chiuso)`,
+      !!bare && bare.data.accessToken === null && bare.data.refreshToken === null && bare.data.idToken === null,
     )
   }
 

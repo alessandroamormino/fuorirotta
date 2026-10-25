@@ -26,6 +26,8 @@
 #       foto non https o non *.googleusercontent.com -> null; accesso successivo: cambia solo la foto
 #   S15 statico: lib/auth.ts nomina x-real-ip e nessun forwarded-for
 #   S16 bearer: il token nudo non da' utente, quello firmato si
+#   S36 con l'interruttore di Apple spento sign-in/social con provider apple
+#       risponde 4xx e senza "url" (D-04: nessun provider Apple)
 #
 # Ogni sezione usa un X-Real-IP di TEST-NET-2 (198.51.100.x) tutto suo, cosi'
 # i contatori del rate limit non si disturbano a vicenda. Utenti di prova
@@ -545,3 +547,9 @@ for target in /api/v1/me/export /api/v1/me/sessions; do
   no_store s35 S35
 done
 echo "ok  S35: export ed elenco sessioni senza cookie -> 401, private no-store"
+
+# --- S36: interruttore di Apple spento (qui APPLE_AUTH_ENABLED non e' impostato) ------
+code="$(call s36 POST /api/auth/sign-in/social 198.51.100.66 -H "Origin: ${origin}" -H 'Content-Type: application/json' --data '{"provider":"apple","callbackURL":"/"}')"
+[[ "${code}" =~ ^4[0-9][0-9]$ ]] || fail "S36: sign-in/social con provider apple a interruttore spento: atteso 4xx, ottenuto ${code} ($(cat "${tmp_dir}/s36.b"))"
+[[ "$(json_get "${tmp_dir}/s36.b" 'j.url')" == "undefined" ]] || fail "S36: la risposta contiene un url: '$(cat "${tmp_dir}/s36.b")'"
+echo "ok  S36: con Apple spento il provider apple risponde ${code} e senza url"
