@@ -89,14 +89,21 @@ export default function CalendarFeedDialog() {
 		setCopy("idle");
 	};
 
-	// Il focus va alla scelta sicura quando la conferma si apre.
+	// Il focus va alla scelta sicura quando la conferma si apre, e torna a
+	// "Rigenera link" quando si annulla: il bottone esiste di nuovo solo dopo
+	// il render, quindi lo si cerca qui e non in closeConfirm.
+	const returnFocus = useRef(false);
 	useEffect(() => {
 		if (confirming) document.getElementById("feed-keep")?.focus();
+		else if (returnFocus.current) {
+			document.getElementById("feed-regen")?.focus();
+			returnFocus.current = false;
+		}
 	}, [confirming]);
 
 	const closeConfirm = () => {
+		returnFocus.current = true;
 		setConfirming(false);
-		document.getElementById("feed-regen")?.focus();
 	};
 
 	const flash = (next: "copied" | "failed", ms: number) => {
@@ -214,29 +221,25 @@ export default function CalendarFeedDialog() {
 					<p className="text-sm text-foreground-secondary">Chiunque abbia questo link può vedere i tuoi eventi salvati. Non condividerlo.</p>
 
 					<div className="border-t border-border-soft pt-6">
-						<Button
-							id="feed-regen"
-							variant="ghost"
-							size="sm"
-							disabled={needsLink}
-							aria-expanded={confirming}
-							aria-controls="feed-regen-confirm"
-							onClick={() => setConfirming(true)}
-						>
-							Rigenera link
-						</Button>
-						{confirming && (
-							<div id="feed-regen-confirm" className="mt-4">
-								<p className="text-sm text-foreground">Il link attuale smetterà di funzionare e dovrai iscriverti di nuovo da ogni calendario.</p>
-								<div className="mt-4 flex gap-2">
+						{/* La conferma PRENDE IL POSTO del bottone (UAT 2026-10-25): sotto il
+						    bottone originale sembrava un doppione di "Rigenera link". */}
+						{confirming ? (
+							<div id="feed-regen-confirm" role="group" aria-labelledby="feed-confirm-title">
+								<p id="feed-confirm-title" className="text-sm font-semibold text-foreground">Rigenerare il link?</p>
+								<p className="mt-1 text-sm text-foreground-secondary">Il link attuale smetterà di funzionare e dovrai iscriverti di nuovo da ogni calendario.</p>
+								<div className="mt-4 flex flex-wrap gap-2">
 									<Button variant="destructive" size="sm" loading={rotating} onClick={() => run("rotate")}>
-										Rigenera link
+										Sì, rigenera
 									</Button>
 									<Button id="feed-keep" variant="ghost" size="sm" disabled={rotating} onClick={closeConfirm}>
-										Mantieni il link attuale
+										Annulla
 									</Button>
 								</div>
 							</div>
+						) : (
+							<Button id="feed-regen" variant="ghost" size="sm" disabled={needsLink} onClick={() => setConfirming(true)}>
+								Rigenera link
+							</Button>
 						)}
 					</div>
 				</div>

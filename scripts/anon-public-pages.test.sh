@@ -43,11 +43,25 @@
 #   A13 / e la pagina evento hanno nell'HTML del server il cuore da non salvato
 #       (aria-label "Salva: ...", aria-pressed="false") e il link "Salvati" senza
 #       puntino, con e senza sessione (SAVE-01; l'identita' byte per byte e' A3)
-#   B2-B4, B7, B10-B13 come A2-A4, A7, A10-A13 con l'interruttore acceso
+#   A14 Fase 23 (PREF-04): su / il riquadro "Per te" e' UN div.per-te-slot vuoto e
+#       l'<head> porta lo statement fuorirotta.perte; /lombardia, /lombardia/bergamo
+#       e un evento con comune hanno il bottone Segui con aria-pressed="false"; un
+#       evento senza comune non ne ha nessuno; mai un aria-pressed="true"
+#   A15 /per-te: statica (o) (A1), h1 "Per te" e robots noindex, stessi byte per tutti
+#   A16 il CSS compilato contiene .per-te-slot e html[data-perte] .per-te-slot
+#   A12 (Fase 24) in piu': l'HTML del server di /salvati non contiene "Condividi la lista"
+#       ne' la riga da ospite "averli nel calendario e condividerli" (nascono solo dopo
+#       che il client conosce la modalita'), con e senza sessione
+#   A17 Fase 24 (SHARE-03): un /l/ morto risponde 404 con l'h1 "Questo link non e'
+#       disponibile", stessi byte e header con e senza cookie di sessione
+#   A18 robots.txt e sitemap.xml non nominano /l/ (nessun Disallow che nasconda il noindex,
+#       nessun indirizzo condiviso pubblicizzato)
+#   B2-B4, B7, B10-B15, B17 come A2-A4, A7, A10-A15, A17 con l'interruttore acceso
 #   B5  interruttore acceso: /api/auth/ok 200, stato enabled:true e, col cookie,
 #       l'utente di prova
 #   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
-#       con la sessione e' 200, private e no-store, noindex, e contiene il nome dell'utente
+#       con la sessione e' 200, private e no-store, noindex, e contiene il nome dell'utente;
+#       sezioni nell'ordine Profilo, Sessioni attive, I tuoi dati, Cosa segui, Elimina account
 #   B9  interruttore acceso: /accedi da ospite 200, no-store, noindex, "Continua con Google";
 #       con la sessione reindirizza a /account o al ?next valido, mai fuori sito
 set -euo pipefail
@@ -165,10 +179,12 @@ for dyn in '/eventi/\[id\]' '/\[regione\]' '/\[regione\]/\[provincia\]'; do
   [[ "${row}" == *"ƒ"* ]] \
     || { grep -E '^[┌├└] ' "${tmp_dir}/build.log" || true; fail "A1: la rotta ${dyn} non e' dinamica (ƒ): '${row}'"; }
 done
-row="$(route_row '/salvati')"
-[[ "${row}" == *"○"* ]] \
-  || { grep -E '^[┌├└] ' "${tmp_dir}/build.log" || true; fail "A1: la rotta /salvati non e' statica (○): '${row}'"; }
-echo "ok  A1: / statico con 5m; /salvati statico; /eventi/[id], /[regione], /[regione]/[provincia] dinamiche"
+for stat in /salvati /per-te; do
+  row="$(route_row "${stat}")"
+  [[ "${row}" == *"○"* ]] \
+    || { grep -E '^[┌├└] ' "${tmp_dir}/build.log" || true; fail "A1: la rotta ${stat} non e' statica (○): '${row}'"; }
+done
+echo "ok  A1: / statico con 5m; /salvati e /per-te statici; /eventi/[id], /[regione], /[regione]/[provincia] dinamiche"
 for legal in /privacy /cookie; do
   row="$(route_row "${legal}")"
   [[ "${row}" == *"○"* ]] \
@@ -179,7 +195,13 @@ echo "ok  A10: /privacy e /cookie statiche (○) nella tabella delle rotte"
 # --- Fixture ------------------------------------------------------------------
 event_id="$(psql_dev "SELECT id FROM events WHERE canonical_event_id IS NULL ORDER BY id LIMIT 1" | head -n 1)"
 [[ "${event_id}" =~ ^[0-9]+$ ]] || fail "nessun evento canonico nel database locale (id ottenuto: '${event_id}')"
-pages=("/" "/eventi/${event_id}" "/lombardia")
+# Fase 23: un evento canonico CON comune (bottone "Segui {comune}") e uno SENZA.
+event_comune="$(psql_dev "SELECT id FROM events WHERE canonical_event_id IS NULL AND comune_id IS NOT NULL ORDER BY id LIMIT 1" | head -n 1)"
+[[ "${event_comune}" =~ ^[0-9]+$ ]] || fail "nessun evento canonico con comune nel database locale (id ottenuto: '${event_comune}')"
+event_nocomune="$(psql_dev "SELECT id FROM events WHERE canonical_event_id IS NULL AND comune_id IS NULL ORDER BY id LIMIT 1" | head -n 1)"
+[[ "${event_nocomune}" =~ ^[0-9]+$ ]] || fail "nessun evento canonico senza comune nel database locale (id ottenuto: '${event_nocomune}')"
+# L'ordine conta: "/" per primo (A4 legge il suo Cache-Control); gli indici 1-7 servono a check_follow.
+pages=("/" "/eventi/${event_id}" "/lombardia" "/lombardia/bergamo" "/eventi/${event_comune}" "/eventi/${event_nocomune}" "/per-te")
 
 read -r mint_user mint_cookie _mint_token <<<"$(helper mint anon-pages@fixture.invalid 'Utente Prova' 0 | tail -n 1)"
 [[ -n "${mint_user}" && -n "${mint_cookie}" ]] || fail "helper mint non ha stampato utente e cookie"
@@ -317,9 +339,16 @@ check_saved() {
     || fail "${tag}12: /salvati: manca l'h1 'Salvati' nell'HTML del server"
   grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/saved-anon.b" \
     || fail "${tag}12: /salvati: manca il meta robots noindex"
+  for name in saved-anon saved-sess; do
+    for frag in 'Condividi la lista' 'averli nel calendario e condividerli'; do
+      if grep -qF "${frag}" "${tmp_dir}/${name}.b"; then
+        fail "${tag}12: /salvati (${name}): l'HTML del server contiene '${frag}' (nasce solo dopo che il client conosce la modalita')"
+      fi
+    done
+  done
   same "${tag}12" saved-anon saved-sess \
     || fail "${tag}12: /salvati: la risposta con la sessione differisce da quella anonima"
-  echo "ok  ${tag}12: /salvati 200, h1 e noindex, uguale con e senza sessione"
+  echo "ok  ${tag}12: /salvati 200, h1 e noindex, senza pillola di condivisione ne' riga da ospite, uguale con e senza sessione"
   i=0
   for path in "/" "/eventi/${event_id}"; do
     i=$((i + 1))
@@ -338,6 +367,77 @@ check_saved() {
   echo "ok  ${tag}13: / e la pagina evento hanno il cuore non salvato e il link \"Salvati\" nell'HTML, mai uno stato salvato"
 }
 
+# check_follow <A|B>: A14/B14 e A15/B15 (Fase 23). Le pagine toccate dai follow sono
+# uguali per tutti (A3/B3 lo dicono byte per byte); qui si dice che contengono
+# davvero il riquadro riservato e il Segui, nella forma da non seguito: due
+# pagine senza bottone sarebbero identiche lo stesso. Indici di `pages`:
+# 1 /, 3 /lombardia, 4 /lombardia/bergamo, 5 evento con comune, 6 evento senza, 7 /per-te.
+check_follow() {
+  local tag="$1" name slots
+  for name in anon1-1 sess-1; do
+    slots="$(grep -cE 'class="per-te-slot"[^>]*></div>' "${tmp_dir}/${name}.b" || true)"
+    [[ "${slots}" == "1" ]] \
+      || fail "${tag}14: / (${name}): atteso esattamente 1 div.per-te-slot vuoto, trovati ${slots}"
+    grep -qF 'fuorirotta.perte' "${tmp_dir}/${name}.b" \
+      || fail "${tag}14: / (${name}): manca lo statement fuorirotta.perte nell'<head>"
+  done
+  for name in anon1-3 sess-3; do
+    grep -qF 'aria-label="Segui Lombardia"' "${tmp_dir}/${name}.b" \
+      || fail "${tag}14: /lombardia (${name}): manca aria-label=\"Segui Lombardia\""
+  done
+  for name in anon1-4 sess-4; do
+    grep -qF 'aria-label="Segui provincia di Bergamo"' "${tmp_dir}/${name}.b" \
+      || fail "${tag}14: /lombardia/bergamo (${name}): manca aria-label=\"Segui provincia di Bergamo\""
+  done
+  for name in anon1-5 sess-5; do
+    grep -qF 'aria-label="Segui ' "${tmp_dir}/${name}.b" \
+      || fail "${tag}14: evento ${event_comune} con comune (${name}): manca il bottone Segui"
+  done
+  for name in anon1-6 sess-6; do
+    if grep -qF 'aria-label="Segui ' "${tmp_dir}/${name}.b"; then
+      fail "${tag}14: evento ${event_nocomune} senza comune (${name}): non deve avere alcun bottone Segui"
+    fi
+  done
+  for name in anon1-1 sess-1 anon1-3 sess-3 anon1-4 sess-4 anon1-5 sess-5 anon1-6 sess-6; do
+    if grep -qF 'aria-pressed="true"' "${tmp_dir}/${name}.b"; then
+      fail "${tag}14: ${name}: l'HTML del server contiene uno stato seguito/salvato (aria-pressed=true)"
+    fi
+  done
+  for name in anon1-3 sess-3 anon1-4 sess-4 anon1-5 sess-5; do
+    grep -qF 'aria-pressed="false"' "${tmp_dir}/${name}.b" \
+      || fail "${tag}14: ${name}: il Segui non porta aria-pressed=\"false\""
+  done
+  echo "ok  ${tag}14: / ha UN riquadro per-te-slot vuoto e lo statement fuorirotta.perte; Segui non seguito su regione, provincia, evento con comune; nessuno sull'evento senza comune"
+  for name in anon1-7 sess-7; do
+    grep -qF '>Per te</h1>' "${tmp_dir}/${name}.b" \
+      || fail "${tag}15: /per-te (${name}): manca l'h1 'Per te'"
+    grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/${name}.b" \
+      || fail "${tag}15: /per-te (${name}): manca il meta robots noindex"
+  done
+  echo "ok  ${tag}15: /per-te ha l'h1 \"Per te\" e noindex, uguale con e senza sessione (A3/B3)"
+}
+
+# check_share <A|B>: A17/B17 (Fase 24, SHARE-03). Il link morto e' l'UNICA risposta
+# per codice ignoto, malformato, disattivato o sostituito: uguale per tutti. Un
+# token ben formato che non esiste e' il caso piu' semplice da riprodurre; stesso
+# URL con e senza sessione, quindi nessuna normalizzazione. Il testo si cerca nei
+# byte della risposta (Next 16.4.1 dopo notFound() lo porta nel payload della
+# pagina, non necessariamente come <h1> nell'HTML del server), come fa check:share.
+check_share() {
+  local tag="$1" code
+  code="$(fetch share-anon /l/AAAAAAAAAAAAAAAAAAAAAA)"
+  [[ "${code}" == "404" ]] || fail "${tag}17: GET /l/<morto>: atteso 404, ottenuto ${code}"
+  code="$(fetch share-sess /l/AAAAAAAAAAAAAAAAAAAAAA "${session_cookie}")"
+  [[ "${code}" == "404" ]] || fail "${tag}17: GET /l/<morto> con cookie: atteso 404, ottenuto ${code}"
+  for name in share-anon share-sess; do
+    grep -qF 'Questo link non è disponibile' "${tmp_dir}/${name}.b" \
+      || fail "${tag}17: /l/<morto> (${name}): manca l'h1 'Questo link non è disponibile'"
+  done
+  same "${tag}17" share-anon share-sess \
+    || fail "${tag}17: /l/<morto>: la risposta con la sessione differisce da quella anonima"
+  echo "ok  ${tag}17: /l/<morto> 404 con il suo h1, stessi byte e header con e senza sessione"
+}
+
 # start_server <env...>: next start di produzione sul DB locale.
 start_server() {
   bash scripts/dev-db.sh env "NEXT_TEST_DIST_DIR=${test_dist_dir}" "$@" npx next start -p "${port}" \
@@ -354,6 +454,29 @@ check_pages A
 check_icon A
 check_legal A
 check_saved A
+check_follow A
+check_share A
+
+# --- A16: il CSS compilato porta le regole del riquadro (una volta, dopo la build) ----
+css_files="$(find "${test_dist_dir}/static" -name '*.css' 2>/dev/null || true)"
+[[ -n "${css_files}" ]] || fail "A16: nessun file CSS in ${test_dist_dir}/static"
+# shellcheck disable=SC2086
+grep -q 'per-te-slot' ${css_files} || fail "A16: il CSS compilato non contiene .per-te-slot"
+# shellcheck disable=SC2086
+grep -qF 'html[data-perte] .per-te-slot' ${css_files} || fail "A16: il CSS compilato non contiene html[data-perte] .per-te-slot"
+echo "ok  A16: il CSS compilato contiene .per-te-slot e html[data-perte] .per-te-slot"
+
+# --- A18: nessun /l/ ai crawler (T-24-25) -----------------------------------------------
+# Un Disallow su /l/ nasconderebbe il noindex della pagina; la sitemap non deve
+# pubblicizzare indirizzi condivisi. Si cerca "/l/" nei due file serviti dalla build.
+for f in robots.txt sitemap.xml; do
+  code="$(fetch "a18-${f%%.*}" "/${f}")"
+  [[ "${code}" == "200" ]] || fail "A18: GET /${f}: atteso 200, ottenuto ${code}"
+  if grep -qF '/l/' "${tmp_dir}/a18-${f%%.*}.b"; then
+    fail "A18: /${f} nomina /l/"
+  fi
+done
+echo "ok  A18: robots.txt e sitemap.xml non nominano /l/"
 
 code="$(fetch a5ok /api/auth/ok)"
 [[ "${code}" == "404" ]] || fail "A5: /api/auth/ok a interruttore spento: atteso 404, ottenuto ${code}"
@@ -402,6 +525,8 @@ check_pages B
 check_icon B
 check_legal B
 check_saved B
+check_follow B
+check_share B
 
 code="$(fetch b5ok /api/auth/ok)"
 [[ "${code}" == "200" ]] || fail "B5: /api/auth/ok a interruttore acceso: atteso 200, ottenuto ${code}"
@@ -431,8 +556,8 @@ grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/b8user.b" \
 grep -qF 'Utente Prova' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: il nome dell'utente non e' nell'HTML del server"
 # Ordine delle sezioni (D-06) e sessione corrente gia' nell'HTML del server (nessun flash di vuoto).
-order="$(grep -oE '>(Profilo|Sessioni attive|I tuoi dati|Elimina account)</h2>' "${tmp_dir}/b8user.b" | sed -E 's/^>(.*)<.*/\1/' | paste -sd'|' -)"
-[[ "${order}" == "Profilo|Sessioni attive|I tuoi dati|Elimina account" ]] \
+order="$(grep -oE '>(Profilo|Sessioni attive|I tuoi dati|Cosa segui|Elimina account)</h2>' "${tmp_dir}/b8user.b" | sed -E 's/^>(.*)<.*/\1/' | paste -sd'|' -)"
+[[ "${order}" == "Profilo|Sessioni attive|I tuoi dati|Cosa segui|Elimina account" ]] \
   || fail "B8: /account: ordine delle sezioni inatteso: '${order}'"
 grep -qF 'attiva ora (questo dispositivo)' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: la sessione corrente non e' nell'HTML del server"

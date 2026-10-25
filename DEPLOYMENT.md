@@ -151,7 +151,7 @@ whoever holds it reads that user's saved-events list, with no other credential. 
 - The token sits in the nginx access log for the logrotate window above (14 days). Users can invalidate a
   leaked link with "Rigenera link" in the feed dialog; the old URL answers the same 404 as any unknown one.
 - Guessing is infeasible (128-bit token), but the route still reaches the database per request, so rate-limit
-  it at nginx. Not applied yet: do it on the server at the release that ships this phase.
+  it at nginx. Applied on the server with v2.7.0 (Phase 22, review WR-03).
 
 Sample `limit_req` (the zone goes in the `http` block, the `location` inside the existing `server`; proxy
 settings copied from `location /`):
@@ -174,6 +174,60 @@ Then `docker exec nginx nginx -t && docker exec nginx nginx -s reload`.
 
 The same release applies migration `20261023120000_add_saved_events` (it creates `calendar_feeds`):
 `scripts/deploy.sh` runs it before the build.
+
+#### Share link (/l/)
+
+`/l/{token}` shows a signed-in user's upcoming saved events to whoever holds the URL. It is a **capability**
+URL, a separate secret from the calendar feed. Unknown, malformed, deactivated, regenerated-away, deleted-account
+and auth-off links all answer the same 404 page. The token sits in the nginx access log for the logrotate window
+(14 days); users kill a leaked link with "Genera nuovo link" or "Disattiva link" in the "Condividi la lista" dialog.
+
+**Headers.** `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store` come
+from `headers()` in `next.config.ts`, not from nginx. After every release that touches `next.config.ts`, check them
+on the real image (`check:share` proves them on the standalone `server.js` locally, not on the alpine image):
+
+```bash
+curl -sI https://fuori-rotta.it/l/AAAAAAAAAAAAAAAAAAAAAA
+```
+
+Expect status 404 and the three headers. If any is missing, add it in the `/l/` location below with
+`add_header ... always;` and note it here.
+
+**Rate limit.** Same shape as `/cal/`, looser: link previews (WhatsApp, Telegram, iMessage) fetch from shared
+crawler IPs, and a 429 reveals nothing about a token. **Already applied on the server on 2026-10-25**, so the
+release does not redo it. Zone and `location` live in the same file as the `/cal/` ones,
+`/opt/docker/nginx/conf.d/fuori-rotta.it.conf` (zone `share_link` at line 2, next to `cal_feed`; `location /l/`
+right before `location /cal/`). Starting values, tune after watching the access log:
+
+```nginx
+# http block (top of the same file)
+limit_req_zone $binary_remote_addr zone=share_link:10m rate=60r/m;
+
+# server block, next to location /
+location /l/ {
+    limit_req zone=share_link burst=30 nodelay;
+    limit_req_status 429;
+    proxy_pass http://fuorirotta-frontend:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_read_timeout 120s;
+}
+```
+
+`limit_req_status 429` mirrors `/cal/`: rejected requests are 429, not the default 503. Checked from outside after
+the reload: 45 quick requests to a dead token gave 40 x 404 then 429, and the home page stayed 200.
+
+Rollback (backup taken before the edit):
+
+```bash
+cp /opt/docker/nginx/conf.d/fuori-rotta.it.conf.bak-2026-10-25 /opt/docker/nginx/conf.d/fuori-rotta.it.conf && docker exec nginx nginx -t && docker exec nginx nginx -s reload
+```
+
+**Release order.** Migration `20261025120000_add_share_links` (creates `share_links`) runs before the build through
+`scripts/deploy.sh`, like every migration; it is additive, so the running version is unaffected. Phase 23's
+`20261024120000_add_user_follows` must be applied first (this branch is stacked on Phase 23).
+
+If the nginx file is ever rebuilt from scratch, the block above is what brings the limit back: without it `/l/` works but is not rate-limited.
 
 ### Automated Scraping via Crontab
 

@@ -56,6 +56,31 @@ export const metadata: Metadata = {
 	},
 };
 
+// Script inline del <head>: tema prima del primo paint. Con l'accesso attivo alla
+// build (Fase 23) una riga in piu' riporta su <html> il suggerimento "Per te"
+// del dispositivo, cosi' il riquadro riservato (.per-te-slot) si apre prima del
+// paint. Uguale per ogni visitatore; senza il flag il testo e' quello di prima.
+const PERTE_STATEMENT =
+	process.env.NEXT_PUBLIC_AUTH_ENABLED === "true"
+		? `
+									if (localStorage.getItem('fuorirotta.perte') === '1') {
+										document.documentElement.setAttribute('data-perte', '1');
+									}`
+		: "";
+
+const THEME_SCRIPT = `
+							(function () {
+								try {
+									var stored = localStorage.getItem('theme');
+									if (stored === 'dark') {
+										document.documentElement.classList.add('dark');
+									} else if (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+										document.documentElement.classList.add('dark');
+									}${PERTE_STATEMENT}
+								} catch (e) {}
+							})();
+						`;
+
 export default function RootLayout({
 	children,
 }: Readonly<{
@@ -66,18 +91,7 @@ export default function RootLayout({
 			<head>
 				<script
 					dangerouslySetInnerHTML={{
-						__html: `
-							(function () {
-								try {
-									var stored = localStorage.getItem('theme');
-									if (stored === 'dark') {
-										document.documentElement.classList.add('dark');
-									} else if (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-										document.documentElement.classList.add('dark');
-									}
-								} catch (e) {}
-							})();
-						`,
+						__html: THEME_SCRIPT,
 					}}
 				/>
 			</head>

@@ -220,6 +220,117 @@ http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.
 [[ "${http_code}" == "404" ]] || fail "prova di non-vacuita': /api/comuni/search-inesistente atteso 404, ottenuto ${http_code} — il controllo del codice HTTP non sa fallire"
 echo "ok  GET /api/comuni/search-inesistente risponde 404 — il gate e' dimostrato capace di fallire"
 
+# --- PS1-PS3. /api/places/search: regioni, province, comuni (Fase 23, D-09) --
+places_url="http://127.0.0.1:${port}/api/places/search"
+
+resp_ps1="${tmp_dir}/ps1.json"
+http_code="$(curl -s -o "${resp_ps1}" -w '%{http_code}' --max-time 15 "${places_url}?q=lomb")"
+[[ "${http_code}" == "200" ]] || fail "PS1: atteso 200 su q=lomb, ottenuto ${http_code}"
+node -e "
+  const r = require('${resp_ps1}').results[0];
+  if (!r) throw new Error('nessun risultato per q=lomb');
+  const want = { kind: 'region', key: 'lombardia', label: 'Lombardia', sublabel: 'Regione', chip: 'Lombardia' };
+  for (const k of Object.keys(want)) if (r[k] !== want[k]) throw new Error(k + ': atteso ' + want[k] + ', ottenuto ' + r[k]);
+" || fail "PS1: il primo risultato di q=lomb non e' la regione Lombardia"
+echo "ok  PS1 GET /api/places/search?q=lomb: per prima la regione Lombardia (sublabel Regione, chip Lombardia)"
+
+resp_ps2="${tmp_dir}/ps2.json"
+http_code="$(curl -s -o "${resp_ps2}" -w '%{http_code}' --max-time 15 "${places_url}?q=berg")"
+[[ "${http_code}" == "200" ]] || fail "PS2: atteso 200 su q=berg, ottenuto ${http_code}"
+node -e "
+  const res = require('${resp_ps2}').results;
+  const pi = res.findIndex((r) => r.kind === 'province' && r.key === 'BG');
+  const ci = res.findIndex((r) => r.kind === 'comune' && r.key === '016024');
+  if (pi < 0) throw new Error('provincia BG assente');
+  if (ci < 0) throw new Error('comune 016024 assente');
+  if (pi > ci) throw new Error('la provincia deve precedere il comune');
+  const p = res[pi], c = res[ci];
+  if (p.label !== 'Bergamo' || p.sublabel !== 'Provincia · Lombardia' || p.chip !== 'Provincia di Bergamo') throw new Error('provincia: ' + JSON.stringify(p));
+  if (c.label !== 'Bergamo' || c.sublabel !== 'Comune · provincia di Bergamo' || c.chip !== 'Bergamo (BG)') throw new Error('comune: ' + JSON.stringify(c));
+" || fail "PS2: q=berg non da' provincia e comune di Bergamo nella forma attesa"
+echo "ok  PS2 q=berg: provincia BG (Provincia di Bergamo) prima del comune 016024 (Bergamo (BG))"
+
+resp_ps3="${tmp_dir}/ps3.json"
+http_code="$(curl -s -o "${resp_ps3}" -w '%{http_code}' --max-time 15 "${places_url}?q=san")"
+[[ "${http_code}" == "200" ]] || fail "PS3: atteso 200 su q=san, ottenuto ${http_code}"
+node -e "
+  const res = require('${resp_ps3}').results;
+  if (res.length === 0 || res.length > 8) throw new Error('numero di risultati fuori da 1..8: ' + res.length);
+  for (const r of res) for (const k of ['kind', 'key', 'label', 'sublabel', 'chip'])
+    if (typeof r[k] !== 'string' || !r[k]) throw new Error(k + ' vuoto in ' + JSON.stringify(r));
+" || fail "PS3: q=san supera 8 risultati o una riga ha campi vuoti"
+echo "ok  PS3 q=san: al massimo 8 risultati, ogni riga con kind/key/label/sublabel/chip non vuoti"
+
+# --- PS4. omonimi: Livo di Como e Livo di Trento si distinguono (D-09) -------
+resp_ps4="${tmp_dir}/ps4.json"
+http_code="$(curl -s -o "${resp_ps4}" -w '%{http_code}' --max-time 15 "${places_url}?q=livo")"
+[[ "${http_code}" == "200" ]] || fail "PS4: atteso 200 su q=livo, ottenuto ${http_code}"
+node -e "
+  const res = require('${resp_ps4}').results.filter((r) => r.kind === 'comune' && r.label === 'Livo');
+  const co = res.find((r) => r.key === '013130');
+  const tn = res.find((r) => r.key === '022106');
+  if (!co || !tn) throw new Error('mancano i due Livo: ' + JSON.stringify(res));
+  if (co.sublabel !== 'Comune · provincia di Como' || co.chip !== 'Livo (CO)') throw new Error('Livo CO: ' + JSON.stringify(co));
+  if (tn.sublabel !== 'Comune · provincia di Trento' || tn.chip !== 'Livo (TN)') throw new Error('Livo TN: ' + JSON.stringify(tn));
+" || fail "PS4: i due comuni Livo non si distinguono per sublabel e chip"
+echo "ok  PS4 q=livo: Livo (CO) e Livo (TN) con sublabel e chip diversi"
+
+# --- PS5. Valle d'Aosta: regione e provincia, entrambe (D-09) ---------------
+resp_ps5="${tmp_dir}/ps5.json"
+http_code="$(curl -s -o "${resp_ps5}" -w '%{http_code}' --max-time 15 "${places_url}?q=valle")"
+[[ "${http_code}" == "200" ]] || fail "PS5: atteso 200 su q=valle, ottenuto ${http_code}"
+node -e "
+  const res = require('${resp_ps5}').results;
+  const reg = res.find((r) => r.kind === 'region' && r.key === 'valle-d-aosta');
+  const pro = res.find((r) => r.kind === 'province' && r.key === 'AO');
+  if (!reg || !pro) throw new Error('regione o provincia assenti: ' + JSON.stringify(res));
+  if (reg.sublabel !== 'Regione') throw new Error('sublabel regione: ' + reg.sublabel);
+  if (!pro.sublabel.startsWith('Provincia ·')) throw new Error('sublabel provincia: ' + pro.sublabel);
+" || fail "PS5: q=valle non da' sia la regione sia la provincia della Valle d'Aosta"
+echo "ok  PS5 q=valle: regione valle-d-aosta e provincia AO, sublabel Regione / Provincia ·"
+
+# --- PS6. troppo corte o di sola punteggiatura: results vuoto (T-23-06) ------
+for q6 in "b" "..." "%20"; do
+  resp_ps6="${tmp_dir}/ps6.json"
+  http_code="$(curl -s -o "${resp_ps6}" -w '%{http_code}' --max-time 15 "${places_url}?q=${q6}")"
+  [[ "${http_code}" == "200" ]] || fail "PS6: atteso 200 su q='${q6}', ottenuto ${http_code}"
+  node -e "
+    const body = require('${resp_ps6}');
+    if (!Array.isArray(body.results) || body.results.length !== 0) throw new Error(JSON.stringify(body));
+  " || fail "PS6: q='${q6}' ha restituito risultati"
+done
+echo "ok  PS6 q=b, q=..., q=%20: 200 con results vuoto"
+
+# --- PS7. sintassi SQL nel parametro: niente 500, niente nomi di tabella (T-23-07)
+resp_ps7="${tmp_dir}/ps7.json"
+http_code="$(curl -s -o "${resp_ps7}" -w '%{http_code}' -G --data-urlencode "q=' OR 1=1 --" --max-time 15 "${places_url}")"
+[[ "${http_code}" != "500" ]] || fail "PS7: la query con sintassi SQL ha prodotto un 500"
+if grep -qiE 'comuni|user_follows|prisma' "${resp_ps7}"; then
+  fail "PS7: il corpo contiene un nome di tabella o di libreria"
+fi
+echo "ok  PS7 sintassi SQL nel parametro q: nessun 500, nessun nome di tabella nel corpo"
+
+# --- PS8. nessun cookie su una risposta pubblica (D-09) ----------------------
+headers_ps8="${tmp_dir}/ps8.txt"
+curl -s -o /dev/null -D "${headers_ps8}" --max-time 15 "${places_url}?q=berg"
+if grep -qi '^set-cookie:' "${headers_ps8}"; then
+  fail "PS8: la risposta di q=berg imposta un cookie"
+fi
+echo "ok  PS8 la risposta di q=berg non imposta alcun cookie"
+
+# --- Esatti per primi: q=bergamo (D-09) --------------------------------------
+resp_ps9="${tmp_dir}/ps9.json"
+http_code="$(curl -s -o "${resp_ps9}" -w '%{http_code}' --max-time 15 "${places_url}?q=bergamo")"
+[[ "${http_code}" == "200" ]] || fail "esatti: atteso 200 su q=bergamo, ottenuto ${http_code}"
+node -e "
+  const res = require('${resp_ps9}').results;
+  const exact = res.map((r) => r.label.toLowerCase() === 'bergamo');
+  if (!exact[0]) throw new Error('il primo non e\' esatto: ' + JSON.stringify(res[0]));
+  const firstOther = exact.indexOf(false);
+  if (firstOther >= 0 && exact.slice(firstOther).includes(true)) throw new Error('un esatto segue un non esatto');
+" || fail "esatti: q=bergamo non mette per primi i risultati esatti"
+echo "ok  q=bergamo: i risultati esatti vengono prima di tutti gli altri"
+
 stop_server
 
 echo "PASS: contratto autocomplete comuni (UI-02, D-01, D-03, D-04, D-07, T-09-01, T-09-05)"

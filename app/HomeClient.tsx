@@ -26,6 +26,7 @@ import { DESKTOP_MEDIA_QUERY, useIsDesktopSurface } from "@/lib/hooks/useBrowser
 import { calculateDistanceKm } from "@/lib/territorial/distance";
 import { EASE_STANDARD, MOTION_BASE, MOTION_FAST } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import PerTeRail from "@/components/follow/PerTeRail";
 
 // Il blocco di ripristino da sessionStorage (sotto, useIsomorphicLayoutEffect)
 // deve girare PRIMA del primo paint: useLayoutEffect farebbe questo su
@@ -1398,6 +1399,16 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 								// raggiunte da tastiera fuori da quella fascia.
 								className="h-full overflow-y-auto pl-2 -ml-2 pr-5 -mr-5 [scrollbar-gutter:stable] pt-[var(--header-h)] scroll-pt-[var(--header-h)] lg:pt-0 lg:scroll-pt-0"
 							>
+								{/* "Per te" (Fase 23): primo figlio dello scroller, FUORI da
+								    AnimatePresence, cosi' un filtro o un cambio pagina non lo
+								    rimonta; sparisce con la lista nella vista mappa. Il div c'e'
+								    nell'HTML di tutti, vuoto e alto 0 (globals.css), solo con
+								    l'accesso attivo alla build. Non dipende dai filtri. */}
+								{process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && (
+									<div className="per-te-slot" data-per-te-slot>
+										<PerTeRail />
+									</div>
+								)}
 								{/* pageLoading accanto a loading, non solo loading: al cambio
 								    pagina si vuole LO STESSO spinner grande del primo
 								    caricamento, che sostituisce la lista. Prima il cambio

@@ -18,7 +18,7 @@
  */
 import { prisma } from '../prisma'
 import { istatRegionToSlug } from '../scrapers/regionSlug'
-import { availableEventsWhere, windowStartToday } from '../dateWindow'
+import { availableEventsWhere, endWindow, windowStartToday } from '../dateWindow'
 
 /**
  * Ri-misurato dal vivo sul Postgres locale il 2026-09-19, DOPO l'ingestione
@@ -154,12 +154,13 @@ export async function getProvinceDirectory(): Promise<ProvinceRef[]> {
  */
 export async function getLiveProvinces(): Promise<Set<string>> {
   const windowStart = windowStartToday()
+  const { floor, utcEndOfDayStart } = endWindow(windowStart)
 
   const rows = await prisma.$queryRaw<{ provinceCode: string; count: number }[]>`
     SELECT c.province_code AS "provinceCode", count(*)::int AS count
     FROM events e
     JOIN comuni c ON c.id = e.comune_id
-    WHERE (e.date_end >= ${windowStart} OR (e.date_end IS NULL AND e.date_start >= ${windowStart}))
+    WHERE (e.date_end >= ${floor} OR (e.date_end >= ${windowStart} AND e.date_end < ${utcEndOfDayStart}) OR (e.date_end IS NULL AND e.date_start >= ${windowStart}))
       AND e.canonical_event_id IS NULL
       AND e.comune_id IS NOT NULL
     GROUP BY c.province_code

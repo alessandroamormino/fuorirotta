@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 		"Quali cookie usa Fuorirotta: solo cookie tecnici necessari all'accesso, nessun cookie di profilazione o di terze parti.",
 };
 
-const UPDATED = "23 ottobre 2026";
+const UPDATED = "24 ottobre 2026";
 
 export default function CookiePage() {
 	return (
@@ -56,8 +56,9 @@ export default function CookiePage() {
 			<h2 id="memoria-del-browser">Memoria del browser</h2>
 			<p>
 				Il sito salva alcune scelte nella memoria del tuo browser: il tema chiaro o scuro (localStorage),
-				l&apos;elenco degli eventi salvati senza account (localStorage) e, per la sola scheda aperta, i filtri
-				di ricerca e gli avvisi già mostrati (sessionStorage).
+				l&apos;elenco degli eventi salvati senza account (localStorage), un segnale che ricorda se hai dei luoghi o
+				delle categorie seguiti (localStorage) e, per la sola scheda aperta, i filtri di ricerca, gli avvisi
+				già mostrati e il luogo che stavi per seguire mentre accedi (sessionStorage).
 			</p>
 			<p>
 				L&apos;elenco degli eventi salvati contiene fino a 100 eventi; ogni voce si cancella da sola 12 mesi
@@ -66,6 +67,35 @@ export default function CookiePage() {
 				aggiunto al tuo account, all&apos;accesso, e quando esci. Le altre scelte (tema, filtri, avvisi
 				mostrati) restano sul tuo dispositivo e non vengono mai inviate al nostro server.
 			</p>
+
+			<FactList
+				items={[
+					{
+						title: "Segnale di Per te",
+						facts: [
+							["Nome", <code key="n">fuorirotta.perte</code>],
+							["Dove", "localStorage"],
+							[
+								"A cosa serve",
+								"Ricorda su questo dispositivo che hai dei luoghi o delle categorie seguiti, così «Per te» compare senza far saltare la pagina. Non contiene dati personali.",
+							],
+							["Durata", "Fino a quando esci dall'account."],
+						],
+					},
+					{
+						title: "Luogo che stavi per seguire",
+						facts: [
+							["Nome", <code key="n">fuorirotta.follow-intent</code>],
+							["Dove", "sessionStorage"],
+							[
+								"A cosa serve",
+								"Tiene a mente il luogo che stavi per seguire mentre accedi. Si cancella da solo dopo 15 minuti o alla chiusura della scheda.",
+							],
+							["Durata", "15 minuti al massimo; si toglie anche quando esci dall'account."],
+						],
+					},
+				]}
+			/>
 
 			<h2 id="strumenti-di-terzi">Strumenti di terzi</h2>
 			<p>

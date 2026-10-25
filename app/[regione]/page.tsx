@@ -10,6 +10,8 @@ import EventCard from "@/components/EventCard";
 import Breadcrumb from "@/components/Breadcrumb";
 import CoverageMessage from "@/components/CoverageMessage";
 import Footer from "@/components/Footer";
+import FollowButton from "@/components/follow/FollowButton";
+import { regionChip } from "@/lib/follows/keys";
 import { availableEventsWhere, windowStartToday } from "@/lib/dateWindow";
 import { compareByWindowRelevance } from "@/lib/eventOrdering";
 
@@ -144,6 +146,9 @@ export default async function RegionePage({
 				<p className="mt-1 text-muted-foreground">
 					{data.events.length} {data.events.length === 1 ? "evento in programma" : "eventi in programma"}
 				</p>
+				<div className="mt-4">
+					<FollowButton kind="region" followKey={regione} chip={regionChip(data.displayName)} />
+				</div>
 				<div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
 					{data.events.map((event) => (
 						<EventCard key={event.id} event={event} />

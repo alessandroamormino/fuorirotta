@@ -331,13 +331,16 @@ else
     # cambia, questa riga segue da sola. Nessun apostrofo dentro il blocco
     # npx tsx -e, chiuderebbe la stringa shell.
     window_start="$(npx tsx -e '
-import { romeMidnightUTC, todayInRome } from "./lib/dateWindow"
-console.log(romeMidnightUTC(todayInRome()).toISOString())
+import { romeMidnightUTC, todayInRome, endWindow } from "./lib/dateWindow"
+const ws = romeMidnightUTC(todayInRome())
+const w = endWindow(ws)
+console.log(ws.toISOString() + " " + w.floor.toISOString() + " " + w.utcEndOfDayStart.toISOString())
 ' 2>/dev/null | tail -1)"
+    read -r window_start end_floor utc_eod_start <<< "${window_start}"
     if [[ ! "${window_start}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]; then
       fail "TERR-07: impossibile leggere l inizio finestra da lib/dateWindow.ts: ${window_start}"
     fi
-    expected_count="$(psql_dev "SELECT count(*) FROM events WHERE (date_end >= '${window_start}'::timestamp OR (date_end IS NULL AND date_start >= '${window_start}'::timestamp)) AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL AND canonical_event_id IS NULL")"
+    expected_count="$(psql_dev "SELECT count(*) FROM events WHERE (date_end >= '${end_floor}'::timestamp OR (date_end >= '${window_start}'::timestamp AND date_end < '${utc_eod_start}'::timestamp) OR (date_end IS NULL AND date_start >= '${window_start}'::timestamp)) AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL AND canonical_event_id IS NULL")"
     if [[ "${feature_count}" != "${expected_count}" ]]; then
       fail "TERR-07: il numero di feature nel GeoJSON (${feature_count}) e' diverso dagli eventi canonici DISPONIBILI (in corso o futuri) con coordinate risolte non nulle (${expected_count})"
     else

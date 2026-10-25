@@ -6,6 +6,7 @@ import SiteHeader from "@/components/SiteHeader";
 import Footer from "@/components/Footer";
 import Card from "@/components/ui/Card";
 import ProfileCard from "@/components/account/ProfileCard";
+import FollowManager from "@/components/follow/FollowManager";
 import SessionsList from "@/components/account/SessionsList";
 import { DeleteAccountSection, ExportButton, SignOutButton } from "@/components/account/AccountActions";
 import { activityLabel, listUserSessions } from "@/lib/account";
@@ -65,7 +66,7 @@ export default async function AccountPage() {
 						</h2>
 						<Card className="p-6">
 							<p className="text-base text-foreground">
-								Scarica una copia di tutti i dati che abbiamo su di te: profilo, account collegati, sessioni, eventi salvati e collegamento al calendario, in formato JSON.
+								Scarica una copia di tutti i dati che abbiamo su di te: profilo, account collegati, sessioni, eventi salvati, collegamento al calendario, link di condivisione della lista, luoghi e categorie che segui, in formato JSON.
 							</p>
 							<div className="mt-4">
 								<ExportButton />
@@ -73,7 +74,16 @@ export default async function AccountPage() {
 						</Card>
 					</section>
 
-					{/* Le fasi successive inseriscono qui le proprie sezioni, fra "I tuoi dati" ed "Esci":
+					<section id="account-segui" aria-labelledby="account-segui-titolo" className="scroll-mt-24">
+						<h2 id="account-segui-titolo" className={SECTION_TITLE}>
+							Cosa segui
+						</h2>
+						<Card className="p-6">
+							<FollowManager />
+						</Card>
+					</section>
+
+					{/* Le fasi successive inseriscono qui le proprie sezioni, fra "Cosa segui" ed "Esci":
 					    Esci ed Elimina account restano sempre in fondo. */}
 
 					<section aria-label="Esci">

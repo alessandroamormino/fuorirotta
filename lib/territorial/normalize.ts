@@ -26,7 +26,7 @@ export function normalizeComuneName(raw: string): string {
 
 // Self-check: `npx tsx lib/territorial/normalize.ts`.
 // Non un framework di test, solo un demo() con assert che fallisce rumorosamente.
-if (require.main === module) {
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   const santAngeloForms = [
     normalizeComuneName("Sant'Angelo"),
     normalizeComuneName('Sant’Angelo'), // apostrofo tipografico U+2019

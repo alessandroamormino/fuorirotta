@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 		"Quali dati personali tratta Fuorirotta, perché, con quali fornitori, per quanto tempo e come esercitare i tuoi diritti.",
 };
 
-const UPDATED = "23 ottobre 2026";
+const UPDATED = "25 ottobre 2026";
 
 const INDEX = [
 	{ id: "titolare", label: "Titolare del trattamento" },
@@ -80,6 +80,22 @@ export default function PrivacyPage() {
 					<strong>Collegamento al calendario</strong>: se lo crei, è un collegamento segreto, generato a caso,
 					che mostra i tuoi eventi salvati a chiunque lo abbia. Non condividerlo.
 				</li>
+				<li>
+					<strong>Link di condivisione della lista</strong>: se crei un link per condividere la tua lista di
+					eventi salvati, conserviamo il codice del link, la tua scelta di mostrare o no il tuo nome e le date
+					di creazione e di modifica. Chi ha il link vede i tuoi eventi in arrivo e, solo se lo hai scelto, il
+					tuo nome visualizzato; non vede la tua email né altri dati del tuo account. Il link smette di
+					funzionare quando lo disattivi o lo sostituisci e si cancella insieme all&apos;account. Le pagine
+					condivise non sono indicizzate dai motori di ricerca. È un segreto diverso da quello del
+					calendario.
+				</li>
+				<li>
+					<strong>Luoghi e categorie seguiti</strong>: i luoghi seguiti (comuni, province e regioni) e le
+					categorie seguite che scegli tu. Di ciascuno conserviamo il tipo, il codice e la data in cui l&apos;hai scelto, e
+					li usiamo per mostrarti &quot;Per te&quot; nella home e nella pagina Per te. La finestra di benvenuto
+					che vedi una volta dopo l&apos;accesso registra soltanto la data in cui l&apos;hai vista: non è un
+					consenso, e se la salti non resta nessun altro dato.
+				</li>
 			</ul>
 			<p>Anche senza account, quando usi il sito:</p>
 			<ul>
@@ -118,7 +134,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Finalità",
-								"Fornirti l'account e le sue funzioni: accesso, elenco dei dispositivi, modifica del nome, eventi salvati e collegamento al calendario, scarico ed eliminazione dei tuoi dati",
+								"Fornirti l'account e le sue funzioni: accesso, elenco dei dispositivi, modifica del nome, eventi salvati, collegamento al calendario, link di condivisione della lista, luoghi e categorie seguiti, scarico ed eliminazione dei tuoi dati",
 							],
 							["Base giuridica", "esecuzione del contratto, art. 6.1.b GDPR"],
 						],
@@ -224,7 +240,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni, gli eventi salvati, il collegamento al calendario e il collegamento con Google.",
+								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni, gli eventi salvati, i luoghi e le categorie seguiti, il collegamento al calendario, il link di condivisione della lista e il collegamento con Google.",
 							],
 						],
 					},
@@ -238,11 +254,29 @@ export default function PrivacyPage() {
 						],
 					},
 					{
+						title: "Luoghi e categorie seguiti",
+						facts: [
+							[
+								"Quanto",
+								"Fino a quando smetti di seguirli o elimini l'account. Sono compresi nello scarico dei tuoi dati in formato JSON e l'eliminazione dell'account li cancella.",
+							],
+						],
+					},
+					{
 						title: "Collegamento al calendario",
 						facts: [
 							[
 								"Quanto",
 								"Fino a quando non lo rigeneri con \"Rigenera link\" (il vecchio collegamento smette di funzionare subito) o non elimini l'account. Come ogni indirizzo richiesto, il collegamento compare nei log di accesso di nginx per circa 14 giorni.",
+							],
+						],
+					},
+					{
+						title: "Link di condivisione della lista",
+						facts: [
+							[
+								"Quanto",
+								"Fino a quando non lo disattivi con \"Disattiva link\" o non lo sostituisci con \"Genera nuovo link\" (il vecchio link smette di funzionare subito), oppure non elimini l'account. Come ogni indirizzo richiesto, il link compare nei log di accesso di nginx per circa 14 giorni.",
 							],
 						],
 					},
@@ -273,7 +307,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Indirizzo IP, tipo di browser e indirizzo richiesto (comprese le coordinate di una ricerca \"vicino a me\" e il collegamento al calendario) sono conservati per circa 14 giorni, poi i log più vecchi vengono sovrascritti.",
+								"Indirizzo IP, tipo di browser e indirizzo richiesto (comprese le coordinate di una ricerca \"vicino a me\", il collegamento al calendario e il link di condivisione della lista) sono conservati per circa 14 giorni, poi i log più vecchi vengono sovrascritti.",
 							],
 						],
 					},

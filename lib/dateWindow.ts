@@ -75,20 +75,57 @@ export function windowStartToday(): Date {
 }
 
 /**
- * Evento DISPONIBILE = in corso o futuro: COALESCE(dateEnd, dateStart) >=
- * inizio finestra, scritto come OR esplicito perche' Prisma non ha COALESCE
- * nei filtri e dateEnd e' nullable.
+ * Soglie per la FINE di un evento nella finestra che parte da `windowStart`
+ * (mezzanotte di Roma del giorno D). Una fine e' "disponibile" quando il suo
+ * ultimo giorno secondo lib/eventDays.ts e' >= D. La regola di eventDays: una
+ * fine alle 23:59 UTC e' una fine-giornata in formato UTC e vale la sua data
+ * UTC; ogni altra fine vale il suo giorno di Roma. Prisma non sa leggere l'ora
+ * di una colonna, quindi la regola diventa due intervalli:
+ *  - `dateEnd >= floor` (mezzanotte UTC di D): qualunque formato, ultimo giorno >= D;
+ *  - `windowStart <= dateEnd < utcEndOfDayStart` (da mezzanotte di Roma a
+ *    D-1 23:59 UTC): solo fini in formato Roma che cadono gia' nel giorno D di
+ *    Roma (per esempio una fine a mezzanotte di Roma). Le 23:59 UTC di D-1 ne
+ *    restano fuori: sono la fine-giornata UTC del giorno prima.
+ *
+ * Bugfix 2026-10-25: in produzione in-lombardia, solosagre, opendata, puglia ed
+ * emilia-romagna chiudono un evento del 24 a 2026-10-24T23:59:59.999Z. Con la
+ * sola soglia `dateEnd >= windowStart` (24T22:00Z) quella fine passava e gli
+ * eventi di ieri restavano in lista e in mappa per tutto il giorno dopo, col
+ * badge "Concluso". Il self-check sotto confronta questa regola con eventDays
+ * minuto per minuto intorno alla mezzanotte, nei due fusi dell'anno.
+ */
+export function endWindow(windowStart: Date): { floor: Date; utcEndOfDayStart: Date } {
+	const romeDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(windowStart);
+	const floor = new Date(`${romeDay}T00:00:00.000Z`);
+	return { floor, utcEndOfDayStart: new Date(floor.getTime() - 60_000) };
+}
+
+/** La stessa regola di availableEventsWhere su un istante, per il self-check. */
+function endIsAvailable(end: Date, windowStart: Date): boolean {
+	const { floor, utcEndOfDayStart } = endWindow(windowStart);
+	return end >= floor || (end >= windowStart && end < utcEndOfDayStart);
+}
+
+/**
+ * Evento DISPONIBILE = in corso o futuro: la fine cade in uno dei due
+ * intervalli di endWindow, oppure (senza dateEnd) dateStart >= inizio
+ * finestra, scritto come OR esplicito perche' Prisma non ha COALESCE nei
+ * filtri e dateEnd e' nullable.
  *
  * L'unica definizione del progetto. Prima del 2026-10-16 ce n'erano due
  * copie (copertura e mappa) e tre pagine — home, regione, provincia — ancora
  * su `dateStart >= oggi`: una mostra gia' cominciata spariva da quelle pagine
  * mentre lista e mappa la mostravano. Ogni superficie che dice "eventi"
- * passa da qui.
+ * passa da qui; le copie in SQL (lib/coverage/liveRegions.ts,
+ * lib/saved/resolve.ts e i gate follows-feed e territorial-backfill) usano
+ * gli stessi due intervalli.
  */
 export function availableEventsWhere(windowStart: Date = windowStartToday()) {
+	const { floor, utcEndOfDayStart } = endWindow(windowStart);
 	return {
 		OR: [
-			{ dateEnd: { gte: windowStart } },
+			{ dateEnd: { gte: floor } },
+			{ dateEnd: { gte: windowStart, lt: utcEndOfDayStart } },
 			{ AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
 		],
 	};
@@ -115,6 +152,8 @@ export function availableEventsWhere(windowStart: Date = windowStartToday()) {
 // guardia costa nulla e vale per il giorno in cui qualcuno lo importera' da un
 // componente client.
 if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports -- solo nel self-check, mai nel bundle
+	const { eventDays } = require("./eventDays") as typeof import("./eventDays");
 	let failures = 0;
 	const assertCheck = (cond: boolean, msg: string) => {
 		if (!cond) {
@@ -176,6 +215,28 @@ if (typeof require !== "undefined" && typeof module !== "undefined" && require.m
 	assertCheck(nextDateStr("2026-12-31") === "2027-01-01", `nextDateStr 31/12 -> ${nextDateStr("2026-12-31")}`);
 	assertCheck(nextDateStr("2028-02-28") === "2028-02-29", `bisestile 28/02/2028 -> ${nextDateStr("2028-02-28")}`);
 	assertCheck(nextDateStr("2027-02-28") === "2027-03-01", `non bisestile 28/02/2027 -> ${nextDateStr("2027-02-28")}`);
+
+	// endWindow (bugfix 2026-10-25): la regola deve dire la stessa cosa di
+	// eventDays. Finestre del 25/10 (CEST a mezzanotte), del 26/10 (CET) e del
+	// 10/01; fini minuto per minuto da 4 ore prima a 4 ore dopo la mezzanotte
+	// UTC del giorno, piu' i millisecondi .999 dei due formati reali.
+	for (const day of ["2026-10-25", "2026-10-26", "2026-01-10", "2026-03-29"]) {
+		const ws = romeMidnightUTC(day);
+		const base = new Date(`${day}T00:00:00.000Z`).getTime();
+		for (let m = -240; m <= 240; m++) {
+			for (const ms of [0, 59_999]) {
+				const end = new Date(base + m * 60_000 + ms);
+				// Inizio lontano: con inizio == fine eventDays alzerebbe la fine all'inizio.
+				const want = eventDays(new Date(base - 10 * 86_400_000), end).endDay >= day;
+				assertCheck(endIsAvailable(end, ws) === want, `finestra ${day}, fine ${iso(end)}: eventDays dice ${want ? "dentro" : "fuori"}`);
+			}
+		}
+	}
+	// I casi che hanno morso: fine UTC del 24 (il bug) e fine a mezzanotte di
+	// Roma del 25 (formato Roma, osservazione di review WR-01).
+	const ws25 = romeMidnightUTC("2026-10-25");
+	assertCheck(!endIsAvailable(new Date("2026-10-24T23:59:59.999Z"), ws25), "fine UTC del 24 deve restare fuori il 25");
+	assertCheck(endIsAvailable(new Date("2026-10-24T22:00:00.000Z"), ws25), "fine a mezzanotte di Roma del 25 deve restare dentro il 25");
 
 	// todayInRome ha la forma attesa ed e' un giorno reale.
 	const today = todayInRome();

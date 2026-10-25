@@ -21,6 +21,10 @@
 #   P7  il dialogo di accesso e il piede di pagina collegano le pagine
 #   P8  i mesi di conservazione dei salvati sono SAVED_RETENTION_MONTHS (22-05), in /privacy e /cookie
 #   P9  /privacy nomina gli eventi salvati e il rimedio del collegamento al calendario ("Rigenera link")
+#   P10 /privacy nomina luoghi seguiti e categorie seguite (23-07); /cookie nomina le due chiavi del
+#       browser lette da lib/follows/device.ts e i minuti dell'intento di lib/follows/intent.ts
+#   P11 /privacy nomina il link di condivisione della lista e i suoi due rimedi ("Disattiva link",
+#       "Genera nuovo link"), gli stessi nomi dei bottoni del dialogo (24-04)
 #
 # Regola della TAB letterale: niente `\t` nei grep (BSD e GNU differiscono),
 # solo classi [[:space:]]. Dove un grep puo' legittimamente non trovare nulla
@@ -38,6 +42,8 @@ purge="lib/retention/purgeAuth.ts"
 auth="lib/auth.ts"
 backup="scripts/cron-backup.sh"
 retention="lib/saved/retention.ts"
+device="lib/follows/device.ts"
+intent="lib/follows/intent.ts"
 
 fail() {
   echo "FAIL: $1"
@@ -47,7 +53,7 @@ fail() {
 # has <file> <testo letterale>: il testo compare nel file.
 has() { grep -qF -- "$2" "$1"; }
 
-for f in "${privacy}" "${cookie}" "${shell}" "${purge}" "${auth}" "${backup}" "${retention}" \
+for f in "${privacy}" "${cookie}" "${shell}" "${purge}" "${auth}" "${backup}" "${retention}" "${device}" "${intent}" \
   components/account/SignIn.tsx components/Footer.tsx; do
   [[ -f "${f}" ]] || fail "${f} non esiste"
 done
@@ -115,8 +121,9 @@ echo "ok  P5 /cookie: frase fissa e due cookie con tipo"
 
 # --- P6 ------------------------------------------------------------------
 # Funzioni di fasi successive (21-02 "Da riaggiungere"): non devono comparire.
+# Luoghi e categorie seguiti sono usciti con la fase 23: ora li esige P10.
 for f in "${privacy}" "${cookie}"; do
-  hit="$(grep -niE 'luoghi seguiti|categorie seguite|token del dispositivo|device token|notifiche push|notifiche|Apple' "${f}" || true)"
+  hit="$(grep -niE 'token del dispositivo|device token|notifiche push|notifiche|Apple' "${f}" || true)"
   [[ -z "${hit}" ]] || fail "P6 ${f} parla di funzioni non ancora uscite: ${hit}"
 done
 echo "ok  P6 nessuna funzione non ancora uscita"
@@ -142,3 +149,23 @@ echo "ok  P8 salvati ${months} mesi come il codice"
 has "${privacy}" "eventi salvati" || fail "P9 ${privacy} non nomina gli eventi salvati"
 has "${privacy}" "Rigenera link" || fail "P9 ${privacy} non nomina il rimedio 'Rigenera link' del collegamento al calendario"
 echo "ok  P9 eventi salvati e rimedio del collegamento al calendario"
+
+# --- P10 -----------------------------------------------------------------
+has "${privacy}" "luoghi seguiti" || fail "P10 ${privacy} non nomina i luoghi seguiti"
+has "${privacy}" "categorie seguite" || fail "P10 ${privacy} non nomina le categorie seguite"
+for const in PERTE_HINT_KEY FOLLOW_INTENT_KEY; do
+  key="$(sed -nE "s/.*export const ${const}[[:space:]]*=[[:space:]]*'([^']+)'.*/\1/p" "${device}" | head -n 1 || true)"
+  [[ -n "${key}" ]] || fail "P10 non trovo '${const} = ...' in ${device}"
+  has "${cookie}" "${key}" || fail "P10 ${cookie} non nomina la chiave ${key} (${const})"
+done
+intent_min="$(sed -nE 's/.*INTENT_MAX_AGE_MS[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*\*[[:space:]]*60[[:space:]]*\*[[:space:]]*1000.*/\1/p' "${intent}" | head -n 1 || true)"
+[[ -n "${intent_min}" ]] || fail "P10 non trovo 'INTENT_MAX_AGE_MS = N * 60 * 1000' in ${intent}"
+has "${cookie}" "${intent_min} minuti" || fail "P10 ${cookie} non dice '${intent_min} minuti' per l'intento di follow (INTENT_MAX_AGE_MS)"
+echo "ok  P10 luoghi e categorie seguiti, chiavi del browser e ${intent_min} minuti come il codice"
+
+# --- P11 -----------------------------------------------------------------
+# Needle senza apostrofi e in minuscolo: nel testo corrente compare cosi'.
+has "${privacy}" "link di condivisione della lista" || fail "P11 ${privacy} non nomina il link di condivisione della lista"
+has "${privacy}" "Disattiva link" || fail "P11 ${privacy} non nomina il rimedio 'Disattiva link'"
+has "${privacy}" "Genera nuovo link" || fail "P11 ${privacy} non nomina il rimedio 'Genera nuovo link'"
+echo "ok  P11 link di condivisione della lista e i suoi due rimedi"

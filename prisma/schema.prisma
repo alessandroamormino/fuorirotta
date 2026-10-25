@@ -217,6 +217,9 @@ model User {
   accounts      Account[]
   savedEvents   SavedEvent[]
   calendarFeed  CalendarFeed?
+  shareLink     ShareLink?
+  follows       UserFollow[]
+  preference    UserPreference?
 
   @@map("auth_user")
 }
@@ -319,4 +322,51 @@ model CalendarFeed {
   rotatedAt DateTime? @map("rotated_at") @db.Timestamptz(6)
 
   @@map("calendar_feeds")
+}
+
+// Link di condivisione della lista salvata (Fase 24). Una riga per utente, quindi
+// al piu' un link vivo (D-11). Il codice del link sta in chiaro perche' la finestra
+// lo mostra di nuovo al proprietario, come per CalendarFeed. E' un segreto SEPARATO
+// da quello del calendario: il testo "Non condividerlo" del feed resta vero. Un link
+// morto e' una riga cancellata o sovrascritta, mai un flag (D-11). show_name parte
+// spento (D-04). Il nome della tabella resta generico: una lista futura potra'
+// portare la visibilita' senza riscrivere i link.
+model ShareLink {
+  userId    String    @id @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique @db.VarChar(32)
+  showName  Boolean   @default(false) @map("show_name")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  rotatedAt DateTime? @map("rotated_at") @db.Timestamptz(6)
+
+  @@map("share_links")
+}
+
+// Cosa segue l'utente (Fase 23). Un follow e' una coppia (kind, key): per il
+// comune la key e' il codice ISTAT (l'id surrogato differisce fra locale e
+// produzione), per la provincia la sigla, per la regione lo slug di
+// events.region, per la categoria il nome canonico. La chiave unica
+// (utente, kind, key) rende innocuo il doppio tocco e copre anche le ricerche
+// per utente. Cascata da auth_user come le altre figlie.
+model UserFollow {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String   @db.VarChar(10)
+  key       String   @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, kind, key])
+  @@map("user_follows")
+}
+
+// Una riga per utente. onboarded_at registra solo che la finestra di
+// benvenuto e' stata mostrata, mai un consenso (PREF-03). La Fase 28 aggiunge
+// qui le preferenze di notifica. Cascata da auth_user.
+model UserPreference {
+  userId      String    @id @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  onboardedAt DateTime? @map("onboarded_at") @db.Timestamptz(6)
+
+  @@map("user_preferences")
 }
