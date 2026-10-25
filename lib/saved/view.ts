@@ -9,6 +9,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { dayToLocalDate, eventDays } from '../eventDays'
 import { isEventOver } from '../eventStatus'
+import { CANONICAL_CATEGORIES, FALLBACK_CATEGORY } from '../categories/taxonomy'
 import type { Snap } from './snapshot'
 import type { Sibling } from './series'
 
@@ -133,6 +134,44 @@ export function buildSavedView(items: SavedItemData[], now: Date): { upcoming: S
   upcoming.sort((a, b) => (a.startDay < b.startDay ? -1 : a.startDay > b.startDay ? 1 : bySavedAt(a, b)))
   past.sort((a, b) => (a.endDay > b.endDay ? -1 : a.endDay < b.endDay ? 1 : bySavedAt(a, b)))
   return { upcoming: upcoming.map((e) => e.row), past: past.map((e) => e.row) }
+}
+
+/** Una riga della pagina pubblica /l/{codice}: solo cio' che un estraneo puo' vedere (24-UI-SPEC Surface 3). */
+export interface SharedEvent {
+  /** Id canonico dell'evento (la pagina /eventi/{id}). */
+  id: number
+  title: string
+  place: string | null
+  dateStart: string
+  dateEnd: string | null
+  /** Nome canonico, null per 'Altro' o per un nome fuori tassonomia: la riga non mostra la categoria. */
+  category: string | null
+}
+
+/**
+ * La lista condivisa (SHARE-02, D-06, D-08): solo gli eventi in arrivo, ognuno con
+ * una pagina a cui puntare, ordinati per primo giorno, titolo (it) e id. MAI per
+ * data di salvataggio (la pagina non deve dire quando qualcosa e' stato salvato,
+ * per questo non eredita lo spareggio di buildSavedView) e senza ref, key, savedAt,
+ * gone, dateChanged, otherDays: sono dati del proprietario.
+ */
+export function buildSharedView(items: SavedItemData[], now: Date): SharedEvent[] {
+  // La categoria non e' su SavedRow: si legge dall'elemento per ref, viva prima dell'istantanea.
+  const categories = new Map(items.map((i) => [i.ref, (i.live ?? i.snap)?.category ?? null]))
+  const out: Array<{ day: string; event: SharedEvent }> = []
+  for (const row of buildSavedView(items, now).upcoming) {
+    if (row.eventId === null) continue
+    const raw = categories.get(row.ref) ?? null
+    const category = raw !== null && raw !== FALLBACK_CATEGORY && (CANONICAL_CATEGORIES as readonly string[]).includes(raw) ? raw : null
+    out.push({
+      day: eventDays(row.dateStart, row.dateEnd).startDay,
+      event: { id: row.eventId, title: row.title, place: row.place, dateStart: row.dateStart, dateEnd: row.dateEnd, category },
+    })
+  }
+  out.sort((a, b) =>
+    a.day < b.day ? -1 : a.day > b.day ? 1 : a.event.title.localeCompare(b.event.title, 'it') || a.event.id - b.event.id,
+  )
+  return out.map((o) => o.event)
 }
 
 // Self-check: `npx tsx lib/saved/view.ts`, lanciato da scripts/saved.test.sh
@@ -264,6 +303,35 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
   const withSeries = series.upcoming.find((r) => r.ref === 50)
   assertCheck(withSeries?.otherDays === 'anche il 21 nov, 5 dic', `otherDays: atteso 'anche il 21 nov, 5 dic', ottenuto ${withSeries?.otherDays}`)
   assertCheck(series.upcoming.find((r) => r.ref === 56)?.otherDays === null, 'senza siblings: otherDays null')
+
+  // Vista condivisa (SHARE-02): ordine per primo giorno, titolo (it), id; mai per salvataggio.
+  const shared = (items: SavedItemData[]) => buildSharedView(items, NOW)
+  const ids = (rows: SharedEvent[]) => rows.map((r) => r.id).join(',')
+  const day = (d: string) => snap('x', `${d}T00:00:00.000Z`, `${d}T23:59:59.999Z`)
+  const sameDay = (title: string): Snap => ({ ...day('2026-10-20'), title })
+  const byTitle = shared([
+    item(60, 60, '2026-10-09T00:00:00.000Z', sameDay('zeta')),
+    item(61, 61, '2026-10-01T00:00:00.000Z', sameDay('beta')),
+    item(62, 62, '2026-10-05T00:00:00.000Z', sameDay('alfa')),
+  ])
+  assertCheck(ids(byTitle) === '62,61,60', `condivisa, stesso giorno: titolo, non salvataggio: atteso 62,61,60, ottenuto ${ids(byTitle)}`)
+  const byId = shared([item(71, 71, '2026-10-01T00:00:00.000Z', sameDay('uguale')), item(70, 70, '2026-10-09T00:00:00.000Z', sameDay('uguale'))])
+  assertCheck(ids(byId) === '70,71', `condivisa, giorno e titolo uguali: per id, ottenuto ${ids(byId)}`)
+  const byDay = shared([item(80, 80, '2026-10-01T00:00:00.000Z', snap('a', '2026-10-25T00:00:00.000Z', null)), item(81, 81, '2026-10-09T00:00:00.000Z', snap('z', '2026-10-18T00:00:00.000Z', null))])
+  assertCheck(ids(byDay) === '81,80', `condivisa: il primo giorno viene prima del titolo, ottenuto ${ids(byDay)}`)
+  const hidden = shared([
+    item(90, null, '2026-10-01T00:00:00.000Z', null, snap('senza-pagina', '2026-10-30T00:00:00.000Z', null)),
+    item(91, 91, '2026-10-01T00:00:00.000Z', utcYesterday),
+    item(92, 92, '2026-10-01T00:00:00.000Z', utcToday),
+    item(93, 93, '2026-10-01T00:00:00.000Z', romeToday),
+    item(94, 93, '2026-10-02T00:00:00.000Z', romeToday),
+  ])
+  assertCheck(ids(hidden) === '92,93', `condivisa: niente riga senza pagina, niente passati, due salvataggi dello stesso evento = una riga, finisce oggi = presente: atteso 92,93, ottenuto ${ids(hidden)}`)
+  const cat = (name: string | null) => shared([item(95, 95, '2026-10-01T00:00:00.000Z', { ...day('2026-10-20'), category: name as string })])[0]?.category
+  assertCheck(cat('Altro') === null && cat('Categoria vecchia') === null && cat(null) === null, 'condivisa: categoria Altro, fuori tassonomia o nulla = null')
+  assertCheck(cat('Sagre e feste') === 'Sagre e feste', 'condivisa: una categoria canonica resta')
+  const keysOf = Object.keys(shared([item(96, 96, '2026-10-01T00:00:00.000Z', day('2026-10-20'))])[0] ?? {}).sort().join(',')
+  assertCheck(keysOf === 'category,dateEnd,dateStart,id,place,title', `condivisa: solo sei chiavi, ottenuto ${keysOf}`)
 
   if (failures > 0) {
     console.error(`[view.ts] ${failures} verifiche fallite`)

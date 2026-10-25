@@ -28,6 +28,24 @@ const nextConfig: NextConfig = {
   //
   // Se un giorno servisse ottimizzare un'immagine remota: si elencano gli
   // hostname davvero necessari, uno per uno. Mai '**'.
+
+  // Pagine /l/{codice} (Fase 24): headers() gira PRIMA del filesystem, quindi vale
+  // per la risposta 200 e per il 404 del link morto. La revoca deve essere istantanea:
+  // nessuna cache condivisa puo' tenere la pagina. Il codice e' nell'indirizzo, quindi
+  // niente Referer verso altri siti e niente indicizzazione. /l/ NON va in robots.ts:
+  // un Disallow nasconderebbe il noindex ai crawler.
+  async headers() {
+    return [
+      {
+        source: '/l/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+    ]
+  },
 };
 
 export default nextConfig;
