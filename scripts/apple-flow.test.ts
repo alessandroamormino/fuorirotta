@@ -15,6 +15,12 @@
 //   F7  collegamento esplicito dal profilo con e-mail diversa: identita' invariata
 //   F8  un account Apple gia' di un altro utente: account_already_linked_to_different_user
 //   F9  scollegare l'unico provider: 400 FAILED_TO_UNLINK_LAST_ACCOUNT
+//   R1  scollegare Apple chiama /auth/revoke una volta con il token in chiaro e toglie la riga
+//   R2  eliminare un account con Apple: una revoca, zero righe in auth_user e in ogni tabella del registro
+//   R3  eliminare un account solo Google: nessuna revoca, zero righe
+//   R4  Apple giu' (500 a ogni client id, poi errore di rete): l'eliminazione riesce, il log non ha token
+//   R5  interruttore spento ma chiavi presenti: la revoca c'e' e prova prima il Services ID, poi il bundle ID
+//   E1  exchangeAppleCode con il bundle ID (la strada della Fase 27)
 //
 // Gli helper (startApple, applePost, follow, cookieFrom, mintGoogleUser e il
 // registro dello stub) sono funzioni con nome: il piano 03 aggiunge qui le sue
@@ -57,6 +63,11 @@ type GoogleGrant = { sub: string; email: string; name: string; picture: string }
 const appleCodes = new Map<string, AppleGrant>()
 const googleCodes = new Map<string, GoogleGrant>()
 const issued: string[] = [] // refresh token emessi da Apple, in ordine
+type RevokeCall = { clientId: string | null; token: string | null; hint: string | null }
+type RevokeMode = 'ok' | 'refuse' | 'error' | 'throw'
+const revokeCalls: RevokeCall[] = [] // chiamate a /auth/revoke, in ordine
+let revokeMode: (clientId: string | null) => RevokeMode = () => 'ok'
+const tokenForms: URLSearchParams[] = [] // corpo di ogni chiamata a /auth/token
 const stubErrors: string[] = [] // tutto cio' che lo stub non si aspettava: fa fallire il prossimo controllo
 let tokenCalls = 0
 let seq = 0
@@ -89,6 +100,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   const json = (body: object) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
   if (method === 'POST' && url === `${APPLE_ORIGIN}/auth/token`) {
     tokenCalls += 1
+    tokenForms.push(form)
     checkClientSecret(form.get('client_secret'), form.get('client_id'))
     const grant = appleCodes.get(form.get('code') ?? '')
     if (!grant) return json({ error: 'invalid_grant' })
@@ -101,6 +113,15 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
       refresh_token: refresh,
       id_token: unsignedJwt({ iss: APPLE_ORIGIN, aud: WEB_ID, sub: grant.sub, email: grant.email, email_verified: 'true' }),
     })
+  }
+  if (method === 'POST' && url === `${APPLE_ORIGIN}/auth/revoke`) {
+    revokeCalls.push({ clientId: form.get('client_id'), token: form.get('token'), hint: form.get('token_type_hint') })
+    checkClientSecret(form.get('client_secret'), form.get('client_id'))
+    const mode = revokeMode(form.get('client_id'))
+    if (mode === 'throw') throw new TypeError('stub: rete assente')
+    if (mode === 'refuse') return new Response(JSON.stringify({ error: 'invalid_client' }), { status: 400 })
+    if (mode === 'error') return new Response('stub: errore', { status: 500 })
+    return new Response(null, { status: 200 })
   }
   if (method === 'POST' && url === 'https://oauth2.googleapis.com/token') {
     const grant = googleCodes.get(form.get('code') ?? '')
@@ -245,6 +266,51 @@ async function main(): Promise<void> {
     const session = await ctx.internalAdapter.createSession(user.id)
     const signed = `${session.token}.${await makeSignature(session.token, ctx.secret)}`
     return { user, cookie: `${ctx.authCookies.sessionToken.name}=${encodeURIComponent(signed)}` }
+  }
+
+  const { USER_DATA_REGISTRY } = await import('../lib/userData/registry')
+  const { exchangeAppleCode } = await import('../lib/appleAuth')
+
+  /** POST JSON a una rotta di Better Auth con sessione e Origin, come il browser. */
+  const postJson = (path: string, body: object, cookie: string) =>
+    handler(
+      new Request(`${BASE}${path}`, {
+        method: 'POST',
+        headers: { origin: BASE, 'content-type': 'application/json', 'x-real-ip': nextIp(), cookie },
+        body: JSON.stringify(body),
+      }),
+    )
+
+  /** Righe che restano per un utente: auth_user piu' ogni tabella del registro (i nomi vengono dal registro, non dall'esterno). */
+  async function rowsLeft(userId: string): Promise<number> {
+    const counts = await Promise.all([
+      prisma.$queryRawUnsafe<{ n: number }[]>('SELECT count(*)::int AS n FROM auth_user WHERE id = $1', userId),
+      ...USER_DATA_REGISTRY.map((entry) =>
+        prisma.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM ${entry.table} WHERE user_id = $1`, userId),
+      ),
+    ])
+    return counts.reduce((sum, rows) => sum + rows[0].n, 0)
+  }
+
+  /** Una riga in saved_events: cosi' "zero righe" dopo l'eliminazione dice qualcosa anche per il registro. */
+  const seedSaved = (userId: string) =>
+    prisma.$executeRawUnsafe(
+      "INSERT INTO saved_events (user_id, title, date_start, canonical_category, source, source_id) VALUES ($1, 'apple-flow', now(), 'Altro', 'apple-flow', $2)",
+      userId,
+      `apple-flow-${userId}`,
+    )
+
+  /** Utente nato con Apple, con sessione e un evento salvato; restituisce anche il refresh token in chiaro. */
+  async function mintAppleUser(tag: string) {
+    const grant: AppleGrant = { sub: `apple-flow-sub-${tag}`, email: `${EMAIL_PREFIX}${tag}@fixture.invalid` }
+    const flow = await appleFlow(grant)
+    const row = await appleRow(grant.sub)
+    if (!row || flow.session === '') {
+      console.error(`FAIL: ${tag}: utente Apple non creato`)
+      process.exit(1)
+    }
+    await seedSaved(row.userId)
+    return { grant, userId: row.userId, cookie: flow.session, refreshToken: issued[issued.length - 1] }
   }
 
   const appleRow = (sub: string) => prisma.account.findFirst({ where: { providerId: 'apple', accountId: sub } })
@@ -393,6 +459,104 @@ async function main(): Promise<void> {
     const f9body = (await f9.json().catch(() => ({}))) as { code?: string }
     check('F9: scollegare l unico provider -> 400 FAILED_TO_UNLINK_LAST_ACCOUNT', f9.status === 400 && f9body.code === 'FAILED_TO_UNLINK_LAST_ACCOUNT', `${f9.status} ${JSON.stringify(f9body)}`)
     check('F9: la riga apple e ancora li', (await appleRow(mario.sub)) !== null)
+
+    // --- R1: scollegare Apple da chi ha anche Google -----------------------------
+    const rGoogle = await mintGoogleUser(`${EMAIL_PREFIX}r1@fixture.invalid`, 'Erre Uno', image)
+    const r1Grant: AppleGrant = { sub: 'apple-flow-sub-r1', email: `${EMAIL_PREFIX}r1@privaterelay.appleid.com` }
+    await appleFlow(r1Grant, { callbackURL: '/account?linked=apple', errorCallbackURL: '/account?link=apple', sessionCookie: rGoogle.cookie, link: true })
+    const r1Token = issued[issued.length - 1]
+    revokeCalls.length = 0
+    // unlink-account vuole l'id della RIGA di auth_account (non il sub di Apple).
+    const r1Row = await appleRow(r1Grant.sub)
+    const r1 = await postJson('/api/auth/unlink-account', { providerId: 'apple', accountId: r1Row?.id ?? 'assente' }, rGoogle.cookie)
+    check('R1: unlink-account di Apple risponde 200', r1.status === 200, `${r1.status} ${await r1.clone().text()}`)
+    check(
+      'R1: una sola revoca, con il Services ID, il refresh token in chiaro e token_type_hint',
+      revokeCalls.length === 1 && revokeCalls[0].clientId === WEB_ID && revokeCalls[0].token === r1Token && revokeCalls[0].hint === 'refresh_token',
+      JSON.stringify(revokeCalls),
+    )
+    check(
+      'R1: la riga apple e sparita, quella google e l utente restano',
+      (await appleRow(r1Grant.sub)) === null &&
+        (await prisma.account.count({ where: { userId: rGoogle.user.id, providerId: 'google' } })) === 1 &&
+        (await prisma.user.count({ where: { id: rGoogle.user.id } })) === 1,
+    )
+
+    // --- R2: eliminare un account con Apple ---------------------------------------
+    const r2 = await mintAppleUser('r2')
+    revokeCalls.length = 0
+    check('R2: prima dell eliminazione ci sono righe (utente, sessione, account, evento salvato)', (await rowsLeft(r2.userId)) >= 4)
+    const r2Delete = await postJson('/api/auth/delete-user', {}, r2.cookie)
+    check('R2: delete-user risponde 200', r2Delete.status === 200, String(r2Delete.status))
+    check('R2: una sola revoca, con il token di quell utente', revokeCalls.length === 1 && revokeCalls[0].token === r2.refreshToken && revokeCalls[0].clientId === WEB_ID, JSON.stringify(revokeCalls))
+    check('R2: zero righe in auth_user e in ogni tabella del registro', (await rowsLeft(r2.userId)) === 0)
+
+    // --- R3: eliminare un account solo Google --------------------------------------
+    const r3 = await mintGoogleUser(`${EMAIL_PREFIX}r3@fixture.invalid`, 'Erre Tre', image)
+    await seedSaved(r3.user.id)
+    revokeCalls.length = 0
+    const r3Delete = await postJson('/api/auth/delete-user', {}, r3.cookie)
+    check('R3: delete-user risponde 200 senza chiamare Apple', r3Delete.status === 200 && revokeCalls.length === 0, `${r3Delete.status} ${JSON.stringify(revokeCalls)}`)
+    check('R3: zero righe in auth_user e in ogni tabella del registro', (await rowsLeft(r3.user.id)) === 0)
+
+    // --- R4: Apple giu' ---------------------------------------------------------------
+    const realError = console.error
+    const logged: string[] = []
+    console.error = (...args: unknown[]) => void logged.push(args.map(String).join(' '))
+    const r4a = await mintAppleUser('r4a')
+    const r4b = await mintAppleUser('r4b')
+    revokeCalls.length = 0
+    const r4Status: number[] = []
+    try {
+      revokeMode = () => 'error'
+      r4Status.push((await postJson('/api/auth/delete-user', {}, r4a.cookie)).status)
+      const errorCalls = revokeCalls.length
+      revokeMode = () => 'throw'
+      r4Status.push((await postJson('/api/auth/delete-user', {}, r4b.cookie)).status)
+      check('R4: con Apple che risponde 500 ogni client id viene provato', errorCalls === 2, String(errorCalls))
+    } finally {
+      revokeMode = () => 'ok'
+      console.error = realError
+    }
+    check('R4: entrambe le eliminazioni rispondono 200', r4Status.join(',') === '200,200', r4Status.join(','))
+    check('R4: zero righe per entrambi gli utenti', (await rowsLeft(r4a.userId)) === 0 && (await rowsLeft(r4b.userId)) === 0)
+    const authLines = logged.filter((line) => line.includes('[Auth]'))
+    check(
+      'R4: il log ha righe [Auth] e nessuna contiene il refresh token o un JWT',
+      authLines.length >= 2 && !logged.some((line) => line.includes(r4a.refreshToken) || line.includes(r4b.refreshToken) || line.includes('eyJ')),
+      logged.join(' | '),
+    )
+
+    // --- R5: interruttore spento, chiavi presenti, try-all ------------------------------
+    const r5 = await mintAppleUser('r5')
+    revokeCalls.length = 0
+    process.env.APPLE_AUTH_ENABLED = 'false'
+    revokeMode = (clientId) => (clientId === WEB_ID ? 'refuse' : 'ok')
+    let r5Status = 0
+    try {
+      r5Status = (await postJson('/api/auth/delete-user', {}, r5.cookie)).status
+    } finally {
+      process.env.APPLE_AUTH_ENABLED = 'true'
+      revokeMode = () => 'ok'
+    }
+    check('R5: con l interruttore spento la revoca c e: Services ID rifiutato, poi bundle ID', r5Status === 200 && revokeCalls.map((call) => call.clientId).join(',') === `${WEB_ID},${BUNDLE_ID}`, `${r5Status} ${JSON.stringify(revokeCalls)}`)
+    check('R5: zero righe', (await rowsLeft(r5.userId)) === 0)
+
+    // --- E1: scambio del codice con il bundle ID (Fase 27) --------------------------------
+    appleCodes.set('native-code', { sub: 'apple-flow-sub-native', email: `${EMAIL_PREFIX}native@fixture.invalid` })
+    tokenForms.length = 0
+    const exchanged = await exchangeAppleCode('native-code', BUNDLE_ID)
+    const sent = tokenForms[0]
+    check(
+      'E1: exchangeAppleCode manda grant_type, code e client_id = bundle ID con un client secret valido, e restituisce il refresh token',
+      tokenForms.length === 1 &&
+        sent.get('grant_type') === 'authorization_code' &&
+        sent.get('code') === 'native-code' &&
+        sent.get('client_id') === BUNDLE_ID &&
+        exchanged.refreshToken === issued[issued.length - 1] &&
+        exchanged.idToken !== null,
+      JSON.stringify(exchanged),
+    )
   } finally {
     await cleanup()
     await prisma.$disconnect()

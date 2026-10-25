@@ -1,8 +1,9 @@
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { APIError } from 'better-auth/api'
+import { decryptOAuthToken } from 'better-auth/oauth2'
 import { bearer } from 'better-auth/plugins'
-import { APPLE_ISSUER, appleClientIds, appleClientSecret, appleMissingConfig } from './appleAuth'
+import { APPLE_ISSUER, appleClientIds, appleClientSecret, appleConfigured, appleMissingConfig, revokeAppleToken } from './appleAuth'
 import { displayNameFromProvider, isValidDisplayName, normalizeDisplayName } from './displayName'
 import { googleProfileImage } from './profileImage'
 import { prisma } from './prisma'
@@ -108,7 +109,9 @@ function appleProvider() {
 
 function create() {
   const baseURL = process.env.BETTER_AUTH_URL
-  return betterAuth({
+  // Il hook di revoca ha bisogno del contesto dell'istanza che sta nascendo: si
+  // legge dentro l'hook (mai alla costruzione), quando `instance` esiste.
+  const created = betterAuth({
     // Esplicito: mai ricavato dalla richiesta. Da qui derivano il redirect_uri
     // di Google, il prefisso __Secure- del cookie e il controllo di Origin.
     baseURL,
@@ -217,6 +220,26 @@ function create() {
         // token, cifrato, per la revoca (D-13).
         create: { before: async (account) => ({ data: noTokens(account) }) },
         update: { before: async (account) => ({ data: noTokens(account) }) },
+        // Un solo punto per scollegamento, eliminazione dell'account e qualunque
+        // cancellazione interna (D-10, D-13). Non ritorna mai false e non lancia
+        // mai: un Apple irraggiungibile non deve bloccare la cancellazione (D-14).
+        // Si basa su appleConfigured(), non sull'interruttore: a interruttore
+        // spento ma con le chiavi presenti il token si revoca comunque.
+        delete: {
+          before: async (account) => {
+            if (account.providerId !== 'apple' || !account.refreshToken) return
+            if (!appleConfigured()) {
+              console.error(`[Auth] Revoca Apple saltata: configurazione Apple assente (${appleMissingConfig().join(', ')})`)
+              return
+            }
+            try {
+              const token = await decryptOAuthToken(account.refreshToken, (await created.$context) as unknown as Parameters<typeof decryptOAuthToken>[1])
+              await revokeAppleToken(token)
+            } catch (error) {
+              console.error('[Auth] Revoca del token Apple non riuscita:', error instanceof Error ? error.message : 'errore')
+            }
+          },
+        },
       },
     },
     socialProviders: {
@@ -232,6 +255,7 @@ function create() {
       ...(appleEnabled() ? { apple: appleProvider() } : {}),
     },
   })
+  return created
 }
 
 export type Auth = ReturnType<typeof create>

@@ -78,3 +78,69 @@ export function appleClientSecret(clientId: string, now: number = Math.floor(Dat
   cache.set(cacheKey, { jwt, exp: now + TTL })
   return jwt
 }
+
+const APPLE_TIMEOUT_MS = 5000
+
+// POST x-www-form-urlencoded verso Apple: 5 s per chiamata, mai un redirect. Un
+// errore di rete o di timeout diventa 'rete' (il messaggio originale potrebbe
+// citare l'URL o altro): ai log arriva solo lo stato o la parola 'rete'.
+async function postToApple(path: string, fields: Record<string, string>, doFetch: typeof fetch): Promise<Response | 'rete'> {
+  try {
+    return await doFetch(`${APPLE_ISSUER}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields),
+      signal: AbortSignal.timeout(APPLE_TIMEOUT_MS),
+      redirect: 'error',
+    })
+  } catch {
+    return 'rete'
+  }
+}
+
+/**
+ * Revoca il refresh token presso Apple (D-10, D-13). Apple vuole lo stesso
+ * client_id con cui il token e' nato: il Services ID per il flusso web, il
+ * bundle ID per quello nativo. Non sapendo quale, si provano in ordine e ci si
+ * ferma al primo 2xx (Apple risponde 200 anche per un token gia' invalido).
+ * Se falliscono tutti lancia un Error con lo stato o 'rete', mai il token.
+ */
+export async function revokeAppleToken(token: string, doFetch: typeof fetch = fetch): Promise<void> {
+  const failures: string[] = []
+  for (const clientId of appleClientIds()) {
+    const response = await postToApple(
+      '/auth/revoke',
+      { client_id: clientId, client_secret: appleClientSecret(clientId), token, token_type_hint: 'refresh_token' },
+      doFetch,
+    )
+    if (response !== 'rete' && response.ok) return
+    failures.push(response === 'rete' ? 'rete' : `HTTP ${response.status}`)
+  }
+  throw new Error(`revoca rifiutata da Apple (${failures.join(', ') || 'nessun client id'})`)
+}
+
+/**
+ * Scambia un authorization code di Apple con il refresh token (SC4). Il
+ * chiamante e' la rotta nativa della Fase 27: passa il refresh token
+ * all'accesso con id token di Better Auth, cosi' l'hook esistente lo salva
+ * cifrato. clientId e' il bundle ID dell'app; il client secret ha lo stesso sub.
+ */
+export async function exchangeAppleCode(
+  code: string,
+  clientId: string,
+  doFetch: typeof fetch = fetch,
+): Promise<{ refreshToken: string | null; idToken: string | null }> {
+  const response = await postToApple(
+    '/auth/token',
+    { grant_type: 'authorization_code', code, client_id: clientId, client_secret: appleClientSecret(clientId) },
+    doFetch,
+  )
+  if (response === 'rete' || !response.ok) {
+    throw new Error(`scambio del codice rifiutato da Apple (${response === 'rete' ? 'rete' : `HTTP ${response.status}`})`)
+  }
+  const body = (await response.json().catch(() => ({}))) as { refresh_token?: unknown; id_token?: unknown }
+  return {
+    refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : null,
+    idToken: typeof body.id_token === 'string' ? body.id_token : null,
+  }
+}
