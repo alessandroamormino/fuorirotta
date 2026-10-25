@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { APIError } from 'better-auth/api'
 import { bearer } from 'better-auth/plugins'
+import { APPLE_ISSUER, appleClientIds, appleClientSecret, appleMissingConfig } from './appleAuth'
 import { displayNameFromProvider, isValidDisplayName, normalizeDisplayName } from './displayName'
 import { googleProfileImage } from './profileImage'
 import { prisma } from './prisma'
@@ -60,8 +61,49 @@ export function authEnabled(): boolean {
   return false
 }
 
+/**
+ * Interruttore di Apple (D-04), separato da quello di Google: true solo con
+ * APPLE_AUTH_ENABLED='true', accesso attivo E le quattro variabili complete con
+ * una chiave EC P-256 leggibile. Interruttore acceso ma configurazione
+ * incompleta: spento, e il log dice i NOMI (una volta per insieme), mai i valori.
+ */
+export function appleEnabled(): boolean {
+  if (process.env.APPLE_AUTH_ENABLED !== 'true' || !authEnabled()) return false
+  const missing = appleMissingConfig()
+  if (missing.length === 0) return true
+  const key = `apple:${missing.join(',')}`
+  if (!reportedMissing.has(key)) {
+    reportedMissing.add(key)
+    console.error(`[Auth] APPLE_AUTH_ENABLED=true ma la configurazione Apple e' incompleta o non valida: ${missing.join(', ')}`)
+  }
+  return false
+}
+
+// I token di Google non si tengono mai (21 D-12). Quello di Apple si tiene solo
+// il refresh token, e solo per poterlo revocare (D-13): la libreria lo ha gia'
+// cifrato prima che l'hook giri. Chi non e' esplicitamente 'apple' (anche senza
+// providerId) perde tutto: fallisce chiuso.
 function noTokens<T extends object>(account: T): T {
-  return { ...account, accessToken: null, refreshToken: null, idToken: null }
+  const providerId = (account as { providerId?: string }).providerId
+  return providerId === 'apple'
+    ? { ...account, accessToken: null, idToken: null }
+    : { ...account, accessToken: null, refreshToken: null, idToken: null }
+}
+
+// Provider Apple: il Services ID e' il client primario (scambio del codice web);
+// il bundle ID, se c'e', si aggiunge solo all'audience dell'id token (Pitfall 4:
+// appBundleIdentifier la SOSTITUIREBBE). Nessun overrideUserInfoOnSignIn (D-07).
+// clientSecret e' un getter: la libreria tiene l'oggetto per riferimento e lo
+// legge a ogni scambio, un valore calcolato qui resterebbe congelato.
+function appleProvider() {
+  const [servicesId] = appleClientIds()
+  return {
+    clientId: [servicesId],
+    audience: appleClientIds(),
+    get clientSecret() {
+      return appleClientSecret(servicesId)
+    },
+  }
 }
 
 function create() {
@@ -107,9 +149,20 @@ function create() {
     account: {
       // AUTH-07: mai unire in automatico un utente nuovo a uno esistente con la
       // stessa e-mail (classe CVE-2026-53516). Nessun trustedProviders. Il
-      // secondo provider della Fase 25 si collega con un'azione esplicita.
-      accountLinking: { enabled: true, disableImplicitLinking: true },
+      // secondo provider si collega con un'azione esplicita dal profilo.
+      // allowDifferentEmails riguarda solo quel collegamento, fatto da chi ha
+      // gia' una sessione (l'e-mail di Apple e' spesso un relay): un accesso con
+      // e-mail uguale resta rifiutato da disableImplicitLinking.
+      accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: true },
+      // Cifrati con BETTER_AUTH_SECRET: ruotarlo rende illeggibili i token Apple
+      // gia' salvati, la revoca viene saltata e loggata.
+      encryptOAuthTokens: true,
     },
+    // Apple fa un POST cross-site al callback. I cookie restano tutti Lax e non
+    // cambia nulla: il POST senza cookie diventa un GET same-site. Questo serve
+    // solo al browser che un cookie lo manda comunque (altrimenti 403
+    // INVALID_ORIGIN).
+    ...(appleEnabled() ? { trustedOrigins: [APPLE_ISSUER] } : {}),
     // Eliminazione immediata, senza mail ne' verifica (D-10).
     user: { deleteUser: { enabled: true } },
     // Senza questo gli errori finirebbero sulla pagina di errore della libreria.
@@ -160,7 +213,8 @@ function create() {
       },
       account: {
         // Non chiamiamo mai le API di Google: i suoi token non si tengono
-        // (D-12, e un'informativa piu' corta).
+        // (21 D-12, e un'informativa piu' corta). Di Apple resta il refresh
+        // token, cifrato, per la revoca (D-13).
         create: { before: async (account) => ({ data: noTokens(account) }) },
         update: { before: async (account) => ({ data: noTokens(account) }) },
       },
@@ -175,6 +229,7 @@ function create() {
         // la separa da nome ed e-mail, che questa opzione riscriverebbe.
         overrideUserInfoOnSignIn: true,
       },
+      ...(appleEnabled() ? { apple: appleProvider() } : {}),
     },
   })
 }
