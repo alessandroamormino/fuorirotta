@@ -65,6 +65,10 @@ Three categories matter because they are read at different times by different pr
 | `BETTER_AUTH_URL` | Runtime, in the container | Public address of the app (`https://fuori-rotta.it`); Google's redirect URI is built from it |
 | `BETTER_AUTH_SECRET` | Runtime, in the container | Session signing secret, at least 32 characters. Generate it **on the server** with `openssl rand -base64 32`; never paste it in a chat or a ticket |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Runtime, in the container | OAuth credentials from the Google Cloud console. Same rule: typed straight into the server's `.env` |
+| `APPLE_AUTH_ENABLED` | Runtime, in the container | Apple sign-in switch (Phase 25, D-04, D-12), separate from `AUTH_ENABLED`. Only the exact value `true` turns Apple on; declared as `${APPLE_AUTH_ENABLED:-false}`. See the Apple switch section below |
+| `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID` | Runtime, in the container | Services ID, Team ID and Key ID from the Apple developer portal. Declared as `${NAME:-}`, so a release without them still starts |
+| `APPLE_PRIVATE_KEY_B64` | Runtime, in the container | The `.p8` key as one line of base64. Typed **only on the server** with a hidden read (see the Apple switch section below); never a build argument, never in a chat or in the repository |
+| `APPLE_APP_BUNDLE_ID` | Runtime, in the container | App ID of the mobile app (Phase 27). Optional; empty is fine |
 | `BACKUP_GPG_RECIPIENT`, `BACKUP_RETENTION_DAYS`, `BACKUP_LOCAL_DIR`, `BACKUP_PG_IMAGE`, `HEALTHCHECK_BACKUP_URL` | Host-only, never passed to the container | Read only by `scripts/cron-backup.sh`. See §Backups |
 
 In production the file is `.env` in the compose directory (`/opt/docker/fuori-rotta/fuorirotta/.env`), not `.env.local` — `.env.local` is a local-development-only convention and is never read by Docker Compose.
@@ -492,6 +496,82 @@ bash /opt/docker/fuori-rotta/fuorirotta/scripts/deploy.sh <tag>
 `http://127.0.0.1:3000`, which keeps working. A port open to the internet would let anyone call the app
 directly, bypassing nginx, and send their own `X-Real-IP` header: every request would then get a fresh
 rate-limit bucket, which defeats the sign-in rate limit.
+
+### Apple sign-in switch (Phase 25, D-12)
+
+Apple ships **switched off** too, with its own switch, and is turned on only after the secrets are on the
+server. Apple is on only when **all** of these hold: `APPLE_AUTH_ENABLED=true`, `AUTH_ENABLED` on, and
+`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_B64` present with a key that parses.
+An incomplete set leaves Apple off and logs the **names** of what is missing once (`configurazione Apple`),
+never the values. `docker-compose.yml` declares the six variables as `${NAME:-}` (and
+`${APPLE_AUTH_ENABLED:-false}`), so a release with the switch off needs no Apple secret on the server and
+compose never aborts because of them.
+
+**Order (D-12):** 1. release with the switch off; 2. add the variables on the server; 3. recreate the
+container; 4. switch on; 5. test in production; 6. switch off again if anything is broken.
+
+All commands run from `/opt/docker/fuori-rotta/fuorirotta`, one at a time, each with its expected output.
+
+Check nothing Apple is there yet (expect `0`):
+
+```bash
+grep -c '^APPLE_' .env
+```
+
+Append the non-secret identifiers, still switched off (replace the three placeholders by the values from the
+Apple portal; if the first name is already there the command does nothing):
+
+```bash
+grep -q '^APPLE_CLIENT_ID=' .env || printf 'APPLE_AUTH_ENABLED=false\nAPPLE_CLIENT_ID=%s\nAPPLE_TEAM_ID=%s\nAPPLE_KEY_ID=%s\n' '<SERVICES_ID>' '<TEAM_ID>' '<KEY_ID>' >> .env
+```
+
+Store the key. On the Mac, `base64 < AuthKey_<KEYID>.p8 | tr -d '\n'` prints the one-line value and you copy it.
+On the server, this reads it hidden (nothing is echoed, nothing lands in the shell history) and appends it
+once; paste the value when the prompt waits and press Enter:
+
+```bash
+grep -q '^APPLE_PRIVATE_KEY_B64=' .env || { read -rs K && printf 'APPLE_PRIVATE_KEY_B64=%s\n' "$K" >> .env; unset K; }
+```
+
+Recreate on the image already deployed (same one-liner as above), then check the log is silent (expect `0`):
+
+```bash
+cd /opt/docker/fuori-rotta/fuorirotta && FUORIROTTA_IMAGE="$(grep -m1 '^image=' .deployed | cut -d= -f2-)" docker compose up -d --no-build
+```
+
+```bash
+docker compose logs --since 2m 2>&1 | grep -c 'configurazione Apple'
+```
+
+**Switch on:** flip the line, print it back (expect `APPLE_AUTH_ENABLED=true`), recreate with the one-liner
+above, then check the state (expect output containing `"apple":true`):
+
+```bash
+grep -q '^APPLE_AUTH_ENABLED=' .env && sed -i 's/^APPLE_AUTH_ENABLED=.*/APPLE_AUTH_ENABLED=true/' .env && grep '^APPLE_AUTH_ENABLED=' .env
+```
+
+```bash
+curl -s https://fuori-rotta.it/api/v1/me/state
+```
+
+**Switch off (fast, no rebuild):** the same line with `false` (expect `APPLE_AUTH_ENABLED=false`), then the
+recreate one-liner:
+
+```bash
+grep -q '^APPLE_AUTH_ENABLED=' .env && sed -i 's/^APPLE_AUTH_ENABLED=.*/APPLE_AUTH_ENABLED=false/' .env && grep '^APPLE_AUTH_ENABLED=' .env
+```
+
+Notes:
+
+- Revocation on unlink and on account deletion works **whenever the variables are present, even with the
+  switch off**: a person who already linked Apple can still unlink or delete the account cleanly.
+- The server-to-server endpoint `/api/apple/notifications` answers 404 while the switch is off.
+- Rotating `BETTER_AUTH_SECRET` invalidates every session **and makes the stored Apple tokens unrevocable**
+  (they are encrypted with it). Revoke first, or accept that Apple's authorizations stay until the people
+  remove them from their Apple ID.
+- If Apple asked for a domain verification file, it lives in `public/.well-known/` and must answer 200
+  without a redirect before you press Verify in the portal.
+- The privacy page (`/privacy`) already describes Apple; `npm run check:privacy-pages` keeps it so.
 
 ### Backups (D-18)
 

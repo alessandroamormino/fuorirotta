@@ -44,6 +44,16 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Accesso con Apple (Fase 25). Come Google: niente :? , il rilascio con
+      # l'interruttore Apple spento viene prima dei segreti (D-12) e lib/auth.ts
+      # rifiuta un insieme incompleto. APPLE_PRIVATE_KEY_B64 e' il .p8 in base64 su
+      # una riga, scritto solo sul server. Solo a runtime, mai come build arg.
+      APPLE_AUTH_ENABLED: ${APPLE_AUTH_ENABLED:-false}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_KEY_ID: ${APPLE_KEY_ID:-}
+      APPLE_PRIVATE_KEY_B64: ${APPLE_PRIVATE_KEY_B64:-}
+      APPLE_APP_BUNDLE_ID: ${APPLE_APP_BUNDLE_ID:-}
     restart: unless-stopped
     networks:
       - fuorirotta-network
