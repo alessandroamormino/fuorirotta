@@ -37,3 +37,16 @@ export async function POST(req: Request): Promise<Response> {
   }
   return noStoreJson({ path: `/l/${row.token}`, showName: row.showName })
 }
+
+// Disattiva il link (D-09, D-11): la riga sparisce. Niente flag, niente storico: un link
+// morto e' una riga assente, quindi la pagina pubblica non trova nulla, come per un codice
+// mai esistito. 200 anche se non c'era nulla da togliere.
+export async function DELETE(req: Request): Promise<Response> {
+  const blocked = assertSameOrigin(req)
+  if (blocked) return blocked
+  const ctx = await requireUser(req)
+  if (ctx instanceof Response) return ctx
+
+  const { count } = await prisma.shareLink.deleteMany({ where: { userId: ctx.user.id } })
+  return noStoreJson({ removed: count })
+}

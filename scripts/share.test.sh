@@ -270,3 +270,67 @@ for name in p1 d1; do
   [[ "$(hdr "${name}" cache-control)" == "no-store" ]] || fail "H1: ${name}: cache-control '$(hdr "${name}" cache-control)'"
 done
 echo "ok  H1: 200 e 404 portano Referrer-Policy no-referrer, X-Robots-Tag 'noindex, nofollow' e Cache-Control no-store (${serve_mode})"
+
+# --- Confronto dei link morti (D2 e seguenti) ---------------------------------------
+# Un link morto, per qualunque causa, deve essere indistinguibile da uno mai esistito:
+# stesso stato, stessi header (Date e Content-Length esclusi: il secondo segue la
+# lunghezza del codice richiesto) e stessi byte DOPO aver sostituito il codice richiesto
+# con __TOKEN__ (Next 16.4.1 lo scrive nel payload della pagina: ricerca, spike 24-RESEARCH).
+# dead <nome> <codice>: GET senza cookie; corpo in <nome>.b, header filtrati in <nome>.hh.
+dead() {
+  local name="$1" token="$2" status
+  status="$(call "${name}" GET "/l/${token}" --path-as-is)"
+  tr -d '\r' <"${tmp_dir}/${name}.h" | grep -viE '^(date|content-length):' >"${tmp_dir}/${name}.hh" || true
+  printf '%s' "${status}"
+}
+# norm <codice> <entrata> <uscita>: sostituzione di testo semplice (split/join), mai una regex:
+# '.' o '-' in un codice non devono significare altro.
+norm() {
+  node -e 'const fs = require("fs"); const [t, i, o] = process.argv.slice(1); fs.writeFileSync(o, fs.readFileSync(i, "latin1").split(t).join("__TOKEN__"), "latin1")' "$1" "$2" "$3"
+}
+# same_dead <etichetta> <nomeA> <codiceA> <nomeB> <codiceB>
+same_dead() {
+  local label="$1" a="$2" ta="$3" b="$4" tb="$5"
+  norm "${ta}" "${tmp_dir}/${a}.b" "${tmp_dir}/${a}.n"
+  norm "${tb}" "${tmp_dir}/${b}.b" "${tmp_dir}/${b}.n"
+  cmp -s "${tmp_dir}/${a}.n" "${tmp_dir}/${b}.n" \
+    || { echo "--- corpo ${a} vs ${b} (normalizzati)"; cmp "${tmp_dir}/${a}.n" "${tmp_dir}/${b}.n" || true; fail "${label}: i corpi normalizzati di ${a} e ${b} differiscono"; }
+  diff "${tmp_dir}/${a}.hh" "${tmp_dir}/${b}.hh" >"${tmp_dir}/hdr.diff" \
+    || { head -n 20 "${tmp_dir}/hdr.diff"; fail "${label}: gli header di ${a} e ${b} differiscono"; }
+}
+
+# --- D2: disattivare toglie la riga e il vecchio indirizzo e' un 404 come un altro -------
+old_path="${share_path}"
+old_token="${old_path#/l/}"
+code="$(call d2del DELETE /api/v1/me/share -H "Origin: ${origin}" -H "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/d2del.b" 'j.removed')" == "1" ]] || fail "D2: DELETE: atteso 200 {removed:1}, ottenuto ${code} '$(cat "${tmp_dir}/d2del.b")'"
+[[ "$(share_rows "${u1_user}")" == "0" ]] || fail "D2: dopo DELETE share_links deve avere zero righe per u1"
+code="$(call d2del2 DELETE /api/v1/me/share -H "Origin: ${origin}" -H "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/d2del2.b" 'j.removed')" == "0" ]] || fail "D2: secondo DELETE: atteso 200 {removed:0}, ottenuto ${code} '$(cat "${tmp_dir}/d2del2.b")'"
+unknown_a="AAAAAAAAAAAAAAAAAAAAAA"
+unknown_b="BBBBBBBBBBBBBBBBBBBBBB"
+[[ "$(dead d2old "${old_token}")" == "404" ]] || fail "D2: il vecchio indirizzo deve dare 404"
+[[ "$(dead d2a "${unknown_a}")" == "404" && "$(dead d2b "${unknown_b}")" == "404" ]] || fail "D2: i codici mai esistiti devono dare 404"
+same_dead "D2 (due codici mai esistiti)" d2a "${unknown_a}" d2b "${unknown_b}"
+same_dead "D2 (disattivato contro mai esistito)" d2old "${old_token}" d2a "${unknown_a}"
+# Il confronto sa fallire: un byte in piu' su una copia normalizzata lo rompe.
+cp "${tmp_dir}/d2a.n" "${tmp_dir}/d2a.plus"
+printf 'x' >>"${tmp_dir}/d2a.plus"
+if cmp -s "${tmp_dir}/d2a.n" "${tmp_dir}/d2a.plus"; then fail "D2: il confronto e' vacuo, un byte in piu' non lo rompe"; fi
+# E il normalizzatore serve: senza, i corpi grezzi dei due codici ignoti differiscono (il codice e' nel payload).
+if cmp -s "${tmp_dir}/d2a.b" "${tmp_dir}/d2b.b"; then fail "D2: i corpi grezzi di due codici diversi sono uguali, il normalizzatore non servirebbe: il test non prova nulla"; fi
+# Poi si ricrea il link: le sezioni dopo hanno bisogno di un link vivo per u1.
+code="$(share_post d2new "${u1_cookie}")"
+[[ "${code}" == "200" ]] || fail "D2: POST dopo DELETE: atteso 200, ottenuto ${code}"
+share_path="$(json_get "${tmp_dir}/d2new.b" 'j.path')"
+[[ "${share_path}" =~ ^/l/[A-Za-z0-9_-]{22}$ && "${share_path}" != "${old_path}" ]] || fail "D2: dopo DELETE il POST deve dare un codice nuovo, vecchio '${old_path}' nuovo '${share_path}'"
+[[ "$(dead d2oldagain "${old_token}")" == "404" ]] || fail "D2: il vecchio codice non deve tornare in vita dopo il nuovo POST"
+echo "ok  D2: DELETE -> {removed:1} poi {removed:0}, zero righe; vecchio indirizzo = mai esistito (stato, header, byte normalizzati); confronto e normalizzatore provati non vacui; nuovo POST = codice nuovo"
+
+# --- H2: la pagina morta, in ogni causa, ha gli header della viva ---------------------
+for name in d2old d2a d2b d2oldagain; do
+  [[ "$(hdr "${name}" referrer-policy)" == "no-referrer" ]] || fail "H2: ${name}: referrer-policy '$(hdr "${name}" referrer-policy)'"
+  [[ "$(hdr "${name}" x-robots-tag)" == "noindex, nofollow" ]] || fail "H2: ${name}: x-robots-tag '$(hdr "${name}" x-robots-tag)'"
+  [[ "$(hdr "${name}" cache-control)" == "no-store" ]] || fail "H2: ${name}: cache-control '$(hdr "${name}" cache-control)'"
+done
+echo "ok  H2: i 404 dei link disattivati e mai esistiti portano no-referrer, 'noindex, nofollow' e no-store"
