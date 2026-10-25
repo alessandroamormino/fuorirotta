@@ -15,8 +15,18 @@ export async function POST(req: Request): Promise<Response> {
   if (ctx instanceof Response) return ctx
 
   const token = newShareToken()
-  const { count } = await prisma.shareLink.updateMany({ where: { userId: ctx.user.id }, data: { token, rotatedAt: new Date() } })
-  if (count === 0) return noStoreJson({ error: 'not-found' }, 404)
-  const row = await prisma.shareLink.findUnique({ where: { userId: ctx.user.id }, select: { showName: true } })
-  return noStoreJson({ path: `/l/${token}`, showName: row?.showName ?? false })
+  // Un solo UPDATE ... RETURNING (review WR-02): con updateMany + findUnique un DELETE
+  // concorrente in mezzo faceva rispondere 200 con un link gia' morto. Senza riga Prisma
+  // lancia P2025, che qui vale "nessun link da rigenerare".
+  try {
+    const row = await prisma.shareLink.update({
+      where: { userId: ctx.user.id },
+      data: { token, rotatedAt: new Date() },
+      select: { showName: true },
+    })
+    return noStoreJson({ path: `/l/${token}`, showName: row.showName })
+  } catch (err) {
+    if ((err as { code?: unknown } | null)?.code === 'P2025') return noStoreJson({ error: 'not-found' }, 404)
+    throw err
+  }
 }

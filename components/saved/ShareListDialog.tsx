@@ -91,6 +91,10 @@ export default function ShareListDialog() {
 	const [confirmError, setConfirmError] = useState("");
 	const [notice, setNotice] = useState("");
 	const [nameBusy, setNameBusy] = useState(false);
+	// Con una scrittura in volo il dialogo non si chiude, compresa quella del nome
+	// (review WR-03): chiuso e riaperto, il GET poteva tornare prima del PATCH e la
+	// spunta restava vecchia mentre la pagina pubblica mostrava gia' il nome.
+	const locked = busy !== null || nameBusy;
 	const [nameError, setNameError] = useState(false);
 	const [canShare, setCanShare] = useState(false);
 	const [copy, setCopy] = useState<CopyState>("idle");
@@ -126,7 +130,7 @@ export default function ShareListDialog() {
 	};
 
 	const onOpenChange = (next: boolean) => {
-		if (!next && busy) return;
+		if (!next && locked) return;
 		setOpen(next);
 		if (next) {
 			// Mai a livello di modulo o in un render sul server (React error 418).
@@ -295,15 +299,15 @@ export default function ShareListDialog() {
 			<Dialog.Content
 				className="w-[calc(100%-2rem)]!"
 				onEscapeKeyDown={(event) => {
-					// Con una richiesta in corso non si esce; altrimenti prima si chiude la conferma, poi il dialogo.
-					if (busy) event.preventDefault();
+					// Con una scrittura in corso non si esce; altrimenti prima si chiude la conferma, poi il dialogo.
+					if (locked) event.preventDefault();
 					else if (confirm) {
 						event.preventDefault();
 						closeConfirm();
 					}
 				}}
 				onInteractOutside={(event) => {
-					if (busy) event.preventDefault();
+					if (locked) event.preventDefault();
 				}}
 			>
 				<div className="space-y-6">
@@ -446,7 +450,7 @@ export default function ShareListDialog() {
 					<button
 						type="button"
 						aria-label="Chiudi"
-						disabled={busy !== null}
+						disabled={locked}
 						className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full text-foreground hover:bg-muted-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
 					>
 						<X size={20} aria-hidden="true" />
