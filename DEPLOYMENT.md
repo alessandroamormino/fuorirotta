@@ -175,6 +175,49 @@ Then `docker exec nginx nginx -t && docker exec nginx nginx -s reload`.
 The same release applies migration `20261023120000_add_saved_events` (it creates `calendar_feeds`):
 `scripts/deploy.sh` runs it before the build.
 
+#### Share link (/l/)
+
+`/l/{token}` shows a signed-in user's upcoming saved events to whoever holds the URL. It is a **capability**
+URL, a separate secret from the calendar feed. Unknown, malformed, deactivated, regenerated-away, deleted-account
+and auth-off links all answer the same 404 page. The token sits in the nginx access log for the logrotate window
+(14 days); users kill a leaked link with "Genera nuovo link" or "Disattiva link" in the "Condividi la lista" dialog.
+
+**Headers.** `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store` come
+from `headers()` in `next.config.ts`, not from nginx. After every release that touches `next.config.ts`, check them
+on the real image (`check:share` proves them on the standalone `server.js` locally, not on the alpine image):
+
+```bash
+curl -sI https://fuori-rotta.it/l/AAAAAAAAAAAAAAAAAAAAAA
+```
+
+Expect status 404 and the three headers. If any is missing, add it in the `/l/` location below with
+`add_header ... always;` and note it here.
+
+**Rate limit.** Same shape as `/cal/`, looser: link previews (WhatsApp, Telegram, iMessage) fetch from shared
+crawler IPs, and a 503 reveals nothing about a token. Starting values, tune after watching the access log:
+
+```nginx
+# http block
+limit_req_zone $binary_remote_addr zone=share_link:10m rate=60r/m;
+
+# server block, next to location /
+location /l/ {
+    limit_req zone=share_link burst=30 nodelay;
+    proxy_pass http://fuorirotta-frontend:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_read_timeout 120s;
+}
+```
+
+Then `docker exec nginx nginx -t && docker exec nginx nginx -s reload`.
+
+**Release order.** Migration `20261025120000_add_share_links` (creates `share_links`) runs before the build through
+`scripts/deploy.sh`, like every migration; it is additive, so the running version is unaffected. Phase 23's
+`20261024120000_add_user_follows` must be applied first (this branch is stacked on Phase 23).
+
+**Without the nginx step** `/l/` works but is not rate-limited.
+
 ### Automated Scraping via Crontab
 
 **Adding a source to an already-scheduled region adds no crontab row.** The schedulable unit is the region, not the source: `trentino-alto-adige` has carried its `5 4 * * *` line since Phase 14, and Phase 19 (`altoadige.ts`) hangs a second source off that same line via `getSourcesByRegion`. For a release like that, skip the "Install it as a BLOCK" procedure below entirely — there is nothing to install — and run only step 4's `--check` to confirm the installed block still matches the registry. Proven by `scripts/crontab-generate.test.sh` S10 (asserts exactly one `trentino-alto-adige` line).
