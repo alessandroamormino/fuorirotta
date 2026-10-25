@@ -76,6 +76,17 @@ export const USER_DATA_REGISTRY: readonly UserDataEntry[] = [
       })
   },
   {
+    table: 'share_links',
+    exportKey: 'shareLink',
+    // Del link di condivisione si esporta quando e' nato, quando e' stato rigenerato e se mostra il
+    // nome: MAI il link stesso, che resterebbe nel file scaricato come un secondo modo per aprire la lista.
+    exportRows: async (userId) =>
+      prisma.shareLink.findMany({
+        where: { userId },
+        select: { createdAt: true, rotatedAt: true, showName: true }
+      })
+  },
+  {
     table: 'user_follows',
     exportKey: 'follows',
     // Niente id interni: cosa segue (kind, key) e da quando.

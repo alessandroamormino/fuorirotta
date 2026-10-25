@@ -71,13 +71,14 @@ expected="auth_account|user_id|c
 auth_session|user_id|c
 calendar_feeds|user_id|c
 saved_events|user_id|c
+share_links|user_id|c
 user_follows|user_id|c
 user_preferences|user_id|c"
 [[ "${children}" == "${expected}" ]] || fail "S2: figli di auth_user attesi
 ${expected}
 trovati
 ${children}"
-ok "S2: auth_session, auth_account, saved_events, calendar_feeds, user_follows e user_preferences puntano ad auth_user con ON DELETE CASCADE"
+ok "S2: auth_session, auth_account, saved_events, calendar_feeds, share_links, user_follows e user_preferences puntano ad auth_user con ON DELETE CASCADE"
 
 # --- S3: cancellare il genitore svuota i figli, senza ordine -------------------
 psql_dev "INSERT INTO auth_user (id, name, email, updated_at) VALUES ('${fixture}', 'gate', 'gate@user-data.invalid', now())" >/dev/null
@@ -85,12 +86,13 @@ psql_dev "INSERT INTO auth_session (id, expires_at, token, updated_at, user_id) 
 psql_dev "INSERT INTO auth_account (id, account_id, provider_id, user_id, updated_at) VALUES ('${fixture}', '${fixture}', 'google', '${fixture}', now())" >/dev/null
 psql_dev "INSERT INTO saved_events (user_id, title, date_start, canonical_category, source, source_id) VALUES ('${fixture}', 'gate', now(), 'Altro', 'user-data-gate', '${fixture}')" >/dev/null
 psql_dev "INSERT INTO calendar_feeds (user_id, token) VALUES ('${fixture}', '${fixture}')" >/dev/null
+psql_dev "INSERT INTO share_links (user_id, token) VALUES ('${fixture}', '${fixture}')" >/dev/null
 psql_dev "INSERT INTO user_follows (user_id, kind, key) VALUES ('${fixture}', 'region', 'lombardia')" >/dev/null
 psql_dev "INSERT INTO user_preferences (user_id, onboarded_at) VALUES ('${fixture}', now())" >/dev/null
 psql_dev "DELETE FROM auth_user WHERE id = '${fixture}'" >/dev/null
-left="$(psql_dev "SELECT (SELECT count(*) FROM auth_session WHERE user_id = '${fixture}') + (SELECT count(*) FROM auth_account WHERE user_id = '${fixture}') + (SELECT count(*) FROM saved_events WHERE user_id = '${fixture}') + (SELECT count(*) FROM calendar_feeds WHERE user_id = '${fixture}') + (SELECT count(*) FROM user_follows WHERE user_id = '${fixture}') + (SELECT count(*) FROM user_preferences WHERE user_id = '${fixture}')")"
+left="$(psql_dev "SELECT (SELECT count(*) FROM auth_session WHERE user_id = '${fixture}') + (SELECT count(*) FROM auth_account WHERE user_id = '${fixture}') + (SELECT count(*) FROM saved_events WHERE user_id = '${fixture}') + (SELECT count(*) FROM calendar_feeds WHERE user_id = '${fixture}') + (SELECT count(*) FROM share_links WHERE user_id = '${fixture}') + (SELECT count(*) FROM user_follows WHERE user_id = '${fixture}') + (SELECT count(*) FROM user_preferences WHERE user_id = '${fixture}')")"
 [[ "${left}" == "0" ]] || fail "S3: dopo il DELETE di auth_user restano ${left} righe figlie"
-ok "S3: il DELETE diretto di auth_user non lascia righe in auth_session, auth_account, saved_events, calendar_feeds, user_follows ne' user_preferences"
+ok "S3: il DELETE diretto di auth_user non lascia righe in auth_session, auth_account, saved_events, calendar_feeds, share_links, user_follows ne' user_preferences"
 
 # --- funzioni condivise da S4/S5/S6 -------------------------------------------
 cat > "${tmp_ts}" <<'TS'

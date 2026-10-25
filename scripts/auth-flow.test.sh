@@ -457,7 +457,7 @@ code="$(call s29 GET /api/v1/me/export 198.51.100.61 -H "${x_cookie_hdr}")"
   || fail "S29: content-disposition atteso attachment con fuorirotta-dati-${rome_today}.json, ottenuto '$(header s29 content-disposition)'"
 [[ "$(header s29 content-type)" == "application/json; charset=utf-8" ]] || fail "S29: content-type inatteso '$(header s29 content-type)'"
 no_store s29 S29
-[[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j).sort().join()')" == "calendarFeed,exportedAt,follows,format,linkedAccounts,preferences,profile,savedEvents,sessions" ]] \
+[[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j).sort().join()')" == "calendarFeed,exportedAt,follows,format,linkedAccounts,preferences,profile,savedEvents,sessions,shareLink" ]] \
   || fail "S29: chiavi di primo livello inattese: $(json_get "${tmp_dir}/s29.b" 'Object.keys(j).join()')"
 [[ "$(json_get "${tmp_dir}/s29.b" 'j.format === 1 && !Number.isNaN(Date.parse(j.exportedAt))')" == "true" ]] || fail "S29: format o exportedAt inattesi"
 [[ "$(json_get "${tmp_dir}/s29.b" 'Object.keys(j.profile).sort().join() + "|" + j.profile.name + "|" + j.profile.email')" == "createdAt,email,emailVerified,image,name|Anna Esporta|s29-a@fixture.invalid" ]] \
@@ -503,9 +503,9 @@ echo "ok  S31: nell'export di A nessuna e-mail, account id, nome o user agent di
   || fail "S32: un utente con un account e una sessione deve avere array di lunghezza 1: $(cat "${tmp_dir}/s31.b")"
 [[ "$(json_get "${tmp_dir}/s31.b" 'Array.isArray(j.savedEvents) && j.savedEvents.length === 0 && Array.isArray(j.calendarFeed) && j.calendarFeed.length === 0')" == "true" ]] \
   || fail "S32: savedEvents e calendarFeed devono essere array vuoti per chi non ha salvato nulla: $(cat "${tmp_dir}/s31.b")"
-[[ "$(json_get "${tmp_dir}/s31.b" 'Array.isArray(j.follows) && j.follows.length === 0 && Array.isArray(j.preferences) && j.preferences.length === 0')" == "true" ]] \
-  || fail "S32: follows e preferences devono essere array vuoti per chi non segue nulla: $(cat "${tmp_dir}/s31.b")"
-echo "ok  S32: un utente con un account e una sessione ha linkedAccounts e sessions di lunghezza 1; savedEvents, calendarFeed, follows e preferences sono array vuoti (mai null)"
+[[ "$(json_get "${tmp_dir}/s31.b" 'Array.isArray(j.follows) && j.follows.length === 0 && Array.isArray(j.preferences) && j.preferences.length === 0 && Array.isArray(j.shareLink) && j.shareLink.length === 0')" == "true" ]] \
+  || fail "S32: follows, preferences e shareLink devono essere array vuoti per chi non segue ne' condivide nulla: $(cat "${tmp_dir}/s31.b")"
+echo "ok  S32: un utente con un account e una sessione ha linkedAccounts e sessions di lunghezza 1; savedEvents, calendarFeed, follows, preferences e shareLink sono array vuoti (mai null)"
 
 # S33: cancellazione totale con una sessione di 3 giorni fa, due dispositivi, token finti.
 read -r c_user c_cookie c_token <<<"$(helper mint s33-c@fixture.invalid 'Carla Cancella' 3 "${ua_mac}" --fake-tokens | tail -n 1)"
