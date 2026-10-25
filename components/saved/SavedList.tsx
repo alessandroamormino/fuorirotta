@@ -12,6 +12,7 @@ import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
 import SaveHeart from "@/components/saved/SaveHeart";
 import CalendarFeedDialog from "@/components/saved/CalendarFeedDialog";
+import ShareListDialog from "@/components/saved/ShareListDialog";
 import { useUserState } from "@/components/account/UserStateProvider";
 
 type State =
@@ -254,8 +255,9 @@ function CalendarEntry({ mode }: { mode: SavedMode }) {
 	if (mode === "pending") return <div className="mt-4 min-h-12" />;
 	if (mode === "account") {
 		return (
-			<div className="mt-4 mb-6">
+			<div className="mt-4 mb-6 flex flex-wrap gap-2">
 				<CalendarFeedDialog />
+				<ShareListDialog />
 			</div>
 		);
 	}
