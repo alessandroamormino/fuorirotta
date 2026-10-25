@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, Copy, Share2, X } from "lucide-react";
+import { useUserState } from "@/components/account/UserStateProvider";
 import * as Dialog from "@/components/ui/Dialog";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -16,12 +17,18 @@ import Input from "@/components/ui/Input";
 type ShareLink = { path: string; showName: boolean };
 type View = { status: "loading" } | { status: "error" } | { status: "ready"; link: ShareLink | null; upcoming: number };
 type CopyState = "idle" | "copied" | "failed";
+type Busy = null | "create" | "rotate" | "off";
+type Confirm = null | "off" | "regen";
 
 // Timeout di visualizzazione, non durate di animazione (come ShareButton).
 const COPIED_MS = 2000;
 const FAILED_MS = 4000;
 const COPY_FAILED = "Copia non riuscita. Seleziona il link e copialo a mano.";
 const SHARE_URL = "/api/v1/me/share";
+const ROTATE_URL = "/api/v1/me/share/rotate";
+const ROTATED = "Nuovo link creato. Quello vecchio non funziona più.";
+const DEACTIVATED = "Link disattivato. Chi lo aveva non può più aprirlo.";
+const INACTIVE = "Il link non era più attivo.";
 const FOCUS_RING =
 	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
@@ -33,8 +40,9 @@ class HttpError extends Error {
 	}
 }
 
-async function call(method: "GET" | "POST", url: string): Promise<unknown> {
-	const res = await fetch(url, { method, credentials: "same-origin", cache: "no-store" });
+async function call(url: string, init: { method?: string; body?: string } = {}): Promise<unknown> {
+	const headers = init.body ? { "Content-Type": "application/json" } : undefined;
+	const res = await fetch(url, { ...init, headers, credentials: "same-origin", cache: "no-store" });
 	if (!res.ok) throw new HttpError(res.status);
 	return res.json();
 }
@@ -73,10 +81,18 @@ function Alert({ children }: { children: React.ReactNode }) {
 }
 
 export default function ShareListDialog() {
+	const ownerName = useUserState().user?.name ?? "";
 	const [open, setOpen] = useState(false);
 	const [view, setView] = useState<View>({ status: "loading" });
-	const [creating, setCreating] = useState(false);
+	// Creare, sostituire o disattivare non si abbandona a meta': finche' una richiesta e' in corso il dialogo non si chiude.
+	const [busy, setBusy] = useState<Busy>(null);
 	const [createError, setCreateError] = useState(false);
+	const [confirm, setConfirm] = useState<Confirm>(null);
+	const [confirmError, setConfirmError] = useState("");
+	const [notice, setNotice] = useState("");
+	const [nameBusy, setNameBusy] = useState(false);
+	const [nameError, setNameError] = useState(false);
+	const [canShare, setCanShare] = useState(false);
 	const [copy, setCopy] = useState<CopyState>("idle");
 	const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// Scarta le risposte di una richiesta superata (chiusura, nuovo tentativo).
@@ -100,7 +116,7 @@ export default function ShareListDialog() {
 	const load = () => {
 		const mine = ++generation.current;
 		setView({ status: "loading" });
-		call("GET", SHARE_URL)
+		call(SHARE_URL)
 			.then((data) => {
 				if (mine === generation.current) setView({ status: "ready", ...parseState(data) });
 			})
@@ -110,9 +126,11 @@ export default function ShareListDialog() {
 	};
 
 	const onOpenChange = (next: boolean) => {
-		if (!next && creating) return;
+		if (!next && busy) return;
 		setOpen(next);
 		if (next) {
+			// Mai a livello di modulo o in un render sul server (React error 418).
+			setCanShare(typeof navigator.share === "function");
 			load();
 			return;
 		}
@@ -120,19 +138,106 @@ export default function ShareListDialog() {
 		if (timer.current) clearTimeout(timer.current);
 		setCreateError(false);
 		setCopy("idle");
+		setConfirm(null);
+		setConfirmError("");
+		setNotice("");
+		setNameError(false);
 	};
 
+	// Il focus va alla scelta sicura quando la conferma si apre.
+	useEffect(() => {
+		if (confirm) document.getElementById("share-keep")?.focus();
+	}, [confirm]);
+
+	const openConfirm = (kind: "off" | "regen") => {
+		setConfirm(kind);
+		setConfirmError("");
+	};
+
+	const closeConfirm = () => {
+		const opener = confirm === "off" ? "share-off" : "share-regen";
+		setConfirm(null);
+		setConfirmError("");
+		document.getElementById(opener)?.focus();
+	};
+
+	// Un'altra scheda ha gia' tolto il link: si riparte dallo stato vero.
+	const inactive = () => {
+		setConfirm(null);
+		setConfirmError("");
+		setNotice(INACTIVE);
+		load();
+	};
+	const isGone = (error: unknown) => error instanceof HttpError && error.status === 404;
+
 	const create = () => {
-		setCreating(true);
+		setBusy("create");
 		setCreateError(false);
-		call("POST", SHARE_URL)
+		setNotice("");
+		call(SHARE_URL, { method: "POST" })
 			.then((data) => {
 				const link = parseLink(data);
 				setView((v) => (v.status === "ready" ? { ...v, link } : v));
 				pendingFocus.current = "share-copy";
 			})
 			.catch(() => setCreateError(true))
-			.finally(() => setCreating(false));
+			.finally(() => setBusy(null));
+	};
+
+	const rotate = () => {
+		setBusy("rotate");
+		setConfirmError("");
+		call(ROTATE_URL, { method: "POST" })
+			.then((data) => {
+				const next = parseLink(data);
+				setView((v) => (v.status === "ready" ? { ...v, link: next } : v));
+				setConfirm(null);
+				setCopy("idle");
+				setNotice(ROTATED);
+				pendingFocus.current = "share-copy";
+			})
+			.catch((error) => (isGone(error) ? inactive() : setConfirmError("Non siamo riusciti a generare un nuovo link. Riprova tra poco.")))
+			.finally(() => setBusy(null));
+	};
+
+	const deactivate = () => {
+		setBusy("off");
+		setConfirmError("");
+		call(SHARE_URL, { method: "DELETE" })
+			.then(() => {
+				// La riga sparisce con il link: il prossimo parte con il nome spento (D-11).
+				setView((v) => (v.status === "ready" ? { ...v, link: null } : v));
+				setConfirm(null);
+				setCopy("idle");
+				setNotice(DEACTIVATED);
+				pendingFocus.current = "share-create";
+			})
+			.catch(() => setConfirmError("Non siamo riusciti a disattivare il link. Riprova tra poco."))
+			.finally(() => setBusy(null));
+	};
+
+	const setShowName = (value: boolean) => {
+		setView((v) => (v.status === "ready" && v.link ? { ...v, link: { ...v.link, showName: value } } : v));
+	};
+
+	// Il nome si applica subito allo stesso link (D-04): ottimista, annullato se il server rifiuta.
+	const onToggleName = (next: boolean) => {
+		if (nameBusy || !link) return;
+		const previous = link.showName;
+		setNameBusy(true);
+		setNameError(false);
+		setNotice("");
+		setShowName(next);
+		call(SHARE_URL, { method: "PATCH", body: JSON.stringify({ showName: next }) })
+			.catch((error) => {
+				if (isGone(error)) {
+					inactive();
+					return;
+				}
+				setShowName(previous);
+				setNameError(true);
+			})
+			.finally(() => setNameBusy(false));
 	};
 
 	const flash = (next: "copied" | "failed", ms: number) => {
@@ -155,7 +260,18 @@ export default function ShareListDialog() {
 		}
 	};
 
-	const status = copy === "copied" ? "Link copiato" : copy === "failed" ? COPY_FAILED : view.status === "loading" ? "Sto controllando il link" : "";
+	// Il foglio di sistema porta solo il titolo fisso e il link: mai il nome, mai un conteggio.
+	const onShare = async () => {
+		const data = { title: "Eventi salvati su Fuorirotta", text: "Guarda gli eventi che ho salvato su Fuorirotta.", url: https };
+		if (navigator.canShare && !navigator.canShare(data)) return;
+		try {
+			await navigator.share(data);
+		} catch {
+			// Foglio chiuso (AbortError) o rifiutato: in entrambi i casi il tasto "Copia link" e' li'.
+		}
+	};
+
+	const status = copy === "copied" ? "Link copiato" : copy === "failed" ? COPY_FAILED : view.status === "loading" ? "Sto controllando il link" : notice;
 
 	return (
 		<Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -170,7 +286,20 @@ export default function ShareListDialog() {
 				</button>
 			</Dialog.Trigger>
 			{/* "!" come in SignInDialog: w-full di Dialog.Content verrebbe dopo w-[calc(...)] nel CSS compilato. */}
-			<Dialog.Content className="w-[calc(100%-2rem)]!">
+			<Dialog.Content
+				className="w-[calc(100%-2rem)]!"
+				onEscapeKeyDown={(event) => {
+					// Con una richiesta in corso non si esce; altrimenti prima si chiude la conferma, poi il dialogo.
+					if (busy) event.preventDefault();
+					else if (confirm) {
+						event.preventDefault();
+						closeConfirm();
+					}
+				}}
+				onInteractOutside={(event) => {
+					if (busy) event.preventDefault();
+				}}
+			>
 				<div className="space-y-6">
 					<Dialog.Title className="pr-10 text-xl font-semibold leading-[1.2] text-foreground">Condividi la lista</Dialog.Title>
 					<Dialog.Description className="text-sm text-foreground-secondary">
@@ -199,7 +328,7 @@ export default function ShareListDialog() {
 							</p>
 							<div className="space-y-6">
 								{createError && <Alert>Non riusciamo a creare il link. Riprova tra poco.</Alert>}
-								<Button id="share-create" variant="primary" size="md" loading={creating} className="w-full min-[480px]:w-auto" onClick={create}>
+								<Button id="share-create" variant="primary" size="md" loading={busy === "create"} className="w-full min-[480px]:w-auto" onClick={create}>
 									Crea link
 								</Button>
 							</div>
@@ -226,8 +355,76 @@ export default function ShareListDialog() {
 										{COPY_FAILED}
 									</p>
 								)}
+								{canShare && (
+									<Button variant="primary" size="md" className="mt-2 w-full min-[480px]:w-auto" onClick={onShare}>
+										<Share2 size={18} aria-hidden="true" />
+										Condividi
+									</Button>
+								)}
 							</div>
 							<p className="text-sm text-foreground-secondary">{privacyFor(view.upcoming)}</p>
+
+							<div>
+								<label aria-busy={nameBusy || undefined} className="flex min-h-11 items-start gap-3">
+									<input
+										type="checkbox"
+										className="mt-1 h-5 w-5 flex-none accent-primary"
+										aria-describedby="share-name-help"
+										checked={link.showName}
+										onChange={(event) => onToggleName(event.target.checked)}
+									/>
+									<span>
+										<span className="block text-sm font-semibold text-foreground">Mostra il mio nome</span>
+										<span id="share-name-help" className="block break-words text-sm text-foreground-secondary">
+											{link.showName && ownerName ? (
+												<>
+													Chi apre il link vede il titolo «I salvati di <span className="text-foreground">{ownerName}</span>».
+												</>
+											) : (
+												"Chi apre il link vede il titolo «Eventi salvati»."
+											)}
+										</span>
+									</span>
+								</label>
+								{nameError && (
+									<div className="mt-2">
+										<Alert>Non siamo riusciti a salvare la scelta. Riprova.</Alert>
+									</div>
+								)}
+							</div>
+
+							<div className="border-t border-border-soft pt-6">
+								<div className="flex flex-wrap gap-2">
+									<Button id="share-off" variant="ghost" size="sm" disabled={busy !== null} aria-expanded={confirm === "off"} aria-controls="share-off-confirm" onClick={() => openConfirm("off")}>
+										Disattiva link
+									</Button>
+									<Button id="share-regen" variant="ghost" size="sm" disabled={busy !== null} aria-expanded={confirm === "regen"} aria-controls="share-regen-confirm" onClick={() => openConfirm("regen")}>
+										Genera nuovo link
+									</Button>
+								</div>
+								{confirm && (
+									<div id={confirm === "off" ? "share-off-confirm" : "share-regen-confirm"} className="mt-4">
+										<p className="text-sm text-foreground">
+											{confirm === "off"
+												? "Chi ha il link attuale non potrà più aprirlo. Potrai crearne uno nuovo quando vuoi."
+												: "Chi ha il link attuale non potrà più aprirlo. Il nuovo link funziona subito."}
+										</p>
+										{confirmError && (
+											<div className="mt-4">
+												<Alert>{confirmError}</Alert>
+											</div>
+										)}
+										<div className="mt-4 flex gap-2">
+											<Button variant="destructive" size="sm" loading={busy === (confirm === "off" ? "off" : "rotate")} onClick={confirm === "off" ? deactivate : rotate}>
+												{confirm === "off" ? "Disattiva link" : "Genera nuovo link"}
+											</Button>
+											<Button id="share-keep" variant="ghost" size="sm" disabled={busy !== null} onClick={closeConfirm}>
+												Mantieni il link attuale
+											</Button>
+										</div>
+									</div>
+								)}
+							</div>
 						</>
 					)}
 				</div>
@@ -235,7 +432,7 @@ export default function ShareListDialog() {
 					<button
 						type="button"
 						aria-label="Chiudi"
-						disabled={creating}
+						disabled={busy !== null}
 						className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full text-foreground hover:bg-muted-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
 					>
 						<X size={20} aria-hidden="true" />
