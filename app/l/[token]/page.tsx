@@ -24,11 +24,17 @@ const FOCUS_RING =
 	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const DESCRIPTION = "Gli eventi in arrivo salvati su Fuorirotta.";
 
+// Un codice malformato fa la STESSA ricerca di uno ignoto, con un codice che non puo' esistere
+// (newShareToken non produce 22 trattini): se tornasse prima di toccare il database, il flusso
+// della pagina morta avrebbe righe in un ordine diverso e i byte lo tradirebbero. Costa quanto
+// un codice ben formato qualunque, e non porta mai un valore dell'URL fino alla query.
+const NEVER_A_CODE = "-".repeat(22);
+
 // cache() fa girare la ricerca una volta per richiesta, per generateMetadata e per la pagina.
 const getShared = cache(async (token: string) => {
-	if (!authEnabled() || !SHARE_TOKEN.test(token)) return null;
+	if (!authEnabled()) return null;
 	const link = await prisma.shareLink.findUnique({
-		where: { token },
+		where: { token: SHARE_TOKEN.test(token) ? token : NEVER_A_CODE },
 		// Solo il nome: mai email, foto o id dell'utente.
 		select: { userId: true, showName: true, user: { select: { name: true } } },
 	});
