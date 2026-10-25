@@ -167,6 +167,9 @@ no_store() { # <nome-file> <sezione>
 # Mezzanotte di oggi a Roma come "cifre UTC" senza fuso: la finestra di lib/dateWindow.ts.
 window_start="$(psql_dev "SELECT ((date_trunc('day', now() AT TIME ZONE 'Europe/Rome')) AT TIME ZONE 'Europe/Rome') AT TIME ZONE 'UTC'")"
 [[ -n "${window_start}" ]] || fail "finestra di oggi non calcolata"
+# Soglia della FINE (windowEndFloor): mezzanotte UTC del giorno di Roma, cioe' le cifre del giorno di Roma a 00:00.
+end_floor="$(psql_dev "SELECT date_trunc('day', now() AT TIME ZONE 'Europe/Rome')")"
+[[ -n "${end_floor}" ]] || fail "soglia di fine di oggi non calcolata"
 
 mint_user u1
 add_follow "${u1_user}" region lombardia
@@ -182,7 +185,7 @@ fe1_total="$(json_get "${tmp_dir}/fe1.b" 'j.total')"
 echo "ok  FE1: follow di lombardia -> 200 private, no-store, follows 1, total ${fe1_total}, al piu' 10 voci con id e title"
 
 # --- FE2: stessa clausola della pagina regione -----------------------------------
-want="$(psql_dev "SELECT count(*) FROM events WHERE region = 'lombardia' AND canonical_event_id IS NULL AND (date_end >= '${window_start}' OR (date_end IS NULL AND date_start >= '${window_start}'))")"
+want="$(psql_dev "SELECT count(*) FROM events WHERE region = 'lombardia' AND canonical_event_id IS NULL AND (date_end >= '${end_floor}' OR (date_end IS NULL AND date_start >= '${window_start}'))")"
 [[ "${fe1_total}" == "${want}" ]] || fail "FE2: total del feed ${fe1_total}, eventi di lombardia nel DB ${want}"
 echo "ok  FE2: il total (${fe1_total}) e' il numero di eventi disponibili di lombardia"
 
@@ -274,7 +277,7 @@ echo "ok  FE8: regione + provincia + comune -> total 5 e nessun id ripetuto"
 # --- FE9: solo la categoria, in tutte le regioni ----------------------------------
 set_follows "category:Sagre e feste"
 get_feed fe9 "${fx_cookie}" '?limit=24' >/dev/null
-want="$(psql_dev "SELECT count(*) FROM events WHERE canonical_category = 'Sagre e feste' AND canonical_event_id IS NULL AND (date_end >= '${window_start}' OR (date_end IS NULL AND date_start >= '${window_start}'))")"
+want="$(psql_dev "SELECT count(*) FROM events WHERE canonical_category = 'Sagre e feste' AND canonical_event_id IS NULL AND (date_end >= '${end_floor}' OR (date_end IS NULL AND date_start >= '${window_start}'))")"
 [[ "$(total_of fe9)" == "${want}" ]] || fail "FE9: total $(total_of fe9), atteso ${want} (tutti i canonici disponibili Sagre e feste)"
 # Il feed e' limitato a 24, E1 ed E3 possono non stare nella prima pagina: si leggono tutte le pagine.
 all_ids=""

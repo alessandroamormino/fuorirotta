@@ -75,9 +75,32 @@ export function windowStartToday(): Date {
 }
 
 /**
- * Evento DISPONIBILE = in corso o futuro: COALESCE(dateEnd, dateStart) >=
- * inizio finestra, scritto come OR esplicito perche' Prisma non ha COALESCE
- * nei filtri e dateEnd e' nullable.
+ * Soglia per la FINE di un evento: mezzanotte UTC del giorno di Roma di
+ * `windowStart`, non `windowStart` stesso.
+ *
+ * Bugfix 2026-10-25: in produzione molte sorgenti (in-lombardia, solosagre,
+ * opendata, puglia, emilia-romagna) chiudono un evento del 24 a
+ * 2026-10-24T23:59:59.999Z (formato UTC, lib/eventDays.ts). Confrontata con la
+ * mezzanotte di Roma del 25 (2026-10-24T22:00Z) quella fine passava: gli eventi
+ * di ieri restavano in lista e in mappa per tutto il giorno dopo, col badge
+ * "Concluso". Contro la mezzanotte UTC del 25 i formati si separano tutti
+ * giusti: fine UTC del 24 (23:59Z) fuori, del 25 dentro; fine Roma del 24
+ * (21:59Z/22:59Z) fuori, del 25 dentro; fine a mezzanotte (altoadige, firenze,
+ * roma, torino) dentro dal suo giorno. Stessa regola di eventDays, scritta come
+ * soglia perche' Prisma non sa leggere l'ora di una colonna.
+ * ponytail: una fine in formato Roma con orario vero fra mezzanotte e le 2
+ * (22:00Z-23:59Z del giorno prima) cadrebbe fuori un giorno prima; nessuna
+ * sorgente la scrive oggi — se ne arriva una, serve la regola di eventDays in SQL.
+ */
+export function windowEndFloor(windowStart: Date): Date {
+	const romeDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(windowStart);
+	return new Date(`${romeDay}T00:00:00.000Z`);
+}
+
+/**
+ * Evento DISPONIBILE = in corso o futuro: dateEnd >= windowEndFloor, oppure
+ * (senza dateEnd) dateStart >= inizio finestra, scritto come OR esplicito
+ * perche' Prisma non ha COALESCE nei filtri e dateEnd e' nullable.
  *
  * L'unica definizione del progetto. Prima del 2026-10-16 ce n'erano due
  * copie (copertura e mappa) e tre pagine — home, regione, provincia — ancora
@@ -88,7 +111,7 @@ export function windowStartToday(): Date {
 export function availableEventsWhere(windowStart: Date = windowStartToday()) {
 	return {
 		OR: [
-			{ dateEnd: { gte: windowStart } },
+			{ dateEnd: { gte: windowEndFloor(windowStart) } },
 			{ AND: [{ dateEnd: null }, { dateStart: { gte: windowStart } }] },
 		],
 	};
@@ -176,6 +199,26 @@ if (typeof require !== "undefined" && typeof module !== "undefined" && require.m
 	assertCheck(nextDateStr("2026-12-31") === "2027-01-01", `nextDateStr 31/12 -> ${nextDateStr("2026-12-31")}`);
 	assertCheck(nextDateStr("2028-02-28") === "2028-02-29", `bisestile 28/02/2028 -> ${nextDateStr("2028-02-28")}`);
 	assertCheck(nextDateStr("2027-02-28") === "2027-03-01", `non bisestile 28/02/2027 -> ${nextDateStr("2027-02-28")}`);
+
+	// windowEndFloor (bugfix 2026-10-25): finestra del 25/10, i cinque formati di
+	// fine che le sorgenti scrivono davvero. Dentro = fine >= soglia.
+	const floor25 = windowEndFloor(romeMidnightUTC("2026-10-25"));
+	assertCheck(iso(floor25) === "2026-10-25T00:00:00.000Z", `soglia del 25/10 attesa 2026-10-25T00:00Z, ${iso(floor25)}`);
+	const ends: Array<[string, boolean]> = [
+		["2026-10-24T23:59:59.999Z", false], // formato UTC, finito il 24: era il bug
+		["2026-10-25T23:59:59.999Z", true], // formato UTC, finisce il 25
+		["2026-10-24T21:59:59.999Z", false], // formato Roma, finito il 24
+		["2026-10-25T22:59:59.999Z", true], // formato Roma (CET dopo il cambio), finisce il 25
+		["2026-10-25T00:00:00.000Z", true], // fine a mezzanotte, giorno 25
+	];
+	for (const [end, inside] of ends) {
+		assertCheck((new Date(end) >= floor25) === inside, `fine ${end}: attesa ${inside ? "dentro" : "fuori"} la finestra del 25/10`);
+	}
+	// Inverno (CET): la soglia segue il giorno di Roma, non quello UTC di windowStart.
+	assertCheck(
+		iso(windowEndFloor(romeMidnightUTC("2026-01-10"))) === "2026-01-10T00:00:00.000Z",
+		`soglia del 10/01 attesa 2026-01-10T00:00Z, ${iso(windowEndFloor(romeMidnightUTC("2026-01-10")))}`
+	);
 
 	// todayInRome ha la forma attesa ed e' un giorno reale.
 	const today = todayInRome();
