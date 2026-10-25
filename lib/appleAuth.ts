@@ -1,4 +1,6 @@
 import { createPrivateKey, sign, type KeyObject } from 'node:crypto'
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
+import { prisma } from './prisma'
 
 // Accesso con Apple (Fase 25). Helper SOLO server, usati da lib/auth.ts. Quattro
 // regole:
@@ -143,4 +145,60 @@ export async function exchangeAppleCode(
     refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : null,
     idToken: typeof body.id_token === 'string' ? body.id_token : null,
   }
+}
+
+// --- Notifiche server-to-server di Apple (D-15) --------------------------------
+
+export type AppleEvent = { type: string; sub: string }
+
+// Il set di chiavi di Apple: jose lo scarica al primo uso, lo tiene in cache e
+// limita i riscaricamenti. Singleton di modulo.
+const APPLE_JWKS = createRemoteJWKSet(new URL(`${APPLE_ISSUER}/auth/keys`))
+
+/**
+ * Verifica la firma di una notifica di Apple (RS256, emittente e destinatario
+ * fissati) e ne estrae { type, sub }. Nessun maxTokenAge: un nuovo tentativo
+ * tardivo di Apple deve comunque andare a segno. Lancia se qualcosa non torna.
+ */
+export async function verifyAppleNotification(jws: string, jwks: JWTVerifyGetKey = APPLE_JWKS): Promise<AppleEvent> {
+  const { payload } = await jwtVerify(jws, jwks, { issuer: APPLE_ISSUER, audience: appleClientIds(), algorithms: ['RS256'] })
+  // Apple manda "events" come stringa JSON (A2); un oggetto va bene lo stesso.
+  const events = typeof payload.events === 'string' ? (JSON.parse(payload.events) as unknown) : payload.events
+  const { type, sub } = (events ?? {}) as { type?: unknown; sub?: unknown }
+  if (typeof type !== 'string' || !type || typeof sub !== 'string' || !sub) throw new Error('notifica Apple senza type o sub')
+  return { type, sub }
+}
+
+/**
+ * Applica una notifica verificata (D-15). Tutto con deleteMany: un replay o un
+ * utente gia' eliminato non e' mai un errore. Si salta Better Auth di proposito:
+ * Apple ha gia' revocato, non serve una revoca. Il nome dell'evento di
+ * cancellazione non e' confermabile offline (CONTEXT: account-delete, ricerca:
+ * account-deleted): si accettano entrambi, il log dice quale arriva davvero.
+ */
+export async function applyAppleEvent(event: AppleEvent): Promise<'deleted' | 'unlinked' | 'ignored'> {
+  const outcome = await apply(event)
+  console.log(`[Apple S2S] ${event.type}: ${outcome}`)
+  return outcome
+}
+
+async function apply({ type, sub }: AppleEvent): Promise<'deleted' | 'unlinked' | 'ignored'> {
+  if (type !== 'account-delete' && type !== 'account-deleted' && type !== 'consent-revoked') return 'ignored'
+  const row = await prisma.account.findUnique({
+    where: { providerId_accountId: { providerId: 'apple', accountId: sub } },
+    select: { userId: true },
+  })
+  if (!row) return 'ignored'
+  const { userId } = row
+  if (type === 'consent-revoked' && (await prisma.account.count({ where: { userId, providerId: { not: 'apple' } } })) > 0) {
+    // Riga Apple e sessioni insieme: un crash non lascia l'una senza le altre.
+    await prisma.$transaction([
+      prisma.account.deleteMany({ where: { providerId: 'apple', accountId: sub } }),
+      prisma.session.deleteMany({ where: { userId } }),
+    ])
+    return 'unlinked'
+  }
+  // La cascata sulle chiavi esterne toglie ogni tabella del registro (check:user-data).
+  await prisma.user.deleteMany({ where: { id: userId } })
+  return 'deleted'
 }

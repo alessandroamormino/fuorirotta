@@ -3,6 +3,7 @@
 // durata, cache, ri-firma), la forma delle richieste di revoca e di scambio del
 // codice. Esce con 1 al primo controllo fallito e stampa "ok  <caso>" per ognuno.
 import { generateKeyPairSync, verify } from 'node:crypto'
+import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, importSPKI, jwtVerify } from 'jose'
 
 // Variabili PRIMA dell'import dinamico di lib/appleAuth (che importa lib/prisma,
 // il quale non apre nessuna connessione all'import).
@@ -43,7 +44,7 @@ function fakeFetch(answers: (Response | Error)[]): { doFetch: typeof fetch; call
 const decode = (part: string) => JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as Record<string, unknown>
 
 async function main(): Promise<void> {
-  const { appleClientSecret, revokeAppleToken, exchangeAppleCode } = await import('../lib/appleAuth')
+  const { appleClientSecret, revokeAppleToken, exchangeAppleCode, verifyAppleNotification } = await import('../lib/appleAuth')
   const now = 1_800_000_000
 
   // --- client secret ---------------------------------------------------------
@@ -66,6 +67,13 @@ async function main(): Promise<void> {
   check('client secret: una seconda chiamata restituisce la stessa stringa', appleClientSecret(WEB_ID, now + 60) === secret)
   const refreshed = appleClientSecret(WEB_ID, now + 3600 - 599)
   check('client secret: con meno di 600 s residui ne torna uno nuovo', refreshed !== secret && decode(refreshed.split('.')[1]).iat === now + 3600 - 599)
+  const verified = await jwtVerify(secret, await importSPKI(publicKey.export({ type: 'spki', format: 'pem' }) as string, 'ES256'), {
+    algorithms: ['ES256'],
+    issuer: 'TEAMID1234',
+    audience: 'https://appleid.apple.com',
+    currentDate: new Date(now * 1000),
+  }).then(() => true, () => false)
+  check('client secret: verificato in modo indipendente da jose (ES256, iss, aud)', verified)
   check('client secret: il bundle ID ha un sub suo', decode(appleClientSecret(BUNDLE_ID, now).split('.')[1]).sub === BUNDLE_ID)
 
   // --- revoca ------------------------------------------------------------------
@@ -131,6 +139,30 @@ async function main(): Promise<void> {
     exchangeError = error instanceof Error ? error.message : 'non-Error'
   }
   check('scambio: un rifiuto lancia con lo stato e senza il codice', exchangeError.includes('HTTP 400') && !exchangeError.includes('codice-segreto'), exchangeError)
+  // --- notifiche server-to-server --------------------------------------------------
+  const rsa = await generateKeyPair('RS256')
+  const other = await generateKeyPair('RS256')
+  const jwks = createLocalJWKSet({ keys: [{ ...(await exportJWK(rsa.publicKey)), kid: 'k1', alg: 'RS256', use: 'sig' }] })
+  const sign = (events: unknown, o: { iss?: string; aud?: string; key?: typeof rsa.privateKey } = {}) =>
+    new SignJWT({ events })
+      .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+      .setIssuer(o.iss ?? 'https://appleid.apple.com')
+      .setAudience(o.aud ?? WEB_ID)
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(o.key ?? rsa.privateKey)
+  const rejects = (jws: string) => verifyAppleNotification(jws, jwks).then(() => false, () => true)
+  const event = { type: 'account-deleted', sub: 'sub-1' }
+
+  const asString = await verifyAppleNotification(await sign(JSON.stringify(event)), jwks)
+  check('notifica: events come stringa JSON accettato', asString.type === 'account-deleted' && asString.sub === 'sub-1')
+  const asObject = await verifyAppleNotification(await sign(event, { aud: BUNDLE_ID }), jwks)
+  check('notifica: events come oggetto accettato (e aud = bundle ID)', asObject.type === 'account-deleted' && asObject.sub === 'sub-1')
+  check('notifica: aud sbagliata rifiutata', await rejects(await sign(event, { aud: 'other.client' })))
+  check('notifica: iss sbagliato rifiutato', await rejects(await sign(event, { iss: 'https://evil.example' })))
+  check('notifica: firma di un altra chiave rifiutata', await rejects(await sign(event, { key: other.privateKey })))
+  check('notifica: events senza sub rifiutato', await rejects(await sign({ type: 'account-deleted' })))
+  check('notifica: events assente rifiutato', await rejects(await sign(undefined)))
 }
 
 main()

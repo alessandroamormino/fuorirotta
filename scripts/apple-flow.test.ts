@@ -21,11 +21,20 @@
 //   R4  Apple giu' (500 a ogni client id, poi errore di rete): l'eliminazione riesce, il log non ha token
 //   R5  interruttore spento ma chiavi presenti: la revoca c'e' e prova prima il Services ID, poi il bundle ID
 //   E1  exchangeAppleCode con il bundle ID (la strada della Fase 27)
+//   N1  account-deleted (events come stringa JSON): utente e registro a zero
+//   N1b account-delete (l'ortografia di D-15): idem
+//   N2  consent-revoked con Google: via la riga Apple e le sessioni, utente e Google restano
+//   N3  consent-revoked per chi ha solo Apple: via l'utente
+//   N4  idempotenza: replay, sub ignoto, email-disabled, tipo ignoto
+//   N5  account-deleted per un utente gia' eliminato con delete-user
+//   N6  rifiuti (altra chiave, aud, iss, corpo, 413, 404) senza toccare le righe; payload= in forma di form
+//   V1  id token nativo (bundle ID) sullo stesso utente del web; un'altra audience e' rifiutata
 //
 // Gli helper (startApple, applePost, follow, cookieFrom, mintGoogleUser e il
 // registro dello stub) sono funzioni con nome: il piano 03 aggiunge qui le sue
 // rotte (revoca e notifiche). Tutte le e-mail di prova iniziano con "apple-flow-".
 import { generateKeyPairSync, verify, type KeyObject } from 'node:crypto'
+import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 
 if (!/@localhost:5433\/fuorirotta_dev/.test(process.env.DATABASE_URL ?? '')) {
   console.error('FAIL: DATABASE_URL non e il Postgres locale di sviluppo (usa scripts/dev-db.sh)')
@@ -67,6 +76,7 @@ type RevokeCall = { clientId: string | null; token: string | null; hint: string 
 type RevokeMode = 'ok' | 'refuse' | 'error' | 'throw'
 const revokeCalls: RevokeCall[] = [] // chiamate a /auth/revoke, in ordine
 let revokeMode: (clientId: string | null) => RevokeMode = () => 'ok'
+let appleKeys: object = { keys: [] } // risposta di GET /auth/keys (le chiavi pubbliche di prova)
 const tokenForms: URLSearchParams[] = [] // corpo di ogni chiamata a /auth/token
 const stubErrors: string[] = [] // tutto cio' che lo stub non si aspettava: fa fallire il prossimo controllo
 let tokenCalls = 0
@@ -114,6 +124,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
       id_token: unsignedJwt({ iss: APPLE_ORIGIN, aud: WEB_ID, sub: grant.sub, email: grant.email, email_verified: 'true' }),
     })
   }
+  if (method === 'GET' && url === `${APPLE_ORIGIN}/auth/keys`) return json(appleKeys)
   if (method === 'POST' && url === `${APPLE_ORIGIN}/auth/revoke`) {
     revokeCalls.push({ clientId: form.get('client_id'), token: form.get('token'), hint: form.get('token_type_hint') })
     checkClientSecret(form.get('client_secret'), form.get('client_id'))
@@ -557,6 +568,142 @@ async function main(): Promise<void> {
         exchanged.idToken !== null,
       JSON.stringify(exchanged),
     )
+
+    // --- Notifiche S2S e id token nativo ------------------------------------------------
+    const KID = 'test-kid'
+    const rsa = await generateKeyPair('RS256')
+    const otherRsa = await generateKeyPair('RS256')
+    appleKeys = { keys: [{ ...(await exportJWK(rsa.publicKey)), kid: KID, alg: 'RS256', use: 'sig' }] }
+    const { POST: notificationsPost } = await import('../app/api/apple/notifications/route')
+
+    type Claims = { iss?: string; aud?: string; key?: typeof rsa.privateKey; asObject?: boolean }
+    /** JWS di Apple di prova: events e' una stringa JSON (come manda Apple) o, con asObject, un oggetto. */
+    async function signNotification(type: string, sub: string, claims: Claims = {}): Promise<string> {
+      const event = { type, sub, event_time: Date.now() }
+      return new SignJWT({ events: claims.asObject ? event : JSON.stringify(event) })
+        .setProtectedHeader({ alg: 'RS256', kid: KID })
+        .setIssuer(claims.iss ?? APPLE_ORIGIN)
+        .setAudience(claims.aud ?? WEB_ID)
+        .setIssuedAt()
+        .setExpirationTime('1h')
+        .sign(claims.key ?? rsa.privateKey)
+    }
+    const notify = (body: string, contentType = 'application/json') =>
+      notificationsPost(new Request(`${BASE}/api/apple/notifications`, { method: 'POST', headers: { 'content-type': contentType, 'x-real-ip': nextIp() }, body }))
+    const notifyJws = (jws: string) => notify(JSON.stringify({ payload: jws }))
+
+    // N1
+    const n1 = await mintAppleUser('n1')
+    check('N1: prima della notifica ci sono righe', (await rowsLeft(n1.userId)) >= 4)
+    const n1Jws = await signNotification('account-deleted', n1.grant.sub)
+    const n1Reply = await notifyJws(n1Jws)
+    check('N1: account-deleted risponde 200, no-store, e lascia zero righe in auth_user e nel registro', n1Reply.status === 200 && n1Reply.headers.get('cache-control') === 'private, no-store' && (await rowsLeft(n1.userId)) === 0, String(n1Reply.status))
+
+    // N1b
+    const n1b = await mintAppleUser('n1b')
+    const n1bReply = await notifyJws(await signNotification('account-delete', n1b.grant.sub))
+    check('N1b: account-delete (D-15) risponde 200 e lascia zero righe', n1bReply.status === 200 && (await rowsLeft(n1b.userId)) === 0, String(n1bReply.status))
+
+    // N2
+    const n2Google = await mintGoogleUser(`${EMAIL_PREFIX}n2@fixture.invalid`, 'Enne Due', image)
+    const n2Grant: AppleGrant = { sub: 'apple-flow-sub-n2', email: `${EMAIL_PREFIX}n2@privaterelay.appleid.com` }
+    await appleFlow(n2Grant, { callbackURL: '/account?linked=apple', errorCallbackURL: '/account?link=apple', sessionCookie: n2Google.cookie, link: true })
+    await ctx.internalAdapter.createSession(n2Google.user.id)
+    const n2Sessions = await prisma.session.count({ where: { userId: n2Google.user.id } })
+    const n2Reply = await notifyJws(await signNotification('consent-revoked', n2Grant.sub, { asObject: true }))
+    check(
+      'N2: consent-revoked (events come oggetto) per Google+Apple: via la riga Apple e tutte le sessioni, restano utente e Google',
+      n2Reply.status === 200 &&
+        n2Sessions >= 2 &&
+        (await appleRow(n2Grant.sub)) === null &&
+        (await prisma.session.count({ where: { userId: n2Google.user.id } })) === 0 &&
+        (await prisma.account.count({ where: { userId: n2Google.user.id, providerId: 'google' } })) === 1 &&
+        (await prisma.user.count({ where: { id: n2Google.user.id } })) === 1,
+      String(n2Reply.status),
+    )
+
+    // N3
+    const n3 = await mintAppleUser('n3')
+    const n3Reply = await notifyJws(await signNotification('consent-revoked', n3.grant.sub))
+    check('N3: consent-revoked per chi ha solo Apple elimina l account', n3Reply.status === 200 && (await rowsLeft(n3.userId)) === 0, String(n3Reply.status))
+
+    // N4
+    const n4 = await mintAppleUser('n4')
+    const n4Before = await rowsLeft(n4.userId)
+    const replay = await notifyJws(n1Jws)
+    const unknown = await notifyJws(await signNotification('account-deleted', 'apple-flow-sub-sconosciuto'))
+    const disabled = await notifyJws(await signNotification('email-disabled', n4.grant.sub))
+    const enabled = await notifyJws(await signNotification('email-enabled', n4.grant.sub))
+    const odd = await notifyJws(await signNotification('something-else', n4.grant.sub))
+    check(
+      'N4: replay, sub ignoto, email-disabled/enabled e tipo ignoto rispondono 200 e non cambiano nulla',
+      [replay, unknown, disabled, enabled, odd].every((r) => r.status === 200) && (await rowsLeft(n4.userId)) === n4Before && (await rowsLeft(n1.userId)) === 0,
+      [replay, unknown, disabled, enabled, odd].map((r) => r.status).join(','),
+    )
+
+    // N5
+    const n5 = await mintAppleUser('n5')
+    const n5Delete = await postJson('/api/auth/delete-user', {}, n5.cookie)
+    const n5Reply = await notifyJws(await signNotification('account-deleted', n5.grant.sub))
+    check('N5: account-deleted per un utente gia eliminato con delete-user risponde 200', n5Delete.status === 200 && n5Reply.status === 200 && (await rowsLeft(n5.userId)) === 0, `${n5Delete.status} ${n5Reply.status}`)
+
+    // N6: ogni rifiuto lascia intatte le righe della vittima
+    const n6 = await mintAppleUser('n6')
+    const n6Before = await rowsLeft(n6.userId)
+    const realN6Error = console.error
+    const n6Logged: string[] = []
+    console.error = (...args: unknown[]) => void n6Logged.push(args.map(String).join(' '))
+    const refusals: Record<string, number> = {}
+    try {
+      refusals.chiave = (await notifyJws(await signNotification('account-deleted', n6.grant.sub, { key: otherRsa.privateKey }))).status
+      refusals.aud = (await notifyJws(await signNotification('account-deleted', n6.grant.sub, { aud: 'other.client' }))).status
+      refusals.iss = (await notifyJws(await signNotification('account-deleted', n6.grant.sub, { iss: 'https://evil.example' }))).status
+      refusals.json = (await notify('not json')).status
+      refusals.grande = (await notify('x'.repeat(20000))).status
+      const valid = await signNotification('account-deleted', n6.grant.sub)
+      process.env.APPLE_AUTH_ENABLED = 'false'
+      try {
+        refusals.spento = (await notifyJws(valid)).status
+      } finally {
+        process.env.APPLE_AUTH_ENABLED = 'true'
+      }
+    } finally {
+      console.error = realN6Error
+    }
+    check(
+      'N6: altra chiave, aud, iss -> 401; corpo non valido -> 400; 20000 byte -> 413; interruttore spento -> 404',
+      refusals.chiave === 401 && refusals.aud === 401 && refusals.iss === 401 && refusals.json === 400 && refusals.grande === 413 && refusals.spento === 404,
+      JSON.stringify(refusals),
+    )
+    check('N6: nessun rifiuto ha toccato le righe, e il log non ha JWT', (await rowsLeft(n6.userId)) === n6Before && !n6Logged.some((line) => line.includes('eyJ')), n6Logged.join(' | '))
+    const formReply = await notify(new URLSearchParams({ payload: await signNotification('account-deleted', n6.grant.sub) }).toString(), 'application/x-www-form-urlencoded')
+    check('N6: payload= in forma di form viene accettato e applicato', formReply.status === 200 && (await rowsLeft(n6.userId)) === 0, String(formReply.status))
+
+    // V1: id token nativo (bundle ID) sullo stesso utente del web
+    const v1 = await mintAppleUser('v1')
+    async function nativeSignIn(aud: string): Promise<Response> {
+      const idToken = await new SignJWT({ email: v1.grant.email, email_verified: 'true', nonce: 'n1' })
+        .setProtectedHeader({ alg: 'RS256', kid: KID })
+        .setIssuer(APPLE_ORIGIN)
+        .setAudience(aud)
+        .setSubject(v1.grant.sub)
+        .setIssuedAt()
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 600)
+        .sign(rsa.privateKey)
+      return handler(
+        new Request(`${BASE}/api/auth/sign-in/social`, {
+          method: 'POST',
+          headers: { origin: BASE, 'content-type': 'application/json', 'x-real-ip': nextIp() },
+          body: JSON.stringify({ provider: 'apple', idToken: { token: idToken, nonce: 'n1' } }),
+        }),
+      )
+    }
+    const nativeOk = await nativeSignIn(BUNDLE_ID)
+    const nativeBody = (await nativeOk.json().catch(() => ({}))) as { user?: { id?: string } }
+    check('V1: id token con aud = bundle ID e sub del web apre una sessione dello stesso utente', nativeOk.status === 200 && nativeBody.user?.id === v1.userId, `${nativeOk.status} ${JSON.stringify(nativeBody)}`)
+    const sessionsBefore = await prisma.session.count({ where: { userId: v1.userId } })
+    const nativeBad = await nativeSignIn('other.client')
+    check('V1: la stessa identita con un altra audience e rifiutata e non crea sessioni', nativeBad.status !== 200 && (await prisma.session.count({ where: { userId: v1.userId } })) === sessionsBefore, String(nativeBad.status))
   } finally {
     await cleanup()
     await prisma.$disconnect()
