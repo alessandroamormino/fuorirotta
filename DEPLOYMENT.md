@@ -194,15 +194,19 @@ Expect status 404 and the three headers. If any is missing, add it in the `/l/` 
 `add_header ... always;` and note it here.
 
 **Rate limit.** Same shape as `/cal/`, looser: link previews (WhatsApp, Telegram, iMessage) fetch from shared
-crawler IPs, and a 503 reveals nothing about a token. Starting values, tune after watching the access log:
+crawler IPs, and a 429 reveals nothing about a token. **Already applied on the server on 2026-10-25**, so the
+release does not redo it. Zone and `location` live in the same file as the `/cal/` ones,
+`/opt/docker/nginx/conf.d/fuori-rotta.it.conf` (zone `share_link` at line 2, next to `cal_feed`; `location /l/`
+right before `location /cal/`). Starting values, tune after watching the access log:
 
 ```nginx
-# http block
+# http block (top of the same file)
 limit_req_zone $binary_remote_addr zone=share_link:10m rate=60r/m;
 
 # server block, next to location /
 location /l/ {
     limit_req zone=share_link burst=30 nodelay;
+    limit_req_status 429;
     proxy_pass http://fuorirotta-frontend:3000;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
@@ -210,13 +214,20 @@ location /l/ {
 }
 ```
 
-Then `docker exec nginx nginx -t && docker exec nginx nginx -s reload`.
+`limit_req_status 429` mirrors `/cal/`: rejected requests are 429, not the default 503. Checked from outside after
+the reload: 45 quick requests to a dead token gave 40 x 404 then 429, and the home page stayed 200.
+
+Rollback (backup taken before the edit):
+
+```bash
+cp /opt/docker/nginx/conf.d/fuori-rotta.it.conf.bak-2026-10-25 /opt/docker/nginx/conf.d/fuori-rotta.it.conf && docker exec nginx nginx -t && docker exec nginx nginx -s reload
+```
 
 **Release order.** Migration `20261025120000_add_share_links` (creates `share_links`) runs before the build through
 `scripts/deploy.sh`, like every migration; it is additive, so the running version is unaffected. Phase 23's
 `20261024120000_add_user_follows` must be applied first (this branch is stacked on Phase 23).
 
-**Without the nginx step** `/l/` works but is not rate-limited.
+If the nginx file is ever rebuilt from scratch, the block above is what brings the limit back: without it `/l/` works but is not rate-limited.
 
 ### Automated Scraping via Crontab
 
