@@ -65,7 +65,7 @@ Three categories matter because they are read at different times by different pr
 | `BETTER_AUTH_URL` | Runtime, in the container | Public address of the app (`https://fuori-rotta.it`); Google's redirect URI is built from it |
 | `BETTER_AUTH_SECRET` | Runtime, in the container | Session signing secret, at least 32 characters. Generate it **on the server** with `openssl rand -base64 32`; never paste it in a chat or a ticket |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Runtime, in the container | OAuth credentials from the Google Cloud console. Same rule: typed straight into the server's `.env` |
-| `APPLE_AUTH_ENABLED` | Runtime, in the container | Apple sign-in switch (Phase 25, D-04, D-12), separate from `AUTH_ENABLED`. Only the exact value `true` turns Apple on; declared as `${APPLE_AUTH_ENABLED:-false}`. See the Apple switch section below |
+| `APPLE_AUTH_ENABLED` | Runtime, in the container | Apple switch (Phase 25, D-04, D-12), separate from `AUTH_ENABLED`. Only the exact value `true` turns Apple on; declared as `${APPLE_AUTH_ENABLED:-false}`. See the Apple switch section below |
 | `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID` | Runtime, in the container | Services ID, Team ID and Key ID from the Apple developer portal. Declared as `${NAME:-}`, so a release without them still starts |
 | `APPLE_PRIVATE_KEY_B64` | Runtime, in the container | The `.p8` key as one line of base64. Typed **only on the server** with a hidden read (see the Apple switch section below); never a build argument, never in a chat or in the repository |
 | `APPLE_APP_BUNDLE_ID` | Runtime, in the container | App ID of the mobile app (Phase 27). Optional; empty is fine |
