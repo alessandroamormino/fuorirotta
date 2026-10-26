@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 		"Quali dati personali tratta Fuorirotta, perché, con quali fornitori, per quanto tempo e come esercitare i tuoi diritti.",
 };
 
-const UPDATED = "25 ottobre 2026";
+const UPDATED = "26 ottobre 2026";
 
 const INDEX = [
 	{ id: "titolare", label: "Titolare del trattamento" },
@@ -376,7 +376,7 @@ export default function PrivacyPage() {
 				Per creare un account devi avere almeno 14 anni, l&apos;età minima per prestare il consenso ai servizi
 				della società dell&apos;informazione in Italia (art. 2-quinquies del Codice in materia di protezione
 				dei dati personali). È anche l&apos;età minima che Google richiede in Italia per avere un proprio
-				account. Alla registrazione non facciamo controlli ulteriori rispetto a quelli di Google.
+				account. Alla registrazione non facciamo controlli ulteriori rispetto a quelli del fornitore scelto.
 			</p>
 
 			<h2 id="modifiche">Modifiche</h2>
