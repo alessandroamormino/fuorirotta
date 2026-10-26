@@ -61,7 +61,8 @@
 #       l'utente di prova
 #   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
 #       con la sessione e' 200, private e no-store, noindex, e contiene il nome dell'utente;
-#       sezioni nell'ordine Profilo, Sessioni attive, I tuoi dati, Cosa segui, Elimina account
+#       sezioni nell'ordine Profilo, Metodi di accesso, Sessioni attive, I tuoi dati, Cosa segui,
+#       Elimina account; con Apple spento niente "Collega Apple" e la frase sullo scollegamento
 #   B9  interruttore acceso: /accedi da ospite 200, no-store, noindex, "Continua con Google"
 #       e (Apple spento) senza "Continua con Apple"; con la sessione reindirizza a /account
 #       o al ?next valido, mai fuori sito
@@ -69,6 +70,7 @@
 #   C2-C4, C7, C12, C13 come B2-B4, B7, B12, B13 (check_pages, check_icon, check_saved)
 #   C5  /api/v1/me/state da ospite: corpo esatto, i due campi di sempre piu' apple:true
 #   C3  nessuna pagina pubblica, con o senza sessione, contiene "Continua con Apple"
+#   C8  /account con la sessione: 200, "Metodi di accesso" e aria-label="Collega Apple"
 #   C9  /accedi da ospite contiene "Continua con Apple" PRIMA di "Continua con Google"
 #   C16 statico: nessuno script ne' CDN di Apple nel codice dell'app; AppleLogo senza
 #       '#', 'http' ne' <img (nessuna richiesta a terzi prima del click)
@@ -575,11 +577,17 @@ grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/b8user.b" \
 grep -qF 'Utente Prova' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: il nome dell'utente non e' nell'HTML del server"
 # Ordine delle sezioni (D-06) e sessione corrente gia' nell'HTML del server (nessun flash di vuoto).
-order="$(grep -oE '>(Profilo|Sessioni attive|I tuoi dati|Cosa segui|Elimina account)</h2>' "${tmp_dir}/b8user.b" | sed -E 's/^>(.*)<.*/\1/' | paste -sd'|' -)"
-[[ "${order}" == "Profilo|Sessioni attive|I tuoi dati|Cosa segui|Elimina account" ]] \
+order="$(grep -oE '>(Profilo|Metodi di accesso|Sessioni attive|I tuoi dati|Cosa segui|Elimina account)</h2>' "${tmp_dir}/b8user.b" | sed -E 's/^>(.*)<.*/\1/' | paste -sd'|' -)"
+[[ "${order}" == "Profilo|Metodi di accesso|Sessioni attive|I tuoi dati|Cosa segui|Elimina account" ]] \
   || fail "B8: /account: ordine delle sezioni inatteso: '${order}'"
 grep -qF 'attiva ora (questo dispositivo)' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: la sessione corrente non e' nell'HTML del server"
+# Metodi di accesso con Apple spento (D-08, D-04): l'utente di prova ha solo Google.
+if grep -qF 'Collega Apple' "${tmp_dir}/b8user.b"; then
+  fail "B8: /account con Apple spento contiene 'Collega Apple'"
+fi
+grep -qF 'Puoi scollegare un metodo solo se ne resta un altro.' "${tmp_dir}/b8user.b" \
+  || fail "B8: /account: manca la frase sullo scollegamento"
 echo "ok  B8: /account da ospite 307 verso /accedi?next=%2Faccount; con la sessione 200, private no-store, noindex, nome nell'HTML"
 
 # --- B9: /accedi (D-02, T-21-32) -----------------------------------------------------------
@@ -623,6 +631,14 @@ google_off="$(grep -bo 'Continua con Google' "${tmp_dir}/c9guest.b" | head -n 1 
   || fail "C9: /accedi: mancano 'Continua con Apple' (${apple_off:-assente}) o 'Continua con Google' (${google_off:-assente})"
 (( apple_off < google_off )) || fail "C9: /accedi: Apple (byte ${apple_off}) non viene prima di Google (byte ${google_off})"
 echo "ok  C9: /accedi da ospite ha 'Continua con Apple' (byte ${apple_off}) prima di 'Continua con Google' (byte ${google_off})"
+
+# --- C8: /account con Apple acceso mostra la riga Apple ------------------------------------
+code="$(fetch c8user /account "${session_cookie}")"
+[[ "${code}" == "200" ]] || fail "C8: /account con la sessione: atteso 200, ottenuto ${code}"
+grep -qF 'Metodi di accesso' "${tmp_dir}/c8user.b" || fail "C8: /account: manca 'Metodi di accesso'"
+grep -qF 'aria-label="Collega Apple"' "${tmp_dir}/c8user.b" \
+  || fail "C8: /account con Apple acceso: manca aria-label=\"Collega Apple\""
+echo "ok  C8: /account con la sessione ha 'Metodi di accesso' e la riga Apple con aria-label \"Collega Apple\""
 
 # --- C5: lo stato anonimo porta il flag di Apple -------------------------------------------
 code="$(fetch c5state /api/v1/me/state)"
