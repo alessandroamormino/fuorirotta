@@ -6,6 +6,7 @@ import { CircleAlert, X } from "lucide-react";
 import * as Dialog from "@/components/ui/Dialog";
 import { returnPathFrom, safeNextPath } from "@/lib/safeNextPath";
 import AppleLogo from "./AppleLogo";
+import { useUserState } from "./UserStateProvider";
 
 /**
  * Corpo dell'accesso, condiviso fra il dialogo globale e /accedi (D-02, D-03).
@@ -172,8 +173,9 @@ export default function SignInDialog({
 	onOpenChange: (open: boolean) => void;
 	returnFocusTo: RefObject<HTMLElement | null>;
 }) {
-	// Task 1: ancora spento nel dialogo; lo stato lo collega nel task successivo.
-	const apple = false;
+	// null finche' /api/v1/me/state non risponde: il pannello tiene il posto di Apple (ACCT-05:
+	// le pagine pubbliche non conoscono il flag, arriva solo dopo il mount).
+	const { apple } = useUserState();
 	return (
 		<Dialog.Root open={open} onOpenChange={onOpenChange}>
 			{/* "!" perche' w-full di Dialog.Content viene DOPO w-[calc(...)] nel CSS compilato

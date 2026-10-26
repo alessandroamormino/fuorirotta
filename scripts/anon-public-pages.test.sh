@@ -66,6 +66,9 @@
 #       e (Apple spento) senza "Continua con Apple"; con la sessione reindirizza a /account
 #       o al ?next valido, mai fuori sito
 #   Run C (Fase 25, interruttore di Apple acceso, variabili Apple finte ma valide):
+#   C2-C4, C7, C12, C13 come B2-B4, B7, B12, B13 (check_pages, check_icon, check_saved)
+#   C5  /api/v1/me/state da ospite: corpo esatto, i due campi di sempre piu' apple:true
+#   C3  nessuna pagina pubblica, con o senza sessione, contiene "Continua con Apple"
 #   C9  /accedi da ospite contiene "Continua con Apple" PRIMA di "Continua con Google"
 #   C16 statico: nessuno script ne' CDN di Apple nel codice dell'app; AppleLogo senza
 #       '#', 'http' ne' <img (nessuna richiesta a terzi prima del click)
@@ -620,6 +623,35 @@ google_off="$(grep -bo 'Continua con Google' "${tmp_dir}/c9guest.b" | head -n 1 
   || fail "C9: /accedi: mancano 'Continua con Apple' (${apple_off:-assente}) o 'Continua con Google' (${google_off:-assente})"
 (( apple_off < google_off )) || fail "C9: /accedi: Apple (byte ${apple_off}) non viene prima di Google (byte ${google_off})"
 echo "ok  C9: /accedi da ospite ha 'Continua con Apple' (byte ${apple_off}) prima di 'Continua con Google' (byte ${google_off})"
+
+# --- C5: lo stato anonimo porta il flag di Apple -------------------------------------------
+code="$(fetch c5state /api/v1/me/state)"
+[[ "${code}" == "200" ]] || fail "C5: /api/v1/me/state: atteso 200, ottenuto ${code}"
+[[ "$(cat "${tmp_dir}/c5state.b")" == '{"enabled":true,"user":null,"apple":true}' ]] \
+  || fail "C5: stato anonimo con Apple acceso inatteso '$(cat "${tmp_dir}/c5state.b")'"
+echo "ok  C5: /api/v1/me/state da ospite e' {\"enabled\":true,\"user\":null,\"apple\":true}"
+
+# --- C2-C4, C7, C12, C13: le pagine pubbliche non cambiano di un byte con Apple acceso ----
+check_pages C
+check_icon C
+check_saved C
+
+# --- C3: nessuna pagina pubblica nomina Apple, con o senza sessione ------------------------
+i=0
+for path in "${pages[@]}"; do
+  i=$((i + 1))
+  for name in "anon1-${i}" "sess-${i}"; do
+    if grep -qF 'Continua con Apple' "${tmp_dir}/${name}.b"; then
+      fail "C3: ${path} (${name}): l'HTML pubblico contiene 'Continua con Apple'"
+    fi
+  done
+done
+for name in saved-anon saved-sess; do
+  if grep -qF 'Continua con Apple' "${tmp_dir}/${name}.b"; then
+    fail "C3: /salvati (${name}): l'HTML pubblico contiene 'Continua con Apple'"
+  fi
+done
+echo "ok  C3: ${pages[*]} e /salvati non contengono 'Continua con Apple', con e senza sessione"
 
 stop_server
 
