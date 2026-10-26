@@ -23,10 +23,12 @@ export interface UserState {
 	/** null finche' lo stato non e' arrivato; false = interruttore spento sul server. */
 	enabled: boolean | null;
 	user: { name: string; email: string; image: string | null } | null;
+	/** null finche' lo stato non e' arrivato; false = Apple spento sul server o stato illeggibile (resta Google). */
+	apple: boolean | null;
 	openSignIn: () => void;
 }
 
-const GUEST: UserState = { enabled: null, user: null, openSignIn: () => {} };
+const GUEST: UserState = { enabled: null, user: null, apple: null, openSignIn: () => {} };
 
 const UserStateContext = createContext<UserState>(GUEST);
 
@@ -43,7 +45,7 @@ export function useUserState(): UserState {
 }
 
 export function UserStateProvider({ children }: { children: ReactNode }) {
-	const [remote, setRemote] = useState<Pick<UserState, "enabled" | "user">>({ enabled: null, user: null });
+	const [remote, setRemote] = useState<Pick<UserState, "enabled" | "user" | "apple">>({ enabled: null, user: null, apple: null });
 	const [open, setOpen] = useState(false);
 	// Dove riportare il focus alla chiusura: il dialogo e' globale, senza Trigger Radix.
 	const returnFocusTo = useRef<HTMLElement | null>(null);
@@ -54,13 +56,32 @@ export function UserStateProvider({ children }: { children: ReactNode }) {
 		const controller = new AbortController();
 		fetch("/api/v1/me/state", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
 			.then((res) => (res.ok ? res.json() : null))
-			.then((data: { enabled?: boolean; user?: { name: string; email: string; image?: string | null } | null } | null) => {
-				if (!data || typeof data.enabled !== "boolean") return;
-				setRemote({ enabled: data.enabled, user: data.user ? { ...data.user, image: data.user.image ?? null } : null });
-			})
-			.catch(() => {
+			.then(
+				(
+					data: {
+						enabled?: boolean;
+						user?: { name: string; email: string; image?: string | null } | null;
+						apple?: boolean;
+					} | null,
+				) => {
+					if (!data || typeof data.enabled !== "boolean") {
+						// Risposta non ok o illeggibile: il segnaposto di Apple non deve restare per sempre.
+						setRemote((prev) => ({ ...prev, apple: false }));
+						return;
+					}
+					setRemote({
+						enabled: data.enabled,
+						user: data.user ? { ...data.user, image: data.user.image ?? null } : null,
+						apple: data.apple === true,
+					});
+				},
+			)
+			.catch((error: unknown) => {
 				// Lo stato e' una lettura di sfondo: se fallisce resta l'ospite, e un
 				// problema vero di sessione emerge quando l'utente prova ad accedere.
+				// Apple passa a false (solo Google); un abort allo smontaggio non cambia nulla.
+				if (error instanceof DOMException && error.name === "AbortError") return;
+				setRemote((prev) => ({ ...prev, apple: false }));
 			});
 		return () => controller.abort();
 	}, []);

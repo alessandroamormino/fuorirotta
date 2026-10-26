@@ -80,6 +80,12 @@
   --google-btn-border: #747775;
   --google-btn-fg: #1f1f1f;
 
+  /* Pulsante "Continua con Apple" (25-UI-SPEC, D-02): nero con logo e testo
+     bianchi sul chiaro, bianco con nero sullo scuro (Apple HIG). Eccezione di
+     marchio, come i token di Google: il bordo ha il colore del fondo. */
+  --apple-btn-bg: #000000;
+  --apple-btn-fg: #ffffff;
+
   /* Tipografia (D-03b) — stack di SISTEMA: nessun @font-face, nessun
      self-hosting, nessun webfont (licenza Apple). Su Apple rende SF Pro,
      altrove cade sul fallback. */
@@ -207,6 +213,9 @@
   --google-btn-bg: #131314;
   --google-btn-border: #8e918f;
   --google-btn-fg: #e3e3e3;
+
+  --apple-btn-bg: #ffffff;
+  --apple-btn-fg: #000000;
 
   --font-display:
     "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial,

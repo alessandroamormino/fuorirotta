@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 		"Quali dati personali tratta Fuorirotta, perché, con quali fornitori, per quanto tempo e come esercitare i tuoi diritti.",
 };
 
-const UPDATED = "25 ottobre 2026";
+const UPDATED = "26 ottobre 2026";
 
 const INDEX = [
 	{ id: "titolare", label: "Titolare del trattamento" },
@@ -51,14 +51,23 @@ export default function PrivacyPage() {
 			<p>Se crei un account:</p>
 			<ul>
 				<li>
-					<strong>Dati dell&apos;account</strong>, ricevuti da Google quando accedi: nome, indirizzo email e
-					l&apos;identificativo che Google assegna al tuo account. Non riceviamo e non conserviamo la tua
-					password: l&apos;accesso avviene solo tramite Google. Non conserviamo i codici di accesso (token)
-					che Google ci restituisce. Salviamo anche l&apos;indirizzo (URL) della tua foto del profilo di
-					Google, che aggiorniamo a ogni accesso, per mostrarla come tua immagine nell&apos;app; se manca o
-					non si carica, mostriamo la tua iniziale. Non copiamo la foto sui nostri server: quando viene
-					mostrata, il tuo browser la scarica direttamente dai server di Google, che vedono il tuo indirizzo
-					IP.
+					<strong>Dati dell&apos;account</strong>, ricevuti da Google o da Apple, a seconda di quale scegli per
+					accedere: nome, indirizzo email e l&apos;identificativo che il fornitore assegna al tuo account. Non
+					riceviamo e non conserviamo la tua password: l&apos;accesso avviene solo tramite Google o Apple. Non
+					conserviamo i codici di accesso (token) che Google ci restituisce. Da Google salviamo anche
+					l&apos;indirizzo (URL) della tua foto del profilo, che aggiorniamo a ogni accesso, per mostrarla come
+					tua immagine nell&apos;app; se manca o non si carica, mostriamo la tua iniziale. Non copiamo la foto
+					sui nostri server: quando viene mostrata, il tuo browser la scarica direttamente dai server di
+					Google, che vedono il tuo indirizzo IP.
+				</li>
+				<li>
+					<strong>Se accedi con Apple</strong>: il nome lo riceviamo solo al primo accesso e solo se scegli di
+					condividerlo. Come email riceviamo il tuo indirizzo oppure, se scegli di nasconderlo, un
+					indirizzo privato di Apple (termina con privaterelay.appleid.com) che inoltra i messaggi alla tua email
+					vera: lo mostriamo e lo includiamo nello scarico dei dati così com&apos;è, e non inviamo alcuna email a
+					quell&apos;indirizzo. Apple non ci dà nessuna foto. Il codice di accesso di Apple (refresh token) lo
+					conserviamo cifrato, e solo per poter revocare l&apos;autorizzazione data a Fuorirotta quando scolleghi
+					Apple o elimini l&apos;account; non è incluso nello scarico dei dati.
 				</li>
 				<li>
 					<strong>Sessioni attive</strong>: per ogni accesso conserviamo l&apos;indirizzo IP, il tipo di
@@ -224,6 +233,19 @@ export default function PrivacyPage() {
 							],
 						],
 					},
+					{
+						title: "Apple",
+						facts: [
+							[
+								"Ruolo",
+								"Quando scegli di accedere con il suo servizio, opera come titolare autonomo del trattamento secondo la propria informativa. Noi riceviamo da Apple solo i dati elencati sopra.",
+							],
+							[
+								"Modifiche al tuo ID Apple",
+								"Se smetti di usare \"Accedi con Apple\" per Fuorirotta o elimini il tuo ID Apple, Apple ci informa: scolleghiamo Apple dal tuo account oppure, se era l'unico modo per entrare, eliminiamo l'account.",
+							],
+						],
+					},
 				]}
 			/>
 			<p>
@@ -240,7 +262,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni, gli eventi salvati, i luoghi e le categorie seguiti, il collegamento al calendario, il link di condivisione della lista e il collegamento con Google.",
+								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni, gli eventi salvati, i luoghi e le categorie seguiti, il collegamento al calendario, il link di condivisione della lista e il collegamento con Google o con Apple. Se avevi collegato Apple, eliminando l'account o scollegando Apple revochiamo anche l'autorizzazione data a Fuorirotta nel tuo ID Apple; se Apple non risponde in quel momento, i tuoi dati vengono eliminati comunque. Il codice di accesso di Apple, che conserviamo cifrato, si cancella insieme all'account o quando scolleghi Apple.",
 							],
 						],
 					},
@@ -307,7 +329,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Indirizzo IP, tipo di browser e indirizzo richiesto (comprese le coordinate di una ricerca \"vicino a me\", il collegamento al calendario e il link di condivisione della lista) sono conservati per circa 14 giorni, poi i log più vecchi vengono sovrascritti.",
+								"Indirizzo IP, tipo di browser e indirizzo richiesto (comprese le coordinate di una ricerca \"vicino a me\", il collegamento al calendario e il link di condivisione della lista) sono conservati per circa 14 giorni, poi i log più vecchi vengono sovrascritti. Al primo accesso con Apple l'indirizzo di ritorno può contenere il nome e l'email che hai condiviso, che in quel caso restano nei log per lo stesso periodo.",
 							],
 						],
 					},
@@ -354,7 +376,7 @@ export default function PrivacyPage() {
 				Per creare un account devi avere almeno 14 anni, l&apos;età minima per prestare il consenso ai servizi
 				della società dell&apos;informazione in Italia (art. 2-quinquies del Codice in materia di protezione
 				dei dati personali). È anche l&apos;età minima che Google richiede in Italia per avere un proprio
-				account. Alla registrazione non facciamo controlli ulteriori rispetto a quelli di Google.
+				account. Alla registrazione non facciamo controlli ulteriori rispetto a quelli del fornitore scelto.
 			</p>
 
 			<h2 id="modifiche">Modifiche</h2>

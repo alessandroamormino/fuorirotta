@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { authEnabled, getAuth } from "@/lib/auth";
+import { appleEnabled, authEnabled, getAuth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import SiteHeader from "@/components/SiteHeader";
 import Footer from "@/components/Footer";
 import Card from "@/components/ui/Card";
 import ProfileCard from "@/components/account/ProfileCard";
 import FollowManager from "@/components/follow/FollowManager";
 import SessionsList from "@/components/account/SessionsList";
+import SignInMethods from "@/components/account/SignInMethods";
 import { DeleteAccountSection, ExportButton, SignOutButton } from "@/components/account/AccountActions";
 import { activityLabel, listUserSessions } from "@/lib/account";
 import { todayInRome } from "@/lib/dateWindow";
+import { isAppleRelayEmail } from "@/lib/displayName";
 import { googleProfileImage } from "@/lib/profileImage";
 
 // Dinamica per costruzione: legge la sessione, quindi non puo' mai finire in
@@ -40,6 +43,12 @@ export default async function AccountPage() {
 		current: row.current,
 	}));
 
+	// Solo il nome del provider: mai una colonna di token (T-25-24).
+	const providers = (await prisma.account.findMany({ where: { userId: user.id }, select: { providerId: true } })).map(
+		(row) => row.providerId,
+	);
+	const linked = { apple: providers.includes("apple"), google: providers.includes("google") };
+
 	return (
 		<>
 			<SiteHeader />
@@ -50,7 +59,19 @@ export default async function AccountPage() {
 						<h2 id="account-profilo" className={SECTION_TITLE}>
 							Profilo
 						</h2>
-						<ProfileCard initialName={user.name} email={user.email} image={googleProfileImage(user.image)} />
+						<ProfileCard
+							initialName={user.name}
+							email={user.email}
+							image={googleProfileImage(user.image)}
+							isRelay={isAppleRelayEmail(user.email)}
+						/>
+					</section>
+
+					<section aria-labelledby="account-metodi">
+						<h2 id="account-metodi" className={SECTION_TITLE}>
+							Metodi di accesso
+						</h2>
+						<SignInMethods linked={linked} appleOn={appleEnabled()} />
 					</section>
 
 					<section aria-labelledby="account-sessioni">
@@ -84,7 +105,8 @@ export default async function AccountPage() {
 					</section>
 
 					{/* Le fasi successive inseriscono qui le proprie sezioni, fra "Cosa segui" ed "Esci":
-					    Esci ed Elimina account restano sempre in fondo. */}
+					    Esci ed Elimina account restano sempre in fondo. "Metodi di accesso" fa eccezione per
+					    scelta dell'utente (Fase 25): sta subito dopo Profilo. */}
 
 					<section aria-label="Esci">
 						<Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">

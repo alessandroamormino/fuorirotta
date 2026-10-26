@@ -11,6 +11,16 @@ export const DISPLAY_NAME_MAX = 50
 
 const FALLBACK_NAME = 'Utente'
 
+// Con "Nascondi la mia e-mail" Apple da' un indirizzo casuale: la sua parte
+// locale non e' un nome (D-06). Il dominio si confronta senza badare alle
+// maiuscole e agli spazi attorno; "…appleid.com.evil.it" non e' un relay.
+const APPLE_RELAY_NAME = 'Utente Fuorirotta'
+const APPLE_RELAY = /@privaterelay\.appleid\.com$/i
+
+export function isAppleRelayEmail(email: unknown): boolean {
+  return typeof email === 'string' && APPLE_RELAY.test(email.trim())
+}
+
 // Caratteri di controllo (tra cui NUL, che Postgres rifiuta in un text con un
 // errore invece di un 400) e gli override bidirezionali (U+202E rovescia il
 // testo che segue). Gli altri Cf (ZWJ, selettori di variante) restano: servono
@@ -40,12 +50,14 @@ export function isValidDisplayName(raw: unknown): raw is string {
   return length >= 1 && length <= DISPLAY_NAME_MAX
 }
 
-// Il nome che arriva da Google non e' controllato da noi: puo' essere vuoto,
-// mancante o lungo piu' di 50. Si tronca, e se non resta nulla si ripiega sulla
-// parte locale dell'e-mail, poi su 'Utente'.
+// Il nome che arriva da Google o da Apple non e' controllato da noi: puo' essere
+// vuoto, mancante o lungo piu' di 50. Si tronca, e se non resta nulla si ripiega
+// su 'Utente Fuorirotta' per un relay di Apple, altrimenti sulla parte locale
+// dell'e-mail, poi su 'Utente'.
 export function displayNameFromProvider(name: unknown, email: unknown): string {
   const fromName = typeof name === 'string' ? clip(normalizeDisplayName(name)) : ''
   if (fromName) return fromName
+  if (isAppleRelayEmail(email)) return APPLE_RELAY_NAME
   const local = typeof email === 'string' ? email.split('@')[0] : ''
   return clip(normalizeDisplayName(local)) || FALLBACK_NAME
 }

@@ -61,9 +61,19 @@
 #       l'utente di prova
 #   B8  interruttore acceso: /account da ospite e' un 307 verso /accedi?next=%2Faccount;
 #       con la sessione e' 200, private e no-store, noindex, e contiene il nome dell'utente;
-#       sezioni nell'ordine Profilo, Sessioni attive, I tuoi dati, Cosa segui, Elimina account
-#   B9  interruttore acceso: /accedi da ospite 200, no-store, noindex, "Continua con Google";
-#       con la sessione reindirizza a /account o al ?next valido, mai fuori sito
+#       sezioni nell'ordine Profilo, Metodi di accesso, Sessioni attive, I tuoi dati, Cosa segui,
+#       Elimina account; con Apple spento niente "Collega Apple" e la frase sullo scollegamento
+#   B9  interruttore acceso: /accedi da ospite 200, no-store, noindex, "Continua con Google"
+#       e (Apple spento) senza "Continua con Apple"; con la sessione reindirizza a /account
+#       o al ?next valido, mai fuori sito
+#   Run C (Fase 25, interruttore di Apple acceso, variabili Apple finte ma valide):
+#   C2-C4, C7, C12, C13 come B2-B4, B7, B12, B13 (check_pages, check_icon, check_saved)
+#   C5  /api/v1/me/state da ospite: corpo esatto, i due campi di sempre piu' apple:true
+#   C3  nessuna pagina pubblica, con o senza sessione, contiene "Continua con Apple"
+#   C8  /account con la sessione: 200, "Metodi di accesso" e aria-label="Collega Apple"
+#   C9  /accedi da ospite contiene "Continua con Apple" PRIMA di "Continua con Google"
+#   C16 statico: nessuno script ne' CDN di Apple nel codice dell'app; AppleLogo senza
+#       '#', 'http' ne' <img (nessuna richiesta a terzi prima del click)
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -88,6 +98,17 @@ auth_env=(
   "BETTER_AUTH_SECRET=${test_secret}"
   GOOGLE_CLIENT_ID=test-client-id.apps.googleusercontent.com
   GOOGLE_CLIENT_SECRET=test-client-secret
+)
+# Apple acceso (run C): valori finti ma validi; la chiave privata e' una P-256 pkcs8 generata
+# qui, su una riga in base64. Nessuna richiesta a Apple parte: serve solo ad appleEnabled().
+apple_key_b64="$(node -e 'const{generateKeyPairSync}=require("crypto");process.stdout.write(Buffer.from(generateKeyPairSync("ec",{namedCurve:"P-256"}).privateKey.export({type:"pkcs8",format:"pem"})).toString("base64"))')"
+[[ -n "${apple_key_b64}" ]] || { echo "FAIL: chiave di prova di Apple non generata"; exit 1; }
+apple_env=(
+  APPLE_AUTH_ENABLED=true
+  APPLE_CLIENT_ID=it.fuorirotta.web.test
+  APPLE_TEAM_ID=TEAMID1234
+  APPLE_KEY_ID=KEYID12345
+  "APPLE_PRIVATE_KEY_B64=${apple_key_b64}"
 )
 
 fail() {
@@ -556,11 +577,17 @@ grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/b8user.b" \
 grep -qF 'Utente Prova' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: il nome dell'utente non e' nell'HTML del server"
 # Ordine delle sezioni (D-06) e sessione corrente gia' nell'HTML del server (nessun flash di vuoto).
-order="$(grep -oE '>(Profilo|Sessioni attive|I tuoi dati|Cosa segui|Elimina account)</h2>' "${tmp_dir}/b8user.b" | sed -E 's/^>(.*)<.*/\1/' | paste -sd'|' -)"
-[[ "${order}" == "Profilo|Sessioni attive|I tuoi dati|Cosa segui|Elimina account" ]] \
+order="$(grep -oE '>(Profilo|Metodi di accesso|Sessioni attive|I tuoi dati|Cosa segui|Elimina account)</h2>' "${tmp_dir}/b8user.b" | sed -E 's/^>(.*)<.*/\1/' | paste -sd'|' -)"
+[[ "${order}" == "Profilo|Metodi di accesso|Sessioni attive|I tuoi dati|Cosa segui|Elimina account" ]] \
   || fail "B8: /account: ordine delle sezioni inatteso: '${order}'"
 grep -qF 'attiva ora (questo dispositivo)' "${tmp_dir}/b8user.b" \
   || fail "B8: /account: la sessione corrente non e' nell'HTML del server"
+# Metodi di accesso con Apple spento (D-08, D-04): l'utente di prova ha solo Google.
+if grep -qF 'Collega Apple' "${tmp_dir}/b8user.b"; then
+  fail "B8: /account con Apple spento contiene 'Collega Apple'"
+fi
+grep -qF 'Puoi scollegare un metodo solo se ne resta un altro.' "${tmp_dir}/b8user.b" \
+  || fail "B8: /account: manca la frase sullo scollegamento"
 echo "ok  B8: /account da ospite 307 verso /accedi?next=%2Faccount; con la sessione 200, private no-store, noindex, nome nell'HTML"
 
 # --- B9: /accedi (D-02, T-21-32) -----------------------------------------------------------
@@ -572,6 +599,9 @@ grep -qiE '<meta name="robots" content="[^"]*noindex' "${tmp_dir}/b9guest.b" \
   || fail "B9: /accedi: manca il meta robots noindex"
 grep -qF 'Continua con Google' "${tmp_dir}/b9guest.b" \
   || fail "B9: /accedi: manca il testo 'Continua con Google'"
+if grep -qF 'Continua con Apple' "${tmp_dir}/b9guest.b"; then
+  fail "B9: /accedi con Apple spento contiene 'Continua con Apple'"
+fi
 # Con la sessione: verso /account, verso un ?next valido, e MAI fuori sito.
 expect_redirect() {
   local path="$1" want="$2" code loc
@@ -586,5 +616,70 @@ expect_redirect '/accedi?next=%2F%2Fevil.example' /account
 expect_redirect '/accedi?next=https%3A%2F%2Fevil.example' /account
 echo "ok  B9: /accedi da ospite 200, no-store, noindex, 'Continua con Google'; con la sessione verso /account o il ?next valido, mai fuori sito"
 
+stop_server
+
+# --- Run C: interruttore di Apple acceso (Fase 25, ACCT-05) ---------------------------------
+start_server "${auth_env[@]}" "${apple_env[@]}"
+echo "ok  next start (produzione) sulla porta ${port}, accesso e Apple accesi con valori finti"
+
+# --- C9: /accedi mostra Apple sopra Google -------------------------------------------------
+code="$(fetch c9guest /accedi)"
+[[ "${code}" == "200" ]] || fail "C9: /accedi da ospite: atteso 200, ottenuto ${code}"
+apple_off="$(grep -bo 'Continua con Apple' "${tmp_dir}/c9guest.b" | head -n 1 | cut -d: -f1)"
+google_off="$(grep -bo 'Continua con Google' "${tmp_dir}/c9guest.b" | head -n 1 | cut -d: -f1)"
+[[ -n "${apple_off}" && -n "${google_off}" ]] \
+  || fail "C9: /accedi: mancano 'Continua con Apple' (${apple_off:-assente}) o 'Continua con Google' (${google_off:-assente})"
+(( apple_off < google_off )) || fail "C9: /accedi: Apple (byte ${apple_off}) non viene prima di Google (byte ${google_off})"
+echo "ok  C9: /accedi da ospite ha 'Continua con Apple' (byte ${apple_off}) prima di 'Continua con Google' (byte ${google_off})"
+
+# --- C8: /account con Apple acceso mostra la riga Apple ------------------------------------
+code="$(fetch c8user /account "${session_cookie}")"
+[[ "${code}" == "200" ]] || fail "C8: /account con la sessione: atteso 200, ottenuto ${code}"
+grep -qF 'Metodi di accesso' "${tmp_dir}/c8user.b" || fail "C8: /account: manca 'Metodi di accesso'"
+grep -qF 'aria-label="Collega Apple"' "${tmp_dir}/c8user.b" \
+  || fail "C8: /account con Apple acceso: manca aria-label=\"Collega Apple\""
+echo "ok  C8: /account con la sessione ha 'Metodi di accesso' e la riga Apple con aria-label \"Collega Apple\""
+
+# --- C5: lo stato anonimo porta il flag di Apple -------------------------------------------
+code="$(fetch c5state /api/v1/me/state)"
+[[ "${code}" == "200" ]] || fail "C5: /api/v1/me/state: atteso 200, ottenuto ${code}"
+[[ "$(cat "${tmp_dir}/c5state.b")" == '{"enabled":true,"user":null,"apple":true}' ]] \
+  || fail "C5: stato anonimo con Apple acceso inatteso '$(cat "${tmp_dir}/c5state.b")'"
+echo "ok  C5: /api/v1/me/state da ospite e' {\"enabled\":true,\"user\":null,\"apple\":true}"
+
+# --- C2-C4, C7, C12, C13: le pagine pubbliche non cambiano di un byte con Apple acceso ----
+check_pages C
+check_icon C
+check_saved C
+
+# --- C3: nessuna pagina pubblica nomina Apple, con o senza sessione ------------------------
+i=0
+for path in "${pages[@]}"; do
+  i=$((i + 1))
+  for name in "anon1-${i}" "sess-${i}"; do
+    if grep -qF 'Continua con Apple' "${tmp_dir}/${name}.b"; then
+      fail "C3: ${path} (${name}): l'HTML pubblico contiene 'Continua con Apple'"
+    fi
+  done
+done
+for name in saved-anon saved-sess; do
+  if grep -qF 'Continua con Apple' "${tmp_dir}/${name}.b"; then
+    fail "C3: /salvati (${name}): l'HTML pubblico contiene 'Continua con Apple'"
+  fi
+done
+echo "ok  C3: ${pages[*]} e /salvati non contengono 'Continua con Apple', con e senza sessione"
+
+stop_server
+
+# --- C16: nessuna richiesta a Apple prima del click (statico) --------------------------------
+if grep -rnE 'appleid\.cdn-apple\.com|appleid\.auth\.js' app components lib; then
+  fail "C16: nel codice dell'app compare lo script o il CDN di Apple"
+fi
+logo="components/account/AppleLogo.tsx"
+if grep -nE '#|http|<img' "${logo}"; then
+  fail "C16: ${logo} contiene '#', 'http' o <img"
+fi
+echo "ok  C16: nessuno script ne' CDN di Apple nel codice; AppleLogo senza '#', 'http' ne' <img"
+
 echo ""
-echo "PASS: pagine pubbliche identiche con e senza sessione, interruttore spento e acceso (ACCT-05)"
+echo "PASS: pagine pubbliche identiche con e senza sessione, interruttore spento e acceso, Apple compreso (ACCT-05)"

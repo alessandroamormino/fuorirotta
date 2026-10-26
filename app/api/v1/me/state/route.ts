@@ -1,4 +1,4 @@
-import { getAuth } from '@/lib/auth'
+import { appleEnabled, getAuth } from '@/lib/auth'
 import { googleProfileImage } from '@/lib/profileImage'
 
 // Stato dell'utente per le isole client, dopo l'idratazione: le pagine
@@ -20,7 +20,10 @@ export async function GET(req: Request): Promise<Response> {
   const res = Response.json(
     { enabled: true, user: session
         ? { name: session.user.name, email: session.user.email, image: googleProfileImage(session.user.image) }
-        : null },
+        : null,
+      // La chiave c'e' solo con Apple acceso e manca del tutto da spento: ogni gate che
+      // confronta questo corpo byte per byte (check:auth-flow S2, check:anon A5/B5) resta valido.
+      ...(appleEnabled() ? { apple: true } : {}) },
     { headers: NO_STORE },
   )
   // Rinnovo a scorrimento (D-04): getSession allunga la riga nel database, ma
