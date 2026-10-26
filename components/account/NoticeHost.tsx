@@ -13,7 +13,23 @@ import { X } from "lucide-react";
  * Google (letto in un effect, mai da searchParams, che renderebbe dinamiche le
  * pagine pubbliche).
  */
-type NoticeId = "cancelled" | "rate-limited" | "auth-failed" | "deleted" | "signed-out";
+type NoticeId =
+	| "cancelled"
+	| "rate-limited"
+	| "auth-failed"
+	| "deleted"
+	| "signed-out"
+	| "collision-apple"
+	| "collision-google"
+	| "linked-apple"
+	| "linked-google"
+	| "link-conflict-apple"
+	| "link-conflict-google"
+	| "link-cancelled"
+	| "link-failed"
+	| "unlinked-apple"
+	| "unlinked-google"
+	| "link-start-failed";
 
 const NOTICE_TEXT: Record<NoticeId, string> = {
 	cancelled: "Accesso annullato",
@@ -21,7 +37,27 @@ const NOTICE_TEXT: Record<NoticeId, string> = {
 	"auth-failed": "Accesso non riuscito. Riprova tra poco.",
 	deleted: "Account eliminato",
 	"signed-out": "Sei uscito",
+	"collision-apple": "Esiste già un account con questa email. Entra con Google e collega Apple dal profilo.",
+	"collision-google": "Esiste già un account con questa email. Entra con Apple e collega Google dal profilo.",
+	"linked-apple": "Apple collegato",
+	"linked-google": "Google collegato",
+	"link-conflict-apple": "Questo account Apple è già usato da un altro profilo",
+	"link-conflict-google": "Questo account Google è già usato da un altro profilo",
+	"link-cancelled": "Collegamento annullato",
+	"link-failed": "Collegamento non riuscito. Riprova tra poco.",
+	"unlinked-apple": "Apple scollegato",
+	"unlinked-google": "Google scollegato",
+	"link-start-failed": "Non siamo riusciti ad avviare il collegamento. Riprova.",
 };
+
+// Codici d'errore di Better Auth 1.7.10 che il ritorno puo' portare. Il valore grezzo non si mostra mai.
+const CANCEL_CODES = ["access_denied", "user_cancelled_authorize"];
+const PROVIDERS = ["apple", "google"] as const;
+type Provider = (typeof PROVIDERS)[number];
+
+function asProvider(value: string | null): Provider | null {
+	return PROVIDERS.find((p) => p === value) ?? null;
+}
 
 const STORAGE_KEY = "notice";
 // Timeout di visualizzazione, non durata di animazione.
@@ -32,14 +68,19 @@ export interface NoticeAction {
 	onClick: () => void;
 }
 
-let listener: ((text: string, action?: NoticeAction) => void) | null = null;
+interface NoticeOptions {
+	/** Resta finche' non lo si chiude o un altro avviso lo sostituisce. */
+	sticky?: boolean;
+}
+
+let listener: ((text: string, action?: NoticeAction, options?: NoticeOptions) => void) | null = null;
 
 /**
  * Mostra un avviso (uno alla volta: sostituisce quello corrente). No-op se l'host non e' montato.
  * Con `action` compare un pulsante fra il testo e la chiusura: esegue onClick e chiude l'avviso.
  */
-export function notify(text: string, action?: NoticeAction): void {
-	listener?.(text, action);
+export function notify(text: string, action?: NoticeAction, options?: NoticeOptions): void {
+	listener?.(text, action, options);
 }
 
 /** Da chiamare PRIMA di una navigazione completa: l'avviso compare una volta dopo il caricamento. */
@@ -56,12 +97,13 @@ function isNoticeId(value: string | null): value is NoticeId {
 }
 
 export default function NoticeHost() {
-	const [message, setMessage] = useState<{ text: string; key: number; action?: NoticeAction } | null>(null);
+	const [message, setMessage] = useState<{ text: string; key: number; action?: NoticeAction; sticky?: boolean } | null>(null);
 	// Messaggio in pausa mentre e' sotto il mouse o contiene il focus.
 	const [paused, setPaused] = useState(false);
 
 	useEffect(() => {
-		const show = (text: string, action?: NoticeAction) => setMessage((prev) => ({ text, action, key: (prev?.key ?? 0) + 1 }));
+		const show = (text: string, action?: NoticeAction, options?: NoticeOptions) =>
+			setMessage((prev) => ({ text, action, sticky: options?.sticky, key: (prev?.key ?? 0) + 1 }));
 		listener = show;
 
 		try {
@@ -74,10 +116,22 @@ export default function NoticeHost() {
 
 		const url = new URL(window.location.href);
 		const error = url.searchParams.get("error");
-		if (error !== null) {
-			// Il valore grezzo non viene mai mostrato: solo due frasi fisse.
-			show(NOTICE_TEXT[error === "access_denied" ? "cancelled" : "auth-failed"]);
-			url.searchParams.delete("error");
+		const via = asProvider(url.searchParams.get("via"));
+		const link = asProvider(url.searchParams.get("link"));
+		const linked = asProvider(url.searchParams.get("linked"));
+		if (linked) {
+			show(NOTICE_TEXT[`linked-${linked}`]);
+		} else if (link && error !== null) {
+			// Ritorno da un collegamento fallito: Better Auth aggiunge error=<codice>.
+			if (error === "account_already_linked_to_different_user") show(NOTICE_TEXT[`link-conflict-${link}`]);
+			else show(NOTICE_TEXT[CANCEL_CODES.includes(error) ? "link-cancelled" : "link-failed"]);
+		} else if (error !== null && !link) {
+			// Il valore grezzo non viene mai mostrato: solo frasi fisse.
+			if (error === "account_not_linked" && via) show(NOTICE_TEXT[`collision-${via}`], undefined, { sticky: true });
+			else show(NOTICE_TEXT[CANCEL_CODES.includes(error) ? "cancelled" : "auth-failed"]);
+		}
+		if (linked || link || error !== null || via) {
+			for (const key of ["error", "error_description", "via", "link", "linked"]) url.searchParams.delete(key);
 			window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 		}
 
@@ -87,7 +141,7 @@ export default function NoticeHost() {
 	}, []);
 
 	useEffect(() => {
-		if (!message || paused) return;
+		if (!message || message.sticky || paused) return;
 		const timer = setTimeout(() => setMessage(null), NOTICE_MS);
 		return () => clearTimeout(timer);
 	}, [message, paused]);
