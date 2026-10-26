@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { authEnabled, getAuth } from "@/lib/auth";
+import { appleEnabled, authEnabled, getAuth } from "@/lib/auth";
 import { safeNextPath } from "@/lib/safeNextPath";
 import SiteHeader from "@/components/SiteHeader";
 import Footer from "@/components/Footer";
 import Card from "@/components/ui/Card";
 import { SignInPanel } from "@/components/account/SignIn";
 
-// Pagina di ripiego per link diretti e ritorni da Google (D-02): dinamica
+// Pagina di ripiego per link diretti e ritorni da Google e da Apple (D-02): dinamica
 // perche' legge la sessione, mai in cache, mai indicizzata.
 export const dynamic = "force-dynamic";
 
@@ -36,6 +36,7 @@ export default async function AccediPage({ searchParams }: { searchParams: Promi
 					<SignInPanel
 						heading={<h1 className="mb-6 text-xl font-medium leading-[1.2] text-foreground">Accedi</h1>}
 						callbackPath={safe}
+						apple={appleEnabled()}
 					/>
 				</Card>
 			</main>
