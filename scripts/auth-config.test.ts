@@ -72,7 +72,7 @@ type ResolvedOptions = {
   user?: { deleteUser?: { enabled?: boolean; sendDeleteAccountVerification?: unknown } }
   databaseHooks: {
     user: { create: { before: Hook }; update: { before: Hook } }
-    account: { create: { before: Hook }; update: { before: Hook } }
+    account: { create: { before: Hook }; update: { before: Hook }; delete: { before: Hook } }
   }
 }
 
@@ -267,6 +267,19 @@ async function main(): Promise<void> {
     JSON.stringify(secretHeader),
   )
   check('eliminazione: deleteUser attivo senza callback di verifica', options.user?.deleteUser?.enabled === true && options.user.deleteUser.sendDeleteAccountVerification === undefined)
+  // Rinfrescherebbero il token di Apple senza providerId (noTokens lo azzera) e
+  // /refresh-token lo restituirebbe in chiaro. disabledPaths risponde prima del
+  // rate limit: nessun database. Senza la chiusura rispondono 401 o 400.
+  for (const [method, path] of [['POST', '/refresh-token'], ['POST', '/get-access-token'], ['GET', '/account-info'], ['POST', '/./refresh-token']] as const) {
+    const res = await auth!.handler(
+      new Request(`https://fuori-rotta.it/api/auth${path}`, {
+        method,
+        headers: { origin: 'https://fuori-rotta.it', 'content-type': 'application/json' },
+        body: method === 'POST' ? '{"accountId":"x"}' : undefined,
+      }),
+    )
+    check(`endpoint chiuso: ${method} /api/auth${path} -> 404`, res.status === 404, String(res.status))
+  }
 
   // --- Hook del database: nome valido, nessun token, foto solo di Google -------------
   const hooks = options.databaseHooks
@@ -323,6 +336,22 @@ async function main(): Promise<void> {
       !!bare && bare.data.accessToken === null && bare.data.refreshToken === null && bare.data.idToken === null,
     )
   }
+
+  // Una riga Apple senza token non si puo' revocare: lo si dice nel log, senza valori.
+  const realError = console.error
+  const deleteLogged: string[] = []
+  console.error = (...args: unknown[]) => void deleteLogged.push(args.map(String).join(' '))
+  try {
+    await hooks.account.delete.before({ providerId: 'apple', accountId: 'apple-sub-segreto', refreshToken: null })
+    await hooks.account.delete.before({ providerId: 'google', refreshToken: null })
+  } finally {
+    console.error = realError
+  }
+  check(
+    'hook account.delete: riga Apple senza token -> una riga di log, senza sub; Google tace',
+    deleteLogged.length === 1 && deleteLogged[0].includes('Revoca Apple saltata') && !deleteLogged[0].includes('apple-sub-segreto'),
+    deleteLogged.join(' | '),
+  )
 
   // --- Etichetta del dispositivo e giorno di attivita' (D-08, AUTH-06) --------
   const { deviceLabel } = await import('../lib/userAgent')
