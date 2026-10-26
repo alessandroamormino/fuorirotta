@@ -13,6 +13,7 @@ import SignInMethods from "@/components/account/SignInMethods";
 import { DeleteAccountSection, ExportButton, SignOutButton } from "@/components/account/AccountActions";
 import { activityLabel, listUserSessions } from "@/lib/account";
 import { todayInRome } from "@/lib/dateWindow";
+import { isAppleRelayEmail } from "@/lib/displayName";
 import { googleProfileImage } from "@/lib/profileImage";
 
 // Dinamica per costruzione: legge la sessione, quindi non puo' mai finire in
@@ -58,7 +59,12 @@ export default async function AccountPage() {
 						<h2 id="account-profilo" className={SECTION_TITLE}>
 							Profilo
 						</h2>
-						<ProfileCard initialName={user.name} email={user.email} image={googleProfileImage(user.image)} />
+						<ProfileCard
+							initialName={user.name}
+							email={user.email}
+							image={googleProfileImage(user.image)}
+							isRelay={isAppleRelayEmail(user.email)}
+						/>
 					</section>
 
 					<section aria-labelledby="account-metodi">

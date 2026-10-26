@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import Image from "next/image";
 import { Check } from "lucide-react";
 import Avatar from "./Avatar";
 import Button from "@/components/ui/Button";
@@ -10,8 +9,9 @@ import Input from "@/components/ui/Input";
 import { DISPLAY_NAME_MAX, displayInitial, isValidDisplayName, normalizeDisplayName } from "@/lib/displayName";
 
 /**
- * Profilo (D-09, D-20): cerchio con la foto di Google (iniziale se manca o non
- * si carica), "Accesso con Google", nome modificabile, e-mail di sola lettura. Isola client perche' il nome cambia
+ * Profilo (D-09, D-20): cerchio con la foto di Google se collegato (iniziale se
+ * manca o non si carica; Apple non manda foto), nome modificabile, e-mail di sola
+ * lettura. I provider stanno in "Metodi di accesso" (D-08). Isola client perche' il nome cambia
  * subito dopo il salvataggio; la pagina server le passa i valori gia' pronti,
  * cosi' il primo HTML li contiene gia'.
  */
@@ -21,7 +21,18 @@ const SAVED_MS = 2000;
 const NAME_ERROR_INVALID = "Scrivi un nome da 1 a 50 caratteri.";
 const NAME_ERROR_SAVE = "Non siamo riusciti a salvare il nome. Riprova.";
 
-export default function ProfileCard({ initialName, email, image }: { initialName: string; email: string; image: string | null }) {
+export default function ProfileCard({
+	initialName,
+	email,
+	image,
+	isRelay,
+}: {
+	initialName: string;
+	email: string;
+	image: string | null;
+	// Deciso dal server (isAppleRelayEmail): il client non riconosce domini.
+	isRelay: boolean;
+}) {
 	const [savedName, setSavedName] = useState(initialName);
 	const [value, setValue] = useState(initialName);
 	const [saving, setSaving] = useState(false);
@@ -85,11 +96,6 @@ export default function ProfileCard({ initialName, email, image }: { initialName
 				</div>
 			</div>
 
-			<p className="mt-4 inline-flex items-center gap-2 rounded-full border border-border-soft px-3 py-1 text-sm font-medium text-foreground">
-				<Image src="/images/google-g.svg" width={16} height={16} alt="" />
-				Accesso con Google
-			</p>
-
 			<form onSubmit={submit} className="mt-6" noValidate>
 				<label htmlFor="account-name" className="mb-2 block text-sm font-medium text-foreground">
 					Nome
@@ -136,7 +142,10 @@ export default function ProfileCard({ initialName, email, image }: { initialName
 			<div className="mt-6">
 				<p className="mb-1 text-sm font-medium text-foreground">Email</p>
 				<p className="break-all text-base text-foreground">{email}</p>
-				<p className="mt-1 text-sm text-foreground-secondary">Arriva dal tuo account Google e non si può cambiare.</p>
+				<p className="mt-1 text-sm text-foreground-secondary">È l&apos;email del tuo primo accesso e non si può cambiare.</p>
+				{isRelay && (
+					<p className="mt-1 text-sm text-foreground-secondary">Indirizzo privato di Apple: inoltra alla tua email vera</p>
+				)}
 			</div>
 		</Card>
 	);
