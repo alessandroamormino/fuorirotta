@@ -190,7 +190,10 @@ async function apply({ type, sub }: AppleEvent): Promise<'deleted' | 'unlinked' 
   })
   if (!row) return 'ignored'
   const { userId } = row
-  if (type === 'consent-revoked' && (await prisma.account.count({ where: { userId, providerId: { not: 'apple' } } })) > 0) {
+  // Stessa regola per i tre eventi, come promette /privacy: se resta un altro
+  // modo per entrare si scollega soltanto, l'account si elimina solo se Apple
+  // era l'unico (anche quando l'ID Apple e' stato eliminato).
+  if ((await prisma.account.count({ where: { userId, providerId: { not: 'apple' } } })) > 0) {
     // Riga Apple e sessioni insieme: un crash non lascia l'una senza le altre.
     await prisma.$transaction([
       prisma.account.deleteMany({ where: { providerId: 'apple', accountId: sub } }),

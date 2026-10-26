@@ -23,6 +23,7 @@
 //   E1  exchangeAppleCode con il bundle ID (la strada della Fase 27)
 //   N1  account-deleted (events come stringa JSON): utente e registro a zero
 //   N1b account-delete (l'ortografia di D-15): idem
+//   N1c account-delete e account-deleted per Google+Apple: si scollega soltanto, utente, Google e dati restano
 //   N2  consent-revoked con Google: via la riga Apple e le sessioni, utente e Google restano
 //   N3  consent-revoked per chi ha solo Apple: via l'utente
 //   N4  idempotenza: replay, sub ignoto, email-disabled, tipo ignoto
@@ -626,6 +627,28 @@ async function main(): Promise<void> {
     const n3 = await mintAppleUser('n3')
     const n3Reply = await notifyJws(await signNotification('consent-revoked', n3.grant.sub))
     check('N3: consent-revoked per chi ha solo Apple elimina l account', n3Reply.status === 200 && (await rowsLeft(n3.userId)) === 0, String(n3Reply.status))
+
+    // N1c: eliminare l'ID Apple con Google collegato scollega soltanto (/privacy, "se era l'unico modo per entrare")
+    const { applyAppleEvent } = await import('../lib/appleAuth')
+    for (const type of ['account-delete', 'account-deleted']) {
+      const google = await mintGoogleUser(`${EMAIL_PREFIX}n1c-${type}@fixture.invalid`, 'Enne Uno Ci', image)
+      const grant: AppleGrant = { sub: `apple-flow-sub-n1c-${type}`, email: `${EMAIL_PREFIX}n1c-${type}@privaterelay.appleid.com` }
+      await appleFlow(grant, { callbackURL: '/account?linked=apple', errorCallbackURL: '/account?link=apple', sessionCookie: google.cookie, link: true })
+      await seedSaved(google.user.id)
+      const linked = (await appleRow(grant.sub)) !== null
+      const outcome = await applyAppleEvent({ type, sub: grant.sub })
+      check(
+        `N1c: ${type} per Google+Apple scollega soltanto: via la riga Apple e le sessioni, restano utente, Google e dati`,
+        linked &&
+          outcome === 'unlinked' &&
+          (await appleRow(grant.sub)) === null &&
+          (await prisma.session.count({ where: { userId: google.user.id } })) === 0 &&
+          (await prisma.account.count({ where: { userId: google.user.id, providerId: 'google' } })) === 1 &&
+          (await prisma.user.count({ where: { id: google.user.id } })) === 1 &&
+          (await prisma.savedEvent.count({ where: { userId: google.user.id } })) === 1,
+        outcome,
+      )
+    }
 
     // N4
     const n4 = await mintAppleUser('n4')
