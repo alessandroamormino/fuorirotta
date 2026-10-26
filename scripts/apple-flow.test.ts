@@ -28,7 +28,8 @@
 //   N3  consent-revoked per chi ha solo Apple: via l'utente
 //   N4  idempotenza: replay, sub ignoto, email-disabled, tipo ignoto
 //   N5  account-deleted per un utente gia' eliminato con delete-user
-//   N6  rifiuti (altra chiave, aud, iss, corpo, 413, 404) senza toccare le righe; payload= in forma di form
+//   N6  rifiuti (altra chiave, aud, iss, corpo, 413, 404 senza configurazione Apple) senza toccare le righe; payload= in forma di form
+//   N7  interruttore spento ma Apple configurato: la notifica si applica comunque
 //   V1  id token nativo (bundle ID) sullo stesso utente del web; un'altra audience e' rifiutata
 //
 // Gli helper (startApple, applePost, follow, cookieFrom, mintGoogleUser e il
@@ -684,23 +685,35 @@ async function main(): Promise<void> {
       refusals.json = (await notify('not json')).status
       refusals.grande = (await notify('x'.repeat(20000))).status
       const valid = await signNotification('account-deleted', n6.grant.sub)
-      process.env.APPLE_AUTH_ENABLED = 'false'
+      const keyId = process.env.APPLE_KEY_ID
+      delete process.env.APPLE_KEY_ID
       try {
-        refusals.spento = (await notifyJws(valid)).status
+        refusals.nonConfigurato = (await notifyJws(valid)).status
       } finally {
-        process.env.APPLE_AUTH_ENABLED = 'true'
+        process.env.APPLE_KEY_ID = keyId
       }
     } finally {
       console.error = realN6Error
     }
     check(
-      'N6: altra chiave, aud, iss -> 401; corpo non valido -> 400; 20000 byte -> 413; interruttore spento -> 404',
-      refusals.chiave === 401 && refusals.aud === 401 && refusals.iss === 401 && refusals.json === 400 && refusals.grande === 413 && refusals.spento === 404,
+      'N6: altra chiave, aud, iss -> 401; corpo non valido -> 400; 20000 byte -> 413; Apple non configurato -> 404',
+      refusals.chiave === 401 && refusals.aud === 401 && refusals.iss === 401 && refusals.json === 400 && refusals.grande === 413 && refusals.nonConfigurato === 404,
       JSON.stringify(refusals),
     )
     check('N6: nessun rifiuto ha toccato le righe, e il log non ha JWT', (await rowsLeft(n6.userId)) === n6Before && !n6Logged.some((line) => line.includes('eyJ')), n6Logged.join(' | '))
     const formReply = await notify(new URLSearchParams({ payload: await signNotification('account-deleted', n6.grant.sub) }).toString(), 'application/x-www-form-urlencoded')
     check('N6: payload= in forma di form viene accettato e applicato', formReply.status === 200 && (await rowsLeft(n6.userId)) === 0, String(formReply.status))
+
+    // N7: a interruttore spento, con le chiavi presenti, la notifica si applica lo stesso (come la revoca)
+    const n7 = await mintAppleUser('n7')
+    process.env.APPLE_AUTH_ENABLED = 'false'
+    let n7Status = 0
+    try {
+      n7Status = (await notifyJws(await signNotification('account-deleted', n7.grant.sub))).status
+    } finally {
+      process.env.APPLE_AUTH_ENABLED = 'true'
+    }
+    check('N7: interruttore spento ma Apple configurato: account-deleted risponde 200 e lascia zero righe', n7Status === 200 && (await rowsLeft(n7.userId)) === 0, String(n7Status))
 
     // V1: id token nativo (bundle ID) sullo stesso utente del web
     const v1 = await mintAppleUser('v1')
