@@ -43,7 +43,7 @@ export default function PrivacyPage() {
 			<p>Il titolare del trattamento è Alessandro Amormino, persona fisica.</p>
 			<p>
 				Per qualsiasi richiesta sui tuoi dati scrivi a:{" "}
-				<a href="mailto:amormino.alessandro97@gmail.com">amormino.alessandro97@gmail.com</a>
+				<a href="mailto:privacy@fuori-rotta.it">privacy@fuori-rotta.it</a>
 			</p>
 			<p>L&apos;indirizzo postale del titolare non è indicato.</p>
 
