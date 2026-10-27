@@ -85,7 +85,7 @@ echo "ok  P2 nessun segnaposto della bozza"
 # --- P3 ------------------------------------------------------------------
 # Nome ed e-mail del titolare sono scritti qui perche' il testo approvato sta in
 # .planning (ignorato da git) e non c'e' in CI.
-for needle in "Alessandro Amormino" "amormino.alessandro97@gmail.com" "Supabase" "Hetzner" "Mapbox" \
+for needle in "Alessandro Amormino" "privacy@fuori-rotta.it" "Supabase" "Hetzner" "Mapbox" \
   "Google" "Garante per la protezione dei dati personali" "Titolare del trattamento" \
   "Destinatari e responsabili del trattamento" "Conservazione" "In questa pagina"; do
   if [[ "${needle}" == "In questa pagina" ]]; then
