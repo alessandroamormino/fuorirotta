@@ -565,7 +565,9 @@ Notes:
 
 - Revocation on unlink and on account deletion works **whenever the variables are present, even with the
   switch off**: a person who already linked Apple can still unlink or delete the account cleanly.
-- The server-to-server endpoint `/api/apple/notifications` answers 404 while the switch is off.
+- The same holds for the server-to-server endpoint `/api/apple/notifications`: with the switch off it still
+  applies Apple's revocations and deletions. It answers 404 only when sign-in is off (`AUTH_ENABLED`) or the
+  Apple variables are missing.
 - Rotating `BETTER_AUTH_SECRET` invalidates every session **and makes the stored Apple tokens unrevocable**
   (they are encrypted with it). Revoke first, or accept that Apple's authorizations stay until the people
   remove them from their Apple ID.

@@ -118,6 +118,10 @@ function create() {
     secret: process.env.BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, { provider: 'postgresql' }),
     telemetry: { enabled: false },
+    // Nessun client usa i token dei provider. Questi tre rinfrescherebbero il
+    // token di Apple con un aggiornamento senza providerId (noTokens lo azzera,
+    // e la revoca salterebbe) e /refresh-token lo restituirebbe in chiaro.
+    disabledPaths: ['/refresh-token', '/get-access-token', '/account-info'],
     // requireSignature: un token di sessione "nudo" non vale come bearer, solo
     // il valore firmato (21-RESEARCH Pattern 5).
     plugins: [bearer({ requireSignature: true })],
@@ -227,7 +231,11 @@ function create() {
         // spento ma con le chiavi presenti il token si revoca comunque.
         delete: {
           before: async (account) => {
-            if (account.providerId !== 'apple' || !account.refreshToken) return
+            if (account.providerId !== 'apple') return
+            if (!account.refreshToken) {
+              console.error('[Auth] Revoca Apple saltata: nessun token salvato')
+              return
+            }
             if (!appleConfigured()) {
               console.error(`[Auth] Revoca Apple saltata: configurazione Apple assente (${appleMissingConfig().join(', ')})`)
               return

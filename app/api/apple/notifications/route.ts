@@ -1,5 +1,5 @@
-import { appleEnabled } from '@/lib/auth'
-import { applyAppleEvent, verifyAppleNotification } from '@/lib/appleAuth'
+import { authEnabled } from '@/lib/auth'
+import { appleConfigured, applyAppleEvent, verifyAppleNotification } from '@/lib/appleAuth'
 
 // Notifiche server-to-server di Apple (D-15): revoca del consenso, cancellazione
 // dell'account. Tre scelte:
@@ -11,6 +11,9 @@ import { applyAppleEvent, verifyAppleNotification } from '@/lib/appleAuth'
 // - Il corpo e' JSON {payload} come nell'esempio di Apple; payload= in forma di
 //   form costa una riga (A1, confermato solo in produzione). Mai nei log: il JWS,
 //   il corpo, un sub accanto a un'e-mail.
+// Come la revoca, dipende dalla configurazione e non dall'interruttore: a
+// interruttore spento gli utenti gia' collegati esistono ancora, e una notifica
+// persa non torna. 404 solo con l'accesso spento o Apple non configurato.
 export const dynamic = 'force-dynamic'
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
@@ -29,7 +32,7 @@ function payloadOf(text: string): unknown {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  if (!appleEnabled()) return reply(404)
+  if (!authEnabled() || !appleConfigured()) return reply(404)
   const text = await req.text()
   if (Buffer.byteLength(text) > MAX_BYTES) return reply(413)
   const payload = payloadOf(text)
