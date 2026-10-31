@@ -70,7 +70,7 @@ s1_output="$(npx tsx -e '
 (async () => {
   const m = await import("./lib/scrapers/runner")
   const lomb = m.getSourcesByRegion("lombardia").map((e) => e.id)
-  if (lomb.join(",") !== "solosagre,opendata_lombardia,in-lombardia") {
+  if (lomb.join(",") !== "solosagre,opendata_lombardia,in-lombardia,lariofiere") {
     throw new Error("getSourcesByRegion(\"lombardia\") = " + lomb.join(","))
   }
   // Fase 15 (15-05-PLAN.md, SoloSagre nazionale): "molise" NON e piu un
@@ -133,13 +133,14 @@ s2_output="$(npx tsx -e '
   // host proprio, tourism.api.opendatahub.com, distinto da tutti i
   // precedenti — 6 gruppi. 2026-09-20: settimo host data.comune.fi.it
   // (Comune di Firenze), ottavo eventi.comune.torino.it (Comune di Torino),
-  // nono www.comune.roma.it (Comune di Roma) — 9 gruppi adesso.
+  // nono www.comune.roma.it (Comune di Roma). 2026-10-31: decimo
+  // www.lariofiere.it (Lariofiere, Erba) — 10 gruppi adesso.
   // Questa asserzione segue il numero
   // reale di host distinti dichiarati in SOURCE_META, aggiornata ad ogni
   // sorgente nuova che porta un host proprio.
   const real = m.groupSourcesByHost(SOURCE_REGISTRY)
-  if (real.length !== 9) {
-    throw new Error("registry reale atteso 9 gruppi (host distinti), ottenuto " + real.length)
+  if (real.length !== 10) {
+    throw new Error("registry reale atteso 10 gruppi (host distinti), ottenuto " + real.length)
   }
 })().catch((err) => { console.error("FAIL: " + err.message); process.exit(1) })
 ' 2>&1)" && s2_code=0 || s2_code=$?

@@ -419,6 +419,22 @@ export const SOURCE_META: SourceMeta[] = [
       Altro: 'Altro'
     }
   },
+  {
+    // Lariofiere, polo fieristico di Erba (CO) — www.lariofiere.it (2026-10-31).
+    // Ente privato, robots.txt senza divieti ne' Crawl-delay; si prendono
+    // solo nome, date e sede, due richieste per esecuzione.
+    // In FONDO di proposito (l'ordine e' un contratto, vedi torino/roma).
+    // Nessuna riga di crontab nuova: lombardia ha gia' la sua.
+    id: 'lariofiere',
+    region: 'lombardia',
+    type: 'html',
+    url: 'https://www.lariofiere.it/',
+    // L'organizzatore e' la fonte autorevole per le date delle sue fiere.
+    trustRank: 2,
+    categoryMap: {
+      'Fiere e mercati': 'Fiere e mercati'
+    }
+  },
 ]
 
 /**
