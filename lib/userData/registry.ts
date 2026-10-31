@@ -98,6 +98,19 @@ export const USER_DATA_REGISTRY: readonly UserDataEntry[] = [
       })
   },
   {
+    table: 'push_devices',
+    exportKey: 'pushDevices',
+    // Per ogni dispositivo si esporta quale build riceve le notifiche (sandbox o production), la versione
+    // dell'app e da quando: MAI l'identificativo del dispositivo, che non e' un contenuto dell'utente e
+    // sopravvivrebbe all'account nel file scaricato.
+    exportRows: async (userId) =>
+      prisma.pushDevice.findMany({
+        where: { userId },
+        select: { environment: true, appVersion: true, createdAt: true, lastSeenAt: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+      })
+  },
+  {
     table: 'user_preferences',
     exportKey: 'preferences',
     // onboardedAt dice solo che la finestra di benvenuto e' stata mostrata: nessun consenso e' registrato.
