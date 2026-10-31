@@ -1,0 +1,202 @@
+{
+  "request": "GET /api/events?search=<M>&limit=100",
+  "status": 200,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "object"
+    ],
+    "$.cache": [
+      "object"
+    ],
+    "$.cache.age_hours": [
+      "null"
+    ],
+    "$.cache.fresh": [
+      "boolean"
+    ],
+    "$.cache.hit": [
+      "boolean"
+    ],
+    "$.cache.last_event_count": [
+      "null"
+    ],
+    "$.cache.refreshing": [
+      "boolean"
+    ],
+    "$.coverage": [
+      "null"
+    ],
+    "$.events": [
+      "array"
+    ],
+    "$.events[]": [
+      "object"
+    ],
+    "$.events[].address": [
+      "null",
+      "string"
+    ],
+    "$.events[].canonicalCategory": [
+      "string"
+    ],
+    "$.events[].canonicalEventId": [
+      "null"
+    ],
+    "$.events[].category": [
+      "string"
+    ],
+    "$.events[].comune": [
+      "null",
+      "object"
+    ],
+    "$.events[].comune.name": [
+      "string"
+    ],
+    "$.events[].comune.provinceCode": [
+      "string"
+    ],
+    "$.events[].comuneId": [
+      "null",
+      "number"
+    ],
+    "$.events[].coordinateSource": [
+      "null",
+      "string"
+    ],
+    "$.events[].createdAt": [
+      "string"
+    ],
+    "$.events[].dateEnd": [
+      "null",
+      "string"
+    ],
+    "$.events[].dateStart": [
+      "string"
+    ],
+    "$.events[].description": [
+      "null",
+      "string"
+    ],
+    "$.events[].id": [
+      "number"
+    ],
+    "$.events[].imageUrl": [
+      "null",
+      "string"
+    ],
+    "$.events[].latitude": [
+      "null",
+      "number"
+    ],
+    "$.events[].locationName": [
+      "null",
+      "string"
+    ],
+    "$.events[].longitude": [
+      "null",
+      "number"
+    ],
+    "$.events[].mergeReason": [
+      "null",
+      "string"
+    ],
+    "$.events[].mergeScore": [
+      "null",
+      "number"
+    ],
+    "$.events[].phone": [
+      "null",
+      "string"
+    ],
+    "$.events[].region": [
+      "null",
+      "string"
+    ],
+    "$.events[].resolvedLatitude": [
+      "null",
+      "number"
+    ],
+    "$.events[].resolvedLongitude": [
+      "null",
+      "number"
+    ],
+    "$.events[].source": [
+      "string"
+    ],
+    "$.events[].sourceId": [
+      "string"
+    ],
+    "$.events[].sourceUrl": [
+      "null",
+      "string"
+    ],
+    "$.events[].title": [
+      "string"
+    ],
+    "$.events[].updatedAt": [
+      "string"
+    ],
+    "$.limit": [
+      "number"
+    ],
+    "$.mapEvents": [
+      "array"
+    ],
+    "$.mapEvents[]": [
+      "object"
+    ],
+    "$.mapEvents[].category": [
+      "string"
+    ],
+    "$.mapEvents[].coordinateSource": [
+      "null",
+      "string"
+    ],
+    "$.mapEvents[].dateStart": [
+      "string"
+    ],
+    "$.mapEvents[].id": [
+      "number"
+    ],
+    "$.mapEvents[].imageUrl": [
+      "null",
+      "string"
+    ],
+    "$.mapEvents[].latitude": [
+      "null",
+      "number"
+    ],
+    "$.mapEvents[].locationName": [
+      "null",
+      "string"
+    ],
+    "$.mapEvents[].longitude": [
+      "null",
+      "number"
+    ],
+    "$.mapEvents[].resolvedLatitude": [
+      "null",
+      "number"
+    ],
+    "$.mapEvents[].resolvedLongitude": [
+      "null",
+      "number"
+    ],
+    "$.mapEvents[].source": [
+      "string"
+    ],
+    "$.mapEvents[].sourceId": [
+      "string"
+    ],
+    "$.mapEvents[].title": [
+      "string"
+    ],
+    "$.offset": [
+      "number"
+    ],
+    "$.total": [
+      "number"
+    ]
+  }
+}
