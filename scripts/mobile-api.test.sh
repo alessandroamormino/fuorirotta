@@ -23,6 +23,7 @@
 #   P5  tetto di 10 dispositivi per utente: l'11esimo fa sparire il meno recente
 #   P6  D-10: revoca dal web, sign-out col bearer e cancellazione dell'account tolgono il dispositivo
 #   P7  l'export elenca pushDevices senza token
+#   C1  tracer: GET /api/v1/config?version= senza credenziali -> update-required / update-recommended / ok dalle soglie dell'ambiente
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -49,6 +50,13 @@ auth_env=(
   "BETTER_AUTH_SECRET=mobile-api-test-secret-0123456789abcdef"
   GOOGLE_CLIENT_ID=test-client-id.apps.googleusercontent.com
   GOOGLE_CLIENT_SECRET=test-client-secret
+)
+
+# Variabili che il container dell'app riceve in produzione (docker-compose.yml): soglie di versione
+# (API-04) e identita' dell'app per .well-known (API-05). Solo per il dev server, non per l'helper.
+app_env=(
+  APP_MIN_VERSION=1.2.0
+  APP_RECOMMENDED_VERSION=1.4.0
 )
 
 fail() {
@@ -118,7 +126,7 @@ delete_users
 delete_fixture_events
 
 # --- Dev server effimero, Postgres locale reale -----------------------------
-bash scripts/dev-db.sh env "${auth_env[@]}" npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
+bash scripts/dev-db.sh env "${auth_env[@]}" "${app_env[@]}" npx next dev -p "${port}" >"${tmp_dir}/dev-server.log" 2>&1 &
 server_pid=$!
 wait_for_port "${port}"
 echo "ok  dev server locale avviato sulla porta ${port} (scripts/dev-db.sh, Postgres locale)"
@@ -450,9 +458,9 @@ for f in m5w m5a; do
 done
 code="$(call m5n GET /api/v1/me/state 198.51.100.206)"
 [[ "${code}" == "200" && "$(cat "${tmp_dir}/m5n.b")" == '{"enabled":true,"user":null}' ]] || fail "M5: il corpo anonimo deve restare {\"enabled\":true,\"user\":null}, ottenuto '$(cat "${tmp_dir}/m5n.b")'"
-# D-01, parte statica: api-contract lo importano solo userAgent, lo stato e l'API v1, mai pagine, componenti o /api/events.
-stray="$(grep -rl 'api-contract' app components lib --include='*.ts' --include='*.tsx' | grep -vE '^(lib/userAgent\.ts|lib/api-contract\.ts|app/api/v1/)' || true)"
-[[ -z "${stray}" ]] || fail "M5: api-contract importato fuori da lib/userAgent.ts e app/api/v1: ${stray}"
+# D-01, parte statica: api-contract lo importano solo userAgent, il cliente APNs, l'API v1 e .well-known, mai pagine, componenti o /api/events.
+stray="$(grep -rl 'api-contract' app components lib --include='*.ts' --include='*.tsx' | grep -vE '^(lib/userAgent\.ts|lib/api-contract\.ts|lib/push/|app/api/v1/|app/\.well-known/)' || true)"
+[[ -z "${stray}" ]] || fail "M5: api-contract importato fuori da lib/userAgent.ts, lib/push, app/api/v1 e app/.well-known: ${stray}"
 echo "ok  M5: da loggati (cookie e bearer) /me/state ha plan 'beta' e features = FEATURES; l'anonimo resta {\"enabled\":true,\"user\":null}; api-contract non e' importato da pagine, componenti o /api/events"
 
 # --- M6: concorrenza (bordo API-02) e stessa lista da cookie e bearer ----------------------
@@ -652,3 +660,21 @@ code="$(call p7b GET /api/v1/me/export 198.51.100.218 -H "Cookie: fuorirotta.ses
   || fail "P7: pushDevices inattesi: $(json_get "${tmp_dir}/p7b.b" 'j.pushDevices')"
 [[ "$(grep -ci "${p7_tok}" "${tmp_dir}/p7b.b" || true)" == "0" ]] || fail "P7: il token del dispositivo non deve comparire nell'export"
 echo "ok  P7: l'export ha pushDevices con un oggetto {appVersion, createdAt, environment, lastSeenAt} e il token non compare da nessuna parte"
+
+# --- C1 (tracer): la politica di versione, pubblica, su HTTP vero ------------------------------------
+# Nessun cookie, nessun bearer, nessun Origin: e' quello che manda un'app appena installata.
+c1_get() { # <nome> <versione|-> -> codice
+  if [[ "$2" == "-" ]]; then call "$1" GET /api/v1/config 198.51.100.230; else call "$1" GET "/api/v1/config?version=$2" 198.51.100.230; fi
+}
+[[ "$(c1_get c1a 1.1.0)" == "200" ]] || fail "C1: GET config?version=1.1.0: atteso 200"
+c1_ct="$(grep -i '^content-type:' "${tmp_dir}/c1a.h" | head -n 1 | tr -d '\r' | tr 'A-Z' 'a-z')"
+case "${c1_ct}" in *application/json*) ;; *) fail "C1: content-type atteso application/json, ottenuto '${c1_ct}'" ;; esac
+c1_cc="$(grep -i '^cache-control:' "${tmp_dir}/c1a.h" | head -n 1 | cut -d: -f2- | sed 's/^ *//' | tr -d '\r')"
+[[ "${c1_cc}" == "no-store" ]] || fail "C1: cache-control atteso 'no-store', ottenuto '${c1_cc}'"
+[[ "$(cat "${tmp_dir}/c1a.b")" == '{"minimumVersion":"1.2.0","recommendedVersion":"1.4.0","status":"update-required"}' ]] \
+  || fail "C1: corpo inatteso con version=1.1.0: $(cat "${tmp_dir}/c1a.b")"
+[[ "$(c1_get c1b 1.3.0)" == "200" && "$(json_get "${tmp_dir}/c1b.b" 'j.status')" == "update-recommended" ]] || fail "C1: 1.3.0 doveva dare update-recommended: $(cat "${tmp_dir}/c1b.b")"
+[[ "$(c1_get c1c 1.4.0)" == "200" && "$(json_get "${tmp_dir}/c1c.b" 'j.status')" == "ok" ]] || fail "C1: 1.4.0 doveva dare ok: $(cat "${tmp_dir}/c1c.b")"
+[[ "$(c1_get c1d -)" == "200" && "$(json_get "${tmp_dir}/c1d.b" '"status" in j')" == "false" ]] || fail "C1: senza version non ci deve essere la chiave status: $(cat "${tmp_dir}/c1d.b")"
+[[ "$(c1_get c1e v1.0)" == "200" && "$(json_get "${tmp_dir}/c1e.b" '"status" in j')" == "false" ]] || fail "C1: una versione malformata non deve dare status: $(cat "${tmp_dir}/c1e.b")"
+echo "ok  C1: GET /api/v1/config senza credenziali -> 200 application/json no-store; 1.1.0 update-required, 1.3.0 update-recommended, 1.4.0 ok, senza version o malformata nessuna chiave status"

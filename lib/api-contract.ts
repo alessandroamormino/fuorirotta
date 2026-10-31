@@ -46,3 +46,18 @@ export type ApnsEnvironment = (typeof APNS_ENVIRONMENTS)[number]
 export const APNS_TOKEN_RE = /^[0-9a-fA-F]{64,200}$/
 export const DEVICE_CAP = 10
 export type DeviceRegistration = { token: string; environment: ApnsEnvironment; appVersion?: string }
+
+// Politica di versione (Fase 26, API-04). GET /api/v1/config[?version=1.4.0] e' pubblica: niente
+// sessione, niente database. Per l'app: `update-required` = schermata bloccante "Aggiorna";
+// `update-recommended` = avviso che si puo' chiudere; `ok` o nessun `status` (versione mancante o
+// illeggibile) = si procede. Il minimo si alza SOLO per un cambio incompatibile dell'API, vale anche
+// in TestFlight (D-07). Le soglie sono variabili d'ambiente del server (D-06): si cambiano senza
+// una release, e una soglia vuota o malformata e' `null` e non blocca nessuno. Una versione e' da 1 a
+// 4 interi separati da punto (1.4, 1.4.0, 1.10.2.1); si confronta componente per componente.
+export type VersionStatus = 'ok' | 'update-recommended' | 'update-required'
+export type AppConfig = { minimumVersion: string | null; recommendedVersion: string | null; status?: VersionStatus }
+
+// Link universali (API-05): i percorsi del sito che iOS apre nell'app. Sono pagine vere
+// (app/eventi/[id] e app/l/[token]); cambiarli non richiede una release, ma la CDN di Apple tiene
+// il file in cache.
+export const UNIVERSAL_LINK_PATHS = ['/eventi/*', '/l/*'] as const
