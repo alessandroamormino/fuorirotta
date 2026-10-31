@@ -59,7 +59,9 @@
     ".next-follows-feed-test/types/**/*.ts",
     ".next-follows-feed-test/dev/types/**/*.ts",
     ".next-share-test/types/**/*.ts",
-    ".next-share-test/dev/types/**/*.ts"
+    ".next-share-test/dev/types/**/*.ts",
+    ".next-mobile-api-test/types/**/*.ts",
+    ".next-mobile-api-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

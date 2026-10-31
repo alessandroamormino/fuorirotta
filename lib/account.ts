@@ -19,9 +19,18 @@ export function noStoreJson(body: unknown, status = 200): Response {
  * di toccare il database. E' una difesa in piu' accanto a SameSite=Lax.
  * Origin assente o diverso da BETTER_AUTH_URL -> 403. Con l'interruttore
  * spento prima viene il 404: la superficie non esiste.
+ * Eccezione (Fase 26): una richiesta con Authorization: Bearer e SENZA header
+ * Cookie salta il controllo, perche' e' un client nativo (l'app non manda Origin).
  */
 export function assertSameOrigin(req: Request): Response | null {
   if (!getAuth()) return noStoreJson({ error: 'not-found' }, 404)
+  // Un browser non puo' aggiungere Authorization a una richiesta cross-site senza un
+  // preflight CORS, che questo sito non approva mai (nessun Access-Control-Allow-*), e
+  // un'app nativa non manda Origin. Chi porta anche un Cookie e' una richiesta da browser
+  // e tiene il controllo: altrimenti un bearer non verificabile accanto a un cookie valido
+  // autenticherebbe via cookie senza Origin. Un bearer non valido passa di qui e poi cade
+  // in requireUser con 401: l'ordine Origin -> sessione -> corpo resta, nessuna query prima.
+  if (/^bearer\s+\S/i.test(req.headers.get('authorization') ?? '') && !req.headers.has('cookie')) return null
   const base = process.env.BETTER_AUTH_URL
   const origin = req.headers.get('origin')
   if (!base || !origin || origin !== new URL(base).origin) return noStoreJson({ error: 'origin' }, 403)
