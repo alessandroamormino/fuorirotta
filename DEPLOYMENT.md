@@ -631,6 +631,83 @@ section; expect only the acme-challenge location, if any):
 docker exec nginx nginx -T 2>/dev/null | grep -n 'well-known'
 ```
 
+### Test push (Phase 26, D-11)
+
+No endpoint can send a push. The only way is a terminal script on the server, `scripts/send-test-push.sh`, which
+runs `scripts/send-test-push.ts` inside a throwaway `node:24.22.1-alpine` container with the checkout mounted
+(same reason as `cron-maintenance.sh`: Prisma's engine on disk is musl). The APNs key lives **only** in the host
+`.env`, is **never** in `docker-compose.yml` or in the app container, and reaches the throwaway container by name
+(`-e APNS_PRIVATE_KEY_B64`, no value on the command line, so it does not show in `ps`). `APNS_KEY_ID` and
+`APNS_PRIVATE_KEY_B64` are host-only names; `APPLE_TEAM_ID` and `APPLE_APP_BUNDLE_ID` are shared with the Apple
+sign-in section above. A dedicated APNs key is recommended over reusing the Sign in with Apple key: separate
+revocation, and it stays out of the app container.
+
+What each mode proves:
+
+- `--reach`: no credential at all. A throwaway key is sent to both Apple hosts and each must answer
+  `403 InvalidProviderToken`. It proves DNS, outbound 443, TLS and HTTP/2 from this server to Apple.
+- `--token <hex> --env sandbox|production`: one device, no database, never deletes anything. With the real key it
+  proves Apple accepts the key, key id, team and host.
+- `--user <id|email>`: every device of that user, deleting the ones Apple reports dead. Needs a real device, so
+  from Phase 27 on.
+
+Exit codes: `0` ok, `1` negative outcome (configuration, retry, rejected, network, user not found), `2` incomplete
+configuration (the missing **names** are printed, nothing goes on the network).
+
+All commands run from `/opt/docker/fuori-rotta/fuorirotta`, one at a time, each with its expected output.
+
+Can this server reach Apple? Expect two lines, `sandbox api.sandbox.push.apple.com 403 InvalidProviderToken` and
+`production api.push.apple.com 403 InvalidProviderToken`, and exit `0`. A timeout (`nessuna risposta`) means
+outbound 443 to Apple is blocked (port 2197 is Apple's documented alternative):
+
+```bash
+bash scripts/send-test-push.sh --reach
+```
+
+Check no APNs variable is there yet (expect `0`):
+
+```bash
+grep -c '^APNS_' .env
+```
+
+Append the key id (replace the placeholder; if the name is already there the command does nothing):
+
+```bash
+grep -q '^APNS_KEY_ID=' .env || printf 'APNS_KEY_ID=%s\n' '<KEY_ID>' >> .env
+```
+
+Store the key. On the Mac, `base64 < AuthKey_<KEYID>.p8 | tr -d '\n' | pbcopy` copies the one-line value. On the
+server this reads it hidden and appends it once; paste when the prompt waits and press Enter:
+
+```bash
+grep -q '^APNS_PRIVATE_KEY_B64=' .env || { read -rs K && printf 'APNS_PRIVATE_KEY_B64=%s\n' "$K" >> .env; unset K; }
+```
+
+No container recreate is needed: these names are read by the script from `.env`, not by the app. With the real
+key and a fake token, expect `sandbox 400 BadDeviceToken -> dead` and exit `0`:
+
+```bash
+bash scripts/send-test-push.sh --token 0000000000000000000000000000000000000000000000000000000000000000 --env sandbox
+```
+
+How to read the answers:
+
+| Answer | Meaning |
+|--------|---------|
+| `400 BadDeviceToken` | key, key id, team and host accepted; the topic (bundle id) is not yet proven |
+| `403 InvalidProviderToken` | wrong `APNS_KEY_ID` or `APPLE_TEAM_ID`, corrupt `.p8`, or a key without the APNs service |
+| `403 BadEnvironmentKeyIdInToken` | the key is restricted to the other environment |
+| `403 ExpiredProviderToken` | the server clock is off by more than an hour |
+| `400 BadTopic` or `400 DeviceTokenNotForTopic` | `APPLE_APP_BUNDLE_ID` is wrong |
+| `410 Unregistered` | the app is gone from that device: the device is dead |
+
+From Phase 27, with a real device registered (replace the placeholder; the device's row is deleted only if Apple
+says it is dead):
+
+```bash
+bash scripts/send-test-push.sh --user '<EMAIL>'
+```
+
 ### Backups (D-18)
 
 **Why.** Supabase Free has no backups, and from Phase 21 the database holds accounts, the first data
