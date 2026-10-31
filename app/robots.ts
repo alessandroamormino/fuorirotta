@@ -9,7 +9,6 @@ export default function robots(): MetadataRoute.Robots {
 				disallow: [
 					"/api/",
 					"/cal/",
-					"/_next/",
 					"/*.json$",
 					"/*.map$",
 				],

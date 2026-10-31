@@ -2,10 +2,18 @@ import { prisma } from "@/lib/prisma";
 import { Event } from "@/lib/types";
 import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent, groupMembersByCanonical } from "@/lib/dedup/compose";
+import type { Metadata } from "next";
 import HomeClient from "./HomeClient";
 import { availableEventsWhere, windowStartToday } from "@/lib/dateWindow";
 
 export const revalidate = 300; // Rivalidate ogni 5 minuti
+
+// Il titolo di default del layout e' solo "Fuorirotta": per la home serve
+// quello che la gente cerca. Canonical esplicito, come le pagine regione.
+export const metadata: Metadata = {
+	title: { absolute: "Fuorirotta — Eventi, sagre e feste vicino a te" },
+	alternates: { canonical: "/" },
+};
 
 export default async function Home() {
 	// Le 12 schede dell'HTML devono essere le STESSE della prima pagina che
@@ -66,5 +74,12 @@ export default async function Home() {
 	// Decimal e Date non attraversano il confine Server -> Client Component.
 	const initialEvents: Event[] = composedEvents.map(serializeEvent);
 
-	return <HomeClient initialEvents={initialEvents} initialTotal={total} />;
+	// H1 solo per motori di ricerca e lettori di schermo: la home e' un guscio
+	// da applicazione a tutto schermo (12-11), un titolo visibile lo romperebbe.
+	return (
+		<>
+			<h1 className="sr-only">Eventi, sagre e feste vicino a te</h1>
+			<HomeClient initialEvents={initialEvents} initialTotal={total} />
+		</>
+	);
 }
