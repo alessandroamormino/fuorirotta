@@ -146,7 +146,13 @@ export default async function EventDetailPage({
 	// prima di costruire i metadati strutturati e serializzare per il client.
 	const composedEvent = event ? composeEvent(event, members) : null;
 
-	// Costruisce i dati strutturati Schema.org/Event per Google
+	// Costruisce i dati strutturati Schema.org/Event per Google. Niente
+	// organizer: Fuorirotta non organizza gli eventi, e la sorgente non dice chi.
+	// Stesso cast di generateMetadata: getEvent include comune ma il tipo restituito no.
+	const comune = (composedEvent as { comune?: { name: string; provinceCode: string } | null } | null)?.comune ?? null;
+	const placeName = composedEvent
+		? decodeHtmlEntities(composedEvent.locationName ?? "").trim() || comune?.name || null
+		: null;
 	const jsonLd = composedEvent
 		? {
 				"@context": "https://schema.org",
@@ -164,11 +170,26 @@ export default async function EventDetailPage({
 					: undefined,
 				url: `${BASE_URL}/eventi/${eventId}`,
 				...(composedEvent.imageUrl ? { image: composedEvent.imageUrl } : {}),
-				location: composedEvent.locationName
+				// Google vuole location.address per mostrare l'evento nei risultati
+				// arricchiti: quando la sorgente non da' un indirizzo, il comune
+				// agganciato e' comunque un indirizzo vero (localita' + provincia).
+				location: placeName
 					? {
 							"@type": "Place",
-							name: decodeHtmlEntities(composedEvent.locationName),
-							...(composedEvent.address ? { address: composedEvent.address } : {}),
+							name: placeName,
+							address: {
+								"@type": "PostalAddress",
+								...(composedEvent.address
+									? { streetAddress: decodeHtmlEntities(composedEvent.address) }
+									: {}),
+								...(comune
+									? {
+											addressLocality: comune.name,
+											addressRegion: comune.provinceCode,
+										}
+									: {}),
+								addressCountry: "IT",
+							},
 							...(composedEvent.latitude && composedEvent.longitude
 								? {
 										geo: {
@@ -180,11 +201,6 @@ export default async function EventDetailPage({
 								: {}),
 						}
 					: undefined,
-				organizer: {
-					"@type": "Organization",
-					name: "Fuorirotta",
-					url: BASE_URL,
-				},
 			}
 		: null;
 

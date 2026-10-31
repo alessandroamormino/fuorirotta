@@ -22,12 +22,13 @@ export const metadata: Metadata = {
 		template: "%s | Fuorirotta",
 	},
 	description:
-		"Scopri eventi, sagre, feste e manifestazioni vicino a te in Lombardia. Fuorirotta raccoglie gli eventi locali su un'unica piattaforma con mappa interattiva.",
+		"Scopri eventi, sagre, feste e manifestazioni vicino a te in tutta Italia. Fuorirotta raccoglie gli eventi locali su un'unica piattaforma con mappa interattiva.",
 	keywords: [
+		"eventi vicino a me",
+		"sagre",
+		"feste locali",
 		"eventi lombardia",
 		"sagre lombardia",
-		"feste locali",
-		"eventi vicino a me",
 		"cosa fare nel weekend",
 		"manifestazioni lombardia",
 		"eventi milano",
@@ -44,15 +45,15 @@ export const metadata: Metadata = {
 		locale: "it_IT",
 		url: SITE_URL,
 		siteName: "Fuorirotta",
-		title: "Fuorirotta — Eventi, Sagre e Feste in Lombardia",
+		title: "Fuorirotta — Eventi, Sagre e Feste vicino a te",
 		description:
-			"Scopri eventi, sagre, feste e manifestazioni vicino a te in Lombardia con mappa interattiva.",
+			"Scopri eventi, sagre, feste e manifestazioni vicino a te in tutta Italia, con mappa interattiva.",
 	},
 	twitter: {
 		card: "summary_large_image",
-		title: "Fuorirotta — Eventi, Sagre e Feste in Lombardia",
+		title: "Fuorirotta — Eventi, Sagre e Feste vicino a te",
 		description:
-			"Scopri eventi, sagre, feste e manifestazioni vicino a te in Lombardia con mappa interattiva.",
+			"Scopri eventi, sagre, feste e manifestazioni vicino a te in tutta Italia, con mappa interattiva.",
 	},
 };
 

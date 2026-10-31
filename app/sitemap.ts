@@ -33,7 +33,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		orderBy: {
 			dateStart: "asc",
 		},
-		take: 5000,
+		// Google accetta 50.000 URL per sitemap: il tetto storico di 5.000
+		// tagliava fuori gli eventi piu' lontani (5.000 esatti il 2026-10-31).
+		// ponytail: un file solo; oltre ~45.000 eventi futuri serve un indice di sitemap.
+		take: 45000,
 	});
 
 	// ROLL-05/D-10: solo le regioni sopra la stessa soglia di copertura di
