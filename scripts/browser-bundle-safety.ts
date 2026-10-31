@@ -25,7 +25,7 @@
  *   if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module)
  *
  * Seconda regola (piano 21-06): nessun file 'use client' puo' raggiungere
- * SERVER_ONLY_MODULES (lib/auth.ts, lib/account.ts, lib/prisma.ts, lib/appleAuth.ts). Il gate si
+ * SERVER_ONLY_MODULES (lib/auth.ts, lib/account.ts, lib/prisma.ts, lib/appleAuth.ts, lib/push/apns.ts, lib/push/send.ts). Il gate si
  * dimostra capace di fallire a ogni esecuzione, con un'entrata sintetica.
  *
  * Exit: 0 pulito, 1 se un modulo raggiungibile dal client ha la forma nuda o se
@@ -42,7 +42,7 @@ const EXTS = ['.ts', '.tsx', '.js', '.jsx']
 // di accesso, i segreti letti dall'ambiente e il pool del database. `server-only`
 // non e' installato e gli script tsx importano lib/auth.ts, quindi il pacchetto
 // non sarebbe comunque applicabile: questo controllo sul grafo lo sostituisce.
-const SERVER_ONLY_MODULES = ['lib/auth.ts', 'lib/account.ts', 'lib/prisma.ts', 'lib/appleAuth.ts']
+const SERVER_ONLY_MODULES = ['lib/auth.ts', 'lib/account.ts', 'lib/prisma.ts', 'lib/appleAuth.ts', 'lib/push/apns.ts', 'lib/push/send.ts']
 
 function walk(dir: string, out: string[] = []): string[] {
   const full = join(ROOT, dir)

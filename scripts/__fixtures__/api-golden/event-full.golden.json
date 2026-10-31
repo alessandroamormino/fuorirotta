@@ -1,0 +1,88 @@
+{
+  "request": "GET /api/events/<id> (tutte le colonne valorizzate)",
+  "status": 200,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "object"
+    ],
+    "$.address": [
+      "string"
+    ],
+    "$.canonicalCategory": [
+      "string"
+    ],
+    "$.canonicalEventId": [
+      "null"
+    ],
+    "$.category": [
+      "string"
+    ],
+    "$.comuneId": [
+      "number"
+    ],
+    "$.coordinateSource": [
+      "string"
+    ],
+    "$.createdAt": [
+      "string"
+    ],
+    "$.dateEnd": [
+      "string"
+    ],
+    "$.dateStart": [
+      "string"
+    ],
+    "$.description": [
+      "string"
+    ],
+    "$.id": [
+      "number"
+    ],
+    "$.imageUrl": [
+      "string"
+    ],
+    "$.latitude": [
+      "number"
+    ],
+    "$.locationName": [
+      "string"
+    ],
+    "$.longitude": [
+      "number"
+    ],
+    "$.mergeReason": [
+      "string"
+    ],
+    "$.mergeScore": [
+      "number"
+    ],
+    "$.phone": [
+      "string"
+    ],
+    "$.region": [
+      "string"
+    ],
+    "$.resolvedLatitude": [
+      "number"
+    ],
+    "$.resolvedLongitude": [
+      "number"
+    ],
+    "$.source": [
+      "string"
+    ],
+    "$.sourceId": [
+      "string"
+    ],
+    "$.sourceUrl": [
+      "string"
+    ],
+    "$.title": [
+      "string"
+    ],
+    "$.updatedAt": [
+      "string"
+    ]
+  }
+}

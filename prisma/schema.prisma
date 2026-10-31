@@ -220,6 +220,7 @@ model User {
   shareLink     ShareLink?
   follows       UserFollow[]
   preference    UserPreference?
+  pushDevices   PushDevice[]
 
   @@map("auth_user")
 }
@@ -234,6 +235,7 @@ model Session {
   userAgent String?  @map("user_agent")
   userId    String   @map("user_id")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushDevices PushDevice[]
 
   @@index([userId])
   @@map("auth_session")
@@ -369,4 +371,29 @@ model UserPreference {
   onboardedAt DateTime? @map("onboarded_at") @db.Timestamptz(6)
 
   @@map("user_preferences")
+}
+
+// Il token APNs di un'installazione iPhone (D-14: esadecimale, minuscolo). L'ambiente lo
+// sceglie la build (D-16): 'sandbox' per Xcode e le build di sviluppo, 'production' per
+// TestFlight e App Store. Il dispositivo e' legato alla SESSIONE che lo ha registrato: uscire
+// dall'app, revocare dal web, la pulizia delle sessioni scadute e la cancellazione dell'account
+// lo tolgono tutti a cascata (D-10). Il token e' unico: un telefono passato a un altro account
+// cambia proprietario invece di restare legato al vecchio (Pitfall 5). La colonna si chiama
+// device_token e non token perche' il gate dei nomi segreti (check:user-data S7) non scatti;
+// nessun CHECK su environment, lo valida la rotta.
+model PushDevice {
+  id          Int      @id @default(autoincrement())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId   String   @map("session_id")
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  deviceToken String   @unique @map("device_token") @db.VarChar(200)
+  environment String   @db.VarChar(10)
+  appVersion  String?  @map("app_version") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@map("push_devices")
 }

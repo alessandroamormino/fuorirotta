@@ -378,6 +378,12 @@ async function main(): Promise<void> {
   device('Firefox su Windows', UA.firefoxWindows, 'Firefox su Windows', 'desktop')
   device('stringa vuota', '', 'Browser sconosciuto', 'desktop')
   device('null', null, 'Browser sconosciuto', 'desktop')
+  // L'app (D-13): "FuoriRotta/<versione> (<piattaforma>; <dispositivo>)", controllata per prima.
+  device('app iPhone', 'FuoriRotta/1.0.0 (iOS; iPhone)', 'App iPhone', 'phone')
+  device('app iPad', 'FuoriRotta/2.3 (iOS; iPad)', 'App iPad', 'tablet')
+  device('app Android', 'FuoriRotta/1.0.0 (Android; Android)', 'App Android', 'phone')
+  device('lo user agent predefinito di iOS (CFNetwork) non basta, l\'app deve impostarlo', 'FuoriRotta/1 CFNetwork/1494.0.7 Darwin/23.4.0', 'Browser sconosciuto', 'desktop')
+  device('solo il nome dell\'app', 'FuoriRotta', 'Browser sconosciuto', 'desktop')
   device('curl', 'curl/8.4.0', 'Browser sconosciuto', 'desktop')
 
   const at = (iso: string) => new Date(iso)

@@ -1,3 +1,4 @@
+import { FEATURES, PLAN } from '@/lib/api-contract'
 import { appleEnabled, getAuth } from '@/lib/auth'
 import { googleProfileImage } from '@/lib/profileImage'
 
@@ -21,6 +22,9 @@ export async function GET(req: Request): Promise<Response> {
     { enabled: true, user: session
         ? { name: session.user.name, email: session.user.email, image: googleProfileImage(session.user.image) }
         : null,
+      // D-04: piano e funzioni solo da loggati, con la stessa tecnica di `apple` qui sotto,
+      // cosi' il corpo anonimo e quello a interruttore spento restano identici a prima.
+      ...(session ? { plan: PLAN, features: [...FEATURES] } : {}),
       // La chiave c'e' solo con Apple acceso e manca del tutto da spento: ogni gate che
       // confronta questo corpo byte per byte (check:auth-flow S2, check:anon A5/B5) resta valido.
       ...(appleEnabled() ? { apple: true } : {}) },

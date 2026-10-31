@@ -1,11 +1,14 @@
 // User agent -> etichetta italiana del dispositivo ("Chrome su Mac"), senza
 // dipendenze (D-08). Pura: vale sul server e nei gate.
 //
-// L'ordine dei controlli conta, perche' gli user agent si mimano a vicenda:
+// L'ordine dei controlli conta (prima di tutto l'app, FuoriRotta/1.0.0 (iOS; iPhone),
+// che potrebbe nominare anche un motore di browser), perche' gli user agent si mimano a vicenda:
 // Edge dichiara anche Chrome/ e Safari/, Chrome dichiara Safari/, iPhone e
 // iPad dichiarano "Mac OS X", Android dichiara Linux.
 // ponytail: euristica, non un parser completo; un browser raro cade in
 // 'Browser sconosciuto'. Se serve di piu', ua-parser-js.
+
+import { APP_USER_AGENT_RE } from './api-contract'
 
 export type DeviceKind = 'phone' | 'tablet' | 'desktop'
 
@@ -13,6 +16,8 @@ const UNKNOWN = { label: 'Browser sconosciuto', kind: 'desktop' } as const
 
 export function deviceLabel(ua: string | null | undefined): { label: string; kind: DeviceKind } {
   if (!ua) return { ...UNKNOWN }
+  const app = APP_USER_AGENT_RE.exec(ua)
+  if (app) return { label: `App ${app[1]}`, kind: app[1] === 'iPad' ? 'tablet' : 'phone' }
   const browser = /Edg\//.test(ua) ? 'Edge'
     : /OPR\/|Opera/.test(ua) ? 'Opera'
     : /Firefox\//.test(ua) ? 'Firefox'

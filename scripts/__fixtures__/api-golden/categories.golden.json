@@ -1,0 +1,19 @@
+{
+  "request": "GET /api/categories",
+  "status": 200,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "array"
+    ],
+    "$[]": [
+      "object"
+    ],
+    "$[].count": [
+      "number"
+    ],
+    "$[].name": [
+      "string"
+    ]
+  }
+}

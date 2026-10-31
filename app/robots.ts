@@ -5,7 +5,8 @@ export default function robots(): MetadataRoute.Robots {
 		rules: [
 			{
 				userAgent: "*",
-				allow: "/",
+				// Il percorso .well-known e' esplicito: il disallow dei .json non deve coprire assetlinks.json.
+				allow: ["/", "/.well-known/"],
 				disallow: [
 					"/api/",
 					"/cal/",

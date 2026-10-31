@@ -31,6 +31,8 @@
 //   N6  rifiuti (altra chiave, aud, iss, corpo, 413, 404 senza configurazione Apple) senza toccare le righe; payload= in forma di form
 //   N7  interruttore spento ma Apple configurato: la notifica si applica comunque
 //   V1  id token nativo (bundle ID) sullo stesso utente del web; un'altra audience e' rifiutata
+//   V2  come un'app: id token nativo con lo user agent dell'app, SENZA Origin e SENZA cookie ->
+//       200, set-auth-token firmato che vale come bearer, sessione etichettata 'App iPhone'
 //
 // Gli helper (startApple, applePost, follow, cookieFrom, mintGoogleUser e il
 // registro dello stub) sono funzioni con nome: il piano 03 aggiunge qui le sue
@@ -740,6 +742,32 @@ async function main(): Promise<void> {
     const sessionsBefore = await prisma.session.count({ where: { userId: v1.userId } })
     const nativeBad = await nativeSignIn('other.client')
     check('V1: la stessa identita con un altra audience e rifiutata e non crea sessioni', nativeBad.status !== 200 && (await prisma.session.count({ where: { userId: v1.userId } })) === sessionsBefore, String(nativeBad.status))
+
+    // V2: l'app vera: nessun Origin, nessun cookie, user agent dell'app (Fase 26, D-13)
+    const v2 = await mintAppleUser('v2')
+    const APP_UA = 'FuoriRotta/1.0.0 (iOS; iPhone)'
+    const v2Token = await new SignJWT({ email: v2.grant.email, email_verified: 'true', nonce: 'n2' })
+      .setProtectedHeader({ alg: 'RS256', kid: KID })
+      .setIssuer(APPLE_ORIGIN)
+      .setAudience(BUNDLE_ID)
+      .setSubject(v2.grant.sub)
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 600)
+      .sign(rsa.privateKey)
+    const appSignIn = await handler(
+      new Request(`${BASE}/api/auth/sign-in/social`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': APP_UA },
+        body: JSON.stringify({ provider: 'apple', idToken: { token: v2Token, nonce: 'n2' } }),
+      }),
+    )
+    const bearerValue = appSignIn.headers.get('set-auth-token') ?? ''
+    check('V2: id token nativo senza Origin ne cookie, con lo user agent dell\'app -> 200 e set-auth-token firmato', appSignIn.status === 200 && bearerValue.includes('.'), `${appSignIn.status} ${bearerValue ? 'con token' : 'senza set-auth-token'}`)
+    const viaBearer = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${bearerValue}` }) })
+    check('V2: il set-auth-token vale come bearer e dice l\'utente v2', viaBearer?.user.id === v2.userId, JSON.stringify(viaBearer?.user.id))
+    const { deviceLabel } = await import('../lib/userAgent')
+    const appSession = await prisma.session.findFirst({ where: { userId: v2.userId, userAgent: APP_UA } })
+    check('V2: la sessione nata dall\'app e\' \'App iPhone\' per deviceLabel', appSession !== null && deviceLabel(appSession.userAgent).label === 'App iPhone', String(appSession?.userAgent))
   } finally {
     await cleanup()
     await prisma.$disconnect()

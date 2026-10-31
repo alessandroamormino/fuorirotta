@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /.next-comuni-search-test/
+/.next-mobile-api-test/
+/.next-api-golden-test/
 /out/
 
 # production

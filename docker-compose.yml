@@ -54,6 +54,10 @@ services:
       APPLE_KEY_ID: ${APPLE_KEY_ID:-}
       APPLE_PRIVATE_KEY_B64: ${APPLE_PRIVATE_KEY_B64:-}
       APPLE_APP_BUNDLE_ID: ${APPLE_APP_BUNDLE_ID:-}
+      # Soglie della versione dell'app (Fase 26, D-06): GET /api/v1/config le legge a ogni richiesta.
+      # Cambiano col .env e una ricreazione del container, senza una release; vuote = nessuno bloccato.
+      APP_MIN_VERSION: ${APP_MIN_VERSION:-}
+      APP_RECOMMENDED_VERSION: ${APP_RECOMMENDED_VERSION:-}
     restart: unless-stopped
     networks:
       - fuorirotta-network

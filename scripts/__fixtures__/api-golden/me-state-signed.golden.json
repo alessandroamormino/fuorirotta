@@ -1,0 +1,34 @@
+{
+  "request": "GET /api/v1/me/state (da loggato)",
+  "status": 200,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "object"
+    ],
+    "$.enabled": [
+      "boolean"
+    ],
+    "$.features": [
+      "array"
+    ],
+    "$.features[]": [
+      "string"
+    ],
+    "$.plan": [
+      "string"
+    ],
+    "$.user": [
+      "object"
+    ],
+    "$.user.email": [
+      "string"
+    ],
+    "$.user.image": [
+      "string"
+    ],
+    "$.user.name": [
+      "string"
+    ]
+  }
+}

@@ -41,12 +41,12 @@ const HOST_SCRIPTS = ['scripts/generate-crontab.ts']
 
 /**
  * Script che girano DENTRO node:24-alpine col checkout montato
- * (scripts/cron-maintenance.sh, e la procedura per n1-proof in DEPLOYMENT.md).
+ * (scripts/cron-maintenance.sh, scripts/send-test-push.sh, e la procedura per n1-proof in DEPLOYMENT.md).
  * Elencati qui per documentazione e per il controllo di completezza sotto: NON
  * sono soggetti ai vincoli di HOST_SCRIPTS, perche' nel container il Node e' 20
  * e l'engine Prisma sul disco (musl) e' quello giusto.
  */
-const CONTAINER_SCRIPTS = ['scripts/maintenance-job.ts', 'scripts/n1-proof.ts', 'scripts/rls-check.ts']
+const CONTAINER_SCRIPTS = ['scripts/maintenance-job.ts', 'scripts/n1-proof.ts', 'scripts/rls-check.ts', 'scripts/send-test-push.ts']
 
 /**
  * Pacchetti che richiedono Node >= 20 e non possono comparire nella chiusura

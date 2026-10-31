@@ -1,0 +1,13 @@
+{
+  "request": "GET /api/events/99999999",
+  "status": 404,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "object"
+    ],
+    "$.error": [
+      "string"
+    ]
+  }
+}
