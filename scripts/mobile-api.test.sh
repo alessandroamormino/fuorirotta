@@ -224,6 +224,7 @@ m2_matrix=(
   'POST|/api/v1/me/calendar-feed|'
   'POST|/api/v1/me/calendar-feed/rotate|'
   'PUT|/api/v1/me/devices|{"token":"{tok}","environment":"sandbox"}'
+  'DELETE|/api/v1/me/devices|{"token":"{tok}"}'
   'GET|/api/v1/me/export|'
   'GET|/api/v1/me/sessions|'
   'DELETE|/api/v1/me/sessions/[id]|'
@@ -518,3 +519,136 @@ code="$(bearer_call p1b PUT /api/v1/me/devices 198.51.100.210 "${p1_cookie}" "{\
 p1_row2="$(psql_dev "SELECT count(*) || '|' || app_version || '|' || (extract(epoch FROM last_seen_at) > ${p1_seen1}) FROM push_devices WHERE user_id = '${p1_user}' GROUP BY app_version, last_seen_at")"
 [[ "${p1_row2}" == "1|1.0.1|true" ]] || fail "P1: dopo il secondo PUT attesa una riga con app_version 1.0.1 e last_seen_at avanzato, trovato '${p1_row2}'"
 echo "ok  P1: PUT /me/devices col solo bearer -> 200 {registered:true} senza token nel corpo, una riga (token minuscolo, utente e sessione dell'app, sandbox); il secondo PUT la aggiorna (app_version, last_seen_at)"
+
+# Token di prova di una sezione: 'fe' + 62 caratteri esadecimali, unico per (sezione, indice).
+fe_tok() { # <cifra 0-9> <indice 0-99> -> 64 caratteri
+  printf 'fe%02x%s' "$2" "$(printf "${1}c%.0s" {1..30})"
+}
+dev_rows() { psql_dev "SELECT count(*) FROM push_devices WHERE user_id = '$1'"; }
+put_dev() { # <nome> <ip> <bearer> <token> [environment]
+  bearer_call "$1" PUT /api/v1/me/devices "$2" "$3" "{\"token\":\"$4\",\"environment\":\"${5:-sandbox}\"}"
+}
+del_dev() { # <nome> <ip> <bearer> <token>
+  bearer_call "$1" DELETE /api/v1/me/devices "$2" "$3" "{\"token\":\"$4\"}"
+}
+
+# --- P2: concorrenza (bordo API-03) -----------------------------------------------------
+mint_app_user p2 "${app_ua}"
+p2_tok="$(fe_tok 2 0)"
+put_dev p2a 198.51.100.211 "${p2_cookie}" "${p2_tok}" >"${tmp_dir}/p2a.code" &
+pid1=$!
+put_dev p2b 198.51.100.211 "${p2_cookie}" "${p2_tok}" >"${tmp_dir}/p2b.code" &
+pid2=$!
+wait "${pid1}" "${pid2}"
+[[ "$(cat "${tmp_dir}/p2a.code")" == "200" && "$(cat "${tmp_dir}/p2b.code")" == "200" ]] || fail "P2: due PUT dello stesso token: attesi 200 e 200, ottenuti $(cat "${tmp_dir}/p2a.code") e $(cat "${tmp_dir}/p2b.code")"
+[[ "$(dev_rows "${p2_user}")" == "1" ]] || fail "P2: due PUT dello stesso token devono lasciare una riga"
+echo "ok  P2: due PUT in parallelo dello stesso token -> 200 e 200 e una riga"
+
+# --- P3: passaggio di proprieta' e DELETE ristretto al proprietario ----------------------------
+mint_app_user p3a "${app_ua}"
+mint_app_user p3b "${app_ua}"
+p3_sid_b="$(psql_dev "SELECT id FROM auth_session WHERE token = '${p3b_token}'" | head -n 1)"
+p3_tok="$(fe_tok 3 0)"
+[[ "$(put_dev p3a1 198.51.100.212 "${p3a_cookie}" "${p3_tok}")" == "200" ]] || fail "P3: PUT di A"
+[[ "$(put_dev p3b1 198.51.100.213 "${p3b_cookie}" "${p3_tok}" production)" == "200" ]] || fail "P3: PUT di B dello stesso token"
+p3_row="$(psql_dev "SELECT count(*) || '|' || min(user_id) || '|' || min(session_id) || '|' || min(environment) FROM push_devices WHERE device_token = '${p3_tok}'")"
+[[ "${p3_row}" == "1|${p3b_user}|${p3_sid_b}|production" ]] || fail "P3: una riga attesa di B, trovata '${p3_row}'"
+code="$(del_dev p3a2 198.51.100.212 "${p3a_cookie}" "${p3_tok}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/p3a2.b")" == '{"removed":0}' ]] || fail "P3: DELETE di A: atteso {\"removed\":0}, ottenuto ${code} '$(cat "${tmp_dir}/p3a2.b")'"
+[[ "$(dev_rows "${p3b_user}")" == "1" ]] || fail "P3: il DELETE di A non doveva togliere la riga di B"
+code="$(del_dev p3b2 198.51.100.213 "${p3b_cookie}" "${p3_tok}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/p3b2.b")" == '{"removed":1}' ]] || fail "P3: DELETE di B: atteso {\"removed\":1}, ottenuto ${code} '$(cat "${tmp_dir}/p3b2.b")'"
+code="$(del_dev p3b3 198.51.100.213 "${p3b_cookie}" "${p3_tok}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/p3b3.b")" == '{"removed":0}' ]] || fail "P3: secondo DELETE di B: atteso {\"removed\":0}, ottenuto ${code} '$(cat "${tmp_dir}/p3b3.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '${p3_tok}'")" == "0" ]] || fail "P3: la riga doveva sparire"
+no_store p3b3 P3
+echo "ok  P3: lo stesso token registrato da A e poi da B e' una riga di B (con la sua sessione e il suo ambiente); il DELETE di A -> removed 0 e la riga resta; quello di B -> removed 1, poi 0"
+
+# --- P4: validazione e credenziali -------------------------------------------------------
+mint_app_user p4 "${app_ua}"
+p4_ok="$(fe_tok 4 0)"
+p4_bad=0
+p4_expect_400() { # <nome> <corpo> <descrizione>
+  local code
+  code="$(bearer_call "$1" PUT /api/v1/me/devices 198.51.100.214 "${p4_cookie}" "$2")"
+  [[ "${code}" == "400" && "$(json_get "${tmp_dir}/$1.b" 'j.error')" == "bad-request" ]] || fail "P4: $3: atteso 400 bad-request, ottenuto ${code} '$(cat "${tmp_dir}/$1.b")'"
+  no_store "$1" P4
+  p4_bad=$((p4_bad + 1))
+}
+hex63="$(printf 'ab%.0s' {1..31})a"
+hex201="$(printf 'ab%.0s' {1..100})a"
+hex200="$(printf 'ab%.0s' {1..100})"
+p4_expect_400 p4a "{\"token\":\"${hex63}\",\"environment\":\"sandbox\"}" "63 caratteri esadecimali"
+p4_expect_400 p4b "{\"token\":\"${hex201}\",\"environment\":\"sandbox\"}" "201 caratteri esadecimali"
+p4_expect_400 p4c "{\"token\":\"$(printf 'zz%.0s' {1..32})\",\"environment\":\"sandbox\"}" "token non esadecimale"
+p4_expect_400 p4d '{"token":"ExponentPushToken[xxxx]","environment":"sandbox"}' "ExponentPushToken"
+p4_expect_400 p4e "{\"token\":\"${p4_ok}\"}" "environment mancante"
+p4_expect_400 p4f "{\"token\":\"${p4_ok}\",\"environment\":\"development\"}" "environment development"
+p4_expect_400 p4g "{\"token\":\"${p4_ok}\",\"environment\":\"sandbox\",\"appVersion\":\"123456789012345678901\"}" "appVersion di 21 caratteri"
+p4_expect_400 p4h "{\"token\":\"${p4_ok}\",\"environment\":\"sandbox\",\"appVersion\":\"1 0\"}" "appVersion con spazio"
+p4_expect_400 p4i 'non-json' "corpo che non e' JSON"
+p4_expect_400 p4j "[\"${p4_ok}\"]" "corpo array"
+code="$(bearer_call p4k PUT "/api/v1/me/devices?token=${p4_ok}&environment=sandbox" 198.51.100.214 "${p4_cookie}" '{}')"
+[[ "${code}" == "400" ]] || fail "P4: token solo nella query: atteso 400, ottenuto ${code}"
+code="$(bearer_call p4l DELETE /api/v1/me/devices 198.51.100.214 "${p4_cookie}" '{"token":"nope"}')"
+[[ "${code}" == "400" ]] || fail "P4: DELETE con token non valido: atteso 400, ottenuto ${code}"
+# 200 e 64/200 caratteri passano (confini inclusi)
+[[ "$(put_dev p4m 198.51.100.214 "${p4_cookie}" "${hex200}")" == "200" ]] || fail "P4: 200 caratteri esadecimali devono passare"
+[[ "$(put_dev p4n 198.51.100.214 "${p4_cookie}" "${p4_ok}")" == "200" ]] || fail "P4: 64 caratteri esadecimali devono passare"
+[[ "$(dev_rows "${p4_user}")" == "2" ]] || fail "P4: i rifiuti non devono scrivere: attese 2 righe (i due PUT validi), trovate $(dev_rows "${p4_user}")"
+body_ok="{\"token\":\"${p4_ok}\",\"environment\":\"sandbox\"}"
+code="$(call p4o PUT /api/v1/me/devices 198.51.100.215 -H "Origin: ${origin}" -H 'Content-Type: application/json' --data "${body_ok}")"
+[[ "${code}" == "401" ]] || fail "P4: senza credenziali con Origin: atteso 401, ottenuto ${code}"
+code="$(call p4p PUT /api/v1/me/devices 198.51.100.215 -H 'Content-Type: application/json' --data "${body_ok}")"
+[[ "${code}" == "403" ]] || fail "P4: senza credenziali e senza Origin: atteso 403, ottenuto ${code}"
+no_store p4o P4
+no_store p4p P4
+echo "ok  P4: ${p4_bad} corpi non validi (63/201 caratteri, non esadecimale, Expo, environment mancante o development, appVersion lunga o con spazio, non JSON, array, token solo in query) -> 400 bad-request senza scritture; 64 e 200 caratteri passano; senza credenziali 401 con Origin e 403 senza"
+
+# --- P5: tetto di 10 dispositivi per utente ---------------------------------------------------
+mint_app_user p5 "${app_ua}"
+p5_sid="$(psql_dev "SELECT id FROM auth_session WHERE token = '${p5_token}'" | head -n 1)"
+for n in 1 2 3 4 5 6 7 8 9 10; do
+  psql_dev "INSERT INTO push_devices (user_id, session_id, device_token, environment, last_seen_at)
+    VALUES ('${p5_user}', '${p5_sid}', '$(fe_tok 5 "${n}")', 'sandbox', now() - interval '${n} minutes')" >/dev/null
+done
+code="$(put_dev p5 198.51.100.216 "${p5_cookie}" "$(fe_tok 5 11)")"
+[[ "${code}" == "200" ]] || fail "P5: l'undicesimo PUT: atteso 200, ottenuto ${code}"
+[[ "$(dev_rows "${p5_user}")" == "10" ]] || fail "P5: dopo l'undicesimo restano 10 righe, trovate $(dev_rows "${p5_user}")"
+[[ "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '$(fe_tok 5 10)'")" == "0" ]] || fail "P5: doveva sparire la riga meno recente (last_seen_at piu' vecchio)"
+[[ "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '$(fe_tok 5 11)'")" == "1" ]] || fail "P5: la riga appena registrata deve restare"
+echo "ok  P5: con 10 dispositivi l'undicesimo PUT -> 200, ne restano 10 e quello visto meno di recente e' sparito"
+
+# --- P6: D-10, il dispositivo non sopravvive alla sessione che lo ha registrato ------------------------
+mint_app_user p6 "${chrome_ua}"
+read -r p6_app_sid p6_app_cookie _ <<<"$(helper session "${p6_user}" 0 "${app_ua}" | tail -n 1)"
+[[ -n "${p6_app_sid}" && -n "${p6_app_cookie}" ]] || fail "P6: helper session non ha stampato la sessione dell'app"
+p6_tok="$(fe_tok 6 0)"
+[[ "$(put_dev p6a 198.51.100.217 "${p6_app_cookie}" "${p6_tok}")" == "200" ]] || fail "P6: PUT dall'app"
+[[ "$(dev_rows "${p6_user}")" == "1" ]] || fail "P6: attesa una riga prima della revoca"
+code="$(call p6b DELETE "/api/v1/me/sessions/${p6_app_sid}" 198.51.100.217 -H "Cookie: fuorirotta.session_token=${p6_cookie}" -H "Origin: ${origin}")"
+[[ "${code}" == "200" ]] || fail "P6: revoca dal web: atteso 200, ottenuto ${code}"
+[[ "$(dev_rows "${p6_user}")" == "0" ]] || fail "P6: la revoca della sessione dal web deve togliere il dispositivo"
+read -r _ p6_app_cookie2 _ <<<"$(helper session "${p6_user}" 0 "${app_ua}" | tail -n 1)"
+[[ "$(put_dev p6c 198.51.100.217 "${p6_app_cookie2}" "${p6_tok}")" == "200" ]] || fail "P6: PUT dalla nuova sessione dell'app"
+[[ "$(dev_rows "${p6_user}")" == "1" ]] || fail "P6: attesa una riga dopo la nuova registrazione"
+code="$(bearer_call p6d POST /api/auth/sign-out 198.51.100.217 "${p6_app_cookie2}" '{}')"
+[[ "${code}" == "200" ]] || fail "P6: sign-out col solo bearer: atteso 200, ottenuto ${code}"
+[[ "$(dev_rows "${p6_user}")" == "0" ]] || fail "P6: il sign-out col bearer deve togliere il dispositivo"
+read -r _ p6_app_cookie3 _ <<<"$(helper session "${p6_user}" 0 "${app_ua}" | tail -n 1)"
+[[ "$(put_dev p6e 198.51.100.217 "${p6_app_cookie3}" "${p6_tok}")" == "200" ]] || fail "P6: PUT dalla terza sessione dell'app"
+[[ "$(dev_rows "${p6_user}")" == "1" ]] || fail "P6: attesa una riga prima della cancellazione dell'account"
+psql_dev "DELETE FROM auth_user WHERE id = '${p6_user}'" >/dev/null
+[[ "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '${p6_tok}'")" == "0" ]] || fail "P6: la cancellazione dell'account deve togliere il dispositivo"
+echo "ok  P6: revoca della sessione dal web, sign-out col solo bearer e cancellazione dell'account lasciano zero righe push_devices per quel dispositivo"
+
+# --- P7: l'export elenca i dispositivi senza il token --------------------------------------------------
+mint_app_user p7 "${app_ua}"
+p7_tok="$(fe_tok 7 0)"
+[[ "$(put_dev p7a 198.51.100.218 "${p7_cookie}" "${p7_tok}" production)" == "200" ]] || fail "P7: PUT dall'app"
+code="$(call p7b GET /api/v1/me/export 198.51.100.218 -H "Cookie: fuorirotta.session_token=${p7_cookie}")"
+[[ "${code}" == "200" ]] || fail "P7: export: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/p7b.b" 'j.pushDevices.length + "|" + Object.keys(j.pushDevices[0]).sort().join() + "|" + j.pushDevices[0].environment')" == "1|appVersion,createdAt,environment,lastSeenAt|production" ]] \
+  || fail "P7: pushDevices inattesi: $(json_get "${tmp_dir}/p7b.b" 'j.pushDevices')"
+[[ "$(grep -ci "${p7_tok}" "${tmp_dir}/p7b.b" || true)" == "0" ]] || fail "P7: il token del dispositivo non deve comparire nell'export"
+echo "ok  P7: l'export ha pushDevices con un oggetto {appVersion, createdAt, environment, lastSeenAt} e il token non compare da nessuna parte"
