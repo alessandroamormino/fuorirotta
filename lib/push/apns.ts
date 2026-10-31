@@ -31,7 +31,7 @@ const JWT_MAX_AGE_S = 40 * 60
 const REQUEST_TIMEOUT_MS = 10_000
 const MAX_PAYLOAD_BYTES = 4096
 
-type Env = NodeJS.ProcessEnv
+type Env = Record<string, string | undefined>
 
 function decodeKey(env: Env): string {
   return Buffer.from(env.APNS_PRIVATE_KEY_B64 ?? '', 'base64').toString('utf8')
