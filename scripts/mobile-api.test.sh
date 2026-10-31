@@ -16,6 +16,13 @@
 #   M6  concorrenza: due PUT bearer in parallelo -> una riga; bearer e cookie vedono gli stessi follow
 #   M7  D-13: la sessione dell'app e' 'App iPhone' nell'elenco del web e si revoca da li'
 #   M8  D-10: POST /api/auth/sign-out con il solo bearer cancella la sessione
+#   P1  tracer: PUT /me/devices col solo bearer -> una riga push_devices (token minuscolo, sessione dell'app); il secondo PUT la aggiorna
+#   P2  concorrenza: due PUT dello stesso token -> 200 e 200 e una riga
+#   P3  passaggio di proprieta' e scoping: la riga passa al secondo utente, il DELETE dell'altro non toglie nulla
+#   P4  validazione: 400 senza scritture, 401/403 senza credenziali, il token solo dal corpo
+#   P5  tetto di 10 dispositivi per utente: l'11esimo fa sparire il meno recente
+#   P6  D-10: revoca dal web, sign-out col bearer e cancellazione dell'account tolgono il dispositivo
+#   P7  l'export elenca pushDevices senza token
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -82,6 +89,7 @@ stop_server() {
 
 # Gli utenti di prova @fixture.invalid: la FK in cascata porta via follow, salvati e sessioni.
 delete_users() {
+  psql_dev "DELETE FROM push_devices WHERE device_token LIKE 'fe%'" >/dev/null 2>&1 || true
   psql_dev "DELETE FROM auth_user WHERE email LIKE '%@fixture.invalid'" >/dev/null 2>&1 || true
 }
 
@@ -215,6 +223,7 @@ m2_matrix=(
   'DELETE|/api/v1/me/share|'
   'POST|/api/v1/me/calendar-feed|'
   'POST|/api/v1/me/calendar-feed/rotate|'
+  'PUT|/api/v1/me/devices|{"token":"{tok}","environment":"sandbox"}'
   'GET|/api/v1/me/export|'
   'GET|/api/v1/me/sessions|'
   'DELETE|/api/v1/me/sessions/[id]|'
@@ -294,6 +303,9 @@ header_value() { # <nome-file> <intestazione> -> valore
 m2_ip_w=198.51.100.201
 m2_ip_a=198.51.100.202
 
+# Token dei dispositivi di prova: 'fe' + 62 caratteri esadecimali, uno per lato (device_token e' unico).
+m2w_tok="fe$(printf 'a1%.0s' {1..31})"
+m2a_tok="fe$(printf 'b2%.0s' {1..31})"
 mint_app_user m2w "" "Parita Prova"
 mint_app_user m2a "" "Parita Prova"
 m2_ev="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
@@ -313,11 +325,12 @@ done
 
 # side_path <lato: w|a> <testo> -> testo con [eventId] [ref] [id] e {ev} sostituiti
 side_path() {
-  local who="$1" s="$2" sid_var="m2${1}_sid" gone_var="m2${1}_gone"
+  local who="$1" s="$2" sid_var="m2${1}_sid" gone_var="m2${1}_gone" tok_var="m2${1}_tok"
   s="${s//\[eventId\]/${m2_ev}}"
   s="${s//\[ref\]/${!gone_var}}"
   s="${s//\[id\]/${!sid_var}}"
   s="${s//\{ev\}/${m2_ev}}"
+  s="${s//\{tok\}/${!tok_var}}"
   printf '%s' "${s}"
 }
 
@@ -484,3 +497,24 @@ code="$(bearer_call m8a POST /api/auth/sign-out 198.51.100.209 "${m8_cookie}" '{
 code="$(bearer_call m8b GET /api/v1/me/follows 198.51.100.209 "${m8_cookie}")"
 [[ "${code}" == "401" ]] || fail "M8: lo stesso bearer dopo il sign-out: atteso 401, ottenuto ${code}"
 echo "ok  M8: POST /api/auth/sign-out con il solo bearer (niente Cookie, niente Origin) -> 200, riga auth_session cancellata, il bearer da' 401"
+
+# --- P1 (tracer): l'app registra il suo token con il solo bearer e compare una riga legata alla sessione ---
+p1_tok_upper="FE$(printf '0A%.0s' {1..31})"
+p1_tok="$(tr 'A-F' 'a-f' <<<"${p1_tok_upper}")"
+mint_app_user p1 "${app_ua}"
+p1_sid="$(psql_dev "SELECT id FROM auth_session WHERE token = '${p1_token}'" | head -n 1)"
+[[ -n "${p1_sid}" ]] || fail "P1: sessione dell'app non trovata"
+code="$(bearer_call p1a PUT /api/v1/me/devices 198.51.100.210 "${p1_cookie}" "{\"token\":\"${p1_tok_upper}\",\"environment\":\"sandbox\"}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/p1a.b")" == '{"registered":true}' ]] || fail "P1: PUT devices col solo bearer: atteso 200 {\"registered\":true}, ottenuto ${code} '$(cat "${tmp_dir}/p1a.b")'"
+no_store p1a P1
+[[ "$(grep -ci "${p1_tok}" "${tmp_dir}/p1a.b" || true)" == "0" ]] || fail "P1: il token non deve tornare nel corpo"
+p1_row="$(psql_dev "SELECT device_token || '|' || user_id || '|' || session_id || '|' || environment FROM push_devices WHERE device_token = '${p1_tok}'")"
+[[ "${p1_row}" == "${p1_tok}|${p1_user}|${p1_sid}|sandbox" ]] || fail "P1: riga attesa '${p1_tok}|${p1_user}|${p1_sid}|sandbox', trovata '${p1_row}'"
+[[ "$(psql_dev "SELECT count(*) FROM push_devices WHERE user_id = '${p1_user}'")" == "1" ]] || fail "P1: attesa una sola riga per l'utente"
+p1_seen1="$(psql_dev "SELECT extract(epoch FROM last_seen_at) FROM push_devices WHERE device_token = '${p1_tok}'")"
+sleep 1
+code="$(bearer_call p1b PUT /api/v1/me/devices 198.51.100.210 "${p1_cookie}" "{\"token\":\"${p1_tok}\",\"environment\":\"sandbox\",\"appVersion\":\"1.0.1\"}")"
+[[ "${code}" == "200" ]] || fail "P1: secondo PUT: atteso 200, ottenuto ${code}"
+p1_row2="$(psql_dev "SELECT count(*) || '|' || app_version || '|' || (extract(epoch FROM last_seen_at) > ${p1_seen1}) FROM push_devices WHERE user_id = '${p1_user}' GROUP BY app_version, last_seen_at")"
+[[ "${p1_row2}" == "1|1.0.1|true" ]] || fail "P1: dopo il secondo PUT attesa una riga con app_version 1.0.1 e last_seen_at avanzato, trovato '${p1_row2}'"
+echo "ok  P1: PUT /me/devices col solo bearer -> 200 {registered:true} senza token nel corpo, una riga (token minuscolo, utente e sessione dell'app, sandbox); il secondo PUT la aggiorna (app_version, last_seen_at)"
