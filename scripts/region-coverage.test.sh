@@ -79,6 +79,15 @@ cleanup() {
   if [[ -n "${test_comune_istat}" ]]; then
     psql_dev "DELETE FROM comuni WHERE istat_code = '${test_comune_istat}'" >/dev/null 2>&1 || true
   fi
+  # S19 interroga /api/events con un comune del Molise: la rotta avvia un
+  # refresh in background e prende il lock della regione, poi stop_server lo
+  # uccide prima del rilascio. Senza questa riga il lock resta 8 h e fa cadere
+  # check:maintenance-locks piu' avanti nella catena (il "lock molise di
+  # origine non identificata", trovato il 2026-10-31). Solo i lock nati
+  # durante questo gate.
+  if [[ -n "${gate_started:-}" ]]; then
+    psql_dev "DELETE FROM region_locks WHERE locked_at >= '${gate_started}'" >/dev/null 2>&1 || true
+  fi
   rm -rf "${tmp_dir}"
   rm -rf "${repo_root}/${test_dist_dir}"
 }
@@ -89,6 +98,7 @@ if ! docker compose -f "${repo_root}/docker-compose.dev.yml" ps postgres-dev 2>/
 fi
 
 # Stato pulito prima di iniziare, nel caso una run precedente sia rimasta a meta'.
+gate_started="$(psql_dev "SELECT now()")"
 psql_dev "DELETE FROM events WHERE source = '${test_source}'" >/dev/null
 
 # Letta dal modulo stesso, mai un letterale duplicato qui: se 15-03-PLAN.md

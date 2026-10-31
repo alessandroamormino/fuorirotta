@@ -25,6 +25,7 @@ import { scrapeAltoAdige } from './altoadige'
 import { scrapeFirenze } from './firenze'
 import { scrapeTorino } from './torino'
 import { scrapeRoma } from './roma'
+import { scrapeLariofiere } from './lariofiere'
 import type { AdapterResult, ScrapeParams } from './types'
 import { SOURCE_META, type SourceMeta } from './sources'
 
@@ -67,6 +68,7 @@ const SCRAPERS: Record<string, ScrapeFactory> = {
   firenze: () => scrapeFirenze,
   torino: () => scrapeTorino,
   roma: () => scrapeRoma,
+  lariofiere: () => scrapeLariofiere,
 }
 
 // Join fail-closed, in entrambe le direzioni. Un metadato senza scraper
