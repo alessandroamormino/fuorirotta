@@ -1,0 +1,11 @@
+{
+  "request": "GET /api/events/<id membro> (307 verso la canonica)",
+  "status": 307,
+  "contentType": "",
+  "location": "/api/events/<id>",
+  "shape": {
+    "$": [
+      "<non-json>"
+    ]
+  }
+}

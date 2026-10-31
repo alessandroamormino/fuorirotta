@@ -1,0 +1,64 @@
+{
+  "request": "GET /api/events/clusters",
+  "status": 200,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "object"
+    ],
+    "$.computedAt": [
+      "string"
+    ],
+    "$.eventCount": [
+      "number"
+    ],
+    "$.geojson": [
+      "object"
+    ],
+    "$.geojson.features": [
+      "array"
+    ],
+    "$.geojson.features[]": [
+      "object"
+    ],
+    "$.geojson.features[].geometry": [
+      "object"
+    ],
+    "$.geojson.features[].geometry.coordinates": [
+      "array"
+    ],
+    "$.geojson.features[].geometry.coordinates[]": [
+      "number"
+    ],
+    "$.geojson.features[].geometry.type": [
+      "string"
+    ],
+    "$.geojson.features[].properties": [
+      "object"
+    ],
+    "$.geojson.features[].properties.category": [
+      "string"
+    ],
+    "$.geojson.features[].properties.dateStart": [
+      "string"
+    ],
+    "$.geojson.features[].properties.id": [
+      "number"
+    ],
+    "$.geojson.features[].properties.imageUrl": [
+      "string"
+    ],
+    "$.geojson.features[].properties.locationName": [
+      "string"
+    ],
+    "$.geojson.features[].properties.title": [
+      "string"
+    ],
+    "$.geojson.features[].type": [
+      "string"
+    ],
+    "$.geojson.type": [
+      "string"
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "request": "GET /api/places/search?q=berg",
+  "status": 200,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "object"
+    ],
+    "$.results": [
+      "array"
+    ],
+    "$.results[]": [
+      "object"
+    ],
+    "$.results[].chip": [
+      "string"
+    ],
+    "$.results[].key": [
+      "string"
+    ],
+    "$.results[].kind": [
+      "string"
+    ],
+    "$.results[].label": [
+      "string"
+    ],
+    "$.results[].sublabel": [
+      "string"
+    ]
+  }
+}

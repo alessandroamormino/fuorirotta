@@ -1,0 +1,88 @@
+{
+  "request": "GET /api/events/<id> (colonne nullable a NULL)",
+  "status": 200,
+  "contentType": "application/json",
+  "shape": {
+    "$": [
+      "object"
+    ],
+    "$.address": [
+      "null"
+    ],
+    "$.canonicalCategory": [
+      "string"
+    ],
+    "$.canonicalEventId": [
+      "null"
+    ],
+    "$.category": [
+      "string"
+    ],
+    "$.comuneId": [
+      "null"
+    ],
+    "$.coordinateSource": [
+      "null"
+    ],
+    "$.createdAt": [
+      "string"
+    ],
+    "$.dateEnd": [
+      "null"
+    ],
+    "$.dateStart": [
+      "string"
+    ],
+    "$.description": [
+      "null"
+    ],
+    "$.id": [
+      "number"
+    ],
+    "$.imageUrl": [
+      "null"
+    ],
+    "$.latitude": [
+      "null"
+    ],
+    "$.locationName": [
+      "null"
+    ],
+    "$.longitude": [
+      "null"
+    ],
+    "$.mergeReason": [
+      "null"
+    ],
+    "$.mergeScore": [
+      "null"
+    ],
+    "$.phone": [
+      "null"
+    ],
+    "$.region": [
+      "null"
+    ],
+    "$.resolvedLatitude": [
+      "null"
+    ],
+    "$.resolvedLongitude": [
+      "null"
+    ],
+    "$.source": [
+      "string"
+    ],
+    "$.sourceId": [
+      "string"
+    ],
+    "$.sourceUrl": [
+      "null"
+    ],
+    "$.title": [
+      "string"
+    ],
+    "$.updatedAt": [
+      "string"
+    ]
+  }
+}

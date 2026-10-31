@@ -173,3 +173,34 @@ record_or_compare() {
 
 # --- G1 (tracer): la busta della lista ------------------------------------------------------------
 record_or_compare events-search "GET /api/events?search=<M>&limit=100" "/api/events?search=${marker}&limit=100"
+
+# --- G2/G3: gli altri percorsi di codice della lista --------------------------------------------
+record_or_compare events-radius "GET /api/events?search=<M>&lat=<lat>&lng=<lng>&radius=50&limit=100" \
+  "/api/events?search=${marker}&lat=${full_lat}&lng=${full_lng}&radius=50&limit=100"
+record_or_compare events-filter "GET /api/events?search=<M>&category=Sagre e feste&dateFrom=<oggi>&dateTo=<data+1>" \
+  "/api/events?search=${marker}&category=Sagre%20e%20feste&dateFrom=${today}&dateTo=${next_day}"
+
+# --- G4-G8: il dettaglio, le due facce delle colonne nullable, gli errori, il 307 ---------------
+record_or_compare event-full "GET /api/events/<id> (tutte le colonne valorizzate)" "/api/events/${F_FULL}"
+record_or_compare event-sparse "GET /api/events/<id> (colonne nullable a NULL)" "/api/events/${F_SPARSE}"
+record_or_compare event-bad-id "GET /api/events/abc" "/api/events/abc"
+record_or_compare event-missing "GET /api/events/99999999" "/api/events/99999999"
+record_or_compare event-member "GET /api/events/<id membro> (307 verso la canonica)" "/api/events/${F_MEMBER}"
+
+# --- G9-G12: il catalogo (sui dati locali veri, quindi solo la forma) ----------------------------
+record_or_compare clusters "GET /api/events/clusters" "/api/events/clusters"
+record_or_compare categories "GET /api/categories" "/api/categories"
+record_or_compare comuni-search "GET /api/comuni/search?q=vigo" "/api/comuni/search?q=vigo"
+record_or_compare places-search "GET /api/places/search?q=berg" "/api/places/search?q=berg"
+
+# --- G13: /me/state da loggato (plan e features sono congelati) ---------------------------------
+read -r g13_user g13_cookie g13_token <<<"$(bash scripts/dev-db.sh env "${auth_env[@]}" npx tsx scripts/auth-flow.helper.ts mint g13-golden@fixture.invalid 'Prova G13' 0 | tail -n 1)"
+[[ -n "${g13_user}" && -n "${g13_cookie}" ]] || fail "G13: helper mint non ha stampato utente e cookie"
+record_or_compare me-state-signed "GET /api/v1/me/state (da loggato)" "/api/v1/me/state" \
+  -H "Cookie: fuorirotta.session_token=${g13_cookie}"
+
+# --- G14: da anonimo il corpo e' quello di sempre, byte per byte ---------------------------------
+code="$(call me-state-anon "/api/v1/me/state")"
+[[ "${code}" == "200" ]] || fail "G14: /me/state anonimo: atteso 200, ottenuto ${code}"
+[[ "$(cat "${tmp_dir}/me-state-anon.b")" == '{"enabled":true,"user":null}' ]] || fail "G14: corpo anonimo cambiato: '$(cat "${tmp_dir}/me-state-anon.b")'"
+echo "ok  G14: /api/v1/me/state anonimo = {\"enabled\":true,\"user\":null}, byte per byte"
