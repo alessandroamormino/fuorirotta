@@ -10,6 +10,8 @@
 // Origin sulle scritture, e sulle rotte /api/auth/* il controllo di Origin di
 // Better Auth si attiva da solo. Stessa sessione del web: 60 giorni, rinnovata
 // al massimo una volta al giorno all'uso, revocabile dall'elenco in /account.
+// Uscire: POST /api/auth/sign-out con il solo bearer e il corpo JSON `{}` (un corpo vuoto con
+// Content-Type JSON e' un 400 di Better Auth); la sessione sparisce dal server e il bearer da' 401.
 //
 // Piano e funzioni (D-04). GET /api/v1/me/state, da loggati, aggiunge `plan` e
 // `features`. Oggi ogni account e' `plan: 'beta'` con TUTTE le funzioni sotto
@@ -23,3 +25,10 @@ export const PLAN = 'beta' as const
 
 export const FEATURES = ['saved', 'follows', 'calendar-feed', 'share', 'push'] as const
 export type Feature = (typeof FEATURES)[number]
+
+// User-Agent dell'app (D-13). Convenzione "FuoriRotta/<versione> (<piattaforma>; <dispositivo>)",
+// con piattaforma iOS|Android e dispositivo iPhone|iPad|Android, p.es. "FuoriRotta/1.0.0 (iOS; iPhone)".
+// L'app DEVE impostarlo: quello predefinito di URLSession/CFNetwork non contiene il nome del
+// dispositivo e la sessione finirebbe in /account come "Browser sconosciuto". Better Auth salva lo
+// user agent solo quando la sessione nasce (all'accesso): va impostato prima di accedere.
+export const APP_USER_AGENT_RE = /^FuoriRotta\/\d+(?:\.\d+){0,3} \((?:iOS|Android); (iPhone|iPad|Android)\)/
