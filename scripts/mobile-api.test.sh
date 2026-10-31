@@ -23,6 +23,7 @@
 #   P5  tetto di 10 dispositivi per utente: l'11esimo fa sparire il meno recente
 #   P6  D-10: revoca dal web, sign-out col bearer e cancellazione dell'account tolgono il dispositivo
 #   P7  l'export elenca pushDevices senza token
+#   W1  API-05: /.well-known/apple-app-site-association e assetlinks.json -> 200 JSON, nessun redirect, HEAD 200
 #   C1  tracer: GET /api/v1/config?version= senza credenziali -> update-required / update-recommended / ok dalle soglie dell'ambiente
 set -euo pipefail
 
@@ -57,6 +58,8 @@ auth_env=(
 app_env=(
   APP_MIN_VERSION=1.2.0
   APP_RECOMMENDED_VERSION=1.4.0
+  APPLE_TEAM_ID=TEAMID1234
+  APPLE_APP_BUNDLE_ID=it.fuorirotta.app.test
 )
 
 fail() {
@@ -678,3 +681,20 @@ c1_cc="$(grep -i '^cache-control:' "${tmp_dir}/c1a.h" | head -n 1 | cut -d: -f2-
 [[ "$(c1_get c1d -)" == "200" && "$(json_get "${tmp_dir}/c1d.b" '"status" in j')" == "false" ]] || fail "C1: senza version non ci deve essere la chiave status: $(cat "${tmp_dir}/c1d.b")"
 [[ "$(c1_get c1e v1.0)" == "200" && "$(json_get "${tmp_dir}/c1e.b" '"status" in j')" == "false" ]] || fail "C1: una versione malformata non deve dare status: $(cat "${tmp_dir}/c1e.b")"
 echo "ok  C1: GET /api/v1/config senza credenziali -> 200 application/json no-store; 1.1.0 update-required, 1.3.0 update-recommended, 1.4.0 ok, senza version o malformata nessuna chiave status"
+
+# --- W1: i file di associazione, senza redirect (Apple li rifiuta se ce n'e' uno) ------------------------
+for w1_path in /.well-known/apple-app-site-association /.well-known/assetlinks.json; do
+  w1_out="$(curl -sS -o "${tmp_dir}/w1.b" -D "${tmp_dir}/w1.h" -w '%{http_code} %{content_type} %{num_redirects}' --max-time 120 "http://127.0.0.1:${port}${w1_path}")"
+  case "${w1_out}" in
+    "200 application/json"*" 0") ;;
+    *) fail "W1: GET ${w1_path}: attesi 200, application/json e 0 redirect, ottenuto '${w1_out}'" ;;
+  esac
+  ! grep -qi '^location:' "${tmp_dir}/w1.h" || fail "W1: ${w1_path} ha un header Location"
+  w1_head="$(curl -sSI -o /dev/null -w '%{http_code}' --max-time 120 "http://127.0.0.1:${port}${w1_path}")"
+  [[ "${w1_head}" == "200" ]] || fail "W1: HEAD ${w1_path}: atteso 200, ottenuto ${w1_head}"
+done
+curl -sS -o "${tmp_dir}/w1a.b" --max-time 120 "http://127.0.0.1:${port}/.well-known/apple-app-site-association"
+[[ "$(json_get "${tmp_dir}/w1a.b" 'j.applinks.details[0].appIDs.join()')" == "TEAMID1234.it.fuorirotta.app.test" ]] || fail "W1: appID inatteso: $(cat "${tmp_dir}/w1a.b")"
+curl -sS -o "${tmp_dir}/w1b.b" --max-time 120 "http://127.0.0.1:${port}/.well-known/assetlinks.json"
+[[ "$(cat "${tmp_dir}/w1b.b")" == "[]" ]] || fail "W1: assetlinks.json atteso [], ottenuto $(cat "${tmp_dir}/w1b.b")"
+echo "ok  W1: apple-app-site-association (appID TEAMID1234.it.fuorirotta.app.test) e assetlinks.json ([]) -> 200 application/json, 0 redirect, nessun Location, HEAD 200"

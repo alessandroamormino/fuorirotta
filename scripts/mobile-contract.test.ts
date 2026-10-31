@@ -118,6 +118,50 @@ async function main(): Promise<void> {
   const code = readFileSync(new URL('../app/api/v1/config/route.ts', import.meta.url), 'utf8')
     .split('\n').filter((l) => /^\s*import\b/.test(l)).join('\n')
   check('config: la rotta non importa lib/auth, lib/account ne lib/prisma', !/lib\/(auth|account|prisma)/.test(code), code)
+
+  // --- .well-known (API-05): AASA e assetlinks, funzioni pure dell'ambiente letto a ogni chiamata ---
+  const importGet = async (path: string) => {
+    const m = (await import(path)) as { default?: unknown; GET: () => Response }
+    return ((m.default ?? m) as { GET: () => Response }).GET
+  }
+  const aasa = await importGet('../app/.well-known/apple-app-site-association/route')
+  const assetlinks = await importGet('../app/.well-known/assetlinks.json/route')
+  const setApple = (team?: string, bundle?: string) => {
+    for (const [k, v] of [['APPLE_TEAM_ID', team], ['APPLE_APP_BUNDLE_ID', bundle]] as const) {
+      if (v === undefined) delete env[k]
+      else env[k] = v
+    }
+  }
+
+  setApple('TEAMID1234', 'it.fuorirotta.app.test')
+  const okRes = aasa()
+  const okBody = await okRes.text()
+  const okJson = JSON.parse(okBody) as { applinks: { details: Array<{ appIDs: string[]; components: Array<Record<string, string>> }> } }
+  check('AASA: team e bundle validi -> 200 application/json', okRes.status === 200 && okRes.headers.get('content-type')?.includes('application/json') === true)
+  check("AASA: appIDs ['TEAMID1234.it.fuorirotta.app.test']", okJson.applinks.details[0].appIDs.join() === 'TEAMID1234.it.fuorirotta.app.test', okBody)
+  check('AASA: components /eventi/* e /l/*', JSON.stringify(okJson.applinks.details[0].components) === '[{"/":"/eventi/*"},{"/":"/l/*"}]', okBody)
+  const bad404: Array<[string, string | undefined, string | undefined]> = [
+    ['team vuoto', '', 'it.fuorirotta.app.test'], ['bundle vuoto', 'TEAMID1234', ''], ['entrambi non impostati', undefined, undefined],
+    ['team minuscolo', 'teamid1234', 'it.fuorirotta.app.test'], ['team di 9 caratteri', 'TEAMID123', 'it.fuorirotta.app.test'],
+    ['team di 11 caratteri', 'TEAMID12345', 'it.fuorirotta.app.test'], ['bundle con spazio', 'TEAMID1234', 'it fuorirotta'],
+    ['bundle con slash', 'TEAMID1234', 'it/fuorirotta'],
+  ]
+  for (const [label, team, bundle] of bad404) {
+    setApple(team, bundle)
+    const r = aasa()
+    check(`AASA: ${label} -> 404 e mai 'undefined' nel corpo`, r.status === 404 && !(await r.text()).includes('undefined'))
+  }
+  setApple('TEAMID1234', 'it.fuorirotta.app.test')
+  const aasaMany = await Promise.all(Array.from({ length: 5 }, async () => (await aasa()).text()))
+  check('AASA: cinque chiamate concorrenti -> corpi identici', aasaMany.every((t) => t === okBody))
+  setApple('TEAMID1234', 'it.fuorirotta.app.other')
+  check("AASA: cambiare l'ambiente tra due chiamate cambia la risposta, senza riavvio", (await aasa().text()).includes('it.fuorirotta.app.other'))
+
+  const al = assetlinks()
+  const alBody = await al.text()
+  check('AASA: assetlinks.json -> 200 application/json e corpo []', al.status === 200 && al.headers.get('content-type')?.includes('application/json') === true && alBody === '[]', alBody)
+  const alMany = await Promise.all(Array.from({ length: 5 }, async () => (await assetlinks()).text()))
+  check('AASA: assetlinks.json, cinque chiamate concorrenti -> corpi identici', alMany.every((t) => t === '[]'))
 }
 
 main().catch((e) => { console.error('FAIL: errore inatteso', e); process.exit(1) })
