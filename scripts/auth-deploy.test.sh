@@ -6,15 +6,19 @@
 #   D1  l'unica porta pubblicata e' 127.0.0.1:3000:3000 - nginx raggiunge l'app
 #       per nome di container, e una porta pubblica lascerebbe a chiunque
 #       impostare X-Real-IP e ottenere un secchio di rate limit nuovo
-#   D2  i cinque nomi a runtime di Google e i sei di Apple (25-06) stanno sotto `environment` nella forma
+#   D2  i cinque nomi a runtime di Google, i sei di Apple (25-06) e le due soglie di versione dell'app
+#       (26-05) stanno sotto `environment` nella forma
 #       ${NOME:-...}: il rilascio con l'interruttore spento non vuole segreti
 #       sul server, quindi compose non deve abortire se mancano
 #   D3  NEXT_PUBLIC_AUTH_ENABLED sta sotto `build.args` (e' inlinato dalla build)
 #   D4  nessun segreto (anche APPLE_PRIVATE_KEY_B64) fra gli argomenti di build ne' come ARG nel
 #       Dockerfile: un ARG resta leggibile nei metadati dell'immagine
 #   D5  il Dockerfile ha ARG ed ENV di NEXT_PUBLIC_AUTH_ENABLED
-#   D6  .env.example elenca i sei nomi dell'accesso e i sei di Apple
+#   D6  .env.example elenca i sei nomi dell'accesso, i sei di Apple, le due soglie e i due nomi APNs
 #   D7  la riga di CRON_SECRET conserva la forma `:?` (deve abortire se manca)
+#   D8  nessun nome APNS_KEY_ID / APNS_PRIVATE_KEY_B64 in una riga non commentata di docker-compose.yml:
+#       la chiave .p8 non entra mai nel container esposto a internet (26-05, D-17); il controllo prova
+#       di saper fallire a ogni giro (riga sintetica)
 #
 # Regola della TAB letterale: niente `\t` nei grep (BSD e GNU differiscono),
 # solo classi [[:space:]]. Dove un grep puo' legittimamente non trovare nulla
@@ -73,7 +77,8 @@ echo "ok  D1: l'unica porta pubblicata e' 127.0.0.1:3000:3000"
 
 # --- D2 ------------------------------------------------------------------------
 for name in AUTH_ENABLED BETTER_AUTH_URL BETTER_AUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
-  APPLE_AUTH_ENABLED APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY_B64 APPLE_APP_BUNDLE_ID; do
+  APPLE_AUTH_ENABLED APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY_B64 APPLE_APP_BUNDLE_ID \
+  APP_MIN_VERSION APP_RECOMMENDED_VERSION; do
   printf '%s\n' "${environment}" | grep -qE "^[[:space:]]*${name}:[[:space:]]*\\\$\\{${name}:-[^}]*\\}[[:space:]]*\$" \
     || fail "D2: ${name} non e' sotto environment nella forma \${${name}:-...}"
 done
@@ -81,7 +86,7 @@ printf '%s\n' "${environment}" | grep -qE '^[[:space:]]*AUTH_ENABLED:[[:space:]]
   || fail "D2: AUTH_ENABLED deve avere default false"
 printf '%s\n' "${environment}" | grep -qE '^[[:space:]]*APPLE_AUTH_ENABLED:[[:space:]]*\$\{APPLE_AUTH_ENABLED:-false\}[[:space:]]*$' \
   || fail "D2: APPLE_AUTH_ENABLED deve avere default false"
-echo "ok  D2: gli undici nomi a runtime (Google e Apple) sono sotto environment con default :-"
+echo "ok  D2: i tredici nomi a runtime (Google, Apple e soglie di versione) sono sotto environment con default :-"
 
 # --- D3 ------------------------------------------------------------------------
 printf '%s\n' "${build_args}" | grep -qE '^[[:space:]]*NEXT_PUBLIC_AUTH_ENABLED:[[:space:]]*\$\{NEXT_PUBLIC_AUTH_ENABLED:-[^}]*\}' \
@@ -108,15 +113,24 @@ echo "ok  D5: il Dockerfile ha ARG ed ENV di NEXT_PUBLIC_AUTH_ENABLED"
 
 # --- D6 ------------------------------------------------------------------------
 for name in AUTH_ENABLED NEXT_PUBLIC_AUTH_ENABLED BETTER_AUTH_URL BETTER_AUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
-  APPLE_AUTH_ENABLED APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY_B64 APPLE_APP_BUNDLE_ID; do
+  APPLE_AUTH_ENABLED APPLE_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY_B64 APPLE_APP_BUNDLE_ID \
+  APP_MIN_VERSION APP_RECOMMENDED_VERSION APNS_KEY_ID APNS_PRIVATE_KEY_B64; do
   grep -qE "^${name}=" "${env_example}" || fail "D6: ${name}= manca da ${env_example}"
 done
-echo "ok  D6: .env.example elenca i dodici nomi"
+echo "ok  D6: .env.example elenca i sedici nomi"
 
 # --- D7 ------------------------------------------------------------------------
 printf '%s\n' "${environment}" | grep -qE '^[[:space:]]*CRON_SECRET:[[:space:]]*\$\{CRON_SECRET:\?[^}]*\}' \
   || fail "D7: CRON_SECRET ha perso la forma :? (deve abortire compose se manca)"
 echo "ok  D7: CRON_SECRET conserva la forma :?"
 
+# --- D8 ------------------------------------------------------------------------
+apns_names() { uncommented | grep -E 'APNS_KEY_ID|APNS_PRIVATE_KEY_B64' || true; }
+[[ -n "$(printf '%s\n' '      APNS_PRIVATE_KEY_B64: ${APNS_PRIVATE_KEY_B64:-}' | apns_names)" ]] \
+  || fail "D8: il controllo e' vacuo: una riga APNS_PRIVATE_KEY_B64 sintetica non viene vista"
+leaked="$(apns_names <"${compose}")"
+[[ -z "${leaked}" ]] || fail "D8: un nome APNs compare in ${compose}: ${leaked}"
+echo "ok  D8: la chiave APNs non entra mai nel container dell'app"
+
 echo ""
-echo "PASS: contratto di rilascio dell'accesso (D1-D7)"
+echo "PASS: contratto di rilascio dell'accesso (D1-D8)"

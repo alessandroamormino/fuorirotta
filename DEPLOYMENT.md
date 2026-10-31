@@ -66,9 +66,11 @@ Three categories matter because they are read at different times by different pr
 | `BETTER_AUTH_SECRET` | Runtime, in the container | Session signing secret, at least 32 characters. Generate it **on the server** with `openssl rand -base64 32`; never paste it in a chat or a ticket |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Runtime, in the container | OAuth credentials from the Google Cloud console. Same rule: typed straight into the server's `.env` |
 | `APPLE_AUTH_ENABLED` | Runtime, in the container | Apple switch (Phase 25, D-04, D-12), separate from `AUTH_ENABLED`. Only the exact value `true` turns Apple on; declared as `${APPLE_AUTH_ENABLED:-false}`. See the Apple switch section below |
-| `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID` | Runtime, in the container | Services ID, Team ID and Key ID from the Apple developer portal. Declared as `${NAME:-}`, so a release without them still starts |
+| `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID` | Runtime, in the container | Services ID, Team ID and Key ID from the Apple developer portal. Declared as `${NAME:-}`, so a release without them still starts. `APPLE_TEAM_ID` also prefixes the appID in the universal-link association file and signs the APNs token (`iss`) |
 | `APPLE_PRIVATE_KEY_B64` | Runtime, in the container | The `.p8` key as one line of base64. Typed **only on the server** with a hidden read (see the Apple switch section below); never a build argument, never in a chat or in the repository |
-| `APPLE_APP_BUNDLE_ID` | Runtime, in the container | App ID of the mobile app (Phase 27). Optional; empty is fine |
+| `APPLE_APP_BUNDLE_ID` | Runtime, in the container | Bundle ID of the mobile app: the suffix of the appID in `/.well-known/apple-app-site-association` and the APNs topic. Empty = the association file answers 404 and push is disabled |
+| `APP_MIN_VERSION`, `APP_RECOMMENDED_VERSION` | Runtime, in the container | Version thresholds of the app (Phase 26, API-04): dotted integers such as `1.4.0`, read by `GET /api/v1/config` on every request. Unset or malformed = nobody is blocked. Change `.env` and recreate the container, no release. The minimum is raised only for an incompatible API change and is active during TestFlight too (D-07) |
+| `APNS_KEY_ID`, `APNS_PRIVATE_KEY_B64` | Host-only, never passed to the container | APNs key id and the `.p8` as one line of base64, read only by `scripts/send-test-push.sh`. Missing = push disabled (D-17). `npm run check:auth-deploy` (D8) fails if either name enters `docker-compose.yml` |
 | `BACKUP_GPG_RECIPIENT`, `BACKUP_RETENTION_DAYS`, `BACKUP_LOCAL_DIR`, `BACKUP_PG_IMAGE`, `HEALTHCHECK_BACKUP_URL` | Host-only, never passed to the container | Read only by `scripts/cron-backup.sh`. See §Backups |
 
 In production the file is `.env` in the compose directory (`/opt/docker/fuori-rotta/fuorirotta/.env`), not `.env.local` — `.env.local` is a local-development-only convention and is never read by Docker Compose.
@@ -574,6 +576,60 @@ Notes:
 - If Apple asked for a domain verification file, it lives in `public/.well-known/` and must answer 200
   without a redirect before you press Verify in the portal.
 - The privacy page (`/privacy`) already describes Apple; `npm run check:privacy-pages` keeps it so.
+
+### Mobile app endpoints (Phase 26)
+
+Three public endpoints serve the app before it has an account. None needs a session or the database.
+
+- `GET /api/v1/config[?version=1.4.0]` answers `{"minimumVersion","recommendedVersion"}` from `APP_MIN_VERSION` and
+  `APP_RECOMMENDED_VERSION`, plus `status` (`update-required`, `update-recommended` or `ok`) when `?version=` is a
+  valid dotted version. A missing or malformed threshold is `null` and blocks nobody.
+- `GET /.well-known/apple-app-site-association` lets iOS open `/eventi/*` and `/l/*` in the app. It is built from
+  `APPLE_TEAM_ID` and `APPLE_APP_BUNDLE_ID` and answers 404 while either is empty.
+- `GET /.well-known/assetlinks.json` answers `[]` while Android is out of scope.
+
+All commands run from `/opt/docker/fuori-rotta/fuorirotta`, one at a time, each with its expected output.
+
+Set the thresholds the first time (replace the two placeholders; if the first name is already there the command does
+nothing; expect no output):
+
+```bash
+grep -q '^APP_MIN_VERSION=' .env || printf 'APP_MIN_VERSION=%s\nAPP_RECOMMENDED_VERSION=%s\n' '<MIN>' '<REC>' >> .env
+```
+
+Change the minimum later (expect `APP_MIN_VERSION=<MIN>` printed back; the same with `APP_RECOMMENDED_VERSION`):
+
+```bash
+grep -q '^APP_MIN_VERSION=' .env && sed -i 's/^APP_MIN_VERSION=.*/APP_MIN_VERSION=<MIN>/' .env && grep '^APP_MIN_VERSION=' .env
+```
+
+Then recreate on the image already deployed (same one-liner as the Apple section):
+
+```bash
+cd /opt/docker/fuori-rotta/fuorirotta && FUORIROTTA_IMAGE="$(grep -m1 '^image=' .deployed | cut -d= -f2-)" docker compose up -d --no-build
+```
+
+Post-deploy checks, from any machine, without `-L` (a redirect would make Apple reject the file). Expect
+`200 application/json redirects=0`; a `404` on the first one means `APPLE_TEAM_ID` or `APPLE_APP_BUNDLE_ID` is empty in `.env`:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{content_type} redirects=%{num_redirects}\n' https://fuori-rotta.it/.well-known/apple-app-site-association
+```
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{content_type} redirects=%{num_redirects}\n' https://fuori-rotta.it/.well-known/assetlinks.json
+```
+
+```bash
+curl -s 'https://fuori-rotta.it/api/v1/config?version=1.0.0'
+```
+
+Read-only check that no nginx location intercepts `/.well-known/` (container name from the "nginx Configuration"
+section; expect only the acme-challenge location, if any):
+
+```bash
+docker exec nginx nginx -T 2>/dev/null | grep -n 'well-known'
+```
 
 ### Backups (D-18)
 
