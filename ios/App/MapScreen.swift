@@ -30,7 +30,14 @@ struct EventMapView: UIViewRepresentable {
     let center: CLLocationCoordinate2D
     let focus: MapFocus
     let showsUser: Bool
+    let mapType: MKMapType
+    /// Vista inclinata (tasto 3D): pitch della camera di sistema.
+    let tilted: Bool
+    /// Il pin della scheda aperta: resta selezionato (animazione e titolo di sistema) finche' la scheda non si chiude.
+    let selectedID: Int?
     let onSelect: (Int) -> Void
+    /// Un tocco sulla mappa vuota deseleziona il pin: la scheda si chiude.
+    let onDeselect: () -> Void
     /// Gli id dei pin di un gruppo che non si puo' dividere con lo zoom.
     let onCluster: ([Int]) -> Void
     let onVisibleCount: (Int) -> Void
@@ -54,6 +61,16 @@ struct EventMapView: UIViewRepresentable {
         let c = context.coordinator
         c.parent = self
         if map.showsUserLocation != showsUser { map.showsUserLocation = showsUser }
+        if map.mapType != mapType { map.mapType = mapType }
+        if tilted != c.tilted {
+            c.tilted = tilted
+            if let camera = map.camera.copy() as? MKMapCamera {
+                camera.pitch = tilted ? 60 : 0
+                map.setCamera(camera, animated: true)
+            }
+        }
+        // Scheda chiusa: il pin torna normale. Selezionarlo lo fa la mappa stessa, col tocco.
+        if selectedID == nil { for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: true) } }
         if focus != c.focus {
             c.focus = focus
             var target = center
@@ -75,6 +92,7 @@ struct EventMapView: UIViewRepresentable {
 
         var parent: EventMapView
         var focus: MapFocus
+        var tilted = false
         private var shown: [Int: PinAnnotation] = [:]
 
         init(_ parent: EventMapView) {
@@ -122,12 +140,15 @@ struct EventMapView: UIViewRepresentable {
             v.glyphImage = UIImage(systemName: visual.symbol)
             v.displayPriority = .defaultLow
             v.canShowCallout = false
+            // Selezionato: ingrandimento e titolo sotto il pin, quelli di sistema (come Mappe).
+            v.titleVisibility = .adaptive
+            v.subtitleVisibility = .hidden
             return v
         }
 
         func mapView(_ map: MKMapView, didSelect view: MKAnnotationView) {
-            defer { map.deselectAnnotation(view.annotation, animated: false) }
             if let cluster = view.annotation as? MKClusterAnnotation {
+                map.deselectAnnotation(cluster, animated: false)
                 let members = cluster.memberAnnotations.compactMap { $0 as? PinAnnotation }
                 if cannotSplit(members, in: map) {
                     parent.onCluster(members.map(\.id))
@@ -141,7 +162,17 @@ struct EventMapView: UIViewRepresentable {
             }
         }
 
-        /// Il foglio basso copre il terzo inferiore dello schermo: un pin piu' in basso della meta' si porta in alto.
+        /// Un altro pin deseleziona il primo e seleziona il nuovo nello stesso giro: si guarda dopo. Se non resta
+        /// nulla di selezionato (e la scheda e' ancora aperta) e' stato un tocco sulla mappa vuota.
+        func mapView(_ map: MKMapView, didDeselect view: MKAnnotationView) {
+            guard view.annotation is PinAnnotation else { return }
+            Task { @MainActor [weak self, weak map] in
+                guard let self, let map, map.selectedAnnotations.isEmpty, self.parent.selectedID != nil else { return }
+                self.parent.onDeselect()
+            }
+        }
+
+        /// Il foglio basso copre quasi la meta' inferiore dello schermo: un pin piu' in basso della meta' si porta in alto.
         private func liftAboveSheet(_ pin: PinAnnotation, in map: MKMapView) {
             let point = map.convert(pin.coordinate, toPointTo: map)
             guard point.y > map.bounds.height * 0.5 else { return }
@@ -164,22 +195,26 @@ struct EventMapView: UIViewRepresentable {
     }
 }
 
-/// Il foglio che si apre toccando un pin, nello stile della scheda luogo di Mappe: due altezze, la mappa resta
-/// toccabile dietro la prima, fondo di vetro di sistema. Contenuto dal popup del sito: foto, categoria, titolo,
-/// giorni · luogo, il cuore per salvare e le azioni Indicazioni / Apri dettaglio.
+/// Il foglio che si apre toccando un pin, come la scheda luogo di Mappe: in basso (380 pt, la mappa resta toccabile)
+/// titolo, tre azioni, quattro informazioni e la foto; tirato su (`.large`) diventa il dettaglio dell'evento, con
+/// le stesse viste di EventDetailView. Fondo di vetro di sistema.
 struct PinSheet: View {
-    static let compact = PresentationDetent.height(250)
+    static let compactHeight: CGFloat = 380
+    static let compact = PresentationDetent.height(compactHeight)
 
-    let onOpen: (Event) -> Void
     let onClose: () -> Void
 
     @Environment(\.api) private var api
+    @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(LocationModel.self) private var location
+    @Environment(SavesModel.self) private var saves
     @State private var event: Event
+    @State private var detent = PresentationDetent.height(compactHeight)
+    @State private var travelTime: TimeInterval?
 
-    init(pin: FuorirottaCore.MapPin, onOpen: @escaping (Event) -> Void, onClose: @escaping () -> Void) {
+    init(pin: FuorirottaCore.MapPin, onClose: @escaping () -> Void) {
         _event = State(initialValue: asEvent(pin))
-        self.onOpen = onOpen
         self.onClose = onClose
     }
 
@@ -190,109 +225,203 @@ struct PinSheet: View {
         return CLLocationCoordinate2D(latitude: lat, longitude: lng)
     }
 
+    /// T-27-28: solo http e https.
+    private var siteURL: URL? {
+        guard let raw = event.sourceUrl, raw.lowercased().hasPrefix("http://") || raw.lowercased().hasPrefix("https://") else { return nil }
+        return URL(string: raw)
+    }
+
     var body: some View {
+        Group {
+            if detent == .large {
+                EventStack { EventDetailView(event: event, onClose: onClose) }
+            } else {
+                card
+            }
+        }
+        .presentationDetents([Self.compact, .large], selection: $detent)
+        .presentationDragIndicator(.visible)
+        // La mappa dietro resta toccabile finche' il foglio e' basso: un altro pin cambia il contenuto.
+        .presentationBackgroundInteraction(.enabled(upThrough: Self.compact))
+        .task(id: event.id) { await fetch() }
+        .task(id: event.id) { await loadTravelTime() }
+    }
+
+    // MARK: scheda bassa
+
+    private var card: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                HStack(alignment: .top, spacing: Spacing.md) {
-                    RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 80, height: 80))
-                        .frame(width: 80, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: Radius.media))
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        if let name = category {
-                            let visual = categoryVisual(name)
-                            Label {
-                                Text(verbatim: name)
-                            } icon: {
-                                Image(systemName: visual.symbol)
-                            }
-                            .font(.label)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, Spacing.sm)
-                            .padding(.vertical, Spacing.xs)
-                            .background(visual.color, in: Capsule())
-                        }
-                        Text(verbatim: event.title)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(Color.foreground)
-                            .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
-                        Text(verbatim: eventMeta(event))
-                            .font(.label)
-                            .foregroundStyle(Color.foregroundSecondary)
-                            .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-                    }
-                    // Il posto di cuore e X, che stanno sopra (vedi overlay).
-                    .padding(.trailing, 44 * 2 + Spacing.sm)
-                    Spacer(minLength: 0)
-                }
+            VStack(spacing: Spacing.md) {
+                header
                 actions
-                if let text = event.description, !text.isEmpty {
-                    // Si vede alzando il foglio.
-                    Text(htmlToAttributed(text))
-                        .font(.body)
-                        .foregroundStyle(Color.foreground)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                infoRow
+                if event.imageUrl != nil {
+                    RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 440, height: 260))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.card))
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.horizontal, Spacing.md)
             .padding(.top, Spacing.lg)
             .padding(.bottom, Spacing.lg)
         }
-        .overlay(alignment: .topTrailing) {
-            // Salvare e chiudere: due cerchi di vetro in alto a destra, nello stesso contenitore.
+    }
+
+    /// Condividi a sinistra, chiudi a destra (due cerchi di vetro), titolo e categoria al centro.
+    private var header: some View {
+        HStack(alignment: .top, spacing: Spacing.sm) {
             GlassEffectContainer(spacing: Spacing.sm) {
-                HStack(spacing: Spacing.sm) {
-                    HeartButton(event: event, style: .glass)
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                            .font(.label.weight(.semibold))
-                            .foregroundStyle(Color.primary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Circle())
-                    }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Chiudi")
+                ShareLink(item: URL(string: "https://fuori-rotta.it/eventi/\(event.id)")!) {
+                    circleIcon("square.and.arrow.up")
+                }
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Condividi evento")
+            }
+            VStack(spacing: 2) {
+                Text(verbatim: event.title)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.foreground)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                    .accessibilityAddTraits(.isHeader)
+                if let category {
+                    Text(verbatim: category)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.foregroundSecondary)
                 }
             }
-            .padding(Spacing.md)
-        }
-        .presentationDetents([Self.compact, .large])
-        .presentationDragIndicator(.visible)
-        // La mappa dietro resta toccabile finche' il foglio e' basso: un altro pin cambia il contenuto.
-        .presentationBackgroundInteraction(.enabled(upThrough: Self.compact))
-        .task(id: event.id) { await fetch() }
-    }
-
-    /// Due azioni di dimensione normale, affiancate (nei testi grandi vanno a capo). Salvare e' il cuore in alto.
-    private var actions: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Spacing.sm) { buttons }
-            VStack(spacing: Spacing.sm) { buttons }
-        }
-        .buttonBorderShape(.roundedRectangle)
-    }
-
-    @ViewBuilder private var buttons: some View {
-        if let spot {
-            Button {
-                openDirections(to: spot, name: event.locationName ?? event.title)
-            } label: {
-                Label("Indicazioni", systemImage: "arrow.triangle.turn.up.right.diamond").frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity)
+            GlassEffectContainer(spacing: Spacing.sm) {
+                Button(action: onClose) { circleIcon("xmark") }
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Chiudi")
             }
-            .buttonStyle(.bordered)
         }
-        Button {
-            onOpen(event)
-        } label: {
-            Label("Apri dettaglio", systemImage: "chevron.right").frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
     }
 
-    /// Il pin porta solo i campi minimi: il resto (fine dell'evento, descrizione) arriva da qui, senza spinner.
+    private func circleIcon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.label.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+    }
+
+    /// Tre bottoni uguali, alti, icona sopra e testo sotto: Indicazioni (pieno, col tempo in auto), Sito, Salva.
+    private var actions: some View {
+        let saved = saves.isSaved(event.id)
+        return HStack(spacing: Spacing.sm) {
+            tile(
+                "car.fill", travelTime.map(formatTravelTime) ?? "Indicazioni",
+                label: travelTime.map { "Indicazioni, \(formatTravelTime(seconds: $0)) in auto" } ?? "Indicazioni",
+                fill: Color.accentToken, enabled: spot != nil
+            ) {
+                if let spot { openDirections(to: spot, name: event.locationName ?? event.title) }
+            }
+            // Senza indirizzo del sito il bottone resta, spento (il dettaglio non ha un calendario da richiamare).
+            tile("safari", "Sito", label: "Apri il sito dell'evento", fill: nil, enabled: siteURL != nil) {
+                if let siteURL { openURL(siteURL) }
+            }
+            tile(
+                saved ? "heart.fill" : "heart", saved ? "Salvato" : "Salva",
+                label: saved ? "Rimuovi dai salvati" : "Salva evento", fill: saved ? Color.heart : nil, enabled: true
+            ) {
+                Task { await saves.toggle(event) }
+            }
+            .sensoryFeedback(.impact(flexibility: .soft), trigger: saved)
+        }
+    }
+
+    private func tile(
+        _ symbol: String, _ title: String, label: String, fill: Color?, enabled: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: symbol).font(.title3).accessibilityHidden(true)
+                Text(verbatim: title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(fill == nil ? Color.accentToken : Color.white)
+            .frame(maxWidth: .infinity, minHeight: 60)
+            .background(fill ?? Color.accentToken.opacity(0.16), in: RoundedRectangle(cornerRadius: Radius.media))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.media))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityLabel(label)
+    }
+
+    /// Quattro colonne: etichetta grigia sopra, valore sotto (Quando / Dove / Categoria / Distanza). Mancano quelle senza dato.
+    private var infoRow: some View {
+        let columns = infoColumns
+        return Group {
+            if typeSize.isAccessibilitySize {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .center, spacing: Spacing.md) {
+                    ForEach(columns, id: \.label) { column($0) }
+                }
+            } else {
+                HStack(alignment: .top, spacing: Spacing.sm) {
+                    ForEach(columns, id: \.label) { column($0) }
+                }
+            }
+        }
+    }
+
+    private struct Info {
+        let label: String
+        let value: String
+        var color: Color = Color.foreground
+    }
+
+    private var infoColumns: [Info] {
+        var out: [Info] = []
+        let when = placeCardWhen(dateStart: event.dateStart, dateEnd: event.dateEnd, today: romeToday())
+        if !when.label.isEmpty { out.append(Info(label: "Quando", value: when.label, color: when.isActive ? Color.success : Color.foreground)) }
+        if let place = [event.locationName, event.address].compactMap({ $0 }).first(where: { !$0.isEmpty }) {
+            out.append(Info(label: "Dove", value: place))
+        }
+        if let category { out.append(Info(label: "Categoria", value: category)) }
+        if let here = location.userCoordinate, let spot {
+            let meters = CLLocation(latitude: here.latitude, longitude: here.longitude)
+                .distance(from: CLLocation(latitude: spot.latitude, longitude: spot.longitude))
+            out.append(Info(label: "Distanza", value: formatDistance(meters: meters)))
+        }
+        return out
+    }
+
+    private func column(_ info: Info) -> some View {
+        VStack(spacing: 4) {
+            Text(verbatim: info.label).font(.footnote).foregroundStyle(Color.foregroundSecondary)
+            Text(verbatim: info.value)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(info.color)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: rete
+
+    /// Il pin porta solo i campi minimi: il resto (fine dell'evento, descrizione, sito) arriva da qui, senza spinner.
     private func fetch() async {
         guard let api, case .found(let fresh)? = try? await api.event(id: event.id) else { return }
         event = fresh
+    }
+
+    /// Tempo in auto dalla posizione del telefono, di sistema. Senza posizione o senza risposta resta "Indicazioni".
+    private func loadTravelTime() async {
+        travelTime = nil
+        guard let here = location.userCoordinate, let spot else { return }
+        let request = MKDirections.Request()
+        request.source = MKMapItem(location: CLLocation(latitude: here.latitude, longitude: here.longitude), address: nil)
+        request.destination = MKMapItem(location: CLLocation(latitude: spot.latitude, longitude: spot.longitude), address: nil)
+        request.transportType = .automobile
+        travelTime = try? await MKDirections(request: request).calculateETA().expectedTravelTime
     }
 }
 
@@ -341,9 +470,14 @@ struct MapScreen: View {
     @State private var offline = false
     @State private var filter: String?  // nil = Tutte
     @State private var sheet: MapSheet?
-    @State private var path = NavigationPath()
+    @State private var mapType = MKMapType.standard
+    @State private var tilted = false
     @State private var focus = MapFocus()
     @State private var visibleCount: Int?
+
+    private var selectedPinID: Int? {
+        if case .pin(let pin) = sheet { pin.id } else { nil }
+    }
 
     private var shownPins: [FuorirottaCore.MapPin] {
         guard let filter else { return pins }
@@ -351,14 +485,18 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        EventStack(path: $path) {
+        EventStack {
             ZStack {
                 EventMapView(
                     pins: shownPins,
                     center: CLLocationCoordinate2D(latitude: location.place.latitude, longitude: location.place.longitude),
                     focus: focus,
                     showsUser: location.authorised,
+                    mapType: mapType,
+                    tilted: tilted,
+                    selectedID: selectedPinID,
                     onSelect: { id in sheet = pins.first { $0.id == id }.map(MapSheet.pin) },
+                    onDeselect: { if case .pin = sheet { sheet = nil } },
                     onCluster: { ids in
                         let members = pins.filter { ids.contains($0.id) }.sorted { $0.dateStart < $1.dateStart }.map(asEvent)
                         sheet = .group(Group(events: members))
@@ -375,15 +513,8 @@ struct MapScreen: View {
         .sheet(item: $sheet) { item in
             switch item {
             case .pin(let pin):
-                PinSheet(
-                    pin: pin,
-                    onOpen: { event in
-                        sheet = nil
-                        path.append(EventRoute(event: event, slot: "map"))
-                    },
-                    onClose: { sheet = nil }
-                )
-                .id(pin.id)
+                PinSheet(pin: pin, onClose: { sheet = nil })
+                    .id(pin.id)
             case .group(let group):
                 ClusterListSheet(events: group.events)
             }
@@ -414,26 +545,55 @@ struct MapScreen: View {
                         .padding(.vertical, Spacing.sm)
                         .glassEffect(.regular, in: .capsule)
                 }
-                Spacer(minLength: 0)
                 HStack {
                     Spacer()
-                    Button {
-                        focus = MapFocus(id: focus.id + 1, userFirst: true)
-                    } label: {
-                        Image(systemName: "location")
-                            .font(.title3)
-                            .foregroundStyle(Color.primary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Circle())
-                    }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Centra sulla mia posizione")
+                    mapControls
                 }
                 .padding(.horizontal, Spacing.md)
+                Spacer(minLength: 0)
             }
             // Sopra la barra delle schede.
             .padding(.bottom, Spacing.xxxl)
         }
+    }
+
+    /// Colonna di vetro a destra, come Mappe: 3D, stile della mappa, posizione.
+    private var mapControls: some View {
+        VStack(spacing: 0) {
+            Button { tilted.toggle() } label: {
+                Text(verbatim: tilted ? "2D" : "3D")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(tilted ? "Vista piana" : "Vista 3D")
+            Menu {
+                Picker("Stile della mappa", selection: $mapType) {
+                    Text("Standard").tag(MKMapType.standard)
+                    Text("Ibrida").tag(MKMapType.hybrid)
+                    Text("Satellite").tag(MKMapType.satellite)
+                }
+            } label: {
+                controlIcon("globe")
+            }
+            .accessibilityLabel("Stile della mappa")
+            Button {
+                focus = MapFocus(id: focus.id + 1, userFirst: true)
+            } label: {
+                controlIcon("location")
+            }
+            .accessibilityLabel("Centra sulla mia posizione")
+        }
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+    }
+
+    private func controlIcon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.title3)
+            .foregroundStyle(Color.primary)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
     }
 
     private var chips: some View {
