@@ -355,6 +355,23 @@ public struct APIClient: Sendable {
         _ = try await send(post: "api/auth/sign-out", body: Data("{}".utf8))
     }
 
+    /// Registra (o aggiorna) il telefono per le notifiche. Il token va SOLO nel corpo: mai nell'indirizzo.
+    public func registerDevice(token: String, environment: String, appVersion: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["token": token, "environment": environment, "appVersion": appVersion])
+        _ = try await send(method: "PUT", path: "api/v1/me/devices", body: body)
+    }
+
+    /// Toglie il telefono dalle notifiche; va chiamata prima di scartare il bearer.
+    public func unregisterDevice(token: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["token": token])
+        _ = try await send(method: "DELETE", path: "api/v1/me/devices", body: body)
+    }
+
+    /// Elimina l'account (e a cascata i suoi dati). Solo bearer; corpo `{}` come per sign-out.
+    public func deleteUser() async throws {
+        _ = try await send(post: "api/auth/delete-user", body: Data("{}".utf8))
+    }
+
     func get<T: Decodable>(_ url: URL, as type: T.Type) async throws -> T {
         let (data, _) = try await perform(URLRequest(url: url))
         do {
@@ -403,4 +420,9 @@ public struct APIClient: Sendable {
         }
         return (data, http)
     }
+}
+
+/// Il token APNs come lo vuole il server: esadecimale minuscolo, due cifre per byte.
+public func apnsHex(_ data: Data) -> String {
+    data.map { String(format: "%02x", $0) }.joined()
 }

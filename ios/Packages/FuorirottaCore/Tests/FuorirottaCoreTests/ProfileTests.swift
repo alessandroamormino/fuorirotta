@@ -57,7 +57,7 @@ private func body(_ sent: ProfileStub.Sent) -> [String: Any] {
 @Suite(.serialized) struct ProfileTests {
     @Test func apnsHexIsLowercaseAndFullLength() {
         #expect(apnsHex(Data([0xAB, 0x01])) == "ab01")
-        let token = apnsHex(Data((0..<32).map { UInt8($0 &* 9 &+ 250) }))
+        let token = apnsHex(Data((0..<32).map { UInt8(truncatingIfNeeded: $0 * 9 + 250) }))
         #expect(token.count == 64)
         #expect(token.range(of: ApiContract.apnsTokenPattern, options: .regularExpression) != nil)
         #expect(token == token.lowercased())

@@ -58,12 +58,14 @@ final class Session {
 
     private let api: APIClient
     private let saves: SavesModel
+    private let push: PushRegistration
     // Un solo accesso alla volta: due tocchi rapidi non devono lanciare due flussi.
     private var busy = false
 
-    init(api: APIClient, saves: SavesModel) {
+    init(api: APIClient, saves: SavesModel, push: PushRegistration) {
         self.api = api
         self.saves = saves
+        self.push = push
         api.onUnauthorized = { [weak self] in Task { @MainActor in self?.handleUnauthorized() } }
     }
 
@@ -127,6 +129,8 @@ final class Session {
     }
 
     func signOut() async {
+        // Prima il telefono esce dalle notifiche (26 D-08/D-10): dopo, il bearer non c'e' piu'.
+        await push.unregister()
         do { try await api.signOut() } catch { print("sign-out fallito: \(error)") }
         Keychain.delete()
         api.bearer = nil
@@ -176,5 +180,6 @@ final class Session {
         presentSignIn = false
         successCount += 1
         await saves.didSignIn()
+        await push.refreshIfAuthorised()
     }
 }

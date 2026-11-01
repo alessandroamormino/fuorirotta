@@ -23,6 +23,7 @@
 		A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB922A66158CC37247D8879 /* FuorirottaApp.swift */; };
 		B772334C3F88B18C0A811DC6 /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30E1CFACE53CA40F0614F34 /* EventDetailView.swift */; };
 		BF974CD1C09D61EB4E6C78DD /* StatsCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */; };
+		DA5A9A54EE87CEF48C914118 /* PushRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */; };
 		E0C6F06E4A73B6450F59BB0C /* EventCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB95769BD3D9DD0097F97FE /* EventCards.swift */; };
 		E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0958FA7AA361C947B83B04 /* SavesModel.swift */; };
 		EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25216E6A8579546E42AB6C7 /* MapScreen.swift */; };
@@ -33,6 +34,7 @@
 		08E8F863A79CE57299E007F7 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		39BA12BB79474FEB80925711 /* LocationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationModel.swift; sourceTree = "<group>"; };
+		3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistration.swift; sourceTree = "<group>"; };
 		3F0958FA7AA361C947B83B04 /* SavesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavesModel.swift; sourceTree = "<group>"; };
 		4467811081BDB08735B3CFEB /* SignInSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInSheet.swift; sourceTree = "<group>"; };
 		5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsCards.swift; sourceTree = "<group>"; };
@@ -105,6 +107,7 @@
 				9C7EA14984C6205355CBF543 /* LocationViews.swift */,
 				E25216E6A8579546E42AB6C7 /* MapScreen.swift */,
 				D8B41CF87D602B3F4D0B0579 /* ProfileView.swift */,
+				3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */,
 				8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */,
 				6E616087A4FBE9B4B99A3D40 /* SavedView.swift */,
 				3F0958FA7AA361C947B83B04 /* SavesModel.swift */,
@@ -226,6 +229,7 @@
 				9EFA970089F19DF478C0C7C5 /* LocationViews.swift in Sources */,
 				EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */,
 				12751BD6A00CE42B31CBF53B /* ProfileView.swift in Sources */,
+				DA5A9A54EE87CEF48C914118 /* PushRegistration.swift in Sources */,
 				0C552E8B611CE7C46F6741AA /* RemoteImage.swift in Sources */,
 				18006C9D52BAB281B4C5C9F5 /* SavedView.swift in Sources */,
 				E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */,
@@ -267,6 +271,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				API_BASE_URL = "https://fuori-rotta.it";
 				APNS_ENVIRONMENT = sandbox;
+				APS_ENTITLEMENT = development;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -360,6 +365,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				API_BASE_URL = "https://fuori-rotta.it";
 				APNS_ENVIRONMENT = sandbox;
+				APS_ENTITLEMENT = development;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -453,6 +459,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				API_BASE_URL = "https://fuori-rotta.it";
 				APNS_ENVIRONMENT = production;
+				APS_ENTITLEMENT = production;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";

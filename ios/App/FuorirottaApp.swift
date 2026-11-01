@@ -61,7 +61,9 @@ struct FuorirottaApp: App {
     private let api: APIClient
     private let version: String
 
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var session: Session
+    @State private var push: PushRegistration
     @State private var saves: SavesModel
     @State private var location = LocationModel()
     @State private var router = Router()
@@ -75,8 +77,11 @@ struct FuorirottaApp: App {
         api = client
         self.version = version
         let savesModel = SavesModel(api: client)
+        let pushModel = PushRegistration(api: client)
+        AppDelegate.push = pushModel
         _saves = State(initialValue: savesModel)
-        _session = State(initialValue: Session(api: client, saves: savesModel))
+        _push = State(initialValue: pushModel)
+        _session = State(initialValue: Session(api: client, saves: savesModel, push: pushModel))
     }
 
     private enum Gate: Identifiable {
@@ -95,6 +100,7 @@ struct FuorirottaApp: App {
             RootView()
                 .environment(\.api, api)
                 .environment(session)
+                .environment(push)
                 .environment(saves)
                 .environment(location)
                 .environment(router)
@@ -110,6 +116,7 @@ struct FuorirottaApp: App {
                 .task {
                     await saves.start()
                     await session.restore()
+                    await push.refreshIfAuthorised()
                 }
                 // Il ritorno di Google resta il primo; il resto sono i link di fuori-rotta.it.
                 .onOpenURL { url in

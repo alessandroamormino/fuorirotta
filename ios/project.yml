@@ -19,10 +19,13 @@ settings:
   configs:
     Debug:
       APNS_ENVIRONMENT: sandbox
+      APS_ENTITLEMENT: development
     DebugLocal:
       APNS_ENVIRONMENT: sandbox
+      APS_ENTITLEMENT: development
     Release:
       APNS_ENVIRONMENT: production
+      APS_ENTITLEMENT: production
 packages:
   FuorirottaCore:
     path: Packages/FuorirottaCore
@@ -54,6 +57,7 @@ targets:
       properties:
         com.apple.developer.applesignin: [Default]
         com.apple.developer.associated-domains: ["applinks:fuori-rotta.it"]
+        aps-environment: $(APS_ENTITLEMENT)
     info:
       path: App/Info.plist
       properties:
