@@ -41,7 +41,8 @@ private func at(_ n: Int) -> Date { Date(timeIntervalSince1970: 1_790_000_000 + 
         let b = GuestStore(fileURL: file)
         #expect(await b.all() == a.all())
         #expect(await b.all().map(\.id) == [3, 2, 1])
-        #expect(await b.contains(1) && !(await b.contains(9)))
+        #expect(await b.contains(1))
+        #expect(await b.contains(9) == false)
     }
 
     @Test func setSnapAndRemove() async {
