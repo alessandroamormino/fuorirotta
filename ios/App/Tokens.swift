@@ -22,6 +22,11 @@ extension Color {
     static let googleText = Color("googleText")
 }
 
+extension Color {
+    /// Fondi dell'avatar senza foto (REF Omniphile "Community"): i colori delle categorie, scelti dal nome in modo stabile.
+    static let avatarPalette: [Color] = ["categorySagre", "categoryMusica", "categoryArte", "categoryFiere", "categorySport", "categoryFood"].map { Color($0) }
+}
+
 enum Spacing {
     static let xs: CGFloat = 4
     static let sm: CGFloat = 8

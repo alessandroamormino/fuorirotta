@@ -54,19 +54,49 @@ struct ProfileView: View {
             }
             .card()
         case .signedIn(let user):
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                HStack(spacing: Spacing.md) {
-                    Text(verbatim: String(user.name.first ?? user.email.first ?? "?").uppercased())
-                        .font(.heading)
-                        .frame(width: 56, height: 56)
-                        .background(Color.surfaceStrong, in: Circle())
-                    VStack(alignment: .leading) {
-                        Text(verbatim: user.name).font(.heading)
-                        Text(verbatim: user.email).font(.label).foregroundStyle(Color.mutedForeground)
-                    }
+            // Come "Community" nel video: avatar tondo grande, nome in grassetto, e-mail grigia; senza scheda.
+            HStack(spacing: Spacing.md) {
+                ProfileAvatar(user: user)
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text(verbatim: user.name).font(.heading).foregroundStyle(Color.foreground).lineLimit(2)
+                    Text(verbatim: user.email).font(.label).foregroundStyle(Color.mutedForeground).lineLimit(1).truncationMode(.middle)
                 }
+                Spacer(minLength: 0)
             }
-            .card()
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// La foto dell'account se il provider la da' (Google: `user.image`, gia' filtrata dal server), altrimenti le iniziali
+/// su un cerchio colorato. La foto e' una miniatura alla misura del cerchio, come le card.
+struct ProfileAvatar: View {
+    static let size: CGFloat = 72
+
+    let user: MeUser
+    @State private var photo: UIImage?
+
+    var body: some View {
+        ZStack {
+            if let photo {
+                Image(uiImage: photo).resizable().scaledToFill()
+            } else {
+                Color.avatarPalette[stableIndex(user.email, count: Color.avatarPalette.count)]
+                Text(verbatim: initials(name: user.name, email: user.email))
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(Spacing.xs)
+            }
+        }
+        .frame(width: Self.size, height: Self.size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+        .task(id: user.image) {
+            photo = nil
+            guard let url = user.image else { return }
+            photo = await ImageLoader.image(url: url, size: CGSize(width: Self.size, height: Self.size))
         }
     }
 }

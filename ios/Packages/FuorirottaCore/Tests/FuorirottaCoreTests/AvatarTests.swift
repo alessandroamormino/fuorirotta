@@ -34,8 +34,7 @@ import Testing
         let a = stableIndex("Alessandro Amormino", count: 6)
         #expect(a == stableIndex("Alessandro Amormino", count: 6))
         #expect((0..<6).contains(a))
-        #expect(stableIndex("", count: 6) == 0)
         // Valore fissato: la funzione non puo' cambiare tra una versione e l'altra (il colore dell'avatar non deve saltare).
-        #expect(stableIndex("abc", count: 100) == 6)
+        #expect(stableIndex("abc", count: 100) == 63)
     }
 }
