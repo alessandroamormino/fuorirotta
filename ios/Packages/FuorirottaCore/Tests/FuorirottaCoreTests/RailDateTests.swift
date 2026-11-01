@@ -22,10 +22,11 @@ import Testing
         #expect(d.isToday)
     }
 
-    @Test func eventAlreadyRunningSaysInCorsoAndIsHighlighted() {
+    @Test func eventAlreadyRunningSaysInCorsoAndIsNotHighlighted() {
+        // UAT 2: solo chi INIZIA oggi ha la data in accento; "In corso" (mercati annuali, mostre) non e' "oggi".
         let d = railDate(dateStart: "2026-10-30T00:00:00.000Z", dateEnd: "2026-11-03T22:59:00.000Z", today: "2026-11-01")
         #expect(d.label == "In corso")
-        #expect(d.isToday)
+        #expect(d.isToday == false)
     }
 
     @Test func unreadableDateHasNoLabel() {
