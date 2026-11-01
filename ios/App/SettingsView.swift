@@ -1,3 +1,4 @@
+import FuorirottaCore
 import SwiftUI
 
 /// Aspetto dell'app (REF Omniphile: segmentato Sistema / Chiaro / Scuro). `system` = nessun aspetto imposto (D-07).
@@ -39,6 +40,12 @@ struct SettingsView: View {
     @State private var confirmDelete = false
     @State private var showPlaceSheet = false
     @State private var deleteFailed = false
+    // Metodi di accesso: nil = non caricati (rete) o in caricamento.
+    @State private var methods: SignInMethods?
+    @State private var methodsFailed = false
+    @State private var linking: SignInProvider?
+    @State private var unlinkTarget: SignInProvider?
+    @State private var methodMessage: String?
 
     private var signedIn: Bool {
         if case .signedIn = session.state { return true }
@@ -50,6 +57,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     if signedIn { accountGroup }
+                    if signedIn { methodsGroup }
                     appearanceGroup
                     placeGroup
                     if signedIn { notificationsGroup }
@@ -75,14 +83,19 @@ struct SettingsView: View {
     // MARK: gruppi
 
     /// Un gruppo: titolo piccolo grigio sopra, righe nella card.
-    private func group<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
+    private func group<Content: View>(
+        _ title: LocalizedStringKey, fill: Color = .surface, @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(title)
                 .font(.label.weight(.semibold))
                 .foregroundStyle(Color.mutedForeground)
                 .padding(.horizontal, Spacing.md)
                 .accessibilityAddTraits(.isHeader)
-            VStack(alignment: .leading, spacing: Spacing.md) { content() }.card()
+            VStack(alignment: .leading, spacing: Spacing.md) { content() }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(fill, in: RoundedRectangle(cornerRadius: Radius.card))
         }
     }
 
@@ -116,6 +129,108 @@ struct SettingsView: View {
             } message: {
                 Text("I tuoi salvati restano sull'account; su questo iPhone la lista torna vuota.")
             }
+        }
+    }
+
+    // MARK: metodi di accesso
+
+    private var methodsGroup: some View {
+        group("Metodi di accesso") {
+            if let methods {
+                ForEach(SignInProvider.allCases, id: \.self) { provider in methodRow(provider, methods: methods) }
+                if methods.accounts.count == 1 {
+                    Text("Puoi scollegare un metodo solo se ne resta un altro.").font(.label).foregroundStyle(Color.mutedForeground)
+                }
+            } else if methodsFailed {
+                Text("Non riusciamo a caricare i metodi di accesso.").font(.label).foregroundStyle(Color.mutedForeground)
+                Button("Riprova") { Task { await loadMethods() } }.buttonStyle(.bordered).controlSize(.small)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 44)
+            }
+            if let methodMessage {
+                Text(methodMessage).font(.label).foregroundStyle(Color.destructive)
+            }
+        }
+        .task { await loadMethods() }
+        .confirmationDialog(
+            unlinkTarget.map { "Scollegare \($0.name)?" } ?? "", isPresented: Binding(get: { unlinkTarget != nil }, set: { if !$0 { unlinkTarget = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let provider = unlinkTarget, let current = methods {
+                Button("Scollega \(provider.name)", role: .destructive) {
+                    Task {
+                        methodMessage = nil
+                        if await session.unlink(provider, in: current) {
+                            await loadMethods()
+                        } else {
+                            methodMessage = "Non siamo riusciti a scollegare \(provider.name). Riprova."
+                        }
+                    }
+                }
+            }
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            if let provider = unlinkTarget {
+                Text(provider == .apple
+                    ? "Non potrai più entrare con Apple. Il tuo profilo e i tuoi dati restano. Revochiamo anche l'autorizzazione data a Fuorirotta nel tuo ID Apple."
+                    : "Non potrai più entrare con Google. Il tuo profilo e i tuoi dati restano.")
+            }
+        }
+    }
+
+    private func methodRow(_ provider: SignInProvider, methods: SignInMethods) -> some View {
+        let linked = methods.isLinked(provider)
+        return HStack(spacing: Spacing.md) {
+            Group {
+                if provider == .apple {
+                    Image(systemName: "apple.logo").font(.title3).foregroundStyle(Color.foreground)
+                } else {
+                    Image("GoogleG").resizable().scaledToFit().frame(width: 20, height: 20)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text(verbatim: provider.name).foregroundStyle(Color.foreground)
+                Text(linked ? "Collegato" : "Non collegato").font(.label).foregroundStyle(Color.mutedForeground)
+            }
+            Spacer()
+            if linking == provider {
+                ProgressView()
+            } else if !linked {
+                Button("Collega") { Task { await link(provider) } }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(linking != nil)
+                    .accessibilityLabel("Collega \(provider.name)")
+            } else if methods.canUnlink(provider) {
+                Button("Scollega") { unlinkTarget = provider }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(linking != nil)
+                    .accessibilityLabel("Scollega \(provider.name)")
+            }
+        }
+        .frame(minHeight: 44)
+    }
+
+    private func loadMethods() async {
+        methodsFailed = false
+        if let loaded = await session.signInMethods() {
+            methods = loaded
+        } else if methods == nil {
+            methodsFailed = true
+        }
+    }
+
+    private func link(_ provider: SignInProvider) async {
+        linking = provider
+        methodMessage = nil
+        defer { linking = nil }
+        switch await session.link(provider) {
+        case .linked: await loadMethods()
+        case .canceled: break
+        case .failed(let message): methodMessage = message
         }
     }
 
@@ -197,31 +312,26 @@ struct SettingsView: View {
         }
     }
 
-    /// Danger Zone (MOB-05): un solo passo di conferma, nessun sondaggio ne' attesa. Successo solo dopo il 2xx del server.
+    /// Zona pericolosa (MOB-05, REF Omniphile): titolo grigio come gli altri gruppi, card rosa tenue senza bordo con una sola
+    /// riga, "Elimina account" in rosso e il cestino a destra. Un solo passo di conferma, nessun sondaggio ne' attesa.
     private var dangerZone: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Zona pericolosa").font(.heading).foregroundStyle(Color.destructive).accessibilityAddTraits(.isHeader)
-            Text("Eliminando l'account cancelli per sempre salvati, preferenze e dati del profilo. Se hai usato Apple, revochiamo anche l'accesso.")
-                .font(.label)
-                .foregroundStyle(Color.foreground)
+        group("Zona pericolosa", fill: Color.destructive.opacity(0.12)) {
+            Button(role: .destructive) { confirmDelete = true } label: {
+                HStack(spacing: Spacing.md) {
+                    Text("Elimina account")
+                    Spacer()
+                    if session.isDeleting { ProgressView() } else { Image(systemName: "trash").accessibilityHidden(true) }
+                }
+                .foregroundStyle(Color.destructive)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isDeleting)
             if deleteFailed {
                 Text("Non è andata a buon fine. Riprova tra un momento.").font(.label).foregroundStyle(Color.destructive)
             }
-            Button(role: .destructive) { confirmDelete = true } label: {
-                HStack(spacing: Spacing.sm) {
-                    if session.isDeleting { ProgressView() }
-                    Text("Elimina account")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(session.isDeleting)
         }
-        .padding(Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.card))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Color.destructive.opacity(0.4), lineWidth: 1))
         .confirmationDialog("Elimina account", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Elimina account", role: .destructive) {
                 deleteFailed = false
