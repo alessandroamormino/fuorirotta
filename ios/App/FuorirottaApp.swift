@@ -26,7 +26,7 @@ struct RootView: View {
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house") { HomeView() }
-            Tab("Mappa", systemImage: "map") { Placeholder(title: "Mappa", symbol: "map") }
+            Tab("Mappa", systemImage: "map") { MapScreen() }
             Tab("Salvati", systemImage: "bookmark") { Placeholder(title: "Salvati", symbol: "bookmark") }
             Tab("Profilo", systemImage: "person") { Placeholder(title: "Profilo", symbol: "person") }
             Tab(role: .search) { Placeholder(title: "Cerca", symbol: "magnifyingglass") }

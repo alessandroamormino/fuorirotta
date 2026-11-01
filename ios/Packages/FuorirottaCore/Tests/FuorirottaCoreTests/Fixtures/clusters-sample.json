@@ -1,0 +1,63 @@
+{
+ "geojson": {
+  "type": "FeatureCollection",
+  "features": [
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      9.170151,
+      45.461816
+     ]
+    },
+    "properties": {
+     "id": 1034375,
+     "title": "Gallerie Leonardo da Vinci",
+     "category": "Arte e cultura",
+     "imageUrl": "https://www.in-lombardia.it/sites/default/files/styles/card_h/public/evento/images/149091/115710/2_ok.jpg?itok=WeYPHt0j",
+     "dateStart": "2019-12-10T00:00:00.000Z",
+     "locationName": "Museo Nazionale Scienza e Tecnologia Leonardo da Vinci"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      10.226117,
+      45.54355
+     ]
+    },
+    "properties": {
+     "id": 314707,
+     "title": "Museum Escape – Il Falco d’Italia",
+     "category": "Arte e cultura",
+     "imageUrl": "https://www.in-lombardia.it/sites/default/files/styles/card_w/public/evento/images/292245/147902/GRAFICA_MUSEUM_ESCAPE_Tavola-disegno-1.jpg?itok=o33NYITa",
+     "dateStart": "2023-11-20T00:00:00.000Z",
+     "locationName": "Museo del Risorgimento Leonessa d'Italia"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      9.031935,
+      45.81374
+     ]
+    },
+    "properties": {
+     "id": 963052,
+     "title": "PARCO DEI RACCONTI",
+     "category": "Arte e cultura",
+     "imageUrl": "https://www.in-lombardia.it/sites/default/files/styles/card_w/public/evento/images/243427/109677/parco_dei_racconti_per_cu.jpg?itok=LaVtz6DW",
+     "dateStart": "2024-11-11T00:00:00.000Z",
+     "locationName": "VILLA IMBONATI - San Fermo della Battaglia CO"
+    }
+   }
+  ]
+ },
+ "eventCount": 3,
+ "computedAt": "2026-11-01T11:10:55.432Z"
+}

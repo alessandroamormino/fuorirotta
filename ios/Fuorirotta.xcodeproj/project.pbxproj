@@ -12,6 +12,7 @@
 		450FA3619A3E5F5381108AC7 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08E8F863A79CE57299E007F7 /* HomeView.swift */; };
 		5984783CE23E2511E599E22F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E5D39164BA3095540C27C68C /* Assets.xcassets */; };
 		A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB922A66158CC37247D8879 /* FuorirottaApp.swift */; };
+		EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25216E6A8579546E42AB6C7 /* MapScreen.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,6 +22,7 @@
 		629E3D4482469EA6F7F6953D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BA4676EE0AF931C39E743D49 /* FuorirottaCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FuorirottaCore; path = Packages/FuorirottaCore; sourceTree = SOURCE_ROOT; };
 		BCB922A66158CC37247D8879 /* FuorirottaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuorirottaApp.swift; sourceTree = "<group>"; };
+		E25216E6A8579546E42AB6C7 /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
 		E5D39164BA3095540C27C68C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -68,6 +70,7 @@
 				BCB922A66158CC37247D8879 /* FuorirottaApp.swift */,
 				08E8F863A79CE57299E007F7 /* HomeView.swift */,
 				629E3D4482469EA6F7F6953D /* Info.plist */,
+				E25216E6A8579546E42AB6C7 /* MapScreen.swift */,
 				26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */,
 			);
 			path = App;
@@ -174,6 +177,7 @@
 			files = (
 				A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */,
 				450FA3619A3E5F5381108AC7 /* HomeView.swift in Sources */,
+				EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */,
 				01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -18,6 +18,41 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
     }
 }
 
+@Suite struct ClustersTests {
+    @Test func decodesSample() throws {
+        let url = Bundle.module.url(forResource: "clusters-sample", withExtension: "json", subdirectory: "Fixtures")!
+        let env = try JSONDecoder().decode(ClusterEnvelope.self, from: Data(contentsOf: url))
+        let set = ClusterSet(env)
+        #expect(set.pins.count == 3)
+        // GeoJSON: coordinates sono [lon, lat], la latitudine sta all'indice 1 (Lombardia: lat ~45, lon ~9).
+        #expect(set.pins.allSatisfy { ($0.lat ?? 0) > 44 && ($0.lat ?? 0) < 47 && ($0.lng ?? 0) > 8 && ($0.lng ?? 0) < 12 })
+        #expect(!set.computedAt.isEmpty)
+    }
+
+    @Test func skipsFeaturesWithoutTwoCoordinates() throws {
+        let json = #"{"computedAt":"x","eventCount":1,"geojson":{"features":[{"geometry":{"coordinates":[9.1]},"properties":{"id":1,"title":"t","dateStart":"2026-11-01T00:00:00.000Z"}}]}}"#
+        let env = try JSONDecoder().decode(ClusterEnvelope.self, from: Data(json.utf8))
+        #expect(ClusterSet(env).pins.isEmpty)
+    }
+}
+
+@Suite struct PinDeltaTests {
+    private func pin(_ id: Int, lat: Double? = 45.0) -> MapPin {
+        MapPin(id: id, title: "t", category: nil, imageUrl: nil, dateStart: "2026-11-01T00:00:00.000Z",
+               locationName: nil, lat: lat, lng: lat == nil ? nil : 9.0)
+    }
+
+    @Test func samePinsChangeNothing() {
+        let d = pinDelta(existing: [1, 2, 3], incoming: [pin(3), pin(1), pin(2)])
+        #expect(d.add.isEmpty && d.remove.isEmpty)
+    }
+
+    @Test func onlyTheDifferenceMoves() {
+        let d = pinDelta(existing: [1, 2], incoming: [pin(2), pin(3), pin(4, lat: nil)])
+        #expect(d.add.map(\.id) == [3] && d.remove == [1])
+    }
+}
+
 @Suite struct WeekendTests {
     @Test(arguments: [
         (rome(2026, 11, 2), "2026-11-06", "2026-11-08"),        // lunedi'

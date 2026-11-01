@@ -42,6 +42,14 @@ public struct MapPin: Codable, Identifiable, Hashable, Sendable {
         case latitude, longitude, resolvedLatitude, resolvedLongitude
     }
 
+    public init(
+        id: Int, title: String, category: String?, imageUrl: String?, dateStart: String,
+        locationName: String?, lat: Double?, lng: Double?
+    ) {
+        self.id = id; self.title = title; self.category = category; self.imageUrl = imageUrl
+        self.dateStart = dateStart; self.locationName = locationName; self.lat = lat; self.lng = lng
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(Int.self, forKey: .id)
@@ -76,6 +84,51 @@ public struct EventsPage: Codable, Sendable {
     public let total: Int
 }
 
+/// Differenza tra i pin gia' sulla mappa e quelli in arrivo: la mappa aggiunge e toglie solo questa, mai tutto.
+/// I pin senza coordinate non si possono mostrare e vengono ignorati.
+public func pinDelta(existing: Set<Int>, incoming: [MapPin]) -> (add: [MapPin], remove: [Int]) {
+    let shown = incoming.filter { $0.lat != nil && $0.lng != nil }
+    let ids = Set(shown.map(\.id))
+    return (shown.filter { !existing.contains($0.id) }, existing.filter { !ids.contains($0) }.sorted())
+}
+
+/// /api/events/clusters: tutti i pin (GeoJSON) con l'istante di calcolo, usato anche come chiave di cache.
+public struct ClusterSet: Sendable {
+    public let computedAt: String
+    public let pins: [MapPin]
+
+    init(_ env: ClusterEnvelope) {
+        computedAt = env.computedAt
+        pins = env.geojson.features.compactMap { f -> MapPin? in
+            guard f.geometry.coordinates.count >= 2 else { return nil }
+            let p = f.properties
+            return MapPin(
+                id: p.id, title: p.title, category: p.category, imageUrl: p.imageUrl, dateStart: p.dateStart,
+                locationName: p.locationName, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
+            )
+        }
+    }
+}
+
+struct ClusterEnvelope: Decodable {
+    struct Feature: Decodable {
+        struct Geometry: Decodable { let coordinates: [Double] }
+        struct Props: Decodable {
+            let id: Int
+            let title: String
+            let category: String?
+            let imageUrl: String?
+            let dateStart: String
+            let locationName: String?
+        }
+        let geometry: Geometry
+        let properties: Props
+    }
+    struct Collection: Decodable { let features: [Feature] }
+    let computedAt: String
+    let geojson: Collection
+}
+
 public struct APIClient: Sendable {
     public let baseURL: URL
     private let session: URLSession
@@ -103,21 +156,36 @@ public struct APIClient: Sendable {
     /// Solo lat, lng, radius, dateFrom, dateTo, limit: mai i parametri che avviano uno scraping in background.
     public func events(
         lat: Double, lng: Double, radiusKm: Int,
-        dateFrom: String, dateTo: String, limit: Int
+        dateFrom: String? = nil, dateTo: String? = nil, limit: Int
     ) async throws -> EventsPage {
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/events"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [
+        var items = [
             URLQueryItem(name: "lat", value: String(lat)),
             URLQueryItem(name: "lng", value: String(lng)),
             URLQueryItem(name: "radius", value: String(radiusKm)),
-            URLQueryItem(name: "dateFrom", value: dateFrom),
-            URLQueryItem(name: "dateTo", value: dateTo),
-            URLQueryItem(name: "limit", value: String(limit)),
         ]
+        if let dateFrom { items.append(URLQueryItem(name: "dateFrom", value: dateFrom)) }
+        if let dateTo { items.append(URLQueryItem(name: "dateTo", value: dateTo)) }
+        items.append(URLQueryItem(name: "limit", value: String(limit)))
+        comps.queryItems = items
+        return try await get(comps.url!, as: EventsPage.self)
+    }
+
+    /// Solo i pin attorno a un punto: la stessa chiamata con limit 1 e nessuna data (i pin non sono limitati).
+    public func mapPins(lat: Double, lng: Double, radiusKm: Int) async throws -> [MapPin] {
+        try await events(lat: lat, lng: lng, radiusKm: radiusKm, limit: 1).mapEvents
+    }
+
+    /// Tutti i pin (circa 9.000, 2,6 MB senza compressione). Le feature senza due coordinate si saltano.
+    public func clusters() async throws -> ClusterSet {
+        ClusterSet(try await get(baseURL.appendingPathComponent("api/events/clusters"), as: ClusterEnvelope.self))
+    }
+
+    private func get<T: Decodable>(_ url: URL, as type: T.Type) async throws -> T {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(from: comps.url!)
+            (data, response) = try await session.data(from: url)
         } catch {
             throw APIError.network
         }
@@ -127,7 +195,7 @@ public struct APIClient: Sendable {
             throw APIError.http(status: http.statusCode, code: code)
         }
         do {
-            return try JSONDecoder().decode(EventsPage.self, from: data)
+            return try JSONDecoder().decode(T.self, from: data)
         } catch {
             throw APIError.decoding
         }
