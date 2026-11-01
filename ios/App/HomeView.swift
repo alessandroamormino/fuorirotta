@@ -315,7 +315,7 @@ struct HomeView: View {
             }
         case .loaded:
             if signedIn { forYouSection }
-            railSection("Vicino a te", events: model.nearby) { limit in
+            railSection("Vicino a te", events: model.nearby, style: .poster) { limit in
                 // Stessa fonte della fila, fino a 100.
                 try await nearbyList(limit: limit)
             }
@@ -341,7 +341,10 @@ struct HomeView: View {
                         line: "Non ci sono eventi in arrivo per quello che segui.")
                 }
             } else {
-                railSection("Per te", events: page.items) { limit in
+                railSection(
+                    "Per te", events: page.items, style: .wide, icon: "sparkles", count: page.total,
+                    subtitle: "Scelti da quello che segui"
+                ) { limit in
                     guard let api else { throw APIError.network }
                     return try await api.feed(limit: limit, offset: 0).items
                 }
@@ -417,18 +420,36 @@ struct HomeView: View {
             .padding(.horizontal, Spacing.md)
     }
 
+    private enum RailStyle { case poster, wide }
+
     /// Titolo in grassetto con il chevron (REF Omniphile) e "Vedi tutto": apre l'elenco della stessa fonte, fino a 100.
-    private func railSection(_ title: String, events: [Event], all: @escaping (Int) async throws -> [Event]) -> some View {
+    /// Con `icon`, `count` e `subtitle` l'intestazione e' quella delle file larghe ("Per te"); senza, quella delle locandine.
+    private func railSection(
+        _ title: String, events: [Event], style: RailStyle, icon: String? = nil, count: Int? = nil, subtitle: String? = nil,
+        all: @escaping (Int) async throws -> [Event]
+    ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             NavigationLink {
                 EventListView(title: title) { try await all(100) }
             } label: {
-                HStack(spacing: Spacing.sm) {
-                    Text(title).font(.heading).foregroundStyle(Color.foreground)
-                    Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
-                        .accessibilityHidden(true)
-                    Spacer()
-                    Text("Vedi tutto").font(.label.weight(.semibold)).foregroundStyle(Color.accentToken)
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    HStack(spacing: Spacing.sm) {
+                        if let icon { SettingsTile(symbol: icon, color: .accentToken) }
+                        Text(title).font(.heading).foregroundStyle(Color.foreground)
+                        Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
+                            .accessibilityHidden(true)
+                        if let count {
+                            Text(verbatim: count == 1 ? "1 evento" : "\(count) eventi")
+                                .font(.label)
+                                .foregroundStyle(Color.mutedForeground)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text("Vedi tutto").font(.label.weight(.semibold)).foregroundStyle(Color.accentToken).fixedSize()
+                    }
+                    if let subtitle {
+                        Text(subtitle).font(.label).foregroundStyle(Color.mutedForeground)
+                    }
                 }
                 .padding(.horizontal, Spacing.md)
                 .frame(minHeight: 44)
@@ -441,16 +462,19 @@ struct HomeView: View {
                     symbol: "calendar.badge.exclamationmark", title: "Nessun evento qui intorno",
                     line: "Cambia posizione o guarda la mappa per scoprire cosa c'è in giro.")
             } else {
-                rail(events)
+                rail(events, style: style)
             }
         }
     }
 
-    private func rail(_ events: [Event]) -> some View {
+    private func rail(_ events: [Event], style: RailStyle) -> some View {
         ScrollView(.horizontal) {
             // Sempre orizzontale, anche con i testi piu' grandi: le schede crescono in altezza, non cambiano disposizione.
             LazyHStack(alignment: .top, spacing: Spacing.md) {
-                ForEach(events) { RailCard(event: $0) }
+                switch style {
+                case .poster: ForEach(events) { PosterCard(event: $0) }
+                case .wide: ForEach(events) { WideCard(event: $0) }
+                }
             }
             .padding(.horizontal, Spacing.md)
         }
@@ -481,13 +505,11 @@ struct HomeView: View {
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: Spacing.md) {
                     ForEach(0..<4, id: \.self) { _ in
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            RoundedRectangle(cornerRadius: Radius.md).fill(Color.surface)
-                                .frame(width: RailCard.width, height: RailCard.imageHeight)
-                            Text("Titolo dell'evento in due righe").font(.body.weight(.semibold)).lineLimit(2)
-                            Text("6-8 novembre · Luogo").font(.label)
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("1 nov").font(.label.weight(.semibold))
+                            RoundedRectangle(cornerRadius: Radius.media).fill(Color.surface)
+                                .frame(width: PosterCard.width, height: PosterCard.height)
                         }
-                        .frame(width: RailCard.width, alignment: .topLeading)
                     }
                 }
                 .padding(.horizontal, Spacing.md)

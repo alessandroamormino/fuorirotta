@@ -132,6 +132,123 @@ struct RailCard: View {
     }
 }
 
+/// Scheda verticale (REF Omniphile "Releases"): locandina 2:3 con il titolo sulla foto e la data del primo giorno SOPRA.
+/// Se l'evento e' oggi, data e bordo sottile sono in accento. Il segnalibro di vetro sta in alto a destra.
+struct PosterCard: View {
+    static let width: CGFloat = 148
+    static let height: CGFloat = 222
+    static let imageSize = CGSize(width: width, height: height)
+
+    let event: Event
+    var slot = "poster"
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var category: String? { event.canonicalCategory ?? event.category }
+
+    var body: some View {
+        let date = railDate(dateStart: event.dateStart, dateEnd: event.dateEnd, today: romeToday())
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(verbatim: date.label)
+                .font(.label.weight(.semibold))
+                .foregroundStyle(date.isToday ? Color.accentToken : Color.foreground)
+                .lineLimit(1)
+                .frame(minHeight: 20, alignment: .leading)
+                .accessibilityHidden(true)
+            EventLink(event: event, slot: slot) { card(highlighted: date.isToday, date: date.label) }
+                .overlay(alignment: .topTrailing) {
+                    BookmarkButton(event: event, style: .glass).padding(Spacing.xs)
+                }
+        }
+        .frame(width: Self.width, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func card(highlighted: Bool, date: String) -> some View {
+        Text(verbatim: event.title)
+            .font(.label.weight(.semibold))
+            .foregroundStyle(.white)
+            .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
+            .truncationMode(.tail)
+            .multilineTextAlignment(.leading)
+            .padding(Spacing.sm)
+            .frame(width: Self.width, alignment: .leading)
+            // L'altezza minima e' quella della locandina; con i testi accessibili la scheda cresce, senza tagli.
+            .frame(minHeight: Self.height, alignment: .bottomLeading)
+            .background {
+                ZStack {
+                    RemoteImage(url: event.imageUrl, category: category, size: Self.imageSize)
+                    LinearGradient(
+                        stops: [.init(color: Color.scrim.opacity(0), location: 0.45), .init(color: Color.scrim, location: 1)],
+                        startPoint: .top, endPoint: .bottom)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Radius.media))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.media)
+                    .strokeBorder(highlighted ? Color.accentToken : Color.surfaceStrong, lineWidth: 1)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: [date, event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
+    }
+}
+
+/// Scheda larga (REF Omniphile "Haven't Watched"): foto 16:9, in basso a sinistra la categoria con chevron e il titolo,
+/// in basso a destra il segnalibro di vetro.
+struct WideCard: View {
+    static let width: CGFloat = 280
+    static let height: CGFloat = 158
+    static let imageSize = CGSize(width: width, height: height)
+    private static let bookmarkSlot: CGFloat = 44 + Spacing.sm
+
+    let event: Event
+    var slot = "wide"
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var category: String? { event.canonicalCategory ?? event.category }
+
+    var body: some View {
+        EventLink(event: event, slot: slot) { card }
+            .overlay(alignment: .bottomTrailing) {
+                BookmarkButton(event: event, style: .glass).padding(Spacing.sm)
+            }
+            .frame(width: Self.width, alignment: .topLeading)
+            .accessibilityElement(children: .contain)
+    }
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            if let name = category {
+                HStack(spacing: Spacing.xs) {
+                    Text(verbatim: name).lineLimit(1)
+                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).accessibilityHidden(true)
+                }
+                .font(.label)
+                .foregroundStyle(.white.opacity(0.75))
+            }
+            Text(verbatim: event.title)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                .truncationMode(.tail)
+        }
+        .padding(Spacing.md)
+        .padding(.trailing, Self.bookmarkSlot)
+        .frame(width: Self.width, alignment: .leading)
+        .frame(minHeight: Self.height, alignment: .bottomLeading)
+        .background {
+            ZStack {
+                RemoteImage(url: event.imageUrl, category: category, size: Self.imageSize)
+                LinearGradient(
+                    stops: [.init(color: Color.scrim.opacity(0), location: 0.35), .init(color: Color.scrim, location: 1)],
+                    startPoint: .top, endPoint: .bottom)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Radius.media))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
+    }
+}
+
 /// Segnalibro: vuoto/pieno con rimbalzo (fermo con "Riduci movimento") e tocco leggero. L'accento solo sul simbolo pieno.
 struct BookmarkButton: View {
     enum Style { case glass, plain }

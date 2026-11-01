@@ -61,6 +61,22 @@ public func formatDayRange(from: String, to: String) -> String {
     return "\(a.d) \(months[a.m - 1]) - \(b.d) \(months[b.m - 1])"
 }
 
+private let shortMonths = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
+
+/// "2026-11-01" -> "1 nov" (nomi fissi, niente locale). Un giorno illeggibile torna com'e'.
+public func formatShortDay(_ day: String) -> String {
+    guard let p = parseDay(day) else { return day }
+    return "\(p.d) \(shortMonths[p.m - 1])"
+}
+
+/// La data sopra una card verticale: il primo giorno ("1 nov"), oppure "In corso" se l'evento e' gia' iniziato.
+/// `isToday` = l'evento si svolge oggi (Roma): la card ha la data e il bordo in accento.
+public func railDate(dateStart: String, dateEnd: String?, today: String) -> (label: String, isToday: Bool) {
+    guard let days = eventDays(dateStart: dateStart, dateEnd: dateEnd) else { return ("", false) }
+    if days.startDay < today { return (days.endDay >= today ? "In corso" : formatShortDay(days.startDay), days.endDay >= today) }
+    return (formatShortDay(days.startDay), days.startDay == today)
+}
+
 private let weekdays = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"]
 
 /// "2026-11-08" -> "domenica 8 novembre" (giorno di Roma, nomi fissi). Un giorno illeggibile torna com'e'.
