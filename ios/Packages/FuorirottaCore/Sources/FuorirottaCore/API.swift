@@ -231,7 +231,7 @@ public struct APIClient: Sendable {
         self.session = session ?? Self.makeSession(appVersion: appVersion)
     }
 
-    /// Il bearer (valore di `set-auth-token`). Va solo su /api/v1/me/** e sign-out/delete-user, mai su una rotta pubblica.
+    /// Il bearer (valore di `set-auth-token`). Va solo su /api/v1/me/**, sign-out/delete-user e i metodi di accesso, mai su una rotta pubblica.
     public var bearer: String? {
         get { auth.bearer }
         nonmutating set { auth.bearer = newValue }
@@ -364,6 +364,22 @@ public struct APIClient: Sendable {
         _ = try await send(post: "api/v1/me/apple-token", json: ["authorizationCode": code])
     }
 
+    /// I metodi di accesso collegati all'account (solo id di riga e provider).
+    public func listAccounts() async throws -> [LinkedAccount] {
+        try await get(baseURL.appendingPathComponent("api/auth/list-accounts"), as: [LinkedAccount].self)
+    }
+
+    /// Collega un secondo metodo all'account della sessione aperta: l'id token e' verificato dal server (AUTH-07: mai
+    /// un collegamento implicito, serve la sessione). Senza `callbackURL` il server non prepara nessun giro nel browser.
+    public func linkSocial(provider: String, idToken: String, nonce: String) async throws {
+        _ = try await send(post: "api/auth/link-social", json: ["provider": provider, "idToken": ["token": idToken, "nonce": nonce]])
+    }
+
+    /// Scollega una riga (il server rifiuta l'ultima). Il corpo e' l'id della RIGA, non il sub del provider.
+    public func unlinkAccount(id: String) async throws {
+        _ = try await send(post: "api/auth/unlink-account", json: ["accountId": id])
+    }
+
     /// Corpo `{}`: un corpo vuoto con Content-Type JSON e' un 400 di Better Auth.
     public func signOut() async throws {
         _ = try await send(post: "api/auth/sign-out", body: Data("{}".utf8))
@@ -416,7 +432,10 @@ public struct APIClient: Sendable {
     func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         var request = request
         let path = request.url?.path ?? ""
-        let personal = path.hasPrefix("/api/v1/me/") || path == "/api/auth/sign-out" || path == "/api/auth/delete-user"
+        // Le rotte dei metodi di accesso rispondono 401 anche per un id token rifiutato: li' la sessione e' finita solo
+        // con il codice UNAUTHORIZED di Better Auth.
+        let accountRoute = ["/api/auth/list-accounts", "/api/auth/link-social", "/api/auth/unlink-account"].contains(path)
+        let personal = path.hasPrefix("/api/v1/me/") || path == "/api/auth/sign-out" || path == "/api/auth/delete-user" || accountRoute
         if personal, let bearer = auth.bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
         let data: Data
         let response: URLResponse
@@ -429,7 +448,8 @@ public struct APIClient: Sendable {
         guard (200..<300).contains(http.statusCode) else {
             // Better Auth risponde {code, message}, le nostre rotte {error}.
             let body = try? JSONDecoder().decode([String: String].self, from: data)
-            if http.statusCode == 401, personal, auth.bearer != nil { auth.onUnauthorized?() }
+            let sessionEnded = !accountRoute || body?["code"] == nil || body?["code"] == "UNAUTHORIZED"
+            if http.statusCode == 401, personal, sessionEnded, auth.bearer != nil { auth.onUnauthorized?() }
             throw APIError.http(status: http.statusCode, code: body?["code"] ?? body?["error"])
         }
         return (data, http)
