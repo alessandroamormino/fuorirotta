@@ -41,8 +41,17 @@ struct HeroCard: View {
     private var category: String? { event.canonicalCategory ?? event.category }
 
     var body: some View {
+        EventLink(event: event, slot: "hero") { card }
+            // Sopra il collegamento: per VoiceOver il segnalibro e' un controllo a parte, e il suo tocco non apre l'evento.
+            // In basso a destra: in alto stanno i pulsanti dell'intestazione di Home.
+            .overlay(alignment: .bottomTrailing) {
+                BookmarkButton(event: event, style: .glass).padding(Spacing.md)
+            }
+    }
+
+    private var card: some View {
         let visual = categoryVisual(category)
-        RemoteImage(url: event.imageUrl, category: category, size: Self.imageSize)
+        return RemoteImage(url: event.imageUrl, category: category, size: Self.imageSize)
             .overlay(alignment: .bottom) {
                 // Sfumatura fissa sotto il testo: il bianco regge il contrasto su qualunque foto.
                 LinearGradient(colors: [Color.scrim.opacity(0), Color.scrim], startPoint: .top, endPoint: .bottom)
@@ -79,11 +88,6 @@ struct HeroCard: View {
             .clipped()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
-            // Dopo l'elemento accessibile della card: il segnalibro e' un controllo a parte per VoiceOver.
-            // In basso a destra: in alto stanno i pulsanti dell'intestazione di Home.
-            .overlay(alignment: .bottomTrailing) {
-                BookmarkButton(event: event, style: .glass).padding(Spacing.md)
-            }
     }
 }
 
@@ -95,30 +99,35 @@ struct RailCard: View {
     static let imageSize = CGSize(width: width, height: imageHeight)
 
     let event: Event
+    /// Distingue la fila di provenienza per lo zoom: lo stesso evento puo' stare in piu' file.
+    var slot = "rail"
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var category: String? { event.canonicalCategory ?? event.category }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            RemoteImage(url: event.imageUrl, category: category, size: Self.imageSize)
-                .frame(width: Self.width, height: Self.imageHeight)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                .overlay(alignment: .topTrailing) {
-                    // Vetro e non "plain": sta sopra una foto qualunque e deve restare leggibile.
-                    BookmarkButton(event: event, style: .glass).padding(Spacing.xs)
-                }
-            Text(verbatim: event.title)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Color.foreground)
-                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-                .truncationMode(.tail)
-            Text(verbatim: eventMeta(event))
-                .font(.label)
-                .foregroundStyle(Color.mutedForeground)
-                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+        EventLink(event: event, slot: slot) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                RemoteImage(url: event.imageUrl, category: category, size: Self.imageSize)
+                    .frame(width: Self.width, height: Self.imageHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                Text(verbatim: event.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.foreground)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                    .truncationMode(.tail)
+                Text(verbatim: eventMeta(event))
+                    .font(.label)
+                    .foregroundStyle(Color.mutedForeground)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+            }
+            .frame(width: Self.width, alignment: .topLeading)
         }
         .frame(width: Self.width, alignment: .topLeading)
+        .overlay(alignment: .topTrailing) {
+            // Vetro e non "plain": sta sopra una foto qualunque e deve restare leggibile.
+            BookmarkButton(event: event, style: .glass).padding(Spacing.xs)
+        }
         .accessibilityElement(children: .contain)
     }
 }
@@ -162,6 +171,11 @@ struct EventRow: View {
     private var category: String? { event.canonicalCategory ?? event.category }
 
     var body: some View {
+        EventLink(event: event, slot: "row") { content }
+            .overlay(alignment: .topTrailing) { BookmarkButton(event: event, style: .plain) }
+    }
+
+    private var content: some View {
         HStack(alignment: .top, spacing: Spacing.md) {
             RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 72, height: 72))
                 .frame(width: 72, height: 72)
@@ -184,7 +198,8 @@ struct EventRow: View {
                 }
             }
             Spacer(minLength: 0)
-            BookmarkButton(event: event, style: .plain)
+            // Il posto del segnalibro, che sta sopra il collegamento (vedi body).
+            Color.clear.frame(width: 44, height: 44)
         }
     }
 }

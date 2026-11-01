@@ -93,6 +93,7 @@ struct HomeView: View {
     @Environment(Session.self) private var session
     @Environment(\.appConfig) private var appConfig
     @Environment(\.openURL) private var openURL
+    @Environment(Router.self) private var router
 
     @State private var dismissedRecommended = UserDefaults.standard.string(forKey: "fr.dismissedRecommended")
     @State private var model = HomeModel()
@@ -101,7 +102,7 @@ struct HomeView: View {
     @State private var showPlaceSheet = false
 
     var body: some View {
-        NavigationStack {
+        EventStack(path: Bindable(router).homePath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     heroSection

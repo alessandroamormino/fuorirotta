@@ -53,6 +53,7 @@ targets:
       path: App/Fuorirotta.entitlements
       properties:
         com.apple.developer.applesignin: [Default]
+        com.apple.developer.associated-domains: ["applinks:fuori-rotta.it"]
     info:
       path: App/Info.plist
       properties:

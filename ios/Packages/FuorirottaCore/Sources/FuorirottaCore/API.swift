@@ -32,6 +32,19 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     public var sourceId: String? = nil
 }
 
+extension Event {
+    /// Un evento con i soli campi che un pin o una riga di Salvati conoscono; il resto arriva da `event(id:)`.
+    public init(
+        id: Int, title: String, dateStart: String, dateEnd: String? = nil, imageUrl: String? = nil,
+        locationName: String? = nil, category: String? = nil, latitude: Double? = nil, longitude: Double? = nil
+    ) {
+        self.init(
+            id: id, title: title, dateStart: dateStart, dateEnd: dateEnd, imageUrl: imageUrl, locationName: locationName,
+            address: nil, canonicalCategory: category, category: category, latitude: nil, longitude: nil,
+            resolvedLatitude: latitude, resolvedLongitude: longitude, sourceUrl: nil, description: nil)
+    }
+}
+
 public struct MapPin: Codable, Identifiable, Hashable, Sendable {
     public let id: Int
     public let title: String
@@ -132,6 +145,12 @@ struct ClusterEnvelope: Decodable {
     struct Collection: Decodable { let features: [Feature] }
     let computedAt: String
     let geojson: Collection
+}
+
+/// Esito di GET /api/events/{id}: l'evento, oppure 404 (cancellato). Gli altri errori sono eccezioni.
+public enum EventLookup: Sendable {
+    case found(Event)
+    case gone
 }
 
 /// GET /api/v1/me/feed.
@@ -267,6 +286,22 @@ public struct APIClient: Sendable {
     /// Tutti i pin (circa 9.000, 2,6 MB senza compressione). Le feature senza due coordinate si saltano.
     public func clusters() async throws -> ClusterSet {
         ClusterSet(try await get(baseURL.appendingPathComponent("api/events/clusters"), as: ClusterEnvelope.self))
+    }
+
+    /// Un evento con tutti i campi. Un membro fuso risponde 307 verso l'id canonico: URLSession lo segue da solo.
+    public func event(id: Int) async throws -> EventLookup {
+        do {
+            return .found(try await get(baseURL.appendingPathComponent("api/events/\(id)"), as: Event.self))
+        } catch APIError.http(status: 404, _) {
+            return .gone
+        }
+    }
+
+    /// Ricerca libera su tutto il catalogo: nessuna posizione e nessun filtro di zona (T-27-30). Nessun bearer.
+    public func search(q: String, limit: Int) async throws -> [Event] {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("api/events"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "search", value: q), URLQueryItem(name: "limit", value: String(limit))]
+        return try await get(comps.url!, as: EventsPage.self).events
     }
 
     /// Accesso nativo: il server verifica l'id token del provider e risponde col bearer nell'header `set-auth-token`.

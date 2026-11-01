@@ -1,11 +1,55 @@
 import FuorirottaCore
 import GoogleSignIn
+import SafariServices
 import SwiftUI
 
 extension EnvironmentValues {
     @Entry var api: APIClient? = nil
     /// Politica di versione del server; nil = non risposta o non valida (l'app prosegue).
     @Entry var appConfig: AppConfig? = nil
+}
+
+enum AppTab: Hashable { case home, map, saved, profile, search }
+
+/// Un indirizzo da mostrare in un Safari dentro l'app (foglio).
+struct SafariTarget: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+/// Dove sta l'app: la scheda attiva, la pila di Home (i link universali spingono qui) e il foglio Safari.
+@MainActor @Observable
+final class Router {
+    var tab = AppTab.home
+    var homePath = NavigationPath()
+    var safari: SafariTarget?
+
+    /// Link universali (T-27-29): solo https://fuori-rotta.it/eventi/<cifre> e /l/<token>. L'id si verifica con
+    /// l'API, la pagina della lista si mostra in Safari: niente viene eseguito o salvato. Altro: ignorato.
+    func open(_ url: URL, api: APIClient?) async {
+        guard url.scheme == "https", url.host(percentEncoded: false) == "fuori-rotta.it" else { return }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count == 2 else { return }
+        switch parts[0] {
+        case "eventi":
+            guard let id = Int(parts[1]), parts[1].allSatisfy(\.isASCII), let api else { return }
+            guard case .found(let event)? = try? await api.event(id: id) else { return }
+            tab = .home
+            homePath.append(EventRoute(event: event, slot: "link"))
+        case "l":
+            guard parts[1].allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else { return }
+            safari = SafariTarget(url: url)
+        default:
+            return
+        }
+    }
+}
+
+/// SFSafariViewController non rientra nell'app: il link universale che mostra resta nel foglio.
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
 
 /// TestFlight per i tester interni; al rilascio sullo Store qui va il link dell'App Store.
@@ -20,6 +64,7 @@ struct FuorirottaApp: App {
     @State private var session: Session
     @State private var saves: SavesModel
     @State private var location = LocationModel()
+    @State private var router = Router()
     @State private var config: AppConfig?
 
     init() {
@@ -52,6 +97,7 @@ struct FuorirottaApp: App {
                 .environment(session)
                 .environment(saves)
                 .environment(location)
+                .environment(router)
                 .environment(\.appConfig, config)
                 // Un solo schermo intero alla volta: la versione non piu' supportata vince sulla spiegazione.
                 .fullScreenCover(item: .constant(gate)) { gate in
@@ -65,22 +111,28 @@ struct FuorirottaApp: App {
                     await saves.start()
                     await session.restore()
                 }
-                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
+                // Il ritorno di Google resta il primo; il resto sono i link di fuori-rotta.it.
+                .onOpenURL { url in
+                    if GIDSignIn.sharedInstance.handle(url) { return }
+                    Task { await router.open(url, api: api) }
+                }
                 .sheet(isPresented: Bindable(session).presentSignIn) { SignInSheet() }
+                .sheet(item: Bindable(router).safari) { SafariView(url: $0.url).ignoresSafeArea() }
         }
     }
 }
 
 struct RootView: View {
     @Environment(SavesModel.self) private var saves
+    @Environment(Router.self) private var router
 
     var body: some View {
-        TabView {
-            Tab("Home", systemImage: "house") { HomeView() }
-            Tab("Mappa", systemImage: "map") { MapScreen() }
-            Tab("Salvati", systemImage: "bookmark") { SavedView() }
-            Tab("Profilo", systemImage: "person") { ProfileView() }
-            Tab(role: .search) { SearchView() }
+        TabView(selection: Bindable(router).tab) {
+            Tab("Home", systemImage: "house", value: AppTab.home) { HomeView() }
+            Tab("Mappa", systemImage: "map", value: AppTab.map) { MapScreen() }
+            Tab("Salvati", systemImage: "bookmark", value: AppTab.saved) { SavedView() }
+            Tab("Profilo", systemImage: "person", value: AppTab.profile) { ProfileView() }
+            Tab(value: AppTab.search, role: .search) { SearchView() }
         }
         // Home e Salvati (le liste che scorrono) fanno ridurre la barra; la mappa non e' uno ScrollView e non la muove.
         .tabBarMinimizeBehavior(.onScrollDown)

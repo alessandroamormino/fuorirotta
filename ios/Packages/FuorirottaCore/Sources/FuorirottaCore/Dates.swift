@@ -61,6 +61,28 @@ public func formatDayRange(from: String, to: String) -> String {
     return "\(a.d) \(months[a.m - 1]) - \(b.d) \(months[b.m - 1])"
 }
 
+private let weekdays = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"]
+
+/// "2026-11-08" -> "domenica 8 novembre" (giorno di Roma, nomi fissi). Un giorno illeggibile torna com'e'.
+public func formatLongDay(_ day: String) -> String {
+    let p = day.split(separator: "-").compactMap { Int($0) }
+    guard p.count == 3, (1...12).contains(p[1]),
+          let noon = Rome.calendar.date(from: DateComponents(year: p[0], month: p[1], day: p[2], hour: 12))
+    else { return day }
+    return "\(weekdays[Rome.calendar.component(.weekday, from: noon) - 1]) \(p[2]) \(months[p[1] - 1])"
+}
+
+/// "21:00" (Roma), oppure nil per gli eventi senza orario: la fonte li salva a mezzanotte di Roma o a mezzanotte UTC.
+public func eventTime(_ dateStart: String) -> String? {
+    guard let date = parseISO(dateStart) else { return nil }
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = TimeZone(identifier: "UTC")!
+    let rome = Rome.calendar.dateComponents([.hour, .minute], from: date)
+    let z = utc.dateComponents([.hour, .minute], from: date)
+    if (rome.hour == 0 && rome.minute == 0) || (z.hour == 0 && z.minute == 0) { return nil }
+    return String(format: "%02d:%02d", rome.hour!, rome.minute!)
+}
+
 /// ISO 8601 con o senza frazioni di secondo (l'API manda ".000Z").
 func parseISO(_ s: String) -> Date? {
     let f = ISO8601DateFormatter()

@@ -21,7 +21,7 @@ struct SavedView: View {
     var body: some View {
         let today = romeToday()
         let shown = rows(for: filter, today: today)
-        NavigationStack {
+        EventStack {
             List {
                 if saves.offline {
                     Label("Sei offline. Mostriamo gli ultimi dati salvati.", systemImage: "wifi.slash")
@@ -185,8 +185,22 @@ struct SavedRowView: View {
     let row: SavedRow
 
     var body: some View {
+        // Una riga il cui evento non esiste piu' non si apre.
+        if !row.gone, let id = row.eventID {
+            EventLink(event: event(id), slot: "saved") { content }
+        } else {
+            content
+        }
+    }
+
+    /// Dall'istantanea: basta per aprire il dettaglio subito, il resto lo carica `event(id:)`.
+    private func event(_ id: Int) -> Event {
+        Event(id: id, title: row.title, dateStart: row.dateStart, dateEnd: row.dateEnd, locationName: row.place, category: row.category)
+    }
+
+    private var content: some View {
         let visual = categoryVisual(row.category)
-        HStack(spacing: Spacing.md) {
+        return HStack(spacing: Spacing.md) {
             // Lo snapshot del server non ha l'immagine (per scelta): le righe usano il segnaposto di categoria.
             RemoteImage(url: nil, category: row.category, size: CGSize(width: 72, height: 72))
                 .frame(width: 72, height: 72)
