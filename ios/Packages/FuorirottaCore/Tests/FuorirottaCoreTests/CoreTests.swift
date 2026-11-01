@@ -76,9 +76,9 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
 
     @Test func eventDaysUtcEndOfDay() {
         let d = eventDays(dateStart: "2026-10-29T00:00:00.000Z", dateEnd: "2026-11-01T23:59:59.999Z")
-        #expect(d?.from == "2026-10-29" && d?.to == "2026-11-01")
+        #expect(d?.startDay == "2026-10-29" && d?.endDay == "2026-11-01")
         let one = eventDays(dateStart: "2026-11-07T00:00:00.000Z", dateEnd: nil)
-        #expect(one?.from == "2026-11-07" && one?.to == "2026-11-07")
+        #expect(one?.startDay == "2026-11-07" && one?.endDay == "2026-11-07")
     }
 }
 

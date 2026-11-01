@@ -21,7 +21,7 @@ struct CategoryPlaceholder: View {
 func eventMeta(_ event: Event) -> String {
     var parts: [String] = []
     if let days = eventDays(dateStart: event.dateStart, dateEnd: event.dateEnd) {
-        parts.append(formatDayRange(from: days.from, to: days.to))
+        parts.append(formatDayRange(from: days.startDay, to: days.endDay))
     }
     if let place = event.locationName, !place.isEmpty { parts.append(place) }
     return parts.joined(separator: " · ")

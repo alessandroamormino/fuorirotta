@@ -56,7 +56,7 @@ func parseISO(_ s: String) -> Date? {
 
 /// Primo e ultimo giorno (Roma) di un evento: l'inizio e' il giorno di Roma; una fine alle 23:59 UTC
 /// vale la sua data UTC (fine-giornata in formato UTC), altrimenti il giorno di Roma.
-public func eventDays(dateStart: String, dateEnd: String?) -> (from: String, to: String)? {
+public func eventDays(dateStart: String, dateEnd: String?) -> (startDay: String, endDay: String)? {
     guard let start = parseISO(dateStart) else { return nil }
     let from = ymd(start, in: Rome.calendar)
     guard let endStr = dateEnd, let end = parseISO(endStr) else { return (from, from) }
