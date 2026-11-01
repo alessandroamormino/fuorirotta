@@ -13,6 +13,7 @@ struct FuorirottaApp: App {
 
     @State private var session: Session
     @State private var saves: SavesModel
+    @State private var location = LocationModel()
 
     init() {
         let info = Bundle.main
@@ -31,6 +32,10 @@ struct FuorirottaApp: App {
                 .environment(\.api, api)
                 .environment(session)
                 .environment(saves)
+                .environment(location)
+                .fullScreenCover(isPresented: .constant(!location.explained)) {
+                    LocationExplanationView().environment(location)
+                }
                 .task {
                     await saves.start()
                     await session.restore()

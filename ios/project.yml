@@ -71,6 +71,7 @@ targets:
           - UIInterfaceOrientationPortrait
         CADisableMinimumFrameDurationOnPhone: true
         ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Usiamo la tua posizione solo per mostrarti gli eventi più vicini. Non la salviamo sui nostri server.
     postBuildScripts:
       - name: API locale (solo DebugLocal)
         basedOnDependencyAnalysis: false

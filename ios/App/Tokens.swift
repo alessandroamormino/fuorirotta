@@ -44,6 +44,9 @@ extension Font {
     static let display = Font.largeTitle.weight(.semibold)
     static let heading = Font.title2.weight(.semibold)
     static let label = Font.footnote
+    // Simboli illustrativi (schermata della posizione 64, carta dell'invito 28): non sono testo, restano fissi.
+    static let symbolHero = Font.system(size: 64, weight: .regular)
+    static let symbolCard = Font.system(size: 28, weight: .regular)
 }
 
 struct CategoryVisual {
