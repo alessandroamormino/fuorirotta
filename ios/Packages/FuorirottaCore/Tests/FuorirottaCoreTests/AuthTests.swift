@@ -85,7 +85,8 @@ private func json(_ d: Data) -> [String: Any] {
         StubProtocol.reset([.init(headers: ["set-auth-token": "tok.sig"])])
         _ = try await stubbedClient().signInSocial(
             provider: "apple", idToken: "IDT", nonce: "RAW", firstName: nil, lastName: nil)
-        let idToken = try #require(json(try #require(StubProtocol.requests.first).body)["idToken"] as? [String: Any])
+        let sent = try #require(StubProtocol.requests.first)
+        let idToken = try #require(json(sent.body)["idToken"] as? [String: Any])
         #expect(idToken["user"] == nil)
     }
 
@@ -94,7 +95,8 @@ private func json(_ d: Data) -> [String: Any] {
         let bearer = try await stubbedClient().signInSocial(
             provider: "google", idToken: "GID", nonce: "RAW", firstName: nil, lastName: nil)
         #expect(bearer == "g.sig")
-        let body = json(try #require(StubProtocol.requests.first).body)
+        let sent = try #require(StubProtocol.requests.first)
+        let body = json(sent.body)
         #expect(body["provider"] as? String == "google")
         #expect((body["idToken"] as? [String: Any])?["nonce"] as? String == "RAW")
     }

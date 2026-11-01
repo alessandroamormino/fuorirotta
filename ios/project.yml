@@ -40,6 +40,10 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
+    entitlements:
+      path: App/Fuorirotta.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
     info:
       path: App/Info.plist
       properties:
