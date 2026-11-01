@@ -32,8 +32,8 @@ struct HeroCard: View {
     static let height: CGFloat = 360
     // Misura di decodifica: lato lungo della card su un iPhone (la larghezza reale dipende dallo schermo).
     static let imageSize = CGSize(width: 440, height: height + 60)
-    // Spazio per il segnalibro di vetro a destra del titolo.
-    private static let bookmarkSlot: CGFloat = 44 + Spacing.sm
+    // Spazio per il cuore di vetro a destra del titolo.
+    private static let heartSlot: CGFloat = 44 + Spacing.sm
 
     let event: Event
     var topInset: CGFloat = 0
@@ -42,10 +42,10 @@ struct HeroCard: View {
 
     var body: some View {
         EventLink(event: event, slot: "hero") { card }
-            // Sopra il collegamento: per VoiceOver il segnalibro e' un controllo a parte, e il suo tocco non apre l'evento.
+            // Sopra il collegamento: per VoiceOver il cuore e' un controllo a parte, e il suo tocco non apre l'evento.
             // In basso a destra: in alto stanno i pulsanti dell'intestazione di Home.
             .overlay(alignment: .bottomTrailing) {
-                BookmarkButton(event: event, style: .glass).padding(Spacing.md)
+                HeartButton(event: event, style: .glass).padding(Spacing.md)
             }
     }
 
@@ -82,7 +82,7 @@ struct HeroCard: View {
                     }
                 }
                 .padding(Spacing.md)
-                .padding(.trailing, Self.bookmarkSlot)
+                .padding(.trailing, Self.heartSlot)
             }
             .frame(height: Self.height + topInset)
             .clipped()
@@ -126,14 +126,14 @@ struct RailCard: View {
         .frame(width: Self.width, alignment: .topLeading)
         .overlay(alignment: .topTrailing) {
             // Vetro e non "plain": sta sopra una foto qualunque e deve restare leggibile.
-            BookmarkButton(event: event, style: .glass).padding(Spacing.xs)
+            HeartButton(event: event, style: .glass).padding(Spacing.xs)
         }
         .accessibilityElement(children: .contain)
     }
 }
 
 /// Scheda verticale (REF Omniphile "Releases"): locandina 2:3 con il titolo sulla foto e la data del primo giorno SOPRA.
-/// Se l'evento e' oggi, data e bordo sottile sono in accento. Il segnalibro di vetro sta in alto a destra.
+/// Se l'evento e' oggi, data e bordo sottile sono in accento. Il cuore di vetro sta in alto a destra.
 struct PosterCard: View {
     static let width: CGFloat = 148
     static let height: CGFloat = 222
@@ -156,7 +156,7 @@ struct PosterCard: View {
                 .accessibilityHidden(true)
             EventLink(event: event, slot: slot) { card(highlighted: date.isToday, date: date.label) }
                 .overlay(alignment: .topTrailing) {
-                    BookmarkButton(event: event, style: .glass).padding(Spacing.xs)
+                    HeartButton(event: event, style: .glass).padding(Spacing.xs)
                 }
         }
         .frame(width: Self.width, alignment: .topLeading)
@@ -193,12 +193,12 @@ struct PosterCard: View {
 }
 
 /// Scheda larga (REF Omniphile "Haven't Watched"): foto 16:9, in basso a sinistra la categoria con chevron e il titolo,
-/// in basso a destra il segnalibro di vetro.
+/// in basso a destra il cuore di vetro.
 struct WideCard: View {
     static let width: CGFloat = 280
     static let height: CGFloat = 158
     static let imageSize = CGSize(width: width, height: height)
-    private static let bookmarkSlot: CGFloat = 44 + Spacing.sm
+    private static let heartSlot: CGFloat = 44 + Spacing.sm
 
     let event: Event
     var slot = "wide"
@@ -209,7 +209,7 @@ struct WideCard: View {
     var body: some View {
         EventLink(event: event, slot: slot) { card }
             .overlay(alignment: .bottomTrailing) {
-                BookmarkButton(event: event, style: .glass).padding(Spacing.sm)
+                HeartButton(event: event, style: .glass).padding(Spacing.sm)
             }
             .frame(width: Self.width, alignment: .topLeading)
             .accessibilityElement(children: .contain)
@@ -232,7 +232,7 @@ struct WideCard: View {
                 .truncationMode(.tail)
         }
         .padding(Spacing.md)
-        .padding(.trailing, Self.bookmarkSlot)
+        .padding(.trailing, Self.heartSlot)
         .frame(width: Self.width, alignment: .leading)
         .frame(minHeight: Self.height, alignment: .bottomLeading)
         .background {
@@ -249,8 +249,9 @@ struct WideCard: View {
     }
 }
 
-/// Segnalibro: vuoto/pieno con rimbalzo (fermo con "Riduci movimento") e tocco leggero. L'accento solo sul simbolo pieno.
-struct BookmarkButton: View {
+/// Cuore dei salvati (come SaveHeart del sito): contorno/pieno con rimbalzo (fermo con "Riduci movimento") e tocco leggero.
+/// Rosso solo da pieno.
+struct HeartButton: View {
     enum Style { case glass, plain }
 
     let event: Event
@@ -264,9 +265,9 @@ struct BookmarkButton: View {
         let button = Button {
             Task { await saves.toggle(event) }
         } label: {
-            Image(systemName: saved ? "bookmark.fill" : "bookmark")
+            Image(systemName: saved ? "heart.fill" : "heart")
                 .font(.title3)
-                .foregroundStyle(saved ? Color.accentToken : Color.primary)
+                .foregroundStyle(saved ? Color.heart : Color.primary)
                 .symbolEffect(.bounce, value: reduceMotion ? false : saved)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -280,7 +281,7 @@ struct BookmarkButton: View {
     }
 }
 
-/// Riga dell'elenco "Vedi tutto": miniatura 72, titolo (2 righe, tutte con i testi accessibili), data e luogo, segnalibro.
+/// Riga dell'elenco "Vedi tutto": miniatura 72, titolo (2 righe, tutte con i testi accessibili), data e luogo, cuore.
 struct EventRow: View {
     let event: Event
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -289,7 +290,7 @@ struct EventRow: View {
 
     var body: some View {
         EventLink(event: event, slot: "row") { content }
-            .overlay(alignment: .topTrailing) { BookmarkButton(event: event, style: .plain) }
+            .overlay(alignment: .topTrailing) { HeartButton(event: event, style: .plain) }
     }
 
     private var content: some View {
@@ -315,7 +316,7 @@ struct EventRow: View {
                 }
             }
             Spacer(minLength: 0)
-            // Il posto del segnalibro, che sta sopra il collegamento (vedi body).
+            // Il posto del cuore, che sta sopra il collegamento (vedi body).
             Color.clear.frame(width: 44, height: 44)
         }
     }

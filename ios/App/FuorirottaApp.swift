@@ -148,7 +148,7 @@ struct RootView: View {
         TabView(selection: Bindable(router).tab) {
             Tab("Home", systemImage: "house", value: AppTab.home) { HomeView() }
             Tab("Mappa", systemImage: "map", value: AppTab.map) { MapScreen() }
-            Tab("Salvati", systemImage: "bookmark", value: AppTab.saved) { SavedView() }
+            Tab("Salvati", systemImage: "heart", value: AppTab.saved) { SavedView() }
             Tab(value: AppTab.profile) {
                 ProfileView()
             } label: {

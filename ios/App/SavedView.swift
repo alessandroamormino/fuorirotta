@@ -122,9 +122,9 @@ struct SavedView: View {
             }
         } else if filter == .upcoming {
             ContentUnavailableView {
-                Label("Nessun evento salvato", systemImage: "bookmark")
+                Label("Nessun evento salvato", systemImage: "heart")
             } description: {
-                Text("Tocca il segnalibro su un evento per ritrovarlo qui.")
+                Text("Tocca il cuore su un evento per ritrovarlo qui.")
             } actions: {
                 // Ospite senza salvati: invito ad accedere, mai un blocco (lacuna del video, vedi OMNIPHILE-VIDEO).
                 if saves.guestCount != nil {

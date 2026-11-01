@@ -106,7 +106,7 @@ final class SavesModel {
 
     func show(_ message: String) { toast = Toast(message: message) }
 
-    /// Ottimistico: il segnalibro cambia subito e torna indietro se il salvataggio non riesce.
+    /// Ottimistico: il cuore cambia subito e torna indietro se il salvataggio non riesce.
     func toggle(_ event: Event) async {
         let wasSaved = ids.contains(event.id)
         if wasSaved { ids.remove(event.id) } else { ids.insert(event.id) }
@@ -186,7 +186,7 @@ final class SavesModel {
     func remove(_ row: SavedRow, message: String) async {
         guard let index = rows.firstIndex(where: { $0.id == row.id }) else { return }
         rows.remove(at: index)
-        let key = mode == .guest ? row.entryID : row.eventID  // lo stesso valore che accende il segnalibro
+        let key = mode == .guest ? row.entryID : row.eventID  // lo stesso valore che accende il cuore
         if let key { ids.remove(key) }
         switch mode {
         case .guest:

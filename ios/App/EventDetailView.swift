@@ -46,8 +46,8 @@ struct EventStack<Root: View>: View {
     }
 }
 
-/// Rende una card un collegamento al dettaglio. Il segnalibro NON va nell'etichetta: chi usa EventLink lo mette
-/// sopra con `.overlay`, cosi' per VoiceOver sono due controlli e il tocco sul segnalibro non apre l'evento.
+/// Rende una card un collegamento al dettaglio. Il cuore NON va nell'etichetta: chi usa EventLink lo mette
+/// sopra con `.overlay`, cosi' per VoiceOver sono due controlli e il tocco sul cuore non apre l'evento.
 struct EventLink<Content: View>: View {
     let event: Event
     let slot: String
@@ -122,7 +122,7 @@ struct EventDetailView: View {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .accessibilityLabel("Condividi evento")
-                BookmarkButton(event: event, style: .plain)
+                HeartButton(event: event, style: .plain)
             }
         }
         .task(id: event.id) { await fetch() }
@@ -301,8 +301,8 @@ struct EventDetailView: View {
     private func about(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("Descrizione").font(.heading).foregroundStyle(Color.foreground).accessibilityAddTraits(.isHeader)
-            // Testo semplice e senza limite di righe: gli URL lunghi vanno a capo per carattere.
-            Text(verbatim: text)
+            // L'HTML della fonte diventa testo (paragrafi, grassetto, link); senza limite di righe, gli URL lunghi vanno a capo.
+            Text(htmlToAttributed(text))
                 .font(.body)
                 .foregroundStyle(Color.foreground)
                 .frame(maxWidth: .infinity, alignment: .leading)

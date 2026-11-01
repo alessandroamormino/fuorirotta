@@ -15,6 +15,8 @@ extension Color {
     static let mutedForeground = Color("mutedForeground")
     static let destructive = Color("destructive")
     static let success = Color("success")
+    /// Il cuore dei salvati, pieno: rosso di sistema (come il cuore del sito), si adatta da solo a chiaro e scuro.
+    static let heart = Color.red
     static let scrim = Color("scrim")
     // Pulsante Google: colori imposti dal marchio (eccezione, come sul web), uguali in chiaro e scuro.
     static let googleFill = Color("googleFill")
