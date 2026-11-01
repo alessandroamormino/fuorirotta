@@ -20,8 +20,9 @@ struct FuorirottaApp: App {
         let version = info.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let client = APIClient(baseURL: URL(string: base)!, appVersion: version)
         api = client
-        _saves = State(initialValue: SavesModel(api: client))
-        _session = State(initialValue: Session(api: client))
+        let savesModel = SavesModel(api: client)
+        _saves = State(initialValue: savesModel)
+        _session = State(initialValue: Session(api: client, saves: savesModel))
     }
 
     var body: some Scene {
@@ -41,6 +42,8 @@ struct FuorirottaApp: App {
 }
 
 struct RootView: View {
+    @Environment(SavesModel.self) private var saves
+
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house") { HomeView() }
@@ -51,5 +54,17 @@ struct RootView: View {
         }
         // Home e Salvati (le liste che scorrono) fanno ridurre la barra; la mappa non e' uno ScrollView e non la muove.
         .tabBarMinimizeBehavior(.onScrollDown)
+        .overlay(alignment: .bottom) {
+            if let toast = saves.toast {
+                ToastBanner(toast: toast) { saves.toast = nil }
+                    .padding(.horizontal, Spacing.md)
+                    .padding(.bottom, Spacing.xxxl)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(Motion.snappy, value: saves.toast?.id)
+        .sensoryFeedback(.success, trigger: saves.successCount)
+        .sensoryFeedback(.warning, trigger: saves.warningCount)
+        .sensoryFeedback(.error, trigger: saves.errorCount)
     }
 }

@@ -41,3 +41,66 @@ extension APIClient {
         do { return try JSONDecoder().decode(Items.self, from: data).items } catch { throw APIError.decoding }
     }
 }
+
+extension APIClient {
+    /// La lista dell'account: istantanea salvata + istantanea viva. Richiede il bearer.
+    public func savedList() async throws -> [SavedItem] {
+        try await get(baseURL.appendingPathComponent("api/v1/me/saved"), as: Items.self).items
+    }
+
+    /// Id canonici salvati dall'account, per accendere i segnalibri.
+    public func savedIds() async throws -> [Int] {
+        try await get(baseURL.appendingPathComponent("api/v1/me/saved/ids"), as: Ids.self).ids
+    }
+
+    /// 409 {error:"cap"} al tetto di 500, 404 se l'evento non esiste piu'.
+    public func save(id: Int) async throws {
+        _ = try await send(method: "PUT", path: "api/v1/me/saved/\(id)")
+    }
+
+    public func unsave(id: Int) async throws {
+        _ = try await send(method: "DELETE", path: "api/v1/me/saved/\(id)")
+    }
+
+    /// Una riga di sola istantanea (l'evento e' stato eliminato): `ref` e' l'id della riga, non dell'evento.
+    public func removeGone(ref: Int) async throws {
+        _ = try await send(method: "DELETE", path: "api/v1/me/saved/gone/\(ref)")
+    }
+
+    /// Unisce la lista del telefono nell'account; idempotente sul server. Ritorna quante righe sono entrate davvero.
+    public func merge(_ entries: [DeviceEntry]) async throws -> Int {
+        let body = try JSONEncoder().encode(["items": entries])
+        let (data, _) = try await send(method: "POST", path: "api/v1/me/saved/merge", body: body)
+        do { return try JSONDecoder().decode(Added.self, from: data).added } catch { throw APIError.decoding }
+    }
+}
+
+public enum MergeOutcome: Equatable, Sendable {
+    case nothing
+    case merged(Int)
+    case failed
+}
+
+/// L'unione dell'ospite: la lista del telefono parte UNA volta, si svuota solo dopo un 2xx (T-27-22).
+/// Se l'app muore tra il 2xx e lo svuotamento, la prossima volta il corpo e' lo stesso e il server risponde added 0.
+/// Si tolgono solo gli id inviati: un salvataggio fatto mentre la richiesta era in volo resta.
+public func mergeGuestSaves(store: GuestStore, send: @Sendable ([DeviceEntry]) async throws -> Int) async -> MergeOutcome {
+    let payload = await store.mergePayload()
+    guard !payload.isEmpty else { return .nothing }
+    do {
+        let added = try await send(payload)
+        await store.remove(ids: Set(payload.map(\.id)))
+        return .merged(added)
+    } catch {
+        return .failed
+    }
+}
+
+/// Lo stesso testo del web; nessun avviso se non e' entrato nulla.
+public func mergeMessage(added: Int) -> String? {
+    switch added {
+    case ..<1: nil
+    case 1: "1 evento aggiunto ai salvati"
+    default: "\(added) eventi aggiunti ai salvati"
+    }
+}

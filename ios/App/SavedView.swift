@@ -47,3 +47,33 @@ struct SavedRowView: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// Avviso di sistema in basso: 4 secondi, poi sparisce. Con "Annulla" il tocco esegue l'azione e lo chiude.
+struct ToastBanner: View {
+    let toast: Toast
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.md) {
+            Text(verbatim: toast.message)
+                .font(.label)
+                .foregroundStyle(Color.foreground)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let title = toast.actionTitle, let action = toast.action {
+                Button(title) {
+                    action()
+                    dismiss()
+                }
+                .font(.label.weight(.semibold))
+                .foregroundStyle(Color.accentToken)
+            }
+        }
+        .padding(Spacing.md)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Radius.md))
+        .task(id: toast.id) {
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled { dismiss() }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}

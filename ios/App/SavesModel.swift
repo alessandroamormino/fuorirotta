@@ -38,15 +38,37 @@ struct SavedRow: Identifiable, Equatable, Codable {
     }
 }
 
+/// Avviso non bloccante in basso, sopra la barra delle schede (UI-SPEC: unione, tetti, rimozione).
+struct Toast: Identifiable {
+    let id = UUID()
+    let message: String
+    var actionTitle: String?
+    var action: (@MainActor () -> Void)?
+}
+
+private enum Copy {
+    static let failed = "Non è andata a buon fine. Riprova tra un momento."
+    static let guestCap = "Hai raggiunto il limite di 100 salvati senza account. Accedi per salvarne fino a 500."
+    static let accountCap = "Hai raggiunto il limite di 500 salvati. Rimuovine qualcuno per aggiungerne altri."
+}
+
 @MainActor @Observable
 final class SavesModel {
-    /// Id salvati (sul telefono per l'ospite): accende i segnalibri.
+    private enum Mode { case guest, account }
+
+    /// Id salvati (ospite: id sul telefono; account: id canonici): accendono i segnalibri.
     private(set) var ids: Set<Int> = []
     private(set) var rows: [SavedRow] = []
     private(set) var loading = true
-    /// Contatori per .sensoryFeedback: cambiano a ogni esito.
+    var toast: Toast?
+    /// Contatori per .sensoryFeedback: cambiano a ogni esito, anche uguale al precedente.
+    private(set) var successCount = 0
     private(set) var warningCount = 0
+    private(set) var errorCount = 0
+    /// Ospite con la lista piena a 90 o piu': l'intestazione di Salvati mostra "N di 100".
+    var guestCount: Int? { mode == .guest ? ids.count : nil }
 
+    private var mode = Mode.guest
     private let api: APIClient
     private let store: GuestStore
 
@@ -62,23 +84,85 @@ final class SavesModel {
 
     func isSaved(_ id: Int) -> Bool { ids.contains(id) }
 
-    /// Ottimistico: il segnalibro si accende subito, il file sul telefono segue.
+    func show(_ message: String) { toast = Toast(message: message) }
+
+    /// Ottimistico: il segnalibro cambia subito e torna indietro se il salvataggio non riesce.
     func toggle(_ event: Event) async {
         let wasSaved = ids.contains(event.id)
         if wasSaved { ids.remove(event.id) } else { ids.insert(event.id) }
-        if await store.toggle(id: event.id, snap: Snap(event: event), now: .now) == .cap {
-            ids.remove(event.id)
-            warningCount += 1
+        switch mode {
+        case .guest:
+            if await store.toggle(id: event.id, snap: Snap(event: event), now: .now) == .cap {
+                ids.remove(event.id)
+                warningCount += 1
+                show(Copy.guestCap)
+            }
+        case .account:
+            do {
+                if wasSaved { try await api.unsave(id: event.id) } else { try await api.save(id: event.id) }
+            } catch {
+                if wasSaved { ids.insert(event.id) } else { ids.remove(event.id) }
+                switch error {
+                case APIError.http(401, _):
+                    break  // la sessione e' finita: ci pensa Session.handleUnauthorized
+                case APIError.http(let status, let code) where status == 409 && code == "cap":
+                    warningCount += 1
+                    show(Copy.accountCap)
+                default:
+                    errorCount += 1
+                    show(Copy.failed)
+                }
+            }
         }
     }
 
-    /// Risolve gli id del telefono dal server (POST, in blocchi da 100). Senza rete restano le istantanee salvate.
+    /// Dopo un accesso riuscito (e dopo restore): unisce la lista del telefono, poi passa all'account.
+    func didSignIn() async {
+        let api = api
+        switch await mergeGuestSaves(store: store, send: { try await api.merge($0) }) {
+        case .nothing:
+            break
+        case .merged(let added):
+            if let message = mergeMessage(added: added) {
+                successCount += 1
+                show(message)
+            }
+        case .failed:
+            // La lista resta sul telefono: la riprova e' il prossimo didSignIn.
+            errorCount += 1
+            show(Copy.failed)
+        }
+        mode = .account
+        if let saved = try? await api.savedIds() { ids = Set(saved) } else { ids = [] }
+        rows = []
+        loading = true
+    }
+
+    /// Uscita (o sessione scaduta): sul telefono non resta nulla dell'account (22 D-07, T-27-23).
+    func didSignOut() async {
+        await store.clear()
+        ids = []
+        rows = []
+        mode = .guest
+        loading = false
+        toast = nil
+        try? FileManager.default.removeItem(at: Self.cacheURL)
+    }
+
+    /// Ospite: gli id del telefono, risolti dal server (POST, blocchi da 100). Account: la lista del server.
     func reload() async {
+        switch mode {
+        case .guest: await reloadGuest()
+        case .account: await reloadAccount()
+        }
+        loading = false
+    }
+
+    private func reloadGuest() async {
         let entries = await store.all()
         ids = Set(entries.map(\.id))
         if entries.isEmpty {
             rows = []
-            loading = false
             return
         }
         do {
@@ -97,6 +181,16 @@ final class SavesModel {
         } catch {
             rows = entries.map { SavedRow(entryID: $0.id, eventID: $0.id, snap: $0.snap, gone: false, prefix: "g") }
         }
-        loading = false
     }
+
+    private func reloadAccount() async {
+        guard let items = try? await api.savedList() else { return }
+        rows = items.map {
+            SavedRow(entryID: $0.ref, eventID: $0.eventId, snap: $0.live ?? $0.snap, gone: $0.eventId == nil, prefix: "a")
+        }
+        ids = Set(items.compactMap(\.eventId))
+    }
+
+    /// Ultima lista dell'account mostrata, per quando la rete manca (Task 3).
+    static var cacheURL: URL { URL.cachesDirectory.appending(path: "fuorirotta/salvati.json") }
 }

@@ -54,6 +54,17 @@ public actor GuestStore {
 
     public func remove(_ id: Int) { commit(loaded().filter { $0.id != id }) }
 
+    /// Toglie piu' id con una sola scrittura (dopo un'unione riuscita).
+    public func remove(ids: Set<Int>) { commit(loaded().filter { !ids.contains($0.id) }) }
+
+    /// Rimette una voce tolta (Annulla) con il suo istante e la sua posizione originali.
+    public func restore(_ entry: DeviceEntry) {
+        var list = loaded().filter { $0.id != entry.id }
+        guard list.count < ApiContract.guestCap else { return }
+        list.append(entry)
+        commit(list.sorted { $0.savedAt > $1.savedAt })
+    }
+
     public func setSnap(_ id: Int, _ snap: Snap) {
         var list = loaded()
         guard let i = list.firstIndex(where: { $0.id == id }) else { return }

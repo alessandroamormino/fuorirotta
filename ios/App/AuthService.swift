@@ -57,11 +57,13 @@ final class Session {
     private(set) var errorCount = 0
 
     private let api: APIClient
+    private let saves: SavesModel
     // Un solo accesso alla volta: due tocchi rapidi non devono lanciare due flussi.
     private var busy = false
 
-    init(api: APIClient) {
+    init(api: APIClient, saves: SavesModel) {
         self.api = api
+        self.saves = saves
         api.onUnauthorized = { [weak self] in Task { @MainActor in self?.handleUnauthorized() } }
     }
 
@@ -76,6 +78,7 @@ final class Session {
         do {
             if let user = try await api.meState().user {
                 state = .signedIn(user)
+                await saves.didSignIn()  // un'unione rimasta a meta' (app chiusa tra il 2xx e lo svuotamento) si ripete qui
             } else {
                 handleUnauthorized()
             }
@@ -128,12 +131,17 @@ final class Session {
         Keychain.delete()
         api.bearer = nil
         state = .signedOut
+        await saves.didSignOut()
     }
 
     func handleUnauthorized() {
         Keychain.delete()
         api.bearer = nil
-        if state != .signedOut { expiredNotice = true }
+        if state != .signedOut {
+            expiredNotice = true
+            // La sessione e' finita: dell'account non resta nulla sul telefono.
+            Task { await saves.didSignOut() }
+        }
         state = .signedOut
     }
 
@@ -167,5 +175,6 @@ final class Session {
         expiredNotice = false
         presentSignIn = false
         successCount += 1
+        await saves.didSignIn()
     }
 }
