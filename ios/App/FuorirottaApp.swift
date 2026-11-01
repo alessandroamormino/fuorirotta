@@ -135,13 +135,30 @@ struct FuorirottaApp: App {
 struct RootView: View {
     @Environment(SavesModel.self) private var saves
     @Environment(Router.self) private var router
+    @Environment(Session.self) private var session
+    /// La foto dell'account come icona della scheda Profilo (REF Omniphile), gia' tonda e a colori originali.
+    @State private var profileIcon: UIImage?
+
+    private var photoURL: String? {
+        if case .signedIn(let user) = session.state { return user.image }
+        return nil
+    }
 
     var body: some View {
         TabView(selection: Bindable(router).tab) {
             Tab("Home", systemImage: "house", value: AppTab.home) { HomeView() }
             Tab("Mappa", systemImage: "map", value: AppTab.map) { MapScreen() }
             Tab("Salvati", systemImage: "bookmark", value: AppTab.saved) { SavedView() }
-            Tab("Profilo", systemImage: "person", value: AppTab.profile) { ProfileView() }
+            Tab(value: AppTab.profile) {
+                ProfileView()
+            } label: {
+                Label {
+                    Text("Profilo")
+                } icon: {
+                    // La barra non applica ritagli SwiftUI: l'immagine arriva gia' tonda; senza foto, il simbolo.
+                    if let profileIcon { Image(uiImage: profileIcon) } else { Image(systemName: "person") }
+                }
+            }
             Tab(value: AppTab.search, role: .search) { SearchView() }
         }
         // Home e Salvati (le liste che scorrono) fanno ridurre la barra; la mappa non e' uno ScrollView e non la muove.
@@ -154,10 +171,30 @@ struct RootView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .task(id: photoURL) {
+            profileIcon = nil
+            guard let url = photoURL, let photo = await ImageLoader.image(url: url, size: CGSize(width: 30, height: 30)) else { return }
+            profileIcon = Self.roundIcon(photo)
+        }
         .animation(Motion.snappy, value: saves.toast?.id)
         .sensoryFeedback(.success, trigger: saves.successCount)
         .sensoryFeedback(.warning, trigger: saves.warningCount)
         .sensoryFeedback(.error, trigger: saves.errorCount)
+    }
+}
+
+extension RootView {
+    /// Cerchio di 30 pt (aspect fill) con i colori originali: un'immagine "template" in una barra verrebbe tinta in una macchia.
+    static func roundIcon(_ image: UIImage) -> UIImage {
+        let side: CGFloat = 30
+        let scale = max(side / image.size.width, side / image.size.height)
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let rect = CGRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height)
+        let drawn = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+            UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: side, height: side)).addClip()
+            image.draw(in: rect)
+        }
+        return drawn.withRenderingMode(.alwaysOriginal)
     }
 }
 

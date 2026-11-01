@@ -100,6 +100,7 @@ struct HomeView: View {
     @State private var current: Int?
     @State private var topInset: CGFloat = 0
     @State private var showPlaceSheet = false
+    @State private var showSettings = false
 
     var body: some View {
         EventStack(path: Bindable(router).homePath) {
@@ -133,6 +134,7 @@ struct HomeView: View {
             .refreshable { await load() }
         }
         .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
+        .sheet(isPresented: $showSettings) { SettingsView() }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
         .sensoryFeedback(.selection, trigger: model.followCount)
@@ -232,21 +234,30 @@ struct HomeView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                Button { showPlaceSheet = true } label: {
-                    Image(systemName: "location")
-                        .font(.title3)
-                        .foregroundStyle(Color.primary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
+                // Capsula di vetro in alto a destra (REF Omniphile): zona | impostazioni, due azioni in un solo gruppo.
+                GlassEffectContainer {
+                    HStack(spacing: 0) {
+                        Button { showPlaceSheet = true } label: { capsuleIcon("location") }
+                            .accessibilityLabel("Cambia posizione")
+                            .accessibilityHint("Apre la scelta della zona")
+                        Button { showSettings = true } label: { capsuleIcon("gearshape") }
+                            .accessibilityLabel("Impostazioni")
+                    }
+                    .glassEffect(.regular.interactive(), in: .capsule)
                 }
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Cambia posizione")
-                .accessibilityHint("Apre la scelta della zona")
             }
             if showsUpdateBanner { updateBanner }
         }
         .padding(.horizontal, Spacing.md)
         .padding(.top, topInset + Spacing.sm)
+    }
+
+    private func capsuleIcon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.title3)
+            .foregroundStyle(Color.primary)
+            .frame(width: 48, height: 44)
+            .contentShape(Rectangle())
     }
 
     /// Altezza riservata all'intestazione quando sotto non c'e' la foto.
