@@ -42,6 +42,8 @@ final class LocationModel {
     private(set) var place = Place.milano
     /// Il sistema ha negato (o limitato) la posizione.
     private(set) var denied = false
+    /// Il sistema consente la posizione (la mappa mostra il pallino dell'utente).
+    private(set) var authorised = false
     /// La spiegazione di primo avvio e' stata vista (una volta sola).
     private(set) var explained: Bool
 
@@ -62,6 +64,7 @@ final class LocationModel {
         bridge.onLocation = { [weak self] coordinate in self?.received(coordinate) }
         manager.delegate = bridge
         denied = Self.isDenied(manager.authorizationStatus)
+        authorised = Self.isAllowed(manager.authorizationStatus)
         refresh()
         if wantsDevice, Self.isAllowed(manager.authorizationStatus) { manager.requestLocation() }
     }
@@ -113,6 +116,7 @@ final class LocationModel {
 
     private func authorizationChanged() {
         denied = Self.isDenied(manager.authorizationStatus)
+        authorised = Self.isAllowed(manager.authorizationStatus)
         if wantsDevice, Self.isAllowed(manager.authorizationStatus) { manager.requestLocation() }
         refresh()
     }
