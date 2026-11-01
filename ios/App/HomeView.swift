@@ -13,6 +13,8 @@ final class HomeModel {
     private(set) var forYou: FeedPage?
     private(set) var forYouFailed = false
     private(set) var followCount = 0  // contatore per .sensoryFeedback(.selection)
+    /// Rete assente: si mostra l'ultimo Home riuscito per questo luogo, con l'avviso "Sei offline...".
+    private(set) var offline = false
     let window = weekendWindow()
 
     func load(api: APIClient, place: Place, signedIn: Bool) async {
@@ -32,10 +34,45 @@ final class HomeModel {
             nearby = n.events
             forYou = f
             forYouFailed = signedIn && f == nil
+            offline = false
             phase = .loaded
+            Self.write(Snapshot(hero: hero, nearby: nearby), for: place)
         } catch {
-            if !Task.isCancelled { phase = .failed }
+            guard !Task.isCancelled else { return }
+            if let cached = Self.read(for: place) {
+                hero = cached.hero
+                nearby = cached.nearby
+                forYou = nil
+                forYouFailed = signedIn
+                offline = true
+                phase = .loaded
+            } else {
+                phase = .failed
+            }
         }
+    }
+
+    // Solo dati pubblici (eroe e fila dei dintorni), uno per luogo: niente dell'account va su disco.
+    private struct Snapshot: Codable {
+        let hero: [Event]
+        let nearby: [Event]
+    }
+
+    private static func url(for place: Place) -> URL {
+        let slug = place.name.lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
+        return URL.cachesDirectory.appending(path: "fuorirotta/home-\(slug).json")
+    }
+
+    private static func write(_ snapshot: Snapshot, for place: Place) {
+        let target = url(for: place)
+        // ponytail: scrittura fallita = niente cache offline, nient'altro.
+        try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(snapshot) { try? data.write(to: target, options: .atomic) }
+    }
+
+    private static func read(for place: Place) -> Snapshot? {
+        guard let data = try? Data(contentsOf: url(for: place)) else { return nil }
+        return try? JSONDecoder().decode(Snapshot.self, from: data)
     }
 
     /// Zero seguiti: un tocco su una categoria la segue e ricarica la fila (un 401 lo gestisce Session).
@@ -54,7 +91,10 @@ struct HomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(LocationModel.self) private var location
     @Environment(Session.self) private var session
+    @Environment(\.appConfig) private var appConfig
+    @Environment(\.openURL) private var openURL
 
+    @State private var dismissedRecommended = UserDefaults.standard.string(forKey: "fr.dismissedRecommended")
     @State private var model = HomeModel()
     @State private var current: Int?
     @State private var topInset: CGFloat = 0
@@ -66,6 +106,13 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     heroSection
                     VStack(alignment: .leading, spacing: Spacing.lg) {
+                        if model.offline {
+                            Label("Sei offline. Mostriamo gli ultimi dati salvati.", systemImage: "wifi.slash")
+                                .font(.label)
+                                .foregroundStyle(Color.foregroundSecondary)
+                                .card()
+                                .padding(.horizontal, Spacing.md)
+                        }
                         if location.showsInactiveNotice {
                             Text("Posizione non attiva. Mostriamo gli eventi vicino a Milano: puoi cambiare zona in ogni momento.")
                                 .font(.label)
@@ -84,6 +131,7 @@ struct HomeView: View {
             .background(Color.background)
             .refreshable { await load() }
         }
+        .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
         .sensoryFeedback(.selection, trigger: model.followCount)
@@ -129,47 +177,79 @@ struct HomeView: View {
                 .frame(height: HeroCard.height + topInset)
                 .accessibilityHidden(true)
         case .failed:
-            Color.clear.frame(height: topInset + 96)
+            Color.clear.frame(height: headerReserve)
         case .loaded:
             if model.hero.isEmpty {
                 // Eroe vuoto: si nasconde, resta l'intestazione e la riga "Nessun evento questo weekend".
-                emptyWeekend.padding(.top, topInset + 96)
+                emptyWeekend.padding(.top, headerReserve)
             } else {
                 hero(model.hero)
             }
         }
     }
 
+    /// "È disponibile una nuova versione.": sopra l'eroe, si chiude con "Più tardi" (ricordato per versione consigliata).
+    private var showsUpdateBanner: Bool {
+        guard appConfig?.status == .updateRecommended else { return false }
+        return dismissedRecommended == nil || dismissedRecommended != appConfig?.recommendedVersion
+    }
+
+    private var updateBanner: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("È disponibile una nuova versione.").font(.label).foregroundStyle(Color.foreground)
+            HStack(spacing: Spacing.md) {
+                Button("Aggiorna") { openURL(updateURL) }
+                    .font(.label.weight(.semibold))
+                    .foregroundStyle(Color.accentToken)
+                Button("Più tardi") {
+                    dismissedRecommended = appConfig?.recommendedVersion ?? ""
+                    UserDefaults.standard.set(dismissedRecommended, forKey: "fr.dismissedRecommended")
+                }
+                .font(.label)
+                .foregroundStyle(Color.foregroundSecondary)
+            }
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Radius.card))
+    }
+
     private var header: some View {
         let ink: Color = onPhoto ? .white : Color.foreground
         let sub: Color = onPhoto ? .white.opacity(0.85) : Color.mutedForeground
-        return HStack(alignment: .top, spacing: Spacing.md) {
-            Button { showPlaceSheet = true } label: {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("Questo weekend").font(.display).foregroundStyle(ink)
-                    Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to) + " · " + location.place.name)
-                        .font(.label)
-                        .foregroundStyle(sub)
+        return VStack(spacing: Spacing.sm) {
+            HStack(alignment: .top, spacing: Spacing.md) {
+                Button { showPlaceSheet = true } label: {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text("Questo weekend").font(.display).foregroundStyle(ink)
+                        Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to) + " · " + location.place.name)
+                            .font(.label)
+                            .foregroundStyle(sub)
+                    }
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                Button { showPlaceSheet = true } label: {
+                    Image(systemName: "location")
+                        .font(.title3)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Cambia posizione")
+                .accessibilityHint("Apre la scelta della zona")
             }
-            .buttonStyle(.plain)
-            Button { showPlaceSheet = true } label: {
-                Image(systemName: "location")
-                    .font(.title3)
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
-            }
-            .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Cambia posizione")
-            .accessibilityHint("Apre la scelta della zona")
+            if showsUpdateBanner { updateBanner }
         }
         .padding(.horizontal, Spacing.md)
         .padding(.top, topInset + Spacing.sm)
     }
+
+    /// Altezza riservata all'intestazione quando sotto non c'e' la foto.
+    private var headerReserve: CGFloat { topInset + 96 + (showsUpdateBanner ? 96 : 0) }
 
     private var emptyWeekend: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
