@@ -29,8 +29,10 @@ struct RootView: View {
             Tab("Mappa", systemImage: "map") { MapScreen() }
             Tab("Salvati", systemImage: "bookmark") { Placeholder(title: "Salvati", symbol: "bookmark") }
             Tab("Profilo", systemImage: "person") { Placeholder(title: "Profilo", symbol: "person") }
-            Tab(role: .search) { Placeholder(title: "Cerca", symbol: "magnifyingglass") }
+            Tab(role: .search) { SearchView() }
         }
+        // Home e Salvati (le liste che scorrono) fanno ridurre la barra; la mappa non e' uno ScrollView e non la muove.
+        .tabBarMinimizeBehavior(.onScrollDown)
     }
 }
 

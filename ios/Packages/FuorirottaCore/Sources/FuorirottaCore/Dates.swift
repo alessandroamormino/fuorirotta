@@ -45,19 +45,21 @@ public func formatDayRange(from: String, to: String) -> String {
     return "\(a.d) \(months[a.m - 1]) - \(b.d) \(months[b.m - 1])"
 }
 
+/// ISO 8601 con o senza frazioni di secondo (l'API manda ".000Z").
+func parseISO(_ s: String) -> Date? {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = f.date(from: s) { return d }
+    f.formatOptions = [.withInternetDateTime]
+    return f.date(from: s)
+}
+
 /// Primo e ultimo giorno (Roma) di un evento: l'inizio e' il giorno di Roma; una fine alle 23:59 UTC
 /// vale la sua data UTC (fine-giornata in formato UTC), altrimenti il giorno di Roma.
 public func eventDays(dateStart: String, dateEnd: String?) -> (from: String, to: String)? {
-    func parse(_ s: String) -> Date? {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: s) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        return f.date(from: s)
-    }
-    guard let start = parse(dateStart) else { return nil }
+    guard let start = parseISO(dateStart) else { return nil }
     let from = ymd(start, in: Rome.calendar)
-    guard let endStr = dateEnd, let end = parse(endStr) else { return (from, from) }
+    guard let endStr = dateEnd, let end = parseISO(endStr) else { return (from, from) }
     var utc = Calendar(identifier: .gregorian)
     utc.timeZone = TimeZone(identifier: "UTC")!
     let h = utc.dateComponents([.hour, .minute], from: end)
