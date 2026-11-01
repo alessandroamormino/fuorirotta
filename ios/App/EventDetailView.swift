@@ -248,9 +248,7 @@ struct EventDetailView: View {
                 }
                 if let spot {
                     Button {
-                        let item = MKMapItem(location: CLLocation(latitude: spot.latitude, longitude: spot.longitude), address: nil)
-                        item.name = event.locationName ?? event.title
-                        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
+                        openDirections(to: spot, name: event.locationName ?? event.title)
                     } label: {
                         Label("Indicazioni", systemImage: "arrow.triangle.turn.up.right.diamond").frame(maxWidth: link == nil ? .infinity : nil)
                     }
@@ -354,6 +352,13 @@ struct EventDetailView: View {
         guard let page = try? await api.events(lat: spot.latitude, lng: spot.longitude, radiusKm: 25, limit: 13) else { return }
         similar = Array(page.events.filter { $0.id != event.id }.prefix(12))
     }
+}
+
+/// "Indicazioni": apre Mappe con il percorso in auto verso il luogo dell'evento.
+func openDirections(to spot: CLLocationCoordinate2D, name: String) {
+    let item = MKMapItem(location: CLLocation(latitude: spot.latitude, longitude: spot.longitude), address: nil)
+    item.name = name
+    item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
 }
 
 /// Colore medio di una foto: la si disegna in un pixel solo.

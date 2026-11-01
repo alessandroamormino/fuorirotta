@@ -136,8 +136,17 @@ struct EventMapView: UIViewRepresentable {
                     map.showAnnotations(cluster.memberAnnotations, animated: true)
                 }
             } else if let pin = view.annotation as? PinAnnotation {
+                liftAboveSheet(pin, in: map)
                 parent.onSelect(pin.id)
             }
+        }
+
+        /// Il foglio basso copre il terzo inferiore dello schermo: un pin piu' in basso della meta' si porta in alto.
+        private func liftAboveSheet(_ pin: PinAnnotation, in map: MKMapView) {
+            let point = map.convert(pin.coordinate, toPointTo: map)
+            guard point.y > map.bounds.height * 0.5 else { return }
+            let shifted = CGPoint(x: map.bounds.midX, y: map.bounds.midY + point.y - map.bounds.height * 0.3)
+            map.setCenter(map.convert(shifted, toCoordinateFrom: map), animated: true)
         }
 
         /// Gli eventi geocodificati sullo stesso centro di comune non si separano mai con lo zoom: restano un gruppo
@@ -155,49 +164,147 @@ struct EventMapView: UIViewRepresentable {
     }
 }
 
-/// La scheda in basso toccando un pin: miniatura, titolo, data e luogo; toccandola si apre l'evento.
-struct MapCallout: View {
-    let event: Event
+/// Il foglio che si apre toccando un pin, nello stile della scheda luogo di Mappe: due altezze, la mappa resta
+/// toccabile dietro la prima, fondo di vetro di sistema. Contenuto dal popup del sito: foto, categoria, titolo,
+/// giorni · luogo e le azioni Salva / Indicazioni / Apri dettaglio.
+struct PinSheet: View {
+    static let compact = PresentationDetent.height(320)
+
+    let onOpen: (Event) -> Void
     let onClose: () -> Void
 
+    @Environment(\.api) private var api
+    @Environment(SavesModel.self) private var saves
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var event: Event
+
+    init(pin: FuorirottaCore.MapPin, onOpen: @escaping (Event) -> Void, onClose: @escaping () -> Void) {
+        _event = State(initialValue: asEvent(pin))
+        self.onOpen = onOpen
+        self.onClose = onClose
+    }
+
+    private var category: String? { event.canonicalCategory ?? event.category }
+
+    private var spot: CLLocationCoordinate2D? {
+        guard let lat = event.resolvedLatitude ?? event.latitude, let lng = event.resolvedLongitude ?? event.longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+    }
+
     var body: some View {
-        EventLink(event: event, slot: "callout") {
-            HStack(spacing: Spacing.md) {
-                RemoteImage(url: event.imageUrl, category: event.canonicalCategory ?? event.category, size: CGSize(width: 72, height: 72))
-                    .frame(width: 72, height: 72)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(verbatim: event.title)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Color.foreground)
-                        .lineLimit(2)
-                    Text(verbatim: eventMeta(event))
-                        .font(.label)
-                        .foregroundStyle(Color.mutedForeground)
-                        .lineLimit(2)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                HStack(alignment: .top, spacing: Spacing.md) {
+                    RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 96, height: 96))
+                        .frame(width: 96, height: 96)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.media))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        if let name = category {
+                            let visual = categoryVisual(name)
+                            Label {
+                                Text(verbatim: name)
+                            } icon: {
+                                Image(systemName: visual.symbol)
+                            }
+                            .font(.label)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, Spacing.sm)
+                            .padding(.vertical, Spacing.xs)
+                            .background(visual.color, in: Capsule())
+                        }
+                        Text(verbatim: event.title)
+                            .font(.heading)
+                            .foregroundStyle(Color.foreground)
+                            .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
+                        Text(verbatim: eventMeta(event))
+                            .font(.label)
+                            .foregroundStyle(Color.foregroundSecondary)
+                            .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                    }
+                    // Il posto della X, che sta sopra (vedi overlay).
+                    .padding(.trailing, Spacing.lg)
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // Il posto dei due pulsanti, che stanno sopra il collegamento (vedi overlay).
-                Color.clear.frame(width: 44, height: 72)
+                actions
+                if let text = event.description, !text.isEmpty {
+                    // Si vede alzando il foglio.
+                    Text(verbatim: text)
+                        .font(.body)
+                        .foregroundStyle(Color.foreground)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            .card()
+            .padding(.horizontal, Spacing.md)
+            .padding(.top, Spacing.lg)
+            .padding(.bottom, Spacing.xl)
         }
         .overlay(alignment: .topTrailing) {
-            VStack(spacing: 0) {
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.label.weight(.semibold))
-                        .foregroundStyle(Color.mutedForeground)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Chiudi")
-                BookmarkButton(event: event, style: .plain)
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.label.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
             }
-            .padding(.top, Spacing.sm)
-            .padding(.trailing, Spacing.xs)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityLabel("Chiudi")
+            .padding(Spacing.md)
         }
+        .presentationDetents([Self.compact, .large])
+        .presentationDragIndicator(.visible)
+        // La mappa dietro resta toccabile finche' il foglio e' basso: un altro pin cambia il contenuto.
+        .presentationBackgroundInteraction(.enabled(upThrough: Self.compact))
+        .task(id: event.id) { await fetch() }
+    }
+
+    /// Tre azioni: Salva, Indicazioni, Apri dettaglio. Quattro in una riga non stanno nei testi grandi: vanno a capo.
+    private var actions: some View {
+        let saved = saves.isSaved(event.id)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Spacing.sm) { buttons(saved: saved) }
+            VStack(spacing: Spacing.sm) { buttons(saved: saved) }
+        }
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: saved)
+    }
+
+    @ViewBuilder private func buttons(saved: Bool) -> some View {
+        Button {
+            Task { await saves.toggle(event) }
+        } label: {
+            Label {
+                Text(saved ? "Salvato" : "Salva")
+            } icon: {
+                Image(systemName: saved ? "bookmark.fill" : "bookmark")
+                    .foregroundStyle(saved ? Color.accentToken : Color.primary)
+                    .symbolEffect(.bounce, value: reduceMotion ? false : saved)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        if let spot {
+            Button {
+                openDirections(to: spot, name: event.locationName ?? event.title)
+            } label: {
+                Label("Indicazioni", systemImage: "arrow.triangle.turn.up.right.diamond").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        Button {
+            onOpen(event)
+        } label: {
+            Label("Apri dettaglio", systemImage: "chevron.right").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+    }
+
+    /// Il pin porta solo i campi minimi: il resto (fine dell'evento, descrizione) arriva da qui, senza spinner.
+    private func fetch() async {
+        guard let api, case .found(let fresh)? = try? await api.event(id: event.id) else { return }
+        event = fresh
     }
 }
 
@@ -216,7 +323,7 @@ struct ClusterListSheet: View {
     }
 }
 
-private func event(from pin: FuorirottaCore.MapPin) -> Event {
+private func asEvent(_ pin: FuorirottaCore.MapPin) -> Event {
     Event(
         id: pin.id, title: pin.title, dateStart: pin.dateStart, imageUrl: pin.imageUrl,
         locationName: pin.locationName, category: pin.category, latitude: pin.lat, longitude: pin.lng)
@@ -227,9 +334,15 @@ struct MapScreen: View {
     private let radiusKm = 50
 
     private enum Phase { case loading, loaded, failed }
-    private struct Group: Identifiable {
-        let id = UUID()
+    private struct Group {
         let events: [Event]
+    }
+    /// Un solo foglio alla volta: un pin o un gruppo che non si divide. L'identita' e' fissa, cosi' passare da un pin
+    /// all'altro cambia il contenuto senza chiudere e riaprire il foglio.
+    private enum MapSheet: Identifiable {
+        case pin(FuorirottaCore.MapPin)
+        case group(Group)
+        var id: String { "map-sheet" }
     }
 
     @Environment(\.api) private var api
@@ -239,8 +352,8 @@ struct MapScreen: View {
     @State private var phase = Phase.loading
     @State private var offline = false
     @State private var filter: String?  // nil = Tutte
-    @State private var selected: FuorirottaCore.MapPin?
-    @State private var group: Group?
+    @State private var sheet: MapSheet?
+    @State private var path = NavigationPath()
     @State private var focus = MapFocus()
     @State private var visibleCount: Int?
 
@@ -250,17 +363,17 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        EventStack {
+        EventStack(path: $path) {
             ZStack {
                 EventMapView(
                     pins: shownPins,
                     center: CLLocationCoordinate2D(latitude: location.place.latitude, longitude: location.place.longitude),
                     focus: focus,
                     showsUser: location.authorised,
-                    onSelect: { id in selected = pins.first { $0.id == id } },
+                    onSelect: { id in sheet = pins.first { $0.id == id }.map(MapSheet.pin) },
                     onCluster: { ids in
-                        let members = pins.filter { ids.contains($0.id) }.sorted { $0.dateStart < $1.dateStart }.map(event(from:))
-                        group = Group(events: members)
+                        let members = pins.filter { ids.contains($0.id) }.sorted { $0.dateStart < $1.dateStart }.map(asEvent)
+                        sheet = .group(Group(events: members))
                     },
                     onVisibleCount: { if visibleCount != $0 { visibleCount = $0 } }
                 )
@@ -271,10 +384,25 @@ struct MapScreen: View {
             // Mappa a tutto schermo: la barra del titolo non serve, il dettaglio la mostra da solo.
             .toolbar(.hidden, for: .navigationBar)
         }
-        .sheet(item: $group) { ClusterListSheet(events: $0.events) }
+        .sheet(item: $sheet) { item in
+            switch item {
+            case .pin(let pin):
+                PinSheet(
+                    pin: pin,
+                    onOpen: { event in
+                        sheet = nil
+                        path.append(EventRoute(event: event, slot: "map"))
+                    },
+                    onClose: { sheet = nil }
+                )
+                .id(pin.id)
+            case .group(let group):
+                ClusterListSheet(events: group.events)
+            }
+        }
         .task(id: location.place) { await load() }
         .onChange(of: location.place) { focus = MapFocus(id: focus.id + 1) }
-        .onChange(of: filter) { selected = nil }
+        .onChange(of: filter) { sheet = nil }
         .sensoryFeedback(.selection, trigger: filter)
     }
 
@@ -314,15 +442,9 @@ struct MapScreen: View {
                     .accessibilityLabel("Centra sulla mia posizione")
                 }
                 .padding(.horizontal, Spacing.md)
-                if let pin = selected {
-                    MapCallout(event: event(from: pin)) { selected = nil }
-                        .padding(.horizontal, Spacing.md)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
             }
             // Sopra la barra delle schede.
             .padding(.bottom, Spacing.xxxl)
-            .animation(Motion.snappy, value: selected?.id)
         }
     }
 
