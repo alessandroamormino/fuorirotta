@@ -68,6 +68,8 @@ struct FuorirottaApp: App {
     @State private var location = LocationModel()
     @State private var router = Router()
     @State private var config: AppConfig?
+    // Aspetto scelto in Impostazioni: "Sistema" = nil (D-07), la scelta resta salvata.
+    @AppStorage(Appearance.key) private var appearance = Appearance.system
 
     init() {
         let info = Bundle.main
@@ -98,6 +100,7 @@ struct FuorirottaApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .preferredColorScheme(appearance.scheme)
                 .environment(\.api, api)
                 .environment(session)
                 .environment(push)

@@ -28,6 +28,7 @@
 		E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0958FA7AA361C947B83B04 /* SavesModel.swift */; };
 		E72210D1CE6D9691DDCA04EE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 57D794E08B519C64F99B0EDB /* PrivacyInfo.xcprivacy */; };
 		EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25216E6A8579546E42AB6C7 /* MapScreen.swift */; };
+		F84D74B4A0B733D401202D12 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A88DE6B36D790BA575926AF1 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +46,7 @@
 		8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImage.swift; sourceTree = "<group>"; };
 		8FB95769BD3D9DD0097F97FE /* EventCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCards.swift; sourceTree = "<group>"; };
 		9C7EA14984C6205355CBF543 /* LocationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationViews.swift; sourceTree = "<group>"; };
+		A88DE6B36D790BA575926AF1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B4B94980B852E814ACC32191 /* Fuorirotta.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Fuorirotta.entitlements; sourceTree = "<group>"; };
 		BA4676EE0AF931C39E743D49 /* FuorirottaCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FuorirottaCore; path = Packages/FuorirottaCore; sourceTree = SOURCE_ROOT; };
 		BCB922A66158CC37247D8879 /* FuorirottaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuorirottaApp.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				6E616087A4FBE9B4B99A3D40 /* SavedView.swift */,
 				3F0958FA7AA361C947B83B04 /* SavesModel.swift */,
 				DD27AFE04C87605DD1EB6FCA /* SearchView.swift */,
+				A88DE6B36D790BA575926AF1 /* SettingsView.swift */,
 				4467811081BDB08735B3CFEB /* SignInSheet.swift */,
 				5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */,
 				26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */,
@@ -238,6 +241,7 @@
 				18006C9D52BAB281B4C5C9F5 /* SavedView.swift in Sources */,
 				E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */,
 				44405A7E46E2D75282D03F9A /* SearchView.swift in Sources */,
+				F84D74B4A0B733D401202D12 /* SettingsView.swift in Sources */,
 				399D5E2B4C97E1D979BDFF58 /* SignInSheet.swift in Sources */,
 				BF974CD1C09D61EB4E6C78DD /* StatsCards.swift in Sources */,
 				01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */,
