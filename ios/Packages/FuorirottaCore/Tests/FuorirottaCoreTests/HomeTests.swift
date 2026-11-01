@@ -190,4 +190,29 @@ private let feedBody = """
         #expect(eventTime("2026-07-08T19:30:00.000Z") == "21:30")
         #expect(eventTime("non una data") == nil)
     }
+
+    // MARK: la richiesta di ricerca
+
+    @Test func searchIsPlainGetWithoutLocation() async throws {
+        HomeStub.reset([.init(body: #"{"events": [], "mapEvents": [], "total": 0}"#)])
+        let api = client()
+        api.bearer = "b.sig"
+        let events = try await api.search(q: "jazz", limit: 30)
+        let sent = try #require(HomeStub.requests.first)
+        #expect(events.isEmpty)
+        #expect(sent.method == "GET")
+        #expect(sent.url.path == "/api/events")
+        #expect(sent.url.query == "search=jazz&limit=30")
+        #expect(sent.headers["Authorization"] == nil)
+        let query = sent.url.query ?? ""
+        for forbidden in ["lat", "lng", "location", "comuneId"] { #expect(!query.contains(forbidden)) }
+    }
+
+    @Test func searchEncodesSpacesAndAccents() async throws {
+        HomeStub.reset([.init(body: #"{"events": [], "mapEvents": [], "total": 0}"#)])
+        _ = try await client().search(q: "sagra d'autunno è", limit: 30)
+        let url = try #require(HomeStub.requests.first?.url)
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        #expect(items?.first { $0.name == "search" }?.value == "sagra d'autunno è")
+    }
 }
