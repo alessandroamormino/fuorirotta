@@ -21,6 +21,7 @@ struct ProfileView: View {
                 .padding(Spacing.md)
             }
             .navigationTitle("Profilo")
+            .onAppear { session.clearError() }
             .sensoryFeedback(.success, trigger: session.successCount)
             .sensoryFeedback(.error, trigger: session.errorCount)
         }

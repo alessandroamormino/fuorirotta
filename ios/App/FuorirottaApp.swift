@@ -1,4 +1,5 @@
 import FuorirottaCore
+import GoogleSignIn
 import SwiftUI
 
 extension EnvironmentValues {
@@ -27,6 +28,8 @@ struct FuorirottaApp: App {
                 .environment(\.api, api)
                 .environment(session)
                 .task { await session.restore() }
+                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
+                .sheet(isPresented: Bindable(session).presentSignIn) { SignInSheet() }
         }
     }
 }

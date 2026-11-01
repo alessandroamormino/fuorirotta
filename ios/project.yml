@@ -26,6 +26,9 @@ settings:
 packages:
   FuorirottaCore:
     path: Packages/FuorirottaCore
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: 10.1.0
 targets:
   Fuorirotta:
     type: application
@@ -34,9 +37,15 @@ targets:
       - App
     dependencies:
       - package: FuorirottaCore
+      - package: GoogleSignIn
+        product: GoogleSignIn
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: it.fuorirotta.app
+        # Identificatori pubblici (nessun segreto per un client iOS). Il server verifica contro il client web.
+        GOOGLE_IOS_CLIENT_ID: 800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0.apps.googleusercontent.com
+        GOOGLE_REVERSED_CLIENT_ID: com.googleusercontent.apps.800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0
+        GOOGLE_SERVER_CLIENT_ID: 800963967220-99bo0jrhvpfelk69r7apgce7tka1l73c.apps.googleusercontent.com
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
@@ -52,6 +61,11 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         FRAPIBaseURL: $(API_BASE_URL)
         FRApnsEnvironment: $(APNS_ENVIRONMENT)
+        GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
+        GIDServerClientID: $(GOOGLE_SERVER_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

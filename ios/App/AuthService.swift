@@ -1,5 +1,6 @@
 import AuthenticationServices
 import FuorirottaCore
+import GoogleSignIn
 import Observation
 import Security
 import SwiftUI
@@ -104,6 +105,24 @@ final class Session {
         }
     }
 
+    func signInWithGoogle() async {
+        guard !busy else { return }
+        busy = true; defer { busy = false }
+        guard let presenter = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first
+        else { return fail(APIError.network) }
+        let raw = randomNonce()
+        do {
+            // Il nonce grezzo finisce nell'id token; il server lo confronta uguale (Google non lo fa hashare).
+            let result = try await GIDSignIn.sharedInstance.signIn(
+                withPresenting: presenter, hint: nil, additionalScopes: nil, nonce: raw)
+            guard let idToken = result.user.idToken?.tokenString else { return fail(APIError.decoding) }
+            try await open(provider: "google", idToken: idToken, nonce: raw, firstName: nil, lastName: nil)
+        } catch {
+            fail(error)
+        }
+    }
+
     func signOut() async {
         do { try await api.signOut() } catch { print("sign-out fallito: \(error)") }
         Keychain.delete()
@@ -123,7 +142,7 @@ final class Session {
 
     /// Cancel dell'utente: nessun messaggio e nessun cambiamento. Il resto: il testo documentato.
     func fail(_ error: Error) {
-        if (error as? ASAuthorizationError)?.code == .canceled { return }
+        if (error as? ASAuthorizationError)?.code == .canceled || (error as? GIDSignInError)?.code == .canceled { return }
         errorCount += 1
         switch error {
         case APIError.http(429, _):

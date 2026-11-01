@@ -16,6 +16,10 @@ extension Color {
     static let destructive = Color("destructive")
     static let success = Color("success")
     static let scrim = Color("scrim")
+    // Pulsante Google: colori imposti dal marchio (eccezione, come sul web), uguali in chiaro e scuro.
+    static let googleFill = Color("googleFill")
+    static let googleBorder = Color("googleBorder")
+    static let googleText = Color("googleText")
 }
 
 enum Spacing {

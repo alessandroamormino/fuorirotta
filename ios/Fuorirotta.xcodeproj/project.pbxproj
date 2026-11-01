@@ -10,6 +10,7 @@
 		01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */; };
 		0C552E8B611CE7C46F6741AA /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */; };
 		12751BD6A00CE42B31CBF53B /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B41CF87D602B3F4D0B0579 /* ProfileView.swift */; };
+		1726C072441403CFF5E9230D /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 600364ED59175FBDE9B930A9 /* GoogleSignIn */; };
 		29D29AC67613BB7CE7896C2D /* FuorirottaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 443A1CB75FB2E97561DAE505 /* FuorirottaCore */; };
 		399D5E2B4C97E1D979BDFF58 /* SignInSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4467811081BDB08735B3CFEB /* SignInSheet.swift */; };
 		44405A7E46E2D75282D03F9A /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD27AFE04C87605DD1EB6FCA /* SearchView.swift */; };
@@ -45,6 +46,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				29D29AC67613BB7CE7896C2D /* FuorirottaCore in Frameworks */,
+				1726C072441403CFF5E9230D /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,6 +117,7 @@
 			name = Fuorirotta;
 			packageProductDependencies = (
 				443A1CB75FB2E97561DAE505 /* FuorirottaCore */,
+				600364ED59175FBDE9B930A9 /* GoogleSignIn */,
 			);
 			productName = Fuorirotta;
 			productReference = 03EA1D39A1FFD244E022F195 /* Fuorirotta.app */;
@@ -145,6 +148,7 @@
 			mainGroup = 06529683F31D0BA7CE878690;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				5C82240EFBC16E2EDEF4D2A7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				CA51402EFA5B843187D7EA84 /* XCLocalSwiftPackageReference "Packages/FuorirottaCore" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -219,6 +223,9 @@
 				CODE_SIGN_ENTITLEMENTS = App/Fuorirotta.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_IOS_CLIENT_ID = "800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0";
+				GOOGLE_SERVER_CLIENT_ID = "800963967220-99bo0jrhvpfelk69r7apgce7tka1l73c.apps.googleusercontent.com";
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -309,6 +316,9 @@
 				CODE_SIGN_ENTITLEMENTS = App/Fuorirotta.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_IOS_CLIENT_ID = "800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0";
+				GOOGLE_SERVER_CLIENT_ID = "800963967220-99bo0jrhvpfelk69r7apgce7tka1l73c.apps.googleusercontent.com";
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -399,6 +409,9 @@
 				CODE_SIGN_ENTITLEMENTS = App/Fuorirotta.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_IOS_CLIENT_ID = "800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0";
+				GOOGLE_SERVER_CLIENT_ID = "800963967220-99bo0jrhvpfelk69r7apgce7tka1l73c.apps.googleusercontent.com";
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -506,10 +519,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		5C82240EFBC16E2EDEF4D2A7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = exactVersion;
+				version = 10.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		443A1CB75FB2E97561DAE505 /* FuorirottaCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FuorirottaCore;
+		};
+		600364ED59175FBDE9B930A9 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5C82240EFBC16E2EDEF4D2A7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
