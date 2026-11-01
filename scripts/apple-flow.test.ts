@@ -33,6 +33,12 @@
 //   V1  id token nativo (bundle ID) sullo stesso utente del web; un'altra audience e' rifiutata
 //   V2  come un'app: id token nativo con lo user agent dell'app, SENZA Origin e SENZA cookie ->
 //       200, set-auth-token firmato che vale come bearer, sessione etichettata 'App iPhone'
+//   A1  Fase 27: accesso nativo -> refresh token NULL (Better Auth lo scarta) -> POST /api/v1/me/apple-token
+//       con il solo bearer lo salva cifrato (client_id = bundle ID) -> delete-user con il solo bearer
+//       revoca col bundle ID dopo il rifiuto del Services ID e lascia zero righe
+//   A2  apple-token rifiuta senza toccare Apple ne' il token salvato: niente riga Apple, corpo errato,
+//       senza credenziali, codice rifiutato, sub diverso; due codici validi sostituiscono, mai duplicano
+//   A3  senza APPLE_APP_BUNDLE_ID: 404 e nessuna chiamata ad Apple
 //
 // Gli helper (startApple, applePost, follow, cookieFrom, mintGoogleUser e il
 // registro dello stub) sono funzioni con nome: il piano 03 aggiunge qui le sue
@@ -768,6 +774,70 @@ async function main(): Promise<void> {
     const { deviceLabel } = await import('../lib/userAgent')
     const appSession = await prisma.session.findFirst({ where: { userId: v2.userId, userAgent: APP_UA } })
     check('V2: la sessione nata dall\'app e\' \'App iPhone\' per deviceLabel', appSession !== null && deviceLabel(appSession.userAgent).label === 'App iPhone', String(appSession?.userAgent))
+
+    // A1: l'app vera da capo a fondo (Fase 27, MOB-05): accesso nativo, apple-token, eliminazione con il solo bearer
+    /** Accesso nativo come l'app: id token del bundle ID, niente Origin ne' cookie; restituisce utente e bearer. */
+    async function nativeAppUser(tag: string) {
+      const sub = `apple-flow-sub-${tag}`
+      const email = `${EMAIL_PREFIX}${tag}@fixture.invalid`
+      const nonce = `n-${tag}`
+      const idToken = await new SignJWT({ email, email_verified: 'true', nonce })
+        .setProtectedHeader({ alg: 'RS256', kid: KID })
+        .setIssuer(APPLE_ORIGIN)
+        .setAudience(BUNDLE_ID)
+        .setSubject(sub)
+        .setIssuedAt()
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 600)
+        .sign(rsa.privateKey)
+      const response = await handler(
+        new Request(`${BASE}/api/auth/sign-in/social`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': APP_UA },
+          body: JSON.stringify({ provider: 'apple', idToken: { token: idToken, nonce } }),
+        }),
+      )
+      const bearer = response.headers.get('set-auth-token') ?? ''
+      const row = await appleRow(sub)
+      if (response.status !== 200 || !bearer || !row) {
+        console.error(`FAIL: ${tag}: accesso nativo non riuscito (${response.status})`)
+        process.exit(1)
+      }
+      await seedSaved(row.userId)
+      return { sub, email, bearer, userId: row.userId, row }
+    }
+    const appleTokenRoute = await import('../app/api/v1/me/apple-token/route')
+    /** POST /api/v1/me/apple-token con il solo bearer (o con le intestazioni date), come l'app. */
+    const appleToken = (body: string, headers: Record<string, string>) =>
+      appleTokenRoute.POST(new Request(`${BASE}/api/v1/me/apple-token`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), ...headers }, body }))
+    const bearerOf = (bearer: string) => ({ authorization: `Bearer ${bearer}` })
+
+    const a1 = await nativeAppUser('a1')
+    check('A1: dopo l\'accesso nativo la riga Apple non ha refresh token (Better Auth lo scarta)', a1.row.refreshToken === null, String(a1.row.refreshToken))
+    appleCodes.set('a1-code', { sub: a1.sub, email: a1.email })
+    tokenForms.length = 0
+    const a1Reply = await appleToken(JSON.stringify({ authorizationCode: 'a1-code' }), bearerOf(a1.bearer))
+    const a1Body = (await a1Reply.json().catch(() => ({}))) as { stored?: boolean }
+    const a1Stored = await appleRow(a1.sub)
+    const a1Form = tokenForms[tokenForms.length - 1]
+    check('A1: apple-token con il solo bearer -> 200 {stored:true}', a1Reply.status === 200 && a1Body.stored === true, `${a1Reply.status} ${JSON.stringify(a1Body)}`)
+    check('A1: lo scambio usa il bundle ID e il codice dell\'app', a1Form?.get('client_id') === BUNDLE_ID && a1Form?.get('code') === 'a1-code', String(a1Form))
+    const a1Issued = issued[issued.length - 1]
+    check(
+      'A1: la riga Apple tiene il refresh token cifrato che si decifra in quello emesso da Apple',
+      !!a1Stored?.refreshToken && a1Stored.refreshToken !== a1Issued && (await decrypt(a1Stored.refreshToken)) === a1Issued,
+      String(a1Stored?.refreshToken ? 'cifrato ma diverso' : 'vuoto'),
+    )
+    revokeCalls.length = 0
+    revokeMode = (clientId) => (clientId === WEB_ID ? 'refuse' : 'ok')
+    let a1Delete = 0
+    try {
+      a1Delete = (await handler(new Request(`${BASE}/api/auth/delete-user`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': APP_UA, ...bearerOf(a1.bearer) }, body: '{}' }))).status
+    } finally {
+      revokeMode = () => 'ok'
+    }
+    const a1Last = revokeCalls[revokeCalls.length - 1]
+    check('A1: delete-user con il solo bearer -> 200 e revoca col bundle ID dopo il rifiuto del Services ID', a1Delete === 200 && a1Last?.clientId === BUNDLE_ID && a1Last.token === a1Issued, `${a1Delete} ${JSON.stringify(revokeCalls)}`)
+    check('A1: zero righe per l\'utente', (await rowsLeft(a1.userId)) === 0)
   } finally {
     await cleanup()
     await prisma.$disconnect()

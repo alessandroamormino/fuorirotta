@@ -123,9 +123,11 @@ export async function revokeAppleToken(token: string, doFetch: typeof fetch = fe
 
 /**
  * Scambia un authorization code di Apple con il refresh token (SC4). Il
- * chiamante e' la rotta nativa della Fase 27: passa il refresh token
- * all'accesso con id token di Better Auth, cosi' l'hook esistente lo salva
- * cifrato. clientId e' il bundle ID dell'app; il client secret ha lo stesso sub.
+ * chiamante e' POST /api/v1/me/apple-token: Better Auth 1.7.10 scarta il
+ * refresh token all'accesso con id token, quindi la rotta lo cifra con
+ * setTokenUtil e lo scrive sulla riga Apple di chi chiama, dove l'hook di
+ * eliminazione lo cerca. clientId e' il bundle ID dell'app; il client secret
+ * ha lo stesso sub.
  */
 export async function exchangeAppleCode(
   code: string,
