@@ -76,6 +76,9 @@ final class LocationModel {
 
     var isUsingDevice: Bool { wantsDevice && !denied }
 
+    /// Dove e' il telefono, solo se la posizione e' in uso e nota (distanza e tempo di viaggio della scheda del pin).
+    var userCoordinate: CLLocationCoordinate2D? { isUsingDevice ? coordinate : nil }
+
     func markExplained() {
         explained = true
         defaults.set(true, forKey: Key.explained)

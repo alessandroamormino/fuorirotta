@@ -84,7 +84,13 @@ struct EventDetailView: View {
     // Misura di decodifica della foto: larghezza di un iPhone, 4:3.
     private static let imageSize = CGSize(width: 440, height: 330)
 
-    init(event: Event) { _event = State(initialValue: event) }
+    /// Con `onClose` (il dettaglio dentro il foglio della mappa) la barra ha una X a sinistra.
+    private let onClose: (() -> Void)?
+
+    init(event: Event, onClose: (() -> Void)? = nil) {
+        _event = State(initialValue: event)
+        self.onClose = onClose
+    }
 
     private var category: String? { event.canonicalCategory ?? event.category }
 
@@ -116,6 +122,12 @@ struct EventDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if let onClose {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onClose) { Image(systemName: "xmark") }
+                        .accessibilityLabel("Chiudi")
+                }
+            }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 // Il vetro lo disegna la barra di sistema attorno ai due pulsanti.
                 ShareLink(item: URL(string: "https://fuori-rotta.it/eventi/\(event.id)")!) {
