@@ -299,9 +299,23 @@ public struct APIClient: Sendable {
 
     /// Ricerca libera su tutto il catalogo: nessuna posizione e nessun filtro di zona (T-27-30). Nessun bearer.
     public func search(q: String, limit: Int) async throws -> [Event] {
-        var comps = URLComponents(url: baseURL.appendingPathComponent("api/events"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "search", value: q), URLQueryItem(name: "limit", value: String(limit))]
-        return try await get(comps.url!, as: EventsPage.self).events
+        try await search(SearchFilters(text: q), limit: limit)
+    }
+
+    /// Ricerca con filtri (testo, date, raggio, categorie). La posizione parte solo se `near` e' acceso, e solo qui.
+    /// Piu' categorie = una richiesta ciascuna, in parallelo, poi l'unione (il server ne accetta una per volta).
+    public func search(_ filters: SearchFilters, limit: Int, now: Date = .now) async throws -> [Event] {
+        func page(_ category: String?) async throws -> [Event] {
+            var comps = URLComponents(url: baseURL.appendingPathComponent("api/events"), resolvingAgainstBaseURL: false)!
+            comps.queryItems = filters.queryItems(category: category, limit: limit, now: now)
+            return try await get(comps.url!, as: EventsPage.self).events
+        }
+        guard filters.categories.count > 1 else { return try await page(filters.categories.first) }
+        let lists = try await withThrowingTaskGroup(of: [Event].self) { group in
+            for category in filters.categories { group.addTask { try await page(category) } }
+            return try await group.reduce(into: [[Event]]()) { $0.append($1) }
+        }
+        return mergeEvents(lists, from: filters.dateRange(now: now)?.from ?? romeToday(now: now), limit: limit)
     }
 
     /// Accesso nativo: il server verifica l'id token del provider e risponde col bearer nell'header `set-auth-token`.

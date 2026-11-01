@@ -18,6 +18,11 @@ private func ymd(_ date: Date, in calendar: Calendar) -> String {
 /// Oggi a Roma, "YYYY-MM-DD".
 public func romeToday(now: Date = .now) -> String { ymd(now, in: Rome.calendar) }
 
+/// Il giorno di Roma `n` giorni dopo oggi, "YYYY-MM-DD".
+public func romeDay(plusDays n: Int, now: Date = .now) -> String {
+    ymd(Rome.calendar.date(byAdding: .day, value: n, to: now)!, in: Rome.calendar)
+}
+
 /// "2026-11-08" -> "Novembre 2026", per le intestazioni di mese.
 public func monthTitle(day: String) -> String? {
     let p = day.split(separator: "-").compactMap { Int($0) }
