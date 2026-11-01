@@ -94,6 +94,8 @@ final class HomeModel {
 struct HomeView: View {
     @Environment(\.api) private var api
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(LocationModel.self) private var location
     @Environment(Session.self) private var session
     @Environment(\.appConfig) private var appConfig
@@ -103,6 +105,9 @@ struct HomeView: View {
     @State private var dismissedRecommended = UserDefaults.standard.string(forKey: "fr.dismissedRecommended")
     @State private var model = HomeModel()
     @State private var current: Int?
+    @State private var heroVisible = true
+    @State private var scrollBusy = false
+    @State private var scrollTouches = 0
     @State private var topInset: CGFloat = 0
     @State private var showPlaceSheet = false
     @State private var showSettings = false
@@ -280,14 +285,42 @@ struct HomeView: View {
         .padding(.horizontal, Spacing.md)
     }
 
+    /// Id della copia della prima slide in fondo al carosello: arrivarci chiude il giro verso destra, poi si torna
+    /// alla vera prima slide senza animazione (nessun riavvolgimento all'indietro). Gli id degli eventi sono positivi.
+    private static let loopID = -1
+    private static let autoSeconds = 4.0
+
+    /// Movimento permesso: niente con "Riduci movimento" e niente con VoiceOver (ne' scala ne' avanzamento).
+    private var motionOK: Bool { !reduceMotion && !voiceOver }
+
+    /// L'avanzamento automatico gira solo se l'eroe si vede e nessuno lo sta usando.
+    private var autoplay: Bool {
+        motionOK && heroVisible && scenePhase == .active && router.tab == .home && router.homePath.isEmpty
+            && !showSettings && !showPlaceSheet && !scrollBusy
+    }
+
+    private struct AutoKey: Hashable {
+        let current: Int?
+        let touches: Int
+        let on: Bool
+    }
+
     private func hero(_ picks: [Event]) -> some View {
         let index = picks.firstIndex { $0.id == current } ?? 0
+        // La copia di chiusura c'e' solo dove il carosello puo' girare da solo.
+        let looping = motionOK && picks.count > 1
         return VStack(spacing: Spacing.md) {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 0) {
                     ForEach(picks) { event in
-                        HeroCard(event: event, topInset: topInset)
+                        HeroCard(event: event, topInset: topInset, zooming: motionOK && (current ?? picks[0].id) == event.id)
                             .containerRelativeFrame(.horizontal)
+                    }
+                    if looping, let first = picks.first {
+                        HeroCard(event: first, topInset: topInset, slot: "hero-loop", zooming: motionOK && current == Self.loopID)
+                            .containerRelativeFrame(.horizontal)
+                            .id(Self.loopID)
+                            .accessibilityHidden(true)
                     }
                 }
                 .scrollTargetLayout()
@@ -295,6 +328,28 @@ struct HomeView: View {
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $current)
             .scrollIndicators(.hidden)
+            // Toccare o trascinare ferma l'avanzamento; ogni cambio di fase fa ripartire il conto dei 4 secondi.
+            .onScrollPhaseChange { old, phase in
+                scrollBusy = phase == .tracking || phase == .interacting || phase == .decelerating
+                // Lo scorrimento che facciamo noi (.animating) non e' un tocco: non azzera il conto.
+                if old != .animating, phase != .animating { scrollTouches += 1 }
+            }
+            .task(id: AutoKey(current: current, touches: scrollTouches, on: autoplay)) {
+                guard looping, autoplay, let first = picks.first else { return }
+                if current == Self.loopID {
+                    // Siamo sulla copia: dopo la fine dello scorrimento si torna alla prima vera, senza animazione.
+                    try? await Task.sleep(for: .seconds(0.6))
+                    guard !Task.isCancelled else { return }
+                    var t = Transaction(animation: nil)
+                    t.disablesAnimations = true
+                    withTransaction(t) { current = first.id }
+                    return
+                }
+                try? await Task.sleep(for: .seconds(Self.autoSeconds))
+                guard !Task.isCancelled else { return }
+                let next = index + 1 < picks.count ? picks[index + 1].id : Self.loopID
+                withAnimation(.easeInOut(duration: 0.5)) { current = next }
+            }
             .onChange(of: index, initial: true) {
                 // Le immagini delle due card successive sono pronte prima dello swipe.
                 let next = picks.dropFirst(index + 1).prefix(2).compactMap(\.imageUrl)
@@ -313,6 +368,8 @@ struct HomeView: View {
                 .accessibilityLabel("Evento \(index + 1) di \(picks.count)")
             }
         }
+        // Fuori schermo (altra scheda a parte, vedi `autoplay`) o scorso in basso: niente avanzamento.
+        .onScrollVisibilityChange(threshold: 0.4) { heroVisible = $0 }
     }
 
     // MARK: File

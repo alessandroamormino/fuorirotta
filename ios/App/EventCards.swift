@@ -35,13 +35,23 @@ struct HeroCard: View {
     // Spazio per il cuore di vetro a destra del titolo.
     private static let heartSlot: CGFloat = 44 + Spacing.sm
 
+    /// Lo zoom lento della foto sulla slide attiva (1.0 -> 1.05 in `zoomSeconds`, come il carosello di Omniphile).
+    static let zoomScale: CGFloat = 1.05
+    static let zoomSeconds: Double = 4
+
     let event: Event
     var topInset: CGFloat = 0
+    /// Distingue la copia che chiude il giro del carosello: lo stesso evento non puo' avere due origini dello zoom.
+    var slot = "hero"
+    /// Vero per la slide attiva quando il movimento e' permesso (mai con "Riduci movimento" o VoiceOver).
+    var zooming = false
+
+    @State private var zoomed = false
 
     private var category: String? { event.canonicalCategory ?? event.category }
 
     var body: some View {
-        EventLink(event: event, slot: "hero") { card }
+        EventLink(event: event, slot: slot) { card }
             // Sopra il collegamento: per VoiceOver il cuore e' un controllo a parte, e il suo tocco non apre l'evento.
             // In basso a destra: in alto stanno i pulsanti dell'intestazione di Home.
             .overlay(alignment: .bottomTrailing) {
@@ -52,6 +62,20 @@ struct HeroCard: View {
     private var card: some View {
         let visual = categoryVisual(category)
         return RemoteImage(url: event.imageUrl, category: category, size: Self.imageSize)
+            .scaleEffect(zoomed ? Self.zoomScale : 1)
+            .task(id: zooming) {
+                if zooming {
+                    zoomed = false
+                    withAnimation(.linear(duration: Self.zoomSeconds)) { zoomed = true }
+                } else {
+                    // Un attimo dopo, a scorrimento finito: la foto che esce non deve scattare indietro sotto gli occhi.
+                    try? await Task.sleep(for: .seconds(0.7))
+                    guard !Task.isCancelled else { return }
+                    var t = Transaction(animation: nil)
+                    t.disablesAnimations = true
+                    withTransaction(t) { zoomed = false }
+                }
+            }
             .overlay(alignment: .bottom) {
                 // Sfumatura fissa sotto il testo: il bianco regge il contrasto su qualunque foto.
                 LinearGradient(colors: [Color.scrim.opacity(0), Color.scrim], startPoint: .top, endPoint: .bottom)
