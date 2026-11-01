@@ -145,4 +145,49 @@ private let feedBody = """
         let config = await client().config(version: "1.0.0")
         #expect(config?.status == nil)
     }
+
+    // MARK: dettaglio (27-08)
+
+    @Test func eventLookupFoundDecodes() async throws {
+        HomeStub.reset([.init(body: """
+        {"id": 7, "title": "Sagra", "dateStart": "2026-11-08T00:00:00.000Z", "dateEnd": null, "imageUrl": null,
+         "locationName": "Lodi", "address": null, "canonicalCategory": null, "category": null, "latitude": null,
+         "longitude": null, "resolvedLatitude": 45.3, "resolvedLongitude": 9.5, "sourceUrl": "https://x.it/a", "description": "d"}
+        """)])
+        let result = try await client().event(id: 7)
+        let sent = try #require(HomeStub.requests.first)
+        #expect(sent.method == "GET")
+        #expect(sent.url.path == "/api/events/7")
+        #expect(sent.headers["Authorization"] == nil)
+        guard case .found(let e) = result else { Issue.record("atteso found"); return }
+        #expect(e.id == 7 && e.resolvedLatitude == 45.3)
+    }
+
+    @Test func eventLookup404IsGone() async throws {
+        HomeStub.reset([.init(status: 404, body: #"{"error": "Event not found"}"#)])
+        let result = try await client().event(id: 99)
+        guard case .gone = result else { Issue.record("atteso gone"); return }
+    }
+
+    @Test func eventLookupOtherErrorsThrow() async {
+        HomeStub.reset([.init(status: 500, body: "{}")])
+        await #expect(throws: APIError.http(status: 500, code: nil)) { try await client().event(id: 1) }
+    }
+
+    @Test func longDayUsesRomeAndItalianNames() {
+        #expect(formatLongDay("2026-11-08") == "domenica 8 novembre")
+        #expect(formatLongDay("2026-11-07") == "sabato 7 novembre")
+        #expect(formatLongDay("2026-12-31") == "giovedì 31 dicembre")
+        #expect(formatLongDay("boh") == "boh")
+    }
+
+    @Test func eventTimeHidesAllDayMarkers() {
+        // Mezzanotte UTC e mezzanotte di Roma (inverno 23:00Z, estate 22:00Z) sono eventi senza orario.
+        #expect(eventTime("2026-11-08T00:00:00.000Z") == nil)
+        #expect(eventTime("2026-11-07T23:00:00.000Z") == nil)
+        #expect(eventTime("2026-07-07T22:00:00.000Z") == nil)
+        #expect(eventTime("2026-11-08T20:00:00.000Z") == "21:00")
+        #expect(eventTime("2026-07-08T19:30:00.000Z") == "21:30")
+        #expect(eventTime("non una data") == nil)
+    }
 }
