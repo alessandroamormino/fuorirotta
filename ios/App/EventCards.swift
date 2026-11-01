@@ -344,8 +344,9 @@ struct EventRow: View {
 
 /// Elenco di una fila ("Vedi tutto"): fino a 100 eventi della stessa fonte. Carica, mostra lo scheletro, l'errore con Riprova o il vuoto.
 struct EventListView: View {
-    let title: String
-    let loader: () async throws -> [Event]
+    let route: EventListRoute
+
+    @Environment(\.api) private var api
 
     private enum Phase { case loading, loaded([Event]), failed }
     @State private var phase = Phase.loading
@@ -389,16 +390,27 @@ struct EventListView: View {
             }
         }
         .listStyle(.plain)
-        .navigationTitle(Text(verbatim: title))
+        .navigationTitle(Text(verbatim: route.title))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .task { await load() }
         .refreshable { await load() }
     }
 
+    /// Stessa fonte della fila, fino a 100.
+    private func fetch() async throws -> [Event] {
+        guard let api else { throw APIError.network }
+        switch route.source {
+        case .nearby(let place):
+            return try await api.events(lat: place.latitude, lng: place.longitude, radiusKm: 50, limit: 100).events
+        case .forYou:
+            return try await api.feed(limit: 100, offset: 0).items
+        }
+    }
+
     private func load() async {
         do {
-            phase = .loaded(try await loader())
+            phase = .loaded(try await fetch())
         } catch {
             // Un aggiornamento che fallisce lascia l'elenco com'e'.
             guard !Task.isCancelled else { return }

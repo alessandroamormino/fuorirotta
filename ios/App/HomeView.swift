@@ -390,19 +390,10 @@ struct HomeView: View {
             if signedIn { forYouSection }
             railSection(
                 "Vicino a te", events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
-                count: model.nearbyTotal, subtitle: "Entro 50 km da \(location.place.name)"
-            ) { limit in
-                // Stessa fonte della fila, fino a 100.
-                try await nearbyList(limit: limit)
-            }
+                count: model.nearbyTotal, subtitle: "Entro 50 km da \(location.place.name)",
+                list: .nearby(location.place))
             if !signedIn { inviteCard }
         }
-    }
-
-    private func nearbyList(limit: Int) async throws -> [Event] {
-        guard let api else { throw APIError.network }
-        let place = location.place
-        return try await api.events(lat: place.latitude, lng: place.longitude, radiusKm: 50, limit: limit).events
     }
 
     @ViewBuilder private var forYouSection: some View {
@@ -419,11 +410,7 @@ struct HomeView: View {
             } else {
                 railSection(
                     "Per te", events: page.items, style: .wide, icon: "sparkles", count: page.total,
-                    subtitle: "Scelti da quello che segui"
-                ) { limit in
-                    guard let api else { throw APIError.network }
-                    return try await api.feed(limit: limit, offset: 0).items
-                }
+                    subtitle: "Scelti da quello che segui", list: .forYou)
             }
         } else if model.forYouFailed {
             VStack(alignment: .leading, spacing: Spacing.md) {
@@ -502,12 +489,10 @@ struct HomeView: View {
     /// Con `icon`, `count` e `subtitle` l'intestazione e' quella delle file larghe ("Per te"); senza, quella delle locandine.
     private func railSection(
         _ title: String, events: [Event], style: RailStyle, icon: String? = nil, iconColor: Color = .accentToken, count: Int? = nil, subtitle: String? = nil,
-        all: @escaping (Int) async throws -> [Event]
+        list: EventListRoute.Source
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            NavigationLink {
-                EventListView(title: title) { try await all(100) }
-            } label: {
+            NavigationLink(value: EventListRoute(title: title, source: list)) {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     HStack(spacing: Spacing.sm) {
                         if let icon { SettingsTile(symbol: icon, color: iconColor) }

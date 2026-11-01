@@ -17,6 +17,19 @@ struct EventRoute: Hashable {
     var sourceID: String { "\(slot)-\(event.id)" }
 }
 
+/// L'elenco "Vedi tutto" di una fila. Dev'essere un valore, non un collegamento con la destinazione inline: quello
+/// non entra nel `NavigationPath`, e i dettagli aggiunti al path finiscono SOTTO di lui
+/// (toccare un evento mostrava ancora l'elenco, e a ogni Indietro riapparivano i dettagli gia' visti).
+struct EventListRoute: Hashable {
+    enum Source: Hashable {
+        case nearby(Place)
+        case forYou
+    }
+
+    let title: String
+    let source: Source
+}
+
 /// Una pila di navigazione che sa aprire un evento con la transizione zoom (con "Riduci movimento": quella di sistema).
 struct EventStack<Root: View>: View {
     private let path: Binding<NavigationPath>?
@@ -33,14 +46,18 @@ struct EventStack<Root: View>: View {
 
     var body: some View {
         NavigationStack(path: path ?? $ownPath) {
-            root.navigationDestination(for: EventRoute.self) { route in
-                if reduceMotion {
-                    EventDetailView(event: route.event)
-                } else {
-                    EventDetailView(event: route.event)
-                        .navigationTransition(.zoom(sourceID: route.sourceID, in: namespace))
+            // Tutte le destinazioni della pila stanno qui, una volta sola (gate S6): niente `navigationDestination`
+            // dentro viste spinte o pigre, niente `NavigationLink` con la destinazione inline.
+            root
+                .navigationDestination(for: EventRoute.self) { route in
+                    if reduceMotion {
+                        EventDetailView(event: route.event)
+                    } else {
+                        EventDetailView(event: route.event)
+                            .navigationTransition(.zoom(sourceID: route.sourceID, in: namespace))
+                    }
                 }
-            }
+                .navigationDestination(for: EventListRoute.self) { EventListView(route: $0) }
         }
         .environment(\.zoomNamespace, namespace)
     }

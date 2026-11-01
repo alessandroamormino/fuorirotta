@@ -128,6 +128,25 @@ for (const f of screens) {
 }
 ok('S4', `${screens.length} file di schermata senza colori o font fissi (il matcher fallisce su una riga piantata)`)
 
+// S6 navigazione (UAT3): niente `NavigationLink` con la destinazione inline. Non entra nel NavigationPath: i dettagli
+// aggiunti al path finiscono sotto di lui ("Vedi tutto", tocco su un evento: si rivede l'elenco; a ogni Indietro
+// riappaiono i dettagli gia' visti). Ogni collegamento e' `NavigationLink(value:)`, le destinazioni stanno in EventStack.
+export function inlineLinks(text: string): string[] {
+  const found: string[] = []
+  text.split('\n').forEach((line, i) => {
+    if (/NavigationLink\s*(\{|\(\s*destination:)/.test(line)) found.push(`riga ${i + 1}`)
+  })
+  return found
+}
+check('S6', inlineLinks('NavigationLink {\n  Dest()\n} label: { Text("x") }').length === 1, 'il matcher non vede NavigationLink {')
+check('S6', inlineLinks('NavigationLink(destination: Dest()) { Text("x") }').length === 1, 'il matcher non vede destination:')
+check('S6', inlineLinks('NavigationLink(value: route) { content }').length === 0, 'falso positivo su NavigationLink(value:)')
+for (const f of screens) {
+  const v = inlineLinks(readFileSync(f, 'utf8'))
+  check('S6', v.length === 0, `${f.slice(ROOT.length + 1)}: NavigationLink con destinazione inline (${v.join(', ')})`)
+}
+ok('S6', 'nessun NavigationLink con destinazione inline (il matcher fallisce su uno piantato)')
+
 // S5 sicurezza del rilascio (D-08, D-09, T-27-35..38). Solo testo: gira uguale su Linux in CI.
 // Ogni riga con `git tag` o `git push` deve nominare un tag ios-; nessuna puo' nominarne uno v* (auto-deploy
 // rilascia il v* piu' alto in produzione). Funzione pura, provata su uno script piantato.
