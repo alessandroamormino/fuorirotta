@@ -95,7 +95,7 @@ struct EventMapView: UIViewRepresentable {
             if !delta.add.isEmpty || !delta.remove.isEmpty { reportVisible(map) }
         }
 
-        /// Quanti pin stanno nella vista (per "Nessun evento in questa zona"). Fuori dall'aggiornamento della vista.
+        /// Quanti pin stanno nella vista (per il messaggio di zona vuota). Fuori dall'aggiornamento della vista.
         private func reportVisible(_ map: MKMapView) {
             let count = map.annotations(in: map.visibleMapRect).filter { $0 is PinAnnotation }.count
             let report = parent.onVisibleCount
