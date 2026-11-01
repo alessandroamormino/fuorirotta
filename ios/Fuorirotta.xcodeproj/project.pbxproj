@@ -11,6 +11,7 @@
 		0C552E8B611CE7C46F6741AA /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */; };
 		12751BD6A00CE42B31CBF53B /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B41CF87D602B3F4D0B0579 /* ProfileView.swift */; };
 		1726C072441403CFF5E9230D /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 600364ED59175FBDE9B930A9 /* GoogleSignIn */; };
+		18006C9D52BAB281B4C5C9F5 /* SavedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E616087A4FBE9B4B99A3D40 /* SavedView.swift */; };
 		29D29AC67613BB7CE7896C2D /* FuorirottaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 443A1CB75FB2E97561DAE505 /* FuorirottaCore */; };
 		399D5E2B4C97E1D979BDFF58 /* SignInSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4467811081BDB08735B3CFEB /* SignInSheet.swift */; };
 		44405A7E46E2D75282D03F9A /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD27AFE04C87605DD1EB6FCA /* SearchView.swift */; };
@@ -19,6 +20,7 @@
 		6FC2DB582A818547A174AF6F /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3507B17FD1396D1BEC002E7 /* AuthService.swift */; };
 		A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB922A66158CC37247D8879 /* FuorirottaApp.swift */; };
 		E0C6F06E4A73B6450F59BB0C /* EventCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB95769BD3D9DD0097F97FE /* EventCards.swift */; };
+		E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0958FA7AA361C947B83B04 /* SavesModel.swift */; };
 		EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25216E6A8579546E42AB6C7 /* MapScreen.swift */; };
 /* End PBXBuildFile section */
 
@@ -26,8 +28,10 @@
 		03EA1D39A1FFD244E022F195 /* Fuorirotta.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fuorirotta.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		08E8F863A79CE57299E007F7 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
+		3F0958FA7AA361C947B83B04 /* SavesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavesModel.swift; sourceTree = "<group>"; };
 		4467811081BDB08735B3CFEB /* SignInSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInSheet.swift; sourceTree = "<group>"; };
 		629E3D4482469EA6F7F6953D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6E616087A4FBE9B4B99A3D40 /* SavedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedView.swift; sourceTree = "<group>"; };
 		8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImage.swift; sourceTree = "<group>"; };
 		8FB95769BD3D9DD0097F97FE /* EventCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCards.swift; sourceTree = "<group>"; };
 		B4B94980B852E814ACC32191 /* Fuorirotta.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Fuorirotta.entitlements; sourceTree = "<group>"; };
@@ -91,6 +95,8 @@
 				E25216E6A8579546E42AB6C7 /* MapScreen.swift */,
 				D8B41CF87D602B3F4D0B0579 /* ProfileView.swift */,
 				8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */,
+				6E616087A4FBE9B4B99A3D40 /* SavedView.swift */,
+				3F0958FA7AA361C947B83B04 /* SavesModel.swift */,
 				DD27AFE04C87605DD1EB6FCA /* SearchView.swift */,
 				4467811081BDB08735B3CFEB /* SignInSheet.swift */,
 				26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */,
@@ -206,6 +212,8 @@
 				EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */,
 				12751BD6A00CE42B31CBF53B /* ProfileView.swift in Sources */,
 				0C552E8B611CE7C46F6741AA /* RemoteImage.swift in Sources */,
+				18006C9D52BAB281B4C5C9F5 /* SavedView.swift in Sources */,
+				E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */,
 				44405A7E46E2D75282D03F9A /* SearchView.swift in Sources */,
 				399D5E2B4C97E1D979BDFF58 /* SignInSheet.swift in Sources */,
 				01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */,

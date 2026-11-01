@@ -27,6 +27,9 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     public let resolvedLongitude: Double?
     public let sourceUrl: String?
     public let description: String?
+    // Servono a Snap(event:) (Salvati): la chiave naturale dell'evento, come sul web.
+    public var source: String? = nil
+    public var sourceId: String? = nil
 }
 
 public struct MapPin: Codable, Identifiable, Hashable, Sendable {
@@ -271,7 +274,7 @@ public struct APIClient: Sendable {
         _ = try await send(post: "api/auth/sign-out", body: Data("{}".utf8))
     }
 
-    private func get<T: Decodable>(_ url: URL, as type: T.Type) async throws -> T {
+    func get<T: Decodable>(_ url: URL, as type: T.Type) async throws -> T {
         let (data, _) = try await perform(URLRequest(url: url))
         do {
             return try JSONDecoder().decode(T.self, from: data)
@@ -280,19 +283,25 @@ public struct APIClient: Sendable {
         }
     }
 
-    private func send(post path: String, json: [String: Any]) async throws -> (Data, HTTPURLResponse) {
+    func send(post path: String, json: [String: Any]) async throws -> (Data, HTTPURLResponse) {
         try await send(post: path, body: JSONSerialization.data(withJSONObject: json))
     }
 
-    private func send(post path: String, body: Data) async throws -> (Data, HTTPURLResponse) {
+    func send(post path: String, body: Data) async throws -> (Data, HTTPURLResponse) {
+        try await send(method: "POST", path: path, body: body)
+    }
+
+    func send(method: String, path: String, body: Data? = nil) async throws -> (Data, HTTPURLResponse) {
         var req = URLRequest(url: baseURL.appendingPathComponent(path))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = body
+        req.httpMethod = method
+        if let body {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = body
+        }
         return try await perform(req)
     }
 
-    private func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         var request = request
         let path = request.url?.path ?? ""
         let personal = path.hasPrefix("/api/v1/me/") || path == "/api/auth/sign-out" || path == "/api/auth/delete-user"

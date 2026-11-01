@@ -74,5 +74,40 @@ struct HeroCard: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.card))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
+            // Dopo l'elemento accessibile della card: il segnalibro e' un controllo a parte per VoiceOver.
+            .overlay(alignment: .topTrailing) {
+                BookmarkButton(event: event, style: .glass).padding(Spacing.md)
+            }
+    }
+}
+
+/// Segnalibro: vuoto/pieno con rimbalzo (fermo con "Riduci movimento") e tocco leggero. L'accento solo sul simbolo pieno.
+struct BookmarkButton: View {
+    enum Style { case glass, plain }
+
+    let event: Event
+    let style: Style
+
+    @Environment(SavesModel.self) private var saves
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let saved = saves.isSaved(event.id)
+        let button = Button {
+            Task { await saves.toggle(event) }
+        } label: {
+            Image(systemName: saved ? "bookmark.fill" : "bookmark")
+                .font(.title3)
+                .foregroundStyle(saved ? Color.accentToken : Color.primary)
+                .symbolEffect(.bounce, value: reduceMotion ? false : saved)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: saved)
+        .accessibilityLabel(saved ? "Rimuovi dai salvati" : "Salva evento")
+        switch style {
+        case .glass: button.glassEffect(.regular.interactive(), in: .circle)
+        case .plain: button.buttonStyle(.plain)
+        }
     }
 }

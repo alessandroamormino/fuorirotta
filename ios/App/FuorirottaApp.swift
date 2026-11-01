@@ -12,6 +12,7 @@ struct FuorirottaApp: App {
     private let api: APIClient
 
     @State private var session: Session
+    @State private var saves: SavesModel
 
     init() {
         let info = Bundle.main
@@ -19,6 +20,7 @@ struct FuorirottaApp: App {
         let version = info.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let client = APIClient(baseURL: URL(string: base)!, appVersion: version)
         api = client
+        _saves = State(initialValue: SavesModel(api: client))
         _session = State(initialValue: Session(api: client))
     }
 
@@ -27,7 +29,11 @@ struct FuorirottaApp: App {
             RootView()
                 .environment(\.api, api)
                 .environment(session)
-                .task { await session.restore() }
+                .environment(saves)
+                .task {
+                    await saves.start()
+                    await session.restore()
+                }
                 .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
                 .sheet(isPresented: Bindable(session).presentSignIn) { SignInSheet() }
         }
@@ -39,21 +45,11 @@ struct RootView: View {
         TabView {
             Tab("Home", systemImage: "house") { HomeView() }
             Tab("Mappa", systemImage: "map") { MapScreen() }
-            Tab("Salvati", systemImage: "bookmark") { Placeholder(title: "Salvati", symbol: "bookmark") }
+            Tab("Salvati", systemImage: "bookmark") { SavedView() }
             Tab("Profilo", systemImage: "person") { ProfileView() }
             Tab(role: .search) { SearchView() }
         }
         // Home e Salvati (le liste che scorrono) fanno ridurre la barra; la mappa non e' uno ScrollView e non la muove.
         .tabBarMinimizeBehavior(.onScrollDown)
-    }
-}
-
-// Segnaposto finche' i piani successivi riempiono le altre schede.
-private struct Placeholder: View {
-    let title: String
-    let symbol: String
-
-    var body: some View {
-        ContentUnavailableView(title, systemImage: symbol, description: Text("In arrivo."))
     }
 }
