@@ -9,6 +9,8 @@ final class HomeModel {
     private(set) var phase = Phase.loading
     private(set) var hero: [Event] = []
     private(set) var nearby: [Event] = []
+    /// Quanti eventi ci sono nel raggio (`total` del server), non solo i 16 della fila.
+    private(set) var nearbyTotal: Int?
     /// "Per te": nil = non caricato (ospite) o non riuscito (`forYouFailed`).
     private(set) var forYou: FeedPage?
     private(set) var forYouFailed = false
@@ -32,16 +34,18 @@ final class HomeModel {
             if Task.isCancelled { return }
             hero = heroPicks(w.events)
             nearby = n.events
+            nearbyTotal = n.total
             forYou = f
             forYouFailed = signedIn && f == nil
             offline = false
             phase = .loaded
-            Self.write(Snapshot(hero: hero, nearby: nearby), for: place)
+            Self.write(Snapshot(hero: hero, nearby: nearby, nearbyTotal: nearbyTotal), for: place)
         } catch {
             guard !Task.isCancelled else { return }
             if let cached = Self.read(for: place) {
                 hero = cached.hero
                 nearby = cached.nearby
+                nearbyTotal = cached.nearbyTotal
                 forYou = nil
                 forYouFailed = signedIn
                 offline = true
@@ -56,6 +60,7 @@ final class HomeModel {
     private struct Snapshot: Codable {
         let hero: [Event]
         let nearby: [Event]
+        let nearbyTotal: Int?
     }
 
     private static func url(for place: Place) -> URL {
@@ -326,7 +331,10 @@ struct HomeView: View {
             }
         case .loaded:
             if signedIn { forYouSection }
-            railSection("Vicino a te", events: model.nearby, style: .poster) { limit in
+            railSection(
+                "Vicino a te", events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
+                count: model.nearbyTotal, subtitle: "Entro 50 km da \(location.place.name)"
+            ) { limit in
                 // Stessa fonte della fila, fino a 100.
                 try await nearbyList(limit: limit)
             }
@@ -436,7 +444,7 @@ struct HomeView: View {
     /// Titolo in grassetto con il chevron (REF Omniphile) e "Vedi tutto": apre l'elenco della stessa fonte, fino a 100.
     /// Con `icon`, `count` e `subtitle` l'intestazione e' quella delle file larghe ("Per te"); senza, quella delle locandine.
     private func railSection(
-        _ title: String, events: [Event], style: RailStyle, icon: String? = nil, count: Int? = nil, subtitle: String? = nil,
+        _ title: String, events: [Event], style: RailStyle, icon: String? = nil, iconColor: Color = .accentToken, count: Int? = nil, subtitle: String? = nil,
         all: @escaping (Int) async throws -> [Event]
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -445,7 +453,7 @@ struct HomeView: View {
             } label: {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     HStack(spacing: Spacing.sm) {
-                        if let icon { SettingsTile(symbol: icon, color: .accentToken) }
+                        if let icon { SettingsTile(symbol: icon, color: iconColor) }
                         Text(title).font(.heading).foregroundStyle(Color.foreground)
                         Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
                             .accessibilityHidden(true)
