@@ -166,16 +166,14 @@ struct EventMapView: UIViewRepresentable {
 
 /// Il foglio che si apre toccando un pin, nello stile della scheda luogo di Mappe: due altezze, la mappa resta
 /// toccabile dietro la prima, fondo di vetro di sistema. Contenuto dal popup del sito: foto, categoria, titolo,
-/// giorni · luogo e le azioni Salva / Indicazioni / Apri dettaglio.
+/// giorni · luogo, il cuore per salvare e le azioni Indicazioni / Apri dettaglio.
 struct PinSheet: View {
-    static let compact = PresentationDetent.height(320)
+    static let compact = PresentationDetent.height(250)
 
     let onOpen: (Event) -> Void
     let onClose: () -> Void
 
     @Environment(\.api) private var api
-    @Environment(SavesModel.self) private var saves
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var event: Event
 
@@ -196,8 +194,8 @@ struct PinSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 HStack(alignment: .top, spacing: Spacing.md) {
-                    RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 96, height: 96))
-                        .frame(width: 96, height: 96)
+                    RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 80, height: 80))
+                        .frame(width: 80, height: 80)
                         .clipShape(RoundedRectangle(cornerRadius: Radius.media))
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -215,7 +213,7 @@ struct PinSheet: View {
                             .background(visual.color, in: Capsule())
                         }
                         Text(verbatim: event.title)
-                            .font(.heading)
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(Color.foreground)
                             .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
                         Text(verbatim: eventMeta(event))
@@ -223,14 +221,14 @@ struct PinSheet: View {
                             .foregroundStyle(Color.foregroundSecondary)
                             .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                     }
-                    // Il posto della X, che sta sopra (vedi overlay).
-                    .padding(.trailing, Spacing.lg)
+                    // Il posto di cuore e X, che stanno sopra (vedi overlay).
+                    .padding(.trailing, 44 * 2 + Spacing.sm)
                     Spacer(minLength: 0)
                 }
                 actions
                 if let text = event.description, !text.isEmpty {
                     // Si vede alzando il foglio.
-                    Text(verbatim: text)
+                    Text(htmlToAttributed(text))
                         .font(.body)
                         .foregroundStyle(Color.foreground)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -238,18 +236,24 @@ struct PinSheet: View {
             }
             .padding(.horizontal, Spacing.md)
             .padding(.top, Spacing.lg)
-            .padding(.bottom, Spacing.xl)
+            .padding(.bottom, Spacing.lg)
         }
         .overlay(alignment: .topTrailing) {
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.label.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
+            // Salvare e chiudere: due cerchi di vetro in alto a destra, nello stesso contenitore.
+            GlassEffectContainer(spacing: Spacing.sm) {
+                HStack(spacing: Spacing.sm) {
+                    HeartButton(event: event, style: .glass)
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.label.weight(.semibold))
+                            .foregroundStyle(Color.primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                    }
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Chiudi")
+                }
             }
-            .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Chiudi")
             .padding(Spacing.md)
         }
         .presentationDetents([Self.compact, .large])
@@ -259,32 +263,16 @@ struct PinSheet: View {
         .task(id: event.id) { await fetch() }
     }
 
-    /// Tre azioni: Salva, Indicazioni, Apri dettaglio. Quattro in una riga non stanno nei testi grandi: vanno a capo.
+    /// Due azioni di dimensione normale, affiancate (nei testi grandi vanno a capo). Salvare e' il cuore in alto.
     private var actions: some View {
-        let saved = saves.isSaved(event.id)
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: Spacing.sm) { buttons(saved: saved) }
-            VStack(spacing: Spacing.sm) { buttons(saved: saved) }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Spacing.sm) { buttons }
+            VStack(spacing: Spacing.sm) { buttons }
         }
-        .buttonBorderShape(.capsule)
-        .controlSize(.large)
-        .sensoryFeedback(.impact(flexibility: .soft), trigger: saved)
+        .buttonBorderShape(.roundedRectangle)
     }
 
-    @ViewBuilder private func buttons(saved: Bool) -> some View {
-        Button {
-            Task { await saves.toggle(event) }
-        } label: {
-            Label {
-                Text(saved ? "Salvato" : "Salva")
-            } icon: {
-                Image(systemName: saved ? "bookmark.fill" : "bookmark")
-                    .foregroundStyle(saved ? Color.accentToken : Color.primary)
-                    .symbolEffect(.bounce, value: reduceMotion ? false : saved)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
+    @ViewBuilder private var buttons: some View {
         if let spot {
             Button {
                 openDirections(to: spot, name: event.locationName ?? event.title)
