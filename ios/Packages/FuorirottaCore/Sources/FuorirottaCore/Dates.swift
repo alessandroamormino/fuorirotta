@@ -15,6 +15,22 @@ private func ymd(_ date: Date, in calendar: Calendar) -> String {
     return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
 }
 
+/// Oggi a Roma, "YYYY-MM-DD".
+public func romeToday(now: Date = .now) -> String { ymd(now, in: Rome.calendar) }
+
+/// "2026-11-08" -> "Novembre 2026", per le intestazioni di mese.
+public func monthTitle(day: String) -> String? {
+    let p = day.split(separator: "-").compactMap { Int($0) }
+    guard p.count == 3, (1...12).contains(p[1]) else { return nil }
+    return months[p[1] - 1].capitalized + " \(p[0])"
+}
+
+/// Passato = l'ultimo giorno dell'evento (Roma) e' prima di oggi. Una data illeggibile conta come passata.
+public func isPastEvent(dateStart: String, dateEnd: String?, today: String) -> Bool {
+    guard let days = eventDays(dateStart: dateStart, dateEnd: dateEnd) else { return true }
+    return days.endDay < today
+}
+
 /// Venerdi'-domenica: da oggi se oggi (Roma) e' ven/sab/dom, altrimenti il prossimo weekend.
 public func weekendWindow(now: Date = .now) -> (from: String, to: String) {
     let cal = Rome.calendar

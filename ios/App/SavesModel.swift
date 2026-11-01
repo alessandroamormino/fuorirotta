@@ -60,6 +60,10 @@ final class SavesModel {
     private(set) var ids: Set<Int> = []
     private(set) var rows: [SavedRow] = []
     private(set) var loading = true
+    /// Rete assente: si mostra l'ultima lista conosciuta con l'avviso "Sei offline...".
+    private(set) var offline = false
+    /// Rete assente e nessuna lista da mostrare.
+    private(set) var loadFailed = false
     var toast: Toast?
     /// Contatori per .sensoryFeedback: cambiano a ogni esito, anche uguale al precedente.
     private(set) var successCount = 0
@@ -145,6 +149,8 @@ final class SavesModel {
         rows = []
         mode = .guest
         loading = false
+        offline = false
+        loadFailed = false
         toast = nil
         try? FileManager.default.removeItem(at: Self.cacheURL)
     }
@@ -156,6 +162,49 @@ final class SavesModel {
         case .account: await reloadAccount()
         }
         loading = false
+    }
+
+    /// Via senza dialogo (reversibile): la riga se ne va subito, l'avviso offre "Annulla" per 4 secondi.
+    func remove(_ row: SavedRow, message: String) async {
+        guard let index = rows.firstIndex(where: { $0.id == row.id }) else { return }
+        rows.remove(at: index)
+        let key = mode == .guest ? row.entryID : row.eventID  // lo stesso valore che accende il segnalibro
+        if let key { ids.remove(key) }
+        switch mode {
+        case .guest:
+            let entry = await store.all().first { $0.id == row.entryID }
+            await store.remove(row.entryID)
+            var undo: (@MainActor () async -> Void)?
+            if let entry { undo = { [store] in await store.restore(entry) } }
+            removedToast(message, undo: undo)
+        case .account:
+            do {
+                if let id = row.eventID { try await api.unsave(id: id) } else { try await api.removeGone(ref: row.entryID) }
+                // Una riga sparita non si puo' risalvare (l'evento non c'e' piu'): niente "Annulla".
+                var undo: (@MainActor () async -> Void)?
+                if let id = row.eventID { undo = { [api] in _ = try? await api.save(id: id) } }
+                removedToast(message, undo: undo)
+            } catch {
+                rows.insert(row, at: min(index, rows.count))
+                if let key { ids.insert(key) }
+                if case APIError.http(401, _) = error { return }
+                errorCount += 1
+                show(Copy.failed)
+            }
+        }
+    }
+
+    private func removedToast(_ message: String, undo: (@MainActor () async -> Void)?) {
+        guard let undo else {
+            show(message)
+            return
+        }
+        toast = Toast(message: message, actionTitle: "Annulla", action: {
+            Task {
+                await undo()
+                await self.reload()
+            }
+        })
     }
 
     private func reloadGuest() async {
@@ -178,19 +227,46 @@ final class SavesModel {
             }
             // Un'istantanea nuova dal server sostituisce quella tenuta sul telefono.
             for e in entries { if let live = resolved[e.id]?.live, live != e.snap { await store.setSnap(e.id, live) } }
+            offline = false
         } catch {
+            // Senza rete restano le istantanee del telefono (non sappiamo se qualcuno e' sparito).
             rows = entries.map { SavedRow(entryID: $0.id, eventID: $0.id, snap: $0.snap, gone: false, prefix: "g") }
+            offline = true
         }
     }
 
     private func reloadAccount() async {
-        guard let items = try? await api.savedList() else { return }
-        rows = items.map {
-            SavedRow(entryID: $0.ref, eventID: $0.eventId, snap: $0.live ?? $0.snap, gone: $0.eventId == nil, prefix: "a")
+        do {
+            let items = try await api.savedList()
+            rows = items.map {
+                SavedRow(entryID: $0.ref, eventID: $0.eventId, snap: $0.live ?? $0.snap, gone: $0.eventId == nil, prefix: "a")
+            }
+            ids = Set(items.compactMap(\.eventId))
+            offline = false
+            loadFailed = false
+            writeCache()
+        } catch {
+            if case APIError.http(401, _) = error { return }  // la sessione e' finita: ci pensa Session
+            if let cached = readCache() {
+                rows = cached
+                offline = true
+            } else if rows.isEmpty {
+                loadFailed = true
+            }
         }
-        ids = Set(items.compactMap(\.eventId))
     }
 
-    /// Ultima lista dell'account mostrata, per quando la rete manca (Task 3).
+    /// Ultima lista dell'account mostrata, per quando la rete manca. Sparisce con l'uscita (T-27-23).
     static var cacheURL: URL { URL.cachesDirectory.appending(path: "fuorirotta/salvati.json") }
+
+    private func writeCache() {
+        // ponytail: scrittura fallita = niente cache offline, nient'altro.
+        try? FileManager.default.createDirectory(at: Self.cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(rows) { try? data.write(to: Self.cacheURL, options: .atomic) }
+    }
+
+    private func readCache() -> [SavedRow]? {
+        guard let data = try? Data(contentsOf: Self.cacheURL) else { return nil }
+        return try? JSONDecoder().decode([SavedRow].self, from: data)
+    }
 }

@@ -196,4 +196,20 @@ private func event(sourceUrl: String? = "https://example.test/e/1", source: Stri
         SavesStub.reset([.init(status: 409, body: #"{"error":"cap"}"#)])
         await #expect(throws: APIError.http(status: 409, code: "cap")) { try await savesClient().save(id: 1) }
     }
+
+    @Test func pastIsDecidedByTheEndDayInRome() {
+        // 2026-11-07T23:30Z e' gia' l'8 novembre a Roma (CET).
+        let now = Date(timeIntervalSince1970: 1_794_094_200)
+        #expect(romeToday(now: now) == "2026-11-08")
+        #expect(isPastEvent(dateStart: "2026-11-06T00:00:00.000Z", dateEnd: "2026-11-07T22:59:59.999Z", today: "2026-11-08"))
+        #expect(!isPastEvent(dateStart: "2026-11-06T00:00:00.000Z", dateEnd: "2026-11-08T22:59:59.999Z", today: "2026-11-08"))
+        #expect(!isPastEvent(dateStart: "2026-11-08T08:00:00.000Z", dateEnd: nil, today: "2026-11-08"))
+        #expect(isPastEvent(dateStart: "", dateEnd: nil, today: "2026-11-08"))
+    }
+
+    @Test func monthTitles() {
+        #expect(monthTitle(day: "2026-11-08") == "Novembre 2026")
+        #expect(monthTitle(day: "2027-01-31") == "Gennaio 2027")
+        #expect(monthTitle(day: "boh") == nil)
+    }
 }
