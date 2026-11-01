@@ -58,3 +58,5 @@ ios/build/
 ios/Packages/FuorirottaCore/.build/
 xcuserdata/
 *.xcuserstate
+.agent/
+.agents/
