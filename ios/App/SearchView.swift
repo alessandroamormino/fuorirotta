@@ -13,28 +13,53 @@ struct SearchView: View {
     private static let recentsKey = "fr.recentQueries"
 
     @Environment(\.api) private var api
+    @Environment(LocationModel.self) private var location
 
-    @State private var query = ""
+    @State private var filters = SearchFilters()
+    @State private var showFilters = false
     @State private var phase = Phase.idle
     @State private var recents = UserDefaults.standard.stringArray(forKey: SearchView.recentsKey) ?? []
     @State private var path = NavigationPath()
 
-    private var term: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var term: String { filters.term }
 
     var body: some View {
         EventStack(path: $path) {
             content
                 .navigationTitle("Cerca")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        // Vetro di sistema; in accento con almeno un filtro attivo.
+                        Button { showFilters = true } label: {
+                            Image(systemName: "line.3.horizontal.decrease")
+                                .foregroundStyle(filters.hasFilters ? Color.accentToken : Color.primary)
+                        }
+                        .accessibilityLabel("Filtri")
+                        .accessibilityValue(filters.hasFilters ? "attivi" : "")
+                    }
+                }
         }
-        .searchable(text: $query, prompt: "Cerca eventi")
-        .onSubmit(of: .search) { record(query) }
+        .searchable(text: $filters.text, prompt: "Cerca eventi")
+        .onSubmit(of: .search) { record(filters.text) }
         // Aprire un risultato conferma la ricerca: torna indietro e la chip c'e'.
-        .onChange(of: path.count) { old, new in if new > old { record(query) } }
-        .task(id: query) { await run() }
+        .onChange(of: path.count) { old, new in if new > old { record(filters.text) } }
+        // Con "Vicino a" acceso la zona segue quella dell'app (anche se cambia dal foglio della zona).
+        .onChange(of: location.place) { _, place in
+            if filters.near != nil { filters.near?.lat = place.latitude; filters.near?.lng = place.longitude }
+        }
+        .sheet(isPresented: $showFilters) { SearchFiltersSheet(filters: $filters) }
+        .task(id: filters) { await run() }
     }
 
-    @ViewBuilder private var content: some View {
-        if term.isEmpty {
+    private var content: some View {
+        VStack(spacing: 0) {
+            if filters.hasFilters { activeFilters }
+            results
+        }
+    }
+
+    @ViewBuilder private var results: some View {
+        if filters.isEmpty {
             idle
         } else {
             switch phase {
@@ -52,12 +77,14 @@ struct SearchView: View {
                 if events.isEmpty {
                     ContentUnavailableView {
                         Label {
-                            Text(verbatim: "Nessun risultato per \"\(asked)\"")
+                            Text(verbatim: asked.isEmpty ? "Nessun risultato" : "Nessun risultato per \"\(asked)\"")
                         } icon: {
                             Image(systemName: "magnifyingglass")
                         }
                     } description: {
-                        Text("Controlla la parola o prova con un luogo o una categoria.")
+                        Text(filters.hasFilters
+                            ? "Prova a togliere o allargare qualche filtro."
+                            : "Controlla la parola o prova con un luogo o una categoria.")
                     }
                 } else {
                     List(events) { EventRow(event: $0).listRowSeparator(.hidden) }
@@ -65,6 +92,44 @@ struct SearchView: View {
                 }
             }
         }
+    }
+
+    // MARK: filtri attivi: chip rimovibili sopra i risultati
+
+    private var activeFilters: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Spacing.sm) {
+                if filters.when != .any {
+                    removable(filters.when.title) { filters.when = .any }
+                }
+                if let near = filters.near {
+                    removable("Entro \(near.radiusKm) km da \(location.place.name)") { filters.near = nil }
+                }
+                ForEach(filters.categories, id: \.self) { name in
+                    removable(name) { filters.categories.removeAll { $0 == name } }
+                }
+            }
+            .padding(.horizontal, Spacing.md)
+        }
+        .scrollIndicators(.hidden)
+        .padding(.vertical, Spacing.sm)
+    }
+
+    private func removable(_ title: String, remove: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(Motion.snappy) { remove() }
+        } label: {
+            HStack(spacing: Spacing.xs) {
+                Text(verbatim: title).font(.label).foregroundStyle(Color.foreground)
+                Image(systemName: "xmark").font(.caption2.weight(.bold)).foregroundStyle(Color.mutedForeground)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, Spacing.md)
+            .frame(minHeight: 44)
+            .background(Color.surface, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: "\(title), tocca per togliere"))
     }
 
     // MARK: campo vuoto: chip recenti
@@ -91,7 +156,7 @@ struct SearchView: View {
                     HStack(spacing: Spacing.sm) {
                         ForEach(recents, id: \.self) { recent in
                             Button {
-                                query = recent
+                                filters.text = recent
                             } label: {
                                 Label {
                                     Text(verbatim: recent)
@@ -127,7 +192,8 @@ struct SearchView: View {
     /// 300 ms dopo l'ultimo tasto (la nuova digitazione annulla questa attesa), poi la richiesta.
     private func run() async {
         let asked = term
-        guard !asked.isEmpty else {
+        let current = filters
+        guard !current.isEmpty else {
             phase = .idle
             return
         }
@@ -136,7 +202,7 @@ struct SearchView: View {
         // Un aggiornamento non svuota l'elenco: il giro di attesa c'e' solo la prima volta.
         if case .results = phase {} else { phase = .loading }
         do {
-            phase = .results(try await api.search(q: asked, limit: 30), for: asked)
+            phase = .results(try await api.search(current, limit: 30), for: asked)
         } catch {
             guard !Task.isCancelled else { return }
             phase = .failed

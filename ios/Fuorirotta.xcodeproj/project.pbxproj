@@ -18,6 +18,7 @@
 		450FA3619A3E5F5381108AC7 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08E8F863A79CE57299E007F7 /* HomeView.swift */; };
 		5984783CE23E2511E599E22F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E5D39164BA3095540C27C68C /* Assets.xcassets */; };
 		6FC2DB582A818547A174AF6F /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3507B17FD1396D1BEC002E7 /* AuthService.swift */; };
+		73CF3C85C98DF9508363A98D /* SearchFiltersSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C502ED14CE515B4DEC1BA5B /* SearchFiltersSheet.swift */; };
 		8825BD1EF35DDF3DC5A3745E /* LocationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39BA12BB79474FEB80925711 /* LocationModel.swift */; };
 		9EFA970089F19DF478C0C7C5 /* LocationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7EA14984C6205355CBF543 /* LocationViews.swift */; };
 		A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB922A66158CC37247D8879 /* FuorirottaApp.swift */; };
@@ -37,6 +38,7 @@
 		26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		39BA12BB79474FEB80925711 /* LocationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationModel.swift; sourceTree = "<group>"; };
 		3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistration.swift; sourceTree = "<group>"; };
+		3C502ED14CE515B4DEC1BA5B /* SearchFiltersSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersSheet.swift; sourceTree = "<group>"; };
 		3F0958FA7AA361C947B83B04 /* SavesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavesModel.swift; sourceTree = "<group>"; };
 		4467811081BDB08735B3CFEB /* SignInSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInSheet.swift; sourceTree = "<group>"; };
 		57D794E08B519C64F99B0EDB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -116,6 +118,7 @@
 				8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */,
 				6E616087A4FBE9B4B99A3D40 /* SavedView.swift */,
 				3F0958FA7AA361C947B83B04 /* SavesModel.swift */,
+				3C502ED14CE515B4DEC1BA5B /* SearchFiltersSheet.swift */,
 				DD27AFE04C87605DD1EB6FCA /* SearchView.swift */,
 				A88DE6B36D790BA575926AF1 /* SettingsView.swift */,
 				4467811081BDB08735B3CFEB /* SignInSheet.swift */,
@@ -240,6 +243,7 @@
 				0C552E8B611CE7C46F6741AA /* RemoteImage.swift in Sources */,
 				18006C9D52BAB281B4C5C9F5 /* SavedView.swift in Sources */,
 				E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */,
+				73CF3C85C98DF9508363A98D /* SearchFiltersSheet.swift in Sources */,
 				44405A7E46E2D75282D03F9A /* SearchView.swift in Sources */,
 				F84D74B4A0B733D401202D12 /* SettingsView.swift in Sources */,
 				399D5E2B4C97E1D979BDFF58 /* SignInSheet.swift in Sources */,
