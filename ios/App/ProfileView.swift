@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(Session.self) private var session
+    @Environment(SavesModel.self) private var saves
     @State private var confirmSignOut = false
 
     var body: some View {
@@ -17,11 +18,14 @@ struct ProfileView: View {
                             .task { session.consumeExpiredNotice() }
                     }
                     accountCard
+                    StatsSection(items: saves.statItems)
                 }
                 .padding(Spacing.md)
             }
             .navigationTitle("Profilo")
             .onAppear { session.clearError() }
+            // Account: le statistiche vengono dai salvati sincronizzati; Salvati puo' non essere mai stato aperto.
+            .task(id: session.state) { if case .signedIn = session.state, saves.statItems.isEmpty { await saves.reload() } }
             .sensoryFeedback(.success, trigger: session.successCount)
             .sensoryFeedback(.error, trigger: session.errorCount)
         }

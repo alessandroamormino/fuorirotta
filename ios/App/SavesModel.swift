@@ -72,6 +72,15 @@ final class SavesModel {
     /// Ospite con la lista piena a 90 o piu': l'intestazione di Salvati mostra "N di 100".
     var guestCount: Int? { mode == .guest ? ids.count : nil }
 
+    /// Date e categorie dei salvati, per le statistiche (MOB-07). Ospite: le istantanee del telefono; account: le righe caricate.
+    var statItems: [StatItem] {
+        switch mode {
+        case .guest: guestStats
+        case .account: rows.filter { !$0.dateStart.isEmpty }.map { StatItem(dateStart: $0.dateStart, dateEnd: $0.dateEnd, category: $0.category) }
+        }
+    }
+
+    private var guestStats: [StatItem] = []
     private var mode = Mode.guest
     private let api: APIClient
     private let store: GuestStore
@@ -84,6 +93,13 @@ final class SavesModel {
     /// All'avvio, prima di Session.restore: i segnalibri partono accesi senza aspettare la rete.
     func start() async {
         ids = Set(await store.all().map(\.id))
+        await refreshGuestStats()
+    }
+
+    private func refreshGuestStats() async {
+        guestStats = await store.all().compactMap { e in
+            e.snap.map { StatItem(dateStart: $0.dateStart, dateEnd: $0.dateEnd, category: $0.category) }
+        }
     }
 
     func isSaved(_ id: Int) -> Bool { ids.contains(id) }
@@ -101,6 +117,7 @@ final class SavesModel {
                 warningCount += 1
                 show(Copy.guestCap)
             }
+            await refreshGuestStats()
         case .account:
             do {
                 if wasSaved { try await api.unsave(id: event.id) } else { try await api.save(id: event.id) }
@@ -145,6 +162,7 @@ final class SavesModel {
     /// Uscita (o sessione scaduta): sul telefono non resta nulla dell'account (22 D-07, T-27-23).
     func didSignOut() async {
         await store.clear()
+        guestStats = []
         ids = []
         rows = []
         mode = .guest
@@ -174,6 +192,7 @@ final class SavesModel {
         case .guest:
             let entry = await store.all().first { $0.id == row.entryID }
             await store.remove(row.entryID)
+            await refreshGuestStats()
             var undo: (@MainActor () async -> Void)?
             if let entry { undo = { [store] in await store.restore(entry) } }
             removedToast(message, undo: undo)
@@ -210,6 +229,7 @@ final class SavesModel {
     private func reloadGuest() async {
         let entries = await store.all()
         ids = Set(entries.map(\.id))
+        await refreshGuestStats()
         if entries.isEmpty {
             rows = []
             return
