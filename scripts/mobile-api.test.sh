@@ -237,6 +237,7 @@ m2_matrix=(
   'PUT|/api/v1/me/devices|{"token":"{tok}","environment":"sandbox"}'
   'DELETE|/api/v1/me/devices|{"token":"{tok}"}'
   'GET|/api/v1/me/export|'
+  'POST|/api/v1/me/apple-token|{"authorizationCode":"m2-parita"}'
   'GET|/api/v1/me/sessions|'
   'DELETE|/api/v1/me/sessions/[id]|'
   'DELETE|/api/v1/me/sessions|'

@@ -13,6 +13,12 @@
 // Uscire: POST /api/auth/sign-out con il solo bearer e il corpo JSON `{}` (un corpo vuoto con
 // Content-Type JSON e' un 400 di Better Auth); la sessione sparisce dal server e il bearer da' 401.
 //
+// Apple (Fase 27, MOB-05). Dopo l'accesso nativo con Apple l'app manda UNA volta, subito (il codice
+// vale una volta sola e per pochi minuti), POST /api/v1/me/apple-token con il solo bearer e il corpo
+// {"authorizationCode": "<codice>"}: 200 {stored:true}. Qualunque errore (400, 404, 409, 502, 500)
+// non e' fatale per l'accesso e significa solo che, all'eliminazione dell'account, Apple non viene
+// revocata. Eliminare l'account: POST /api/auth/delete-user con il solo bearer e il corpo `{}`.
+//
 // Piano e funzioni (D-04). GET /api/v1/me/state, da loggati, aggiunge `plan` e
 // `features`. Oggi ogni account e' `plan: 'beta'` con TUTTE le funzioni sotto
 // elencate: non esiste una tabella di abbonamenti, ne' un'applicazione di queste

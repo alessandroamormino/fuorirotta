@@ -838,6 +838,70 @@ async function main(): Promise<void> {
     const a1Last = revokeCalls[revokeCalls.length - 1]
     check('A1: delete-user con il solo bearer -> 200 e revoca col bundle ID dopo il rifiuto del Services ID', a1Delete === 200 && a1Last?.clientId === BUNDLE_ID && a1Last.token === a1Issued, `${a1Delete} ${JSON.stringify(revokeCalls)}`)
     check('A1: zero righe per l\'utente', (await rowsLeft(a1.userId)) === 0)
+
+    // A2: i rifiuti non chiamano Apple e non toccano il token salvato; due codici validi sostituiscono
+    const a2 = await nativeAppUser('a2')
+    appleCodes.set('a2-first', { sub: a2.sub, email: a2.email })
+    check('A2: preparazione: un primo apple-token valido', (await appleToken(JSON.stringify({ authorizationCode: 'a2-first' }), bearerOf(a2.bearer))).status === 200)
+    const a2Stored = async () => {
+      const row = await appleRow(a2.sub)
+      return row?.refreshToken ? await decrypt(row.refreshToken) : null
+    }
+    const a2Token = await a2Stored()
+    const g2 = await mintGoogleUser(`${EMAIL_PREFIX}a2g@fixture.invalid`, 'A2 Google', 'https://lh3.googleusercontent.com/a/a2g')
+    const g2Bearer = decodeURIComponent(g2.cookie.slice(g2.cookie.indexOf('=') + 1))
+    const callsBefore = tokenCalls
+    const a2Refusals = {
+      senzaRigaApple: await appleToken(JSON.stringify({ authorizationCode: 'a2-first' }), bearerOf(g2Bearer)),
+      vuoto: await appleToken('{}', bearerOf(a2.bearer)),
+      nonStringa: await appleToken(JSON.stringify({ authorizationCode: 5 }), bearerOf(a2.bearer)),
+      lungo: await appleToken(JSON.stringify({ authorizationCode: 'x'.repeat(2049) }), bearerOf(a2.bearer)),
+      senzaCredenziali: await appleToken(JSON.stringify({ authorizationCode: 'a2-first' }), { origin: BASE }),
+    }
+    const notFound = (await a2Refusals.senzaRigaApple.json().catch(() => ({}))) as { error?: string }
+    check(
+      'A2: senza riga Apple 404 not-found; corpo vuoto, non stringa o oltre 2048 caratteri 400; senza credenziali 401; Apple mai chiamato',
+      a2Refusals.senzaRigaApple.status === 404 &&
+        notFound.error === 'not-found' &&
+        a2Refusals.vuoto.status === 400 &&
+        a2Refusals.nonStringa.status === 400 &&
+        a2Refusals.lungo.status === 400 &&
+        a2Refusals.senzaCredenziali.status === 401 &&
+        tokenCalls === callsBefore,
+      JSON.stringify(Object.fromEntries(Object.entries(a2Refusals).map(([k, v]) => [k, v.status]))) + ` chiamate=${tokenCalls - callsBefore}`,
+    )
+    const a2Unknown = await appleToken(JSON.stringify({ authorizationCode: 'a2-sconosciuto' }), bearerOf(a2.bearer))
+    check('A2: un codice che Apple rifiuta -> 502 {error:apple} e il token salvato non cambia', a2Unknown.status === 502 && ((await a2Unknown.json()) as { error?: string }).error === 'apple' && (await a2Stored()) === a2Token, String(a2Unknown.status))
+    appleCodes.set('a2-altro', { sub: 'apple-flow-sub-qualcun-altro', email: `${EMAIL_PREFIX}a2x@fixture.invalid` })
+    const mismatch = await appleToken(JSON.stringify({ authorizationCode: 'a2-altro' }), bearerOf(a2.bearer))
+    check('A2: un codice di un altro sub -> 409 {error:apple-mismatch} e il token salvato non cambia', mismatch.status === 409 && ((await mismatch.json()) as { error?: string }).error === 'apple-mismatch' && (await a2Stored()) === a2Token, String(mismatch.status))
+    appleCodes.set('a2-bis', { sub: a2.sub, email: a2.email })
+    const twice = [await appleToken(JSON.stringify({ authorizationCode: 'a2-bis' }), bearerOf(a2.bearer)), await appleToken(JSON.stringify({ authorizationCode: 'a2-bis' }), bearerOf(a2.bearer))]
+    check(
+      'A2: lo stesso codice due volte -> 200 e 200, una sola riga Apple, tiene il token piu\' recente',
+      twice.every((r) => r.status === 200) && (await prisma.account.count({ where: { userId: a2.userId, providerId: 'apple' } })) === 1 && (await a2Stored()) === issued[issued.length - 1],
+      twice.map((r) => r.status).join(','),
+    )
+    // Una seconda eliminazione con lo stesso bearer e' un 401 pulito, mai 5xx (idempotenza MOB-05)
+    const deleteWith = () => handler(new Request(`${BASE}/api/auth/delete-user`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': APP_UA, ...bearerOf(a2.bearer) }, body: '{}' }))
+    const firstDelete = (await deleteWith()).status
+    const secondDelete = (await deleteWith()).status
+    check('A2: delete-user con il bearer due volte -> 200 poi 401', firstDelete === 200 && secondDelete === 401, `${firstDelete},${secondDelete}`)
+    check('A2: zero righe per l\'utente', (await rowsLeft(a2.userId)) === 0)
+
+    // A3: senza APPLE_APP_BUNDLE_ID la rotta non esiste
+    const a3 = await nativeAppUser('a3')
+    appleCodes.set('a3-code', { sub: a3.sub, email: a3.email })
+    const a3Before = tokenCalls
+    const bundleEnv = process.env.APPLE_APP_BUNDLE_ID
+    let a3Reply: Response
+    try {
+      delete process.env.APPLE_APP_BUNDLE_ID
+      a3Reply = await appleToken(JSON.stringify({ authorizationCode: 'a3-code' }), bearerOf(a3.bearer))
+    } finally {
+      process.env.APPLE_APP_BUNDLE_ID = bundleEnv
+    }
+    check('A3: senza APPLE_APP_BUNDLE_ID -> 404 not-found e Apple mai chiamato', a3Reply.status === 404 && ((await a3Reply.json()) as { error?: string }).error === 'not-found' && tokenCalls === a3Before, String(a3Reply.status))
   } finally {
     await cleanup()
     await prisma.$disconnect()
