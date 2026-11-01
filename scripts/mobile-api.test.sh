@@ -16,6 +16,7 @@
 #   M6  concorrenza: due PUT bearer in parallelo -> una riga; bearer e cookie vedono gli stessi follow
 #   M7  D-13: la sessione dell'app e' 'App iPhone' nell'elenco del web e si revoca da li'
 #   M8  D-10: POST /api/auth/sign-out con il solo bearer cancella la sessione
+#   M9  bearer-only delete-user: 200, poi 401, zero righe
 #   P1  tracer: PUT /me/devices col solo bearer -> una riga push_devices (token minuscolo, sessione dell'app); il secondo PUT la aggiorna
 #   P2  concorrenza: due PUT dello stesso token -> 200 e 200 e una riga
 #   P3  passaggio di proprieta' e scoping: la riga passa al secondo utente, il DELETE dell'altro non toglie nulla
@@ -510,6 +511,26 @@ code="$(bearer_call m8a POST /api/auth/sign-out 198.51.100.209 "${m8_cookie}" '{
 code="$(bearer_call m8b GET /api/v1/me/follows 198.51.100.209 "${m8_cookie}")"
 [[ "${code}" == "401" ]] || fail "M8: lo stesso bearer dopo il sign-out: atteso 401, ottenuto ${code}"
 echo "ok  M8: POST /api/auth/sign-out con il solo bearer (niente Cookie, niente Origin) -> 200, riga auth_session cancellata, il bearer da' 401"
+
+# --- M9: MOB-05, eliminare l'account dall'app con il solo bearer (niente Cookie, niente Origin) -------------
+m9_tok="fe$(printf '0b%.0s' {1..31})"
+mint_app_user m9 "${app_ua}"
+code="$(bearer_call m9s PUT /api/v1/me/follows 198.51.100.219 "${m9_cookie}" '{"kind":"region","key":"lombardia"}')"
+[[ "${code}" == "200" ]] || fail "M9: preparazione follow: atteso 200, ottenuto ${code}"
+code="$(bearer_call m9d PUT /api/v1/me/devices 198.51.100.219 "${m9_cookie}" "{\"token\":\"${m9_tok}\",\"environment\":\"sandbox\"}")"
+[[ "${code}" == "200" ]] || fail "M9: preparazione dispositivo: atteso 200, ottenuto ${code}"
+[[ "$(follow_rows "${m9_user}" region lombardia)" == "1" && "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '${m9_tok}'")" == "1" ]] || fail "M9: preparazione: attese una riga di follow e una di dispositivo"
+code="$(bearer_call m9a POST /api/auth/delete-user 198.51.100.219 "${m9_cookie}" '{}')"
+[[ "${code}" == "200" ]] || fail "M9: delete-user con il solo bearer: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/m9a.b"))"
+for m9_q in "auth_user WHERE id" "auth_session WHERE user_id" "user_follows WHERE user_id"; do
+  [[ "$(psql_dev "SELECT count(*) FROM ${m9_q} = '${m9_user}'")" == "0" ]] || fail "M9: dopo la cancellazione restano righe in ${m9_q%% *}"
+done
+[[ "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '${m9_tok}'")" == "0" ]] || fail "M9: dopo la cancellazione resta il dispositivo in push_devices"
+code="$(bearer_call m9b GET /api/v1/me/follows 198.51.100.219 "${m9_cookie}")"
+[[ "${code}" == "401" ]] || fail "M9: il bearer dopo la cancellazione: atteso 401, ottenuto ${code}"
+code="$(bearer_call m9c POST /api/auth/delete-user 198.51.100.219 "${m9_cookie}" '{}')"
+[[ "${code}" == "401" ]] || fail "M9: seconda cancellazione con lo stesso bearer: atteso 401 (mai 5xx), ottenuto ${code}"
+echo "ok  M9: POST /api/auth/delete-user con il solo bearer (niente Cookie, niente Origin) -> 200, zero righe in auth_user, auth_session, user_follows e push_devices, il bearer da' 401 e una seconda cancellazione e' un 401 pulito"
 
 # --- P1 (tracer): l'app registra il suo token con il solo bearer e compare una riga legata alla sessione ---
 p1_tok_upper="FE$(printf '0A%.0s' {1..31})"
