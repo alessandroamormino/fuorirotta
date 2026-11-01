@@ -26,6 +26,7 @@
 		DA5A9A54EE87CEF48C914118 /* PushRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */; };
 		E0C6F06E4A73B6450F59BB0C /* EventCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB95769BD3D9DD0097F97FE /* EventCards.swift */; };
 		E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0958FA7AA361C947B83B04 /* SavesModel.swift */; };
+		E72210D1CE6D9691DDCA04EE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 57D794E08B519C64F99B0EDB /* PrivacyInfo.xcprivacy */; };
 		EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25216E6A8579546E42AB6C7 /* MapScreen.swift */; };
 /* End PBXBuildFile section */
 
@@ -37,6 +38,7 @@
 		3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistration.swift; sourceTree = "<group>"; };
 		3F0958FA7AA361C947B83B04 /* SavesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavesModel.swift; sourceTree = "<group>"; };
 		4467811081BDB08735B3CFEB /* SignInSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInSheet.swift; sourceTree = "<group>"; };
+		57D794E08B519C64F99B0EDB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsCards.swift; sourceTree = "<group>"; };
 		629E3D4482469EA6F7F6953D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6E616087A4FBE9B4B99A3D40 /* SavedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedView.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 				39BA12BB79474FEB80925711 /* LocationModel.swift */,
 				9C7EA14984C6205355CBF543 /* LocationViews.swift */,
 				E25216E6A8579546E42AB6C7 /* MapScreen.swift */,
+				57D794E08B519C64F99B0EDB /* PrivacyInfo.xcprivacy */,
 				D8B41CF87D602B3F4D0B0579 /* ProfileView.swift */,
 				3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */,
 				8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */,
@@ -188,6 +191,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5984783CE23E2511E599E22F /* Assets.xcassets in Resources */,
+				E72210D1CE6D9691DDCA04EE /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
