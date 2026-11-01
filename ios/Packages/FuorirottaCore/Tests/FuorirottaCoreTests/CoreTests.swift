@@ -47,6 +47,32 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
     }
 }
 
+@Suite struct ContractTests {
+    private func matches(_ pattern: String, _ s: String) -> Bool {
+        s.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    @Test func userAgentMatchesContract() {
+        #expect(matches(ApiContract.userAgentPattern, APIClient.userAgent(version: "1.0.0")))
+        #expect(!matches(ApiContract.userAgentPattern, "FuoriRotta/1 CFNetwork/1494"))
+    }
+
+    @Test func sessionIsCookieless() {
+        let c = APIClient.makeSession(appVersion: "1.0.0").configuration
+        #expect(c.httpCookieStorage == nil)
+        #expect(c.httpShouldSetCookies == false)
+        #expect(c.httpCookieAcceptPolicy == .never)
+        #expect(c.httpAdditionalHeaders?["User-Agent"] as? String == "FuoriRotta/1.0.0 (iOS; iPhone)")
+    }
+
+    @Test func constants() {
+        #expect(ApiContract.categories.count == 7)
+        #expect(ApiContract.categories.last == "Altro")
+        #expect(ApiContract.guestCap == 100)
+        #expect(ApiContract.accountCap == 500)
+    }
+}
+
 @Suite struct SourceGuardTests {
     // T-27-03: l'app non manda mai i parametri che avviano lo scraping in background.
     @Test func apiSwiftNeverBuildsScrapeParams() throws {

@@ -9,3 +9,4 @@ README.md
 .env*
 !.env.example
 lib/generated
+ios
