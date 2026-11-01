@@ -147,6 +147,45 @@ for (const f of screens) {
 }
 ok('S6', 'nessun NavigationLink con destinazione inline (il matcher fallisce su uno piantato)')
 
+// S7 lingue (UAT3): l'italiano e' la lingua di sviluppo, l'inglese e' completo. Senza questo i componenti di sistema
+// (Accedi con Apple) usano l'inglese anche con l'app in italiano.
+const specifiers = (text: string): string => (text.match(/%(?:\d+\$)?(?:lld|@|d|f)/g) ?? []).join(',')
+export function catalogProblems(catalog: {
+  sourceLanguage?: string
+  strings?: Record<string, { localizations?: Record<string, { stringUnit?: { state?: string; value?: string } }> }>
+}): string[] {
+  const out: string[] = []
+  if (catalog.sourceLanguage !== 'it') out.push(`sourceLanguage = ${catalog.sourceLanguage}`)
+  for (const [key, entry] of Object.entries(catalog.strings ?? {})) {
+    if (key === '') continue
+    const unit = entry.localizations?.en?.stringUnit
+    if (!unit?.value) out.push(`senza inglese: ${key}`)
+    else if (unit.state !== 'translated') out.push(`inglese non tradotto: ${key}`)
+    else if (specifiers(unit.value) !== specifiers(key)) out.push(`segnaposto diversi: ${key}`)
+  }
+  return out
+}
+check('S7', catalogProblems({ sourceLanguage: 'it', strings: { 'Ciao %@': { localizations: { en: { stringUnit: { state: 'translated', value: 'Hi' } } } } } }).length === 1, 'il gate non vede un segnaposto perso')
+check('S7', catalogProblems({ sourceLanguage: 'it', strings: { Ciao: {} } }).length === 1, 'il gate non vede una stringa senza inglese')
+check('S7', yml.includes('developmentLanguage: it') && yml.includes('CFBundleDevelopmentRegion: it') && /CFBundleLocalizations: \[it, en\]/.test(yml), 'project.yml non dichiara it come lingua di sviluppo e it/en come localizzazioni')
+const catalog = JSON.parse(read('ios/App/Localizable.xcstrings'))
+const problems = catalogProblems(catalog)
+check('S7', problems.length === 0, problems.slice(0, 5).join('; '))
+const infoCatalog = JSON.parse(read('ios/App/InfoPlist.xcstrings'))
+check('S7', catalogProblems(infoCatalog).length === 0, catalogProblems(infoCatalog).join('; '))
+// Le stringhe che il compilatore non estrae (FuorirottaCore, che le cerca nel bundle principale) devono stare nel catalogo.
+const coreDir = join(ROOT, 'ios/Packages/FuorirottaCore/Sources')
+for (const f of swiftFiles(coreDir)) {
+  for (const m of readFileSync(f, 'utf8').matchAll(/String\(localized: "((?:[^"\\]|\\.)*)", bundle: \.main\)/g)) {
+    const key = m[1].replace(/\\\([^)]*(?:\([^)]*\))?[^)]*\)/g, '%@')
+    const found = Object.keys(catalog.strings).some((k) => k === key || k.replace(/%lld/g, '%@') === key)
+    check('S7', found, `${f.slice(ROOT.length + 1)}: "${m[1]}" non e' nel catalogo`)
+  }
+}
+const categories = [...read('ios/Packages/FuorirottaCore/Sources/FuorirottaCore/ApiContract.swift').matchAll(/categories = \[(.*)\]/g)][0][1]
+for (const c of categories.match(/"[^"]+"/g) ?? []) check('S7', c.slice(1, -1) in catalog.strings, `categoria ${c} non e' nel catalogo`)
+ok('S7', `catalogo it/en completo (${Object.keys(catalog.strings).length} stringhe), it lingua di sviluppo, il gate fallisce su una traduzione mancante`)
+
 // S5 sicurezza del rilascio (D-08, D-09, T-27-35..38). Solo testo: gira uguale su Linux in CI.
 // Ogni riga con `git tag` o `git push` deve nominare un tag ios-; nessuna puo' nominarne uno v* (auto-deploy
 // rilascia il v* piu' alto in produzione). Funzione pura, provata su uno script piantato.

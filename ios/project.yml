@@ -1,5 +1,7 @@
 name: Fuorirotta
 options:
+  # Italiano e' la lingua di sviluppo (UAT3): senza, i componenti di sistema (Accedi con Apple) usano l'inglese.
+  developmentLanguage: it
   deploymentTarget:
     iOS: "26.0"
 configs:
@@ -16,6 +18,9 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     API_BASE_URL: https://fuori-rotta.it
+    # Catalogo delle stringhe: l'italiano e' la sorgente, l'inglese e' completo (gate S7).
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
   configs:
     Debug:
       APNS_ENVIRONMENT: sandbox
@@ -61,6 +66,8 @@ targets:
     info:
       path: App/Info.plist
       properties:
+        CFBundleDevelopmentRegion: it
+        CFBundleLocalizations: [it, en]
         CFBundleDisplayName: Fuorirotta
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
