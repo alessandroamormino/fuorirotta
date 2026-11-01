@@ -945,13 +945,13 @@ here: anyone holding one can turn its check green. Times are UTC.
 | Check | `.env` variable | Pinged by | Runs | Period / grace | Pings success when | Pings `/fail` when | Silence (DOWN mail) means |
 |---|---|---|---|---|---|---|---|
 | `fuorirotta-live` | `HEALTHCHECK_URL` | `cron-scrape.sh` | after each nightly scrape, 03:17-04:14 | 1 day / 3 h | the scrape POST returned 2xx (accepted, not finished) | never | cron not running, or every scrape POST failed |
-| `fuorirotta-sorgenti` | `HEALTHCHECK_SOURCES_URL` | `cron-health.sh` | 05:00 | 1 day / 2 h | every source healthy in `/api/monitoring` | a source is `failed`/`degraded` (list in the mail), or the site does not answer | the health job itself did not run |
+| `fuorirotta-sorgenti` | `HEALTHCHECK_SOURCES_URL` | `cron-health.sh` | 07:30 | 1 day / 2 h | every source healthy in `/api/monitoring` | a source is `failed`/`degraded` (list in the mail), or the site does not answer | the health job itself did not run |
 | `fuorirotta-maintenance` | `HEALTHCHECK_MAINTENANCE_URL` | `cron-maintenance.sh` | 11:00 | 1 day / 3 h | retention, backfill, dedup, cluster cache and auth purge all succeeded | never | the job failed (cause only in `/var/log/fuorirotta-cron.log`, e.g. `lock occupato`) or did not run |
 | `fuorirotta-backup` | `HEALTHCHECK_BACKUP_URL` | `cron-backup.sh` | 12:30 | 1 day / 2 h | encrypted dump written and pruned to 14 days | never | dump, encryption or prune failed, or the job did not run |
 | `fuorirotta-deploy` | `HEALTHCHECK_DEPLOY_URL` | `auto-deploy.sh` | every 5 min, pings only on a release | 365 days / 15 days | a release went live | a release failed and was rolled back | nothing useful: only `/fail` matters |
 
 Not covered by any check: the Mac pulling backups onto the NAS (21:00 local, launchd), and the
-site going down between two 05:00 runs.
+site going down between two 07:30 runs.
 
 Known false alarm: a deploy (or container restart) between 03:17 and ~08:30 kills the in-flight
 lombardia scrape inside the app container; its region lock stays orphaned until its 8 h TTL
@@ -981,7 +981,7 @@ The switch above has two blind spots: it pings when the scrape is *accepted*, no
 *succeeds*, and twenty regions share it — so one dead source never turns it red. Puglia stayed
 down for weeks that way, and on 2026-10-16 `roma` was `failed` with 0 events and nothing rang.
 
-`scripts/cron-health.sh` closes it. At 05:00 UTC, after the last nightly scrape, it reads
+`scripts/cron-health.sh` closes it. At 07:30 UTC, after the last nightly scrape (lombardia starts at 03:17 and on long days finished after five o'clock; `scrape_runs` is only written at the end of a round, so an earlier check judged the previous day's round), it reads
 `/api/monitoring` from the container (`127.0.0.1:3000`) and its `summary` field — computed by
 `summarizeHealth` in `lib/scrapers/health.ts`: every source that is `failed` or `degraded`, one
 readable line each. Then it pings `HEALTHCHECK_SOURCES_URL`: success when all is well, `/fail`

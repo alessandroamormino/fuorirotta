@@ -81,9 +81,9 @@ if ! printf '%s\n' "${output}" | grep -qE '^\*/5 \* \* \* \* /opt/docker/fuori-r
   fail "S6: riga attesa per auto-deploy.sh assente o mal formata"
 fi
 
-# S7: l'allarme sulle sorgenti e' pianificato, dopo gli scrape notturni.
+# S7: l'allarme sulle sorgenti e' pianificato, dopo la fine (non solo l'avvio) del giro Lombardia.
 # Senza, una sorgente morta torna a poter restare giu' per settimane.
-if ! printf '%s\n' "${output}" | grep -qE '^0 5 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-health\.sh >> /var/log/fuorirotta-cron\.log 2>&1$'; then
+if ! printf '%s\n' "${output}" | grep -qE '^30 7 \* \* \* /opt/docker/fuori-rotta/fuorirotta/scripts/cron-health\.sh >> /var/log/fuorirotta-cron\.log 2>&1$'; then
   fail "S7: riga attesa per cron-health.sh assente o mal formata"
 fi
 echo "ok  S3: riga del job consolidato presente, pianificata dopo l'ultima regione"

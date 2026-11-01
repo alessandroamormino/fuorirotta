@@ -36,13 +36,20 @@ const LOG_PATH = '/var/log/fuorirotta-cron.log'
 const AUTO_DEPLOY_SCHEDULE = '*/5 * * * *'
 const AUTO_DEPLOY_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/auto-deploy.sh'
 const DEPLOY_LOG_PATH = '/var/log/fuorirotta-deploy.log'
-// Allarme sulla salute delle sorgenti (scripts/cron-health.sh): dopo l'ultimo
-// scrape notturno (04:14 UTC) e prima della manutenzione, che resta l'ultima.
-const HEALTH_SCHEDULE = '0 5 * * *'
+// Allarme sulla salute delle sorgenti (scripts/cron-health.sh): deve leggere il
+// giro della notte appena finita. Il giro Lombardia parte alle 03:17 UTC e
+// scrive le righe scrape_runs solo a fine giro, che nei giorni lunghi arrivava
+// verso le 06:40; alle cinque l'allarme giudicava quindi il giro del giorno
+// prima (falso DOWN il 2026-11-01). 07:30 lascia margine anche dopo lo
+// spalmamento dei dettagli (backlog 999.6) e resta prima della manutenzione
+// delle 11:00, che resta l'ultima voce di manutenzione; nessuno slot di
+// regione, manutenzione o backup coincide, e l'auto-deploy */5 che scatta
+// anche alle 07:30 agisce solo su un rilascio nuovo.
+const HEALTH_SCHEDULE = '30 7 * * *'
 const HEALTH_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-health.sh'
 // Backup cifrato giornaliero (scripts/cron-backup.sh, D-18). 12:30 UTC: dopo la
-// manutenzione delle 11:00 (che nel giorno peggiore, la domenica, finisce ben
-// prima) e lontano da ogni scrape (03:17-04:14) e dal controllo salute (05:00).
+// manutenzione delle 11:00 (che finisce ben prima) e lontano da ogni scrape
+// (03:17-04:14) e dal controllo salute (07:30).
 // Lo slot non coincide con nessuna voce di REGION_SCHEDULES: lo prova S11.
 const BACKUP_SCHEDULE = '30 12 * * *'
 const BACKUP_SCRIPT_PATH = '/opt/docker/fuori-rotta/fuorirotta/scripts/cron-backup.sh'
