@@ -50,8 +50,10 @@ export interface ScrapeParams {
    * il robots.txt e' fare meno richieste. Chi popola questo insieme e' il
    * runner (unico a parlare col database): gli adattatori restano puri.
    *
-   * Assente = scarica tutto, che e' il comportamento storico e resta quello
-   * del refresh completo settimanale.
+   * Assente = scarica tutto (oggi solo il CLI a sorgente singola). Il runner
+   * lo passa sempre, togliendo ogni giorno la fetta di URL in scadenza
+   * (detailRefreshWeekday in runner.ts), cosi' ogni dettaglio viene riletto
+   * una volta a settimana.
    */
   detailCachedUrls?: Set<string>
 }

@@ -8,6 +8,7 @@
  *   npx tsx frontend/lib/scrapers/runner.ts --from 2026-03-01 --to 2026-06-30
  */
 
+import { createHash } from 'node:crypto'
 import { SOURCE_REGISTRY, getSourceById } from './registry'
 import type { SourceRegistryEntry } from './registry'
 import { saveEvents, logMetrics } from './utils'
@@ -94,26 +95,35 @@ export async function isHostBusyForRegion(region: string): Promise<boolean> {
 }
 
 /**
- * Giorno del refresh completo: la domenica (UTC) nessun dettaglio viene
- * saltato e ogni pagina viene riscaricata.
+ * Giorno UTC (0 = domenica ... 6 = sabato) in cui il dettaglio di questa URL
+ * va riscaricato anche se e' gia' in cache.
  *
- * Perche' serve: saltare il dettaglio degli eventi gia' noti rende lo scrape
- * quotidiano minuti invece di ore, ma una pagina di dettaglio PUO' cambiare
- * dopo la prima lettura — un orario spostato, un indirizzo corretto. Senza un
- * giro completo periodico quelle correzioni non arriverebbero mai.
+ * Perche' serve un refresh periodico: saltare il dettaglio degli eventi gia'
+ * noti rende lo scrape quotidiano minuti invece di ore, ma una pagina di
+ * dettaglio PUO' cambiare dopo la prima lettura — un orario spostato, un
+ * indirizzo corretto. Senza un giro periodico quelle correzioni non
+ * arriverebbero mai.
  *
- * Perche' il giorno della settimana e non una colonna `detailFetchedAt`:
- * quella colonna sarebbe una migrazione, un backfill su 12.499 righe e uno
- * stato in piu' da mantenere, per ottenere la stessa cosa che un confronto
- * sul calendario da' gratis. Se un giorno servisse una politica per-evento
- * (es. ricontrollare piu' spesso gli eventi imminenti) allora la colonna si
+ * Perche' spalmato sui 7 giorni e non tutto in un giorno: il 2026-11-01, la
+ * domenica di refresh completo, in-lombardia ha impiegato 201 minuti (nei
+ * feriali 42-90), perche' ~1000 dettagli x Crawl-delay di 10s del robots.txt
+ * sono ~3h, e il giro finiva dopo l'allarme di cron-health. Spalmato costa
+ * ~+25 minuti a notte e ogni URL resta riletta una volta a settimana, nel
+ * giorno UTC == hash dell'URL modulo 7.
+ *
+ * Perche' un hash dell'URL e non una colonna `detailFetchedAt`: quella
+ * colonna sarebbe una migrazione, un backfill su migliaia di righe e uno
+ * stato in piu' da mantenere, per ottenere la stessa cosa che un calcolo
+ * sull'URL da' gratis. Se un giorno servisse una politica per-evento (es.
+ * ricontrollare piu' spesso gli eventi imminenti) allora la colonna si
  * giustifica; oggi no.
+ *
+ * Perche' sha256 di node:crypto: libreria standard, deterministico fra
+ * processi e fra Node 20 e 24, nessuna dipendenza nuova. Il costo (un hash per
+ * URL in cache, ~1000 al giorno) e' trascurabile.
  */
-export const FULL_DETAIL_REFRESH_WEEKDAY = 0
-
-/** Domenica UTC: nessun dettaglio saltato, si riscarica tutto. */
-export function isFullDetailRefreshDay(now: Date = new Date()): boolean {
-  return now.getUTCDay() === FULL_DETAIL_REFRESH_WEEKDAY
+export function detailRefreshWeekday(url: string): number {
+  return createHash('sha256').update(url).digest().readUInt32BE(0) % 7
 }
 
 /**
@@ -127,15 +137,25 @@ export function isFullDetailRefreshDay(now: Date = new Date()): boolean {
  * e' proporzionale a quanti sono — nessuno stato in piu' da mantenere per
  * distinguerli.
  *
+ * Le URL in scadenza oggi (detailRefreshWeekday(url) === giorno UTC di `now`)
+ * sono ESCLUSE dal set: l'adattatore non le trova "in cache" e ne riscarica il
+ * dettaglio, cosi' ogni evento viene riletto una volta a settimana.
+ *
  * Solo il runner parla col database: gli adattatori ricevono l'insieme gia'
  * pronto via ScrapeParams e restano puri.
  */
-async function detailCachedUrls(sourceId: string): Promise<Set<string>> {
+export async function detailCachedUrls(sourceId: string, now: Date = new Date()): Promise<Set<string>> {
   const rows = await prisma.event.findMany({
     where: { source: sourceId, description: { not: null }, sourceUrl: { not: null } },
     select: { sourceUrl: true }
   })
-  return new Set(rows.map(row => row.sourceUrl).filter((url): url is string => Boolean(url)))
+  const today = now.getUTCDay()
+  return new Set(
+    rows
+      .map(row => row.sourceUrl)
+      .filter((url): url is string => Boolean(url))
+      .filter(url => detailRefreshWeekday(url) !== today)
+  )
 }
 
 /**
@@ -158,11 +178,11 @@ export async function runRegion(region: string, params?: ScrapeParams): Promise<
   try {
     const groups = groupSourcesByHost(getSourcesByRegion(region))
 
-    // Il refresh completo settimanale ignora la cache dei dettagli.
-    const fullRefresh = isFullDetailRefreshDay()
-    if (fullRefresh) {
-      console.log('[Scraper] Refresh completo settimanale: nessuna pagina di dettaglio saltata.')
-    }
+    // Refresh dei dettagli spalmato: ogni giorno la cache dei dettagli omette
+    // la fetta di URL in scadenza oggi (1/7), che viene quindi riscaricata.
+    console.log(
+      `[Scraper] Refresh dettagli spalmato: oggi (giorno UTC ${startedAt.getUTCDay()}) si riscarica 1/7 delle pagine di dettaglio gia' in cache.`
+    )
 
     // Gruppi (host diversi) in parallelo fra loro; dentro ogni gruppo (stesso
     // host) le sorgenti in sequenza — D-02.
@@ -171,9 +191,10 @@ export async function runRegion(region: string, params?: ScrapeParams): Promise<
         const groupResults: ScrapeResult[] = []
         for (const entry of group) {
           try {
-            const entryParams: ScrapeParams = fullRefresh
-              ? { ...params }
-              : { ...params, detailCachedUrls: await detailCachedUrls(entry.id) }
+            const entryParams: ScrapeParams = {
+              ...params,
+              detailCachedUrls: await detailCachedUrls(entry.id, startedAt)
+            }
             const adapterResult = await entry.scrape(entryParams)
             groupResults.push({ ...adapterResult, region: entry.region })
           } catch (err) {
