@@ -19,6 +19,13 @@
 // non e' fatale per l'accesso e significa solo che, all'eliminazione dell'account, Apple non viene
 // revocata. Eliminare l'account: POST /api/auth/delete-user con il solo bearer e il corpo `{}`.
 //
+// Metodi di accesso (Fase 27, UAT 2). Da loggata, l'app collega o scollega Apple/Google con le rotte di Better Auth,
+// col solo bearer: GET /api/auth/list-accounts ([{id, providerId, ...}], mai token), POST /api/auth/link-social con
+// {"provider", "idToken": {"token", "nonce"}} (nessun callbackURL: niente giro nel browser) e POST /api/auth/unlink-account
+// con {"accountId": <id della RIGA>}. Il server verifica l'id token (AUTH-07: nessun collegamento implicito, serve la
+// sessione). Un 401 con code INVALID_TOKEN e' un id token rifiutato, NON una sessione scaduta: l'app resta dentro; solo
+// UNAUTHORIZED (o nessun code) vuol dire sessione finita. L'ultimo metodo non si scollega (400 lato server).
+//
 // Piano e funzioni (D-04). GET /api/v1/me/state, da loggati, aggiunge `plan` e
 // `features`. Oggi ogni account e' `plan: 'beta'` con TUTTE le funzioni sotto
 // elencate: non esiste una tabella di abbonamenti, ne' un'applicazione di queste

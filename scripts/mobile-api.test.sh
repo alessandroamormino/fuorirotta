@@ -25,6 +25,7 @@
 #   P6  D-10: revoca dal web, sign-out col bearer e cancellazione dell'account tolgono il dispositivo
 #   P7  l'export elenca pushDevices senza token
 #   W1  API-05: /.well-known/apple-app-site-association e assetlinks.json -> 200 JSON, nessun redirect, HEAD 200
+#   A1  UAT 2: i metodi di accesso dall'app: list-accounts e link-social accettano il solo bearer, un id token falso e' rifiutato senza collegare nulla
 #   C1  tracer: GET /api/v1/config?version= senza credenziali -> update-required / update-recommended / ok dalle soglie dell'ambiente
 set -euo pipefail
 
@@ -685,6 +686,24 @@ code="$(call p7b GET /api/v1/me/export 198.51.100.218 -H "Cookie: fuorirotta.ses
   || fail "P7: pushDevices inattesi: $(json_get "${tmp_dir}/p7b.b" 'j.pushDevices')"
 [[ "$(grep -ci "${p7_tok}" "${tmp_dir}/p7b.b" || true)" == "0" ]] || fail "P7: il token del dispositivo non deve comparire nell'export"
 echo "ok  P7: l'export ha pushDevices con un oggetto {appVersion, createdAt, environment, lastSeenAt} e il token non compare da nessuna parte"
+
+# --- A1: UAT 2, collegare un secondo metodo dall'app: sessione bearer obbligatoria, id token verificato dal server -----
+# AUTH-07: nessun collegamento implicito. Qui si prova cio' che si puo' senza un provider vero: la sessione bearer e'
+# riconosciuta (l'errore e' quello dell'id token, non della sessione), senza bearer e' 401 UNAUTHORIZED, e un id token
+# falso non lascia nessuna riga in piu'.
+mint_app_user a1 "${app_ua}"
+a1_rows_before="$(psql_dev "SELECT count(*) FROM auth_account WHERE user_id = '${a1_user}'")"
+code="$(bearer_call a1a GET /api/auth/list-accounts 198.51.100.231 "${a1_cookie}")"
+[[ "${code}" == "200" ]] || fail "A1: list-accounts col solo bearer: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/a1a.b"))"
+[[ "$(json_get "${tmp_dir}/a1a.b" 'Array.isArray(j) && j.every((r) => typeof r.id === "string" && typeof r.providerId === "string" && !("accessToken" in r) && !("idToken" in r) && !("refreshToken" in r))')" == "true" ]] || fail "A1: list-accounts deve essere un elenco di righe senza token, corpo '$(cat "${tmp_dir}/a1a.b")'"
+for a1_provider in google apple; do
+  code="$(bearer_call a1b POST /api/auth/link-social 198.51.100.231 "${a1_cookie}" "{\"provider\":\"${a1_provider}\",\"idToken\":{\"token\":\"x.y.z\",\"nonce\":\"n\"}}")"
+  [[ "${code}" == "401" && "$(json_get "${tmp_dir}/a1b.b" 'j.code')" != "UNAUTHORIZED" ]] || [[ "${a1_provider}" == "apple" && "${code}" == "404" ]] || fail "A1: link-social ${a1_provider} con id token falso e bearer: atteso 401 (non UNAUTHORIZED), ottenuto ${code} '$(cat "${tmp_dir}/a1b.b")'"
+done
+code="$(call a1c POST /api/auth/link-social 198.51.100.231 -H 'Content-Type: application/json' --data '{"provider":"google","idToken":{"token":"x.y.z","nonce":"n"}}')"
+[[ "${code}" == "401" && "$(json_get "${tmp_dir}/a1c.b" 'j.code')" == "UNAUTHORIZED" ]] || fail "A1: link-social senza bearer: atteso 401 UNAUTHORIZED, ottenuto ${code} '$(cat "${tmp_dir}/a1c.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM auth_account WHERE user_id = '${a1_user}'")" == "${a1_rows_before}" ]] || fail "A1: un id token falso non deve aggiungere righe auth_account"
+echo "ok  A1: list-accounts col solo bearer -> 200 senza token; link-social con id token falso -> 401 dell'id token (la sessione bearer e' riconosciuta), senza bearer -> 401 UNAUTHORIZED, nessuna riga auth_account in piu'"
 
 # --- C1 (tracer): la politica di versione, pubblica, su HTTP vero ------------------------------------
 # Nessun cookie, nessun bearer, nessun Origin: e' quello che manda un'app appena installata.
