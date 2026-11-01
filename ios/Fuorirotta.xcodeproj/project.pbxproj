@@ -7,17 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */; };
 		29D29AC67613BB7CE7896C2D /* FuorirottaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 443A1CB75FB2E97561DAE505 /* FuorirottaCore */; };
 		450FA3619A3E5F5381108AC7 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08E8F863A79CE57299E007F7 /* HomeView.swift */; };
+		5984783CE23E2511E599E22F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E5D39164BA3095540C27C68C /* Assets.xcassets */; };
 		A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB922A66158CC37247D8879 /* FuorirottaApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		03EA1D39A1FFD244E022F195 /* Fuorirotta.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fuorirotta.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		08E8F863A79CE57299E007F7 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		629E3D4482469EA6F7F6953D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BA4676EE0AF931C39E743D49 /* FuorirottaCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FuorirottaCore; path = Packages/FuorirottaCore; sourceTree = SOURCE_ROOT; };
 		BCB922A66158CC37247D8879 /* FuorirottaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuorirottaApp.swift; sourceTree = "<group>"; };
+		E5D39164BA3095540C27C68C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,9 +64,11 @@
 		790C2C7D61BA6780816C8638 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				E5D39164BA3095540C27C68C /* Assets.xcassets */,
 				BCB922A66158CC37247D8879 /* FuorirottaApp.swift */,
 				08E8F863A79CE57299E007F7 /* HomeView.swift */,
 				629E3D4482469EA6F7F6953D /* Info.plist */,
+				26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -75,6 +81,7 @@
 			buildConfigurationList = 6C6A4726DA26B2395A2A1F42 /* Build configuration list for PBXNativeTarget "Fuorirotta" */;
 			buildPhases = (
 				6B19C7219D80839C6ADA99E3 /* Sources */,
+				DC8825C9538A23A0C0458122 /* Resources */,
 				AF6CB84B00F5B6CABA998C06 /* Frameworks */,
 				E4DD82301129E02FB590D48E /* API locale (solo DebugLocal) */,
 			);
@@ -127,6 +134,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		DC8825C9538A23A0C0458122 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5984783CE23E2511E599E22F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXShellScriptBuildPhase section */
 		E4DD82301129E02FB590D48E /* API locale (solo DebugLocal) */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -156,6 +174,7 @@
 			files = (
 				A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */,
 				450FA3619A3E5F5381108AC7 /* HomeView.swift in Sources */,
+				01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

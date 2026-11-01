@@ -39,6 +39,9 @@ struct HomeView: View {
                             }
                         } header: {
                             Text(verbatim: formatDayRange(from: window.from, to: window.to) + " · Milano")
+                                .font(.label)
+                                .foregroundStyle(Color.mutedForeground)
+                                .textCase(nil)
                         }
                     }
                 }
@@ -49,13 +52,14 @@ struct HomeView: View {
     }
 
     private func row(_ event: Event) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(verbatim: event.title).font(.body.weight(.semibold))
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(verbatim: event.title).font(.body.weight(.semibold)).foregroundStyle(Color.foreground)
             if let days = eventDays(dateStart: event.dateStart, dateEnd: event.dateEnd) {
-                Text(verbatim: formatDayRange(from: days.from, to: days.to)).font(.footnote)
+                Text(verbatim: formatDayRange(from: days.from, to: days.to))
+                    .font(.label).foregroundStyle(Color.mutedForeground)
             }
             if let place = event.locationName {
-                Text(verbatim: place).font(.footnote)
+                Text(verbatim: place).font(.label).foregroundStyle(Color.mutedForeground)
             }
         }
     }

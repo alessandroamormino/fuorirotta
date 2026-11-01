@@ -5,7 +5,7 @@
 // S3 la build Release non puo' portarsi dietro le regole di rete locale (D-10, T-27-01).
 //
 // Esce con 1 al primo controllo fallito. Stampa "ok  <ID>: ..." per ognuno.
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   APNS_ENVIRONMENTS, APNS_TOKEN_RE, APP_USER_AGENT_RE, DEVICE_CAP, FEATURES, PLAN, UNIVERSAL_LINK_PATHS,
@@ -92,3 +92,36 @@ const outside = [...lines.slice(0, start), ...lines.slice(end)]
   .filter((l) => l.includes('http://') || l.includes('NSAllowsLocalNetworking'))
 check('S3', outside.length === 0, `fuori dallo script DebugLocal: ${outside.join(' | ')}`)
 ok('S3', 'Release senza ATS: rete locale solo nello script DebugLocal')
+
+// S4 disciplina dei token (D-05): fuori da Tokens.swift niente esadecimali, Color(red:/hex:, UIColor(red: ne'
+// dimensioni di font fisse. Il matcher e' una funzione pura, provata su una stringa piantata.
+const TOKEN_VIOLATIONS: [string, RegExp][] = [
+  ['esadecimale', /"[^"\n]*#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-zA-Z])[^"\n]*"/],
+  ['Color(red:', /Color\(red:/],
+  ['Color(hex:', /Color\(hex:/],
+  ['UIColor(red:', /UIColor\(red:/],
+  ['.font(.system(size:', /\.font\(\.system\(size:/],
+]
+export function tokenViolations(text: string): string[] {
+  const found: string[] = []
+  text.split('\n').forEach((line, i) => {
+    for (const [name, re] of TOKEN_VIOLATIONS) if (re.test(line)) found.push(`riga ${i + 1}: ${name}`)
+  })
+  return found
+}
+
+check('S4', tokenViolations('let c = Color(red: 1, green: 0, blue: 0)').length === 1, 'il matcher non vede Color(red:')
+check('S4', tokenViolations('let c = "#0071E3"').length === 1, 'il matcher non vede un esadecimale')
+check('S4', tokenViolations('Text("Questo weekend #1 in Lombardia").font(.body)').length === 0, 'falso positivo su #1')
+
+function swiftFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? swiftFiles(join(dir, e.name)) : e.name.endsWith('.swift') ? [join(dir, e.name)] : [],
+  )
+}
+const screens = swiftFiles(join(ROOT, 'ios/App')).filter((f) => !f.endsWith('Tokens.swift'))
+for (const f of screens) {
+  const v = tokenViolations(readFileSync(f, 'utf8'))
+  check('S4', v.length === 0, `${f.slice(ROOT.length + 1)}: ${v.join('; ')}`)
+}
+ok('S4', `${screens.length} file di schermata senza colori o font fissi (il matcher fallisce su una riga piantata)`)
