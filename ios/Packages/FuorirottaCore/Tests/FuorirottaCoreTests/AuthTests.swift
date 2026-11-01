@@ -155,6 +155,67 @@ private func json(_ d: Data) -> [String: Any] {
         _ = try? await api.meState()
         #expect(hits.value == 1)
     }
+
+    // UAT 2: collegare un secondo metodo dalla sessione aperta (stesso /api/auth/link-social del sito, con id token).
+    @Test func listAccountsIsGetWithBearer() async throws {
+        StubProtocol.reset([.init(body: #"[{"id":"r1","providerId":"apple","accountId":"x","scopes":[]},{"id":"r2","providerId":"google"}]"#)])
+        let api = stubbedClient()
+        api.bearer = "b.sig"
+        let rows = try await api.listAccounts()
+        #expect(rows == [LinkedAccount(id: "r1", providerId: "apple"), LinkedAccount(id: "r2", providerId: "google")])
+        let sent = try #require(StubProtocol.requests.first)
+        #expect(sent.method == "GET" && sent.path == "/api/auth/list-accounts")
+        #expect(sent.headers.first { $0.key.lowercased() == "authorization" }?.value == "Bearer b.sig")
+    }
+
+    @Test func linkSocialSendsProviderAndIdTokenWithBearer() async throws {
+        StubProtocol.reset([.init(body: #"{"url":"","status":true,"redirect":false}"#)])
+        let api = stubbedClient()
+        api.bearer = "b.sig"
+        try await api.linkSocial(provider: "google", idToken: "GID", nonce: "RAW")
+        let sent = try #require(StubProtocol.requests.first)
+        #expect(sent.method == "POST" && sent.path == "/api/auth/link-social")
+        #expect(sent.headers.first { $0.key.lowercased() == "authorization" }?.value == "Bearer b.sig")
+        let body = json(sent.body)
+        #expect(body["provider"] as? String == "google")
+        let token = try #require(body["idToken"] as? [String: Any])
+        #expect(token["token"] as? String == "GID" && token["nonce"] as? String == "RAW")
+        #expect(body["callbackURL"] == nil)  // nessun giro nel browser
+    }
+
+    @Test func unlinkAccountSendsRowIdWithBearer() async throws {
+        StubProtocol.reset([.init(body: #"{"status":true}"#)])
+        let api = stubbedClient()
+        api.bearer = "b.sig"
+        try await api.unlinkAccount(id: "r2")
+        let sent = try #require(StubProtocol.requests.first)
+        #expect(sent.method == "POST" && sent.path == "/api/auth/unlink-account")
+        #expect(json(sent.body)["accountId"] as? String == "r2")
+        #expect(sent.headers.first { $0.key.lowercased() == "authorization" }?.value == "Bearer b.sig")
+    }
+
+    @Test func rejectedIdTokenDoesNotLogTheUserOut() async {
+        // Un id token non valido e' un 401 con il suo codice: la sessione dell'app e' a posto.
+        StubProtocol.reset([.init(status: 401, body: #"{"code":"INVALID_TOKEN","message":"Invalid token"}"#)])
+        let api = stubbedClient()
+        api.bearer = "b.sig"
+        let hits = Counter()
+        api.onUnauthorized = { hits.bump() }
+        await #expect(throws: APIError.http(status: 401, code: "INVALID_TOKEN")) {
+            try await api.linkSocial(provider: "apple", idToken: "x", nonce: "n")
+        }
+        #expect(hits.value == 0)
+    }
+
+    @Test func expiredSessionOnLinkRouteStillNotifies() async {
+        StubProtocol.reset([.init(status: 401, body: #"{"code":"UNAUTHORIZED","message":"Unauthorized"}"#)])
+        let api = stubbedClient()
+        api.bearer = "b.sig"
+        let hits = Counter()
+        api.onUnauthorized = { hits.bump() }
+        _ = try? await api.listAccounts()
+        #expect(hits.value == 1)
+    }
 }
 
 final class Counter: @unchecked Sendable {
