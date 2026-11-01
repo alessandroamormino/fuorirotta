@@ -470,7 +470,7 @@ struct MapScreen: View {
     @State private var offline = false
     @State private var filter: String?  // nil = Tutte
     @State private var sheet: MapSheet?
-    @State private var mapType = MKMapType.standard
+    @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
     @State private var tilted = false
     @State private var focus = MapFocus()
     @State private var visibleCount: Int?
@@ -492,7 +492,7 @@ struct MapScreen: View {
                     center: CLLocationCoordinate2D(latitude: location.place.latitude, longitude: location.place.longitude),
                     focus: focus,
                     showsUser: location.authorised,
-                    mapType: mapType,
+                    mapType: mapStyle.mapType,
                     tilted: tilted,
                     selectedID: selectedPinID,
                     onSelect: { id in sheet = pins.first { $0.id == id }.map(MapSheet.pin) },
@@ -569,10 +569,8 @@ struct MapScreen: View {
             }
             .accessibilityLabel(tilted ? "Vista piana" : "Vista 3D")
             Menu {
-                Picker("Stile della mappa", selection: $mapType) {
-                    Text("Standard").tag(MKMapType.standard)
-                    Text("Ibrida").tag(MKMapType.hybrid)
-                    Text("Satellite").tag(MKMapType.satellite)
+                Picker("Stile della mappa", selection: $mapStyle) {
+                    ForEach(MapStyleChoice.allCases) { Text($0.title).tag($0) }
                 }
             } label: {
                 controlIcon("globe")
