@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
-import { APIError } from 'better-auth/api'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { decodeJwt } from 'jose'
 import { decryptOAuthToken } from 'better-auth/oauth2'
 import { bearer } from 'better-auth/plugins'
 import { APPLE_ISSUER, appleClientIds, appleClientSecret, appleConfigured, appleMissingConfig, revokeAppleToken } from './appleAuth'
@@ -174,6 +175,19 @@ function create() {
     user: { deleteUser: { enabled: true } },
     // Senza questo gli errori finirebbero sulla pagina di errore della libreria.
     onAPIError: { errorURL: `${baseURL}/accedi` },
+    hooks: {
+      // La libreria applica overrideUserInfoOnSignIn solo al callback OAuth del
+      // redirect, non al ramo idToken di sign-in/social (l'app nativa): li' un
+      // utente gia' esistente non riceve mai la foto di Google. La si porta qui,
+      // dopo la verifica dell'id token, con la stessa regola del redirect (D-20).
+      // Passa da updateUser, quindi da user.update.before: solo l'immagine, filtrata.
+      after: createAuthMiddleware(async (ctx) => {
+        const body = ctx.body as { provider?: string; idToken?: { token?: string } } | undefined
+        const userId = ctx.context.newSession?.user.id
+        if (ctx.path !== '/sign-in/social' || body?.provider !== 'google' || !body.idToken?.token || !userId) return
+        await ctx.context.internalAdapter.updateUser(userId, { image: googleProfileImage(decodeJwt(body.idToken.token).picture) })
+      }),
+    },
     databaseHooks: {
       user: {
         create: {

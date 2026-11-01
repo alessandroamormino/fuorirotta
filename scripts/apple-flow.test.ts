@@ -39,6 +39,8 @@
 //   A2  apple-token rifiuta senza toccare Apple ne' il token salvato: niente riga Apple, corpo errato,
 //       senza credenziali, codice rifiutato, sub diverso; due codici validi sostituiscono, mai duplicano
 //   A3  senza APPLE_APP_BUNDLE_ID: 404 e nessuna chiamata ad Apple
+//   G1  Fase 27, giro 2b: id token nativo di Google -> la foto (claim picture) si aggiorna a ogni accesso,
+//       come col redirect; indirizzo non di Google -> null; nome ed e-mail dell'utente non si toccano
 //
 // Gli helper (startApple, applePost, follow, cookieFrom, mintGoogleUser e il
 // registro dello stub) sono funzioni con nome: il piano 03 aggiunge qui le sue
@@ -87,6 +89,7 @@ type RevokeMode = 'ok' | 'refuse' | 'error' | 'throw'
 const revokeCalls: RevokeCall[] = [] // chiamate a /auth/revoke, in ordine
 let revokeMode: (clientId: string | null) => RevokeMode = () => 'ok'
 let appleKeys: object = { keys: [] } // risposta di GET /auth/keys (le chiavi pubbliche di prova)
+let googleKeys: object = { keys: [] } // risposta di GET /oauth2/v3/certs di Google
 const tokenForms: URLSearchParams[] = [] // corpo di ogni chiamata a /auth/token
 const stubErrors: string[] = [] // tutto cio' che lo stub non si aspettava: fa fallire il prossimo controllo
 let tokenCalls = 0
@@ -135,6 +138,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
     })
   }
   if (method === 'GET' && url === `${APPLE_ORIGIN}/auth/keys`) return json(appleKeys)
+  if (method === 'GET' && url === 'https://www.googleapis.com/oauth2/v3/certs') return json(googleKeys)
   if (method === 'POST' && url === `${APPLE_ORIGIN}/auth/revoke`) {
     revokeCalls.push({ clientId: form.get('client_id'), token: form.get('token'), hint: form.get('token_type_hint') })
     checkClientSecret(form.get('client_secret'), form.get('client_id'))
@@ -902,6 +906,41 @@ async function main(): Promise<void> {
       process.env.APPLE_APP_BUNDLE_ID = bundleEnv
     }
     check('A3: senza APPLE_APP_BUNDLE_ID -> 404 not-found e Apple mai chiamato', a3Reply.status === 404 && ((await a3Reply.json()) as { error?: string }).error === 'not-found' && tokenCalls === a3Before, String(a3Reply.status))
+
+    // G1: l'id token nativo di Google deve aggiornare la foto come fa il redirect (overrideUserInfoOnSignIn
+    // la libreria lo applica solo al callback OAuth, non al ramo idToken di sign-in/social).
+    googleKeys = { keys: [{ ...(await exportJWK(rsa.publicKey)), kid: KID, alg: 'RS256', use: 'sig' }] }
+    const g1 = await mintGoogleUser(`${EMAIL_PREFIX}g1@fixture.invalid`, 'Gi Uno', 'https://lh3.googleusercontent.com/a/vecchia')
+    await prisma.user.update({ where: { id: g1.user.id }, data: { image: null } })
+    const g1Sub = `apple-flow-g-${g1.user.id}`
+    const googleNative = async (picture: string | undefined, nonce: string) => {
+      const token = await new SignJWT({ email: g1.user.email, email_verified: true, name: 'Nome Di Google', nonce, ...(picture ? { picture } : {}) })
+        .setProtectedHeader({ alg: 'RS256', kid: KID })
+        .setIssuer('https://accounts.google.com')
+        .setAudience(GOOGLE_ID)
+        .setSubject(g1Sub)
+        .setIssuedAt()
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 600)
+        .sign(rsa.privateKey)
+      return handler(
+        new Request(`${BASE}/api/auth/sign-in/social`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': 'FuoriRotta/1.0.0 (iOS; iPhone)' },
+          body: JSON.stringify({ provider: 'google', idToken: { token, nonce } }),
+        }),
+      )
+    }
+    const g1Row = () => prisma.user.findUniqueOrThrow({ where: { id: g1.user.id } })
+    const g1Photo = 'https://lh3.googleusercontent.com/a/nuova'
+    const g1a = await googleNative(g1Photo, 'g1a')
+    const g1aRow = await g1Row()
+    check('G1: id token nativo con picture -> 200 e la foto dell\'utente (senza foto) diventa quella di Google', g1a.status === 200 && g1aRow.image === g1Photo, `${g1a.status} ${g1aRow.image}`)
+    check('G1: nome ed e-mail dell\'utente restano (il nome e\' suo, l\'e-mail e\' l\'identita)', g1aRow.name === 'Gi Uno' && g1aRow.email === g1.user.email, `${g1aRow.name} ${g1aRow.email}`)
+    const g1b = await googleNative('https://evil.example/foto.png', 'g1b')
+    check('G1: picture non di Google -> accesso 200 e foto null (D-20)', g1b.status === 200 && (await g1Row()).image === null, String((await g1Row()).image))
+    await googleNative(g1Photo, 'g1c')
+    const g1d = await googleNative(undefined, 'g1d')
+    check('G1: id token senza picture -> accesso 200 e foto null, come il redirect', g1d.status === 200 && (await g1Row()).image === null, String((await g1Row()).image))
   } finally {
     await cleanup()
     await prisma.$disconnect()
