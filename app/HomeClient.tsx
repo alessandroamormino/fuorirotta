@@ -1283,7 +1283,7 @@ export default function HomeClient({ initialEvents, initialTotal }: HomeClientPr
 					    chip e interruttori tornano figli diretti della colonna.
 					    z-20, non z-10: il cuore delle card (SaveHeart, z-10) viene
 					    dopo nel DOM e a pari z-index ci passava sopra scorrendo. */}
-					<div className="absolute inset-x-0 top-0 z-20flex flex-col gap-3 bg-background px-4 sm:px-[18px] pt-[var(--nav-h)] pb-3 -translate-y-[var(--nav-offset,0px)] lg:contents">
+					<div className="absolute inset-x-0 top-0 z-20 flex flex-col gap-3 bg-background px-4 sm:px-[18px] pt-[var(--nav-h)] pb-3 -translate-y-[var(--nav-offset,0px)] lg:contents">
 					<CategoryFilterBar
 						categories={categories}
 						selected={selectedCategory}
