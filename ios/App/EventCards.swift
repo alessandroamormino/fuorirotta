@@ -153,3 +153,104 @@ struct BookmarkButton: View {
         }
     }
 }
+
+/// Riga dell'elenco "Vedi tutto": miniatura 72, titolo (2 righe, tutte con i testi accessibili), data e luogo, segnalibro.
+struct EventRow: View {
+    let event: Event
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var category: String? { event.canonicalCategory ?? event.category }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Spacing.md) {
+            RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 72, height: 72))
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text(verbatim: event.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.foreground)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                Text(verbatim: eventMeta(event))
+                    .font(.label)
+                    .foregroundStyle(Color.mutedForeground)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                if let name = category {
+                    HStack(spacing: Spacing.xs) {
+                        Circle().fill(categoryVisual(name).color).frame(width: 8, height: 8)
+                        Text(verbatim: name).font(.label).foregroundStyle(Color.mutedForeground)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            Spacer(minLength: 0)
+            BookmarkButton(event: event, style: .plain)
+        }
+    }
+}
+
+/// Elenco di una fila ("Vedi tutto"): fino a 100 eventi della stessa fonte. Carica, mostra lo scheletro, l'errore con Riprova o il vuoto.
+struct EventListView: View {
+    let title: String
+    let loader: () async throws -> [Event]
+
+    private enum Phase { case loading, loaded([Event]), failed }
+    @State private var phase = Phase.loading
+
+    var body: some View {
+        List {
+            switch phase {
+            case .loading:
+                ForEach(0..<6, id: \.self) { _ in
+                    HStack(spacing: Spacing.md) {
+                        RoundedRectangle(cornerRadius: Radius.md).fill(Color.surface).frame(width: 72, height: 72)
+                        VStack(alignment: .leading) {
+                            Text("Titolo dell'evento in due righe").font(.body.weight(.semibold))
+                            Text("6-8 novembre · Luogo").font(.label)
+                        }
+                    }
+                    .redacted(reason: .placeholder)
+                    .listRowSeparator(.hidden)
+                    .accessibilityHidden(true)
+                }
+            case .loaded(let events):
+                if events.isEmpty {
+                    ContentUnavailableView {
+                        Label("Nessun evento", systemImage: "calendar")
+                    } description: {
+                        Text("Non c'è ancora niente qui. Riprova più tardi.")
+                    }
+                    .listRowSeparator(.hidden)
+                } else {
+                    ForEach(events) { EventRow(event: $0).listRowSeparator(.hidden) }
+                }
+            case .failed:
+                ContentUnavailableView {
+                    Label("Eventi non disponibili", systemImage: "wifi.slash")
+                } description: {
+                    Text("Non riusciamo a caricare gli eventi. Controlla la connessione e riprova.")
+                } actions: {
+                    Button("Riprova") { Task { await load() } }
+                }
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle(Text(verbatim: title))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        do {
+            phase = .loaded(try await loader())
+        } catch {
+            // Un aggiornamento che fallisce lascia l'elenco com'e'.
+            guard !Task.isCancelled else { return }
+            if case .loaded = phase { return }
+            phase = .failed
+        }
+    }
+}

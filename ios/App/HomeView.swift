@@ -9,9 +9,13 @@ final class HomeModel {
     private(set) var phase = Phase.loading
     private(set) var hero: [Event] = []
     private(set) var nearby: [Event] = []
+    /// "Per te": nil = non caricato (ospite) o non riuscito (`forYouFailed`).
+    private(set) var forYou: FeedPage?
+    private(set) var forYouFailed = false
+    private(set) var followCount = 0  // contatore per .sensoryFeedback(.selection)
     let window = weekendWindow()
 
-    func load(api: APIClient, place: Place) async {
+    func load(api: APIClient, place: Place, signedIn: Bool) async {
         // Un aggiornamento non svuota lo schermo: lo scheletro c'e' solo al primo caricamento.
         if phase == .failed { phase = .loading }
         do {
@@ -20,13 +24,28 @@ final class HomeModel {
                 lat: place.latitude, lng: place.longitude, radiusKm: 50,
                 dateFrom: window.from, dateTo: window.to, limit: 40)
             async let near = api.events(lat: place.latitude, lng: place.longitude, radiusKm: 50, limit: 16)
-            let (w, n) = try await (weekend, near)
+            // Il feed e' un'altra rotta (bearer, nessuna posizione): se fallisce non toglie il resto di Home.
+            async let feed: FeedPage? = signedIn ? try? await api.feed(limit: 16, offset: 0) : nil
+            let (w, n, f) = try await (weekend, near, feed)
+            if Task.isCancelled { return }
             hero = heroPicks(w.events)
             nearby = n.events
+            forYou = f
+            forYouFailed = signedIn && f == nil
             phase = .loaded
         } catch {
             if !Task.isCancelled { phase = .failed }
         }
+    }
+
+    /// Zero seguiti: un tocco su una categoria la segue e ricarica la fila (un 401 lo gestisce Session).
+    func follow(api: APIClient, category: String) async {
+        do {
+            try await api.follow(kind: "category", key: category)
+            forYou = try await api.feed(limit: 16, offset: 0)
+            forYouFailed = false
+            followCount += 1
+        } catch {}  // il tocco non e' andato a buon fine: la fila resta com'era e si puo' ritoccare
     }
 }
 
@@ -34,6 +53,7 @@ struct HomeView: View {
     @Environment(\.api) private var api
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(LocationModel.self) private var location
+    @Environment(Session.self) private var session
 
     @State private var model = HomeModel()
     @State private var current: Int?
@@ -65,12 +85,23 @@ struct HomeView: View {
             .refreshable { await load() }
         }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
-        .task(id: location.place) { await load() }
+        .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
+        .sensoryFeedback(.selection, trigger: model.followCount)
+    }
+
+    private struct LoadKey: Equatable {
+        let place: Place
+        let signedIn: Bool
+    }
+
+    private var signedIn: Bool {
+        if case .signedIn = session.state { return true }
+        return false
     }
 
     private func load() async {
         guard let api else { return }
-        await model.load(api: api, place: location.place)
+        await model.load(api: api, place: location.place, signedIn: signedIn)
     }
 
     // MARK: Eroe e intestazione
@@ -202,8 +233,99 @@ struct HomeView: View {
                 Button("Riprova") { Task { await load() } }
             }
         case .loaded:
-            railSection("Vicino a te", events: model.nearby)
+            if signedIn { forYouSection }
+            railSection("Vicino a te", events: model.nearby) { limit in
+                // Stessa fonte della fila, fino a 100.
+                try await nearbyList(limit: limit)
+            }
+            if !signedIn { inviteCard }
         }
+    }
+
+    private func nearbyList(limit: Int) async throws -> [Event] {
+        guard let api else { throw APIError.network }
+        let place = location.place
+        return try await api.events(lat: place.latitude, lng: place.longitude, radiusKm: 50, limit: limit).events
+    }
+
+    @ViewBuilder private var forYouSection: some View {
+        if let page = model.forYou {
+            if page.follows == 0 {
+                chooseCategories
+            } else if page.items.isEmpty {
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    railTitle("Per te")
+                    emptyRow(
+                        symbol: "calendar.badge.clock", title: "Niente in programma",
+                        line: "Non ci sono eventi in arrivo per quello che segui.")
+                }
+            } else {
+                railSection("Per te", events: page.items) { limit in
+                    guard let api else { throw APIError.network }
+                    return try await api.feed(limit: limit, offset: 0).items
+                }
+            }
+        } else if model.forYouFailed {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                railTitle("Per te")
+                emptyRow(
+                    symbol: "wifi.slash", title: "Per te non è disponibile",
+                    line: "Non riusciamo a caricare gli eventi. Controlla la connessione e riprova.")
+            }
+        }
+    }
+
+    private var chooseCategories: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            railTitle("Per te")
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("Scegli cosa ti piace").font(.headline).foregroundStyle(Color.foreground)
+                Text("Tocca le categorie che segui e qui compariranno gli eventi scelti per te.")
+                    .font(.label)
+                    .foregroundStyle(Color.mutedForeground)
+            }
+            .padding(.horizontal, Spacing.md)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Spacing.sm)], spacing: Spacing.sm) {
+                ForEach(ApiContract.categories, id: \.self) { name in
+                    Button {
+                        guard let api else { return }
+                        Task { await model.follow(api: api, category: name) }
+                    } label: {
+                        HStack(spacing: Spacing.sm) {
+                            Circle().fill(categoryVisual(name).color).frame(width: 8, height: 8)
+                            Text(verbatim: name).font(.label).foregroundStyle(Color.foreground).lineLimit(2)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, Spacing.md)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .background(Color.surface, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, Spacing.md)
+        }
+    }
+
+    /// Ospite: invito ad accedere, mai un blocco. Il foglio di accesso e' lo stesso di Salvati e Profilo.
+    private var inviteCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Image(systemName: "sparkles").font(.symbolCard).foregroundStyle(Color.foreground).accessibilityHidden(true)
+            Text("Accedi per avere eventi scelti per te").font(.heading).foregroundStyle(Color.foreground)
+            Text("Salva gli eventi che ti interessano e scegli le categorie che segui.")
+                .font(.body)
+                .foregroundStyle(Color.foregroundSecondary)
+                .padding(.bottom, Spacing.sm)
+            Button {
+                session.presentSignIn = true
+            } label: {
+                Text("Accedi").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .card()
+        .padding(.horizontal, Spacing.md)
     }
 
     private func railTitle(_ title: String) -> some View {
@@ -214,11 +336,29 @@ struct HomeView: View {
             .padding(.horizontal, Spacing.md)
     }
 
-    private func railSection(_ title: String, events: [Event]) -> some View {
+    /// Titolo in grassetto con il chevron (REF Omniphile) e "Vedi tutto": apre l'elenco della stessa fonte, fino a 100.
+    private func railSection(_ title: String, events: [Event], all: @escaping (Int) async throws -> [Event]) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            railTitle(title)
+            NavigationLink {
+                EventListView(title: title) { try await all(100) }
+            } label: {
+                HStack(spacing: Spacing.sm) {
+                    Text(title).font(.heading).foregroundStyle(Color.foreground)
+                    Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
+                        .accessibilityHidden(true)
+                    Spacer()
+                    Text("Vedi tutto").font(.label.weight(.semibold)).foregroundStyle(Color.accentToken)
+                }
+                .padding(.horizontal, Spacing.md)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isHeader)
             if events.isEmpty {
-                emptyRail
+                emptyRow(
+                    symbol: "calendar.badge.exclamationmark", title: "Nessun evento qui intorno",
+                    line: "Cambia posizione o guarda la mappa per scoprire cosa c'è in giro.")
             } else {
                 rail(events)
             }
@@ -237,14 +377,14 @@ struct HomeView: View {
     }
 
     /// Stato vuoto sul modello del video: simbolo a linee grande, titolo in grassetto, una riga grigia.
-    private var emptyRail: some View {
+    private func emptyRow(symbol: String, title: String, line: String) -> some View {
         VStack(spacing: Spacing.sm) {
-            Image(systemName: "calendar.badge.exclamationmark")
+            Image(systemName: symbol)
                 .font(.largeTitle)
                 .foregroundStyle(Color.mutedForeground)
                 .accessibilityHidden(true)
-            Text("Nessun evento qui intorno").font(.headline).foregroundStyle(Color.foreground)
-            Text("Cambia posizione o guarda la mappa per scoprire cosa c'è in giro.")
+            Text(title).font(.headline).foregroundStyle(Color.foreground)
+            Text(line)
                 .font(.label)
                 .foregroundStyle(Color.mutedForeground)
                 .multilineTextAlignment(.center)

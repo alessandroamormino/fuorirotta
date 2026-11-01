@@ -134,6 +134,31 @@ struct ClusterEnvelope: Decodable {
     let geojson: Collection
 }
 
+/// GET /api/v1/me/feed.
+public struct FeedPage: Decodable, Sendable {
+    public let items: [Event]
+    public let total: Int
+    public let follows: Int
+}
+
+/// GET /api/v1/config. Una soglia mancante o malformata e' nil; uno `status` sconosciuto vale come assente.
+public struct AppConfig: Decodable, Equatable, Sendable {
+    public enum Status: String, Sendable { case ok, updateRecommended = "update-recommended", updateRequired = "update-required" }
+
+    public let minimumVersion: String?
+    public let recommendedVersion: String?
+    public let status: Status?
+
+    private enum CodingKeys: String, CodingKey { case minimumVersion, recommendedVersion, status }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        minimumVersion = try c.decodeIfPresent(String.self, forKey: .minimumVersion)
+        recommendedVersion = try c.decodeIfPresent(String.self, forKey: .recommendedVersion)
+        status = (try? c.decodeIfPresent(String.self, forKey: .status)).flatMap(Status.init(rawValue:))
+    }
+}
+
 /// Utente dell'account, da GET /api/v1/me/state. `plan` e `features` non condizionano nulla (D-04) e non si leggono.
 public struct MeUser: Codable, Equatable, Sendable {
     public let name: String
@@ -258,6 +283,27 @@ public struct APIClient: Sendable {
             throw APIError.http(status: http.statusCode, code: "no-token")
         }
         return bearer
+    }
+
+    /// "Per te": gli eventi di cio' che l'utente segue. `follows == 0` = nessun seguito (Home mostra le categorie).
+    /// Solo con il bearer, mai una posizione: la posizione parte solo come lat/lng di `events` (T-27-25).
+    public func feed(limit: Int, offset: Int) async throws -> FeedPage {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("api/v1/me/feed"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "limit", value: String(limit)), URLQueryItem(name: "offset", value: String(offset))]
+        return try await get(comps.url!, as: FeedPage.self)
+    }
+
+    /// Segue una categoria (o un luogo): `key` e' il nome canonico, il server controlla ogni chiave.
+    public func follow(kind: String, key: String) async throws {
+        _ = try await send(method: "PUT", path: "api/v1/me/follows", body: JSONSerialization.data(withJSONObject: ["kind": kind, "key": key]))
+    }
+
+    /// Politica di versione (pubblica, niente bearer). nil se il server non risponde o risponde male:
+    /// l'app prosegue (fail open, T-27-26). Solo un "update-required" esplicito blocca.
+    public func config(version: String) async -> AppConfig? {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("api/v1/config"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "version", value: version)]
+        return try? await get(comps.url!, as: AppConfig.self)
     }
 
     public func meState() async throws -> MeState {
