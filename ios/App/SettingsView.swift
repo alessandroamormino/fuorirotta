@@ -1,4 +1,5 @@
 import FuorirottaCore
+import MapKit
 import SwiftUI
 
 /// Aspetto dell'app (REF Omniphile: segmentato Sistema / Chiaro / Scuro). `system` = nessun aspetto imposto (D-07).
@@ -24,6 +25,31 @@ enum Appearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// Stile della mappa: una sola preferenza (@AppStorage), condivisa dal tasto della mappa e da Impostazioni > Mappa.
+/// Predefinito `hybrid`: satellite con strade e nomi dei luoghi. Il satellite puro non ha etichette e su una mappa di
+/// eventi i nomi dei paesi servono; e' anche cio' che Apple Mappe chiama "Satellite".
+enum MapStyleChoice: String, CaseIterable, Identifiable {
+    case standard, hybrid, satellite
+
+    static let key = "fr.mapStyle"
+
+    var id: Self { self }
+    var title: LocalizedStringKey {
+        switch self {
+        case .standard: "Standard"
+        case .hybrid: "Ibrida"
+        case .satellite: "Satellite"
+        }
+    }
+    var mapType: MKMapType {
+        switch self {
+        case .standard: .standard
+        case .hybrid: .hybrid
+        case .satellite: .satellite
+        }
+    }
+}
+
 /// Impostazioni (REF Omniphile): foglio a tutta altezza chiuso da una X tonda in alto a sinistra, gruppi in card.
 /// Le righe stavano nella pagina Profilo; il Profilo tiene l'intestazione utente e le statistiche.
 struct SettingsView: View {
@@ -35,6 +61,7 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     @AppStorage(Appearance.key) private var appearance = Appearance.system
+    @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
 
     @State private var confirmSignOut = false
     @State private var confirmDelete = false
@@ -60,6 +87,7 @@ struct SettingsView: View {
                     if signedIn { methodsGroup }
                     appearanceGroup
                     placeGroup
+                    mapGroup
                     if signedIn { notificationsGroup }
                     infoGroup
                     if signedIn { dangerZone }
@@ -241,10 +269,6 @@ struct SettingsView: View {
                 ForEach(Appearance.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
-            // Liquid Glass non e' una scelta dell'app: lo regola iOS, qui non c'e' un interruttore.
-            Text("Il Liquid Glass lo regola iOS: Impostazioni > Schermo e luminosità > Liquid Glass (Chiaro o Colorato).")
-                .font(.label)
-                .foregroundStyle(Color.mutedForeground)
         }
     }
 
@@ -259,6 +283,15 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private var mapGroup: some View {
+        group("Mappa") {
+            Picker("Stile della mappa", selection: $mapStyle) {
+                ForEach(MapStyleChoice.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
         }
     }
 
