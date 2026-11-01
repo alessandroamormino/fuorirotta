@@ -101,6 +101,6 @@ if [[ ${check} -eq 1 ]]; then
   exit 0
 fi
 
-git tag -a "${tag}" -m "${tag}"
-git push --quiet origin "${tag}"
+git tag -a "ios-${version}" -m "ios-${version}"
+git push --quiet origin "ios-${version}"
 echo "release-ios: ${tag} caricata (${last:-nessuna} -> ${tag}). La build compare in App Store Connect > TestFlight dopo l'elaborazione (10-30 minuti)."

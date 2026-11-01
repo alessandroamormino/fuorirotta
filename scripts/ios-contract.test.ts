@@ -3,8 +3,10 @@
 //
 // S1 la copia Swift del contratto e' uguale a lib/api-contract.ts; S2 il gate sa fallire;
 // S3 la build Release non puo' portarsi dietro le regole di rete locale (D-10, T-27-01).
+// S5 il percorso di rilascio dell'app non puo' creare un tag v*, perdere una chiave o aprire oltre i tester interni.
 //
 // Esce con 1 al primo controllo fallito. Stampa "ok  <ID>: ..." per ognuno.
+import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -125,3 +127,33 @@ for (const f of screens) {
   check('S4', v.length === 0, `${f.slice(ROOT.length + 1)}: ${v.join('; ')}`)
 }
 ok('S4', `${screens.length} file di schermata senza colori o font fissi (il matcher fallisce su una riga piantata)`)
+
+// S5 sicurezza del rilascio (D-08, D-09, T-27-35..38). Solo testo: gira uguale su Linux in CI.
+// Ogni riga con `git tag` o `git push` deve nominare un tag ios-; nessuna puo' nominarne uno v* (auto-deploy
+// rilascia il v* piu' alto in produzione). Funzione pura, provata su uno script piantato.
+export function tagViolations(script: string): string[] {
+  const found: string[] = []
+  script.split('\n').forEach((line, i) => {
+    if (!/git (tag|push)/.test(line)) return
+    if (!line.includes('ios-')) found.push(`riga ${i + 1}: tag senza ios-`)
+    if (/["'\s]v(?:\$|\d)/.test(line)) found.push(`riga ${i + 1}: tag v*`)
+  })
+  return found
+}
+check('S5', tagViolations('git tag -a "v${version}" -m x').length > 0, 'il matcher non vede git tag v${version}')
+check('S5', tagViolations('git push --quiet origin "v2.1.0"').length > 0, 'il matcher non vede git push v2.1.0')
+check('S5', tagViolations('git tag -a "ios-${version}" -m x\ngit push origin "ios-${version}"').length === 0, 'falso positivo su ios-')
+const releaseIos = read('scripts/release-ios.sh')
+const tv = tagViolations(releaseIos)
+check('S5', tv.length === 0, `release-ios.sh: ${tv.join('; ')}`)
+check('S5', (releaseIos.match(/git (?:tag|push)[^\n]*ios-\$\{version\}/g) ?? []).length >= 2, 'tag e push di ios-${version} mancanti')
+const exportOpts = read('ios/ExportOptions.plist')
+check('S5', /<key>testFlightInternalTestingOnly<\/key>\s*<true\/>/.test(exportOpts), 'testFlightInternalTestingOnly non e\' true')
+check('S5', /<key>destination<\/key>\s*<string>upload<\/string>/.test(exportOpts), 'destination non e\' upload')
+const gi = read('.gitignore').split('\n').map((l) => l.trim())
+check('S5', gi.includes('*.p8') && gi.includes('*.mobileprovision'), '.gitignore senza *.p8 / *.mobileprovision')
+const tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' })
+  .split('\n').filter((f) => /\.(p8|mobileprovision)$/.test(f))
+check('S5', tracked.length === 0, `tracciati: ${tracked.join(', ')}`)
+check('S5', /<key>NSPrivacyTracking<\/key>\s*<false\/>/.test(read('ios/App/PrivacyInfo.xcprivacy')), 'NSPrivacyTracking non e\' false')
+ok('S5', 'rilascio app: solo tag ios-, solo tester interni, nessuna chiave tracciata (il matcher fallisce su un tag v piantato)')

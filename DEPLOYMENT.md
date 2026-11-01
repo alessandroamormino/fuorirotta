@@ -708,6 +708,58 @@ says it is dead):
 bash scripts/send-test-push.sh --user '<EMAIL>'
 ```
 
+### iOS app (Phase 27)
+
+The app is released from the Mac, like the web, with one script: `npm run release:ios X.Y.Z`. No CI, no GitHub
+secret, no server step is involved.
+
+**What it does.** It checks, then archives the `Fuorirotta` scheme in Release with the App Store Connect API key
+(`xcodebuild archive -allowProvisioningUpdates`), verifies the archived binary and uploads it to TestFlight
+(`ios/ExportOptions.plist`, `destination upload`). On success it creates and pushes the annotated tag `ios-X.Y.Z`.
+
+**What it refuses** (every message starts with `release-ios:`): a version not of the form `X.Y.Z`; a
+`MARKETING_VERSION` in `ios/project.yml` different from `X.Y.Z` (bumping it is part of the release commit); an existing
+`ios-X.Y.Z` tag or a version not above the highest `ios-*` tag; a missing `ASC_KEY_ID` / `ASC_ISSUER_ID` or key file; a
+key inside the repo; any tracked `*.p8` or `*.mobileprovision`; an Xcode project that `xcodegen` regenerates differently
+from the committed one; and, for the real upload only, not being on `main`, a dirty tree, `main` different from
+`origin/main`, or a CI run that is not green for HEAD. After archiving it reads the binary's `Info.plist` and refuses
+unless `FRAPIBaseURL` is `https://fuori-rotta.it` and `NSAppTransportSecurity` is absent.
+
+Dry run: `npm run release:ios -- --check 1.0.0` does the version, key, project and binary checks, archives and exports a
+local `.ipa` in `ios/build/export`, and uploads nothing and tags nothing.
+
+**Key and env file (outside the repo, never on GitHub).** In App Store Connect > Users and Access > Integrations >
+App Store Connect API > Team Keys, create a key with role **Admin** (Xcode needs it to create the cloud-managed
+distribution certificate). Download it once as `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8` and write
+`~/.appstoreconnect/fuorirotta.env` with two lines, `ASC_KEY_ID=<id>` and `ASC_ISSUER_ID=<id>` (the Issuer ID is above
+the key list). `ASC_KEY_PATH` overrides the key location. `.gitignore` lists `*.p8` and `*.mobileprovision` and
+`check:ios-contract` (S5) fails if either is tracked.
+
+**Why `ios-X.Y.Z` and never `v*`.** `scripts/auto-deploy.sh` on the server deploys the highest `v*` tag to production.
+An app tag named `v*` would deploy the web. The script contains no command able to create one, and S5 proves it in CI
+(with a self-test on a planted `v` tag).
+
+**Internal testing only (D-08).** `ios/ExportOptions.plist` sets `testFlightInternalTestingOnly`, so a build can only
+reach internal testers. To add a tester: App Store Connect > Fuorirotta > TestFlight > Internal Testing > add the
+person (an App Store Connect user with a TestFlight role) and tick the build. External testing needs Beta App Review,
+a demo account and the project e-mail, and is out of this phase.
+
+**Order of a release.** The web release that carries `POST /api/v1/me/apple-token` (Phase 27) must be live before
+testers delete accounts from the app (the Apple token revocation is called on deletion):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://fuori-rotta.it/api/v1/me/apple-token -H 'Content-Type: application/json' -d '{}'
+```
+
+Expected `403` (the route exists and refuses a request without credentials and without Origin); `404` means the web
+release is not live yet. Then `npm run release:ios X.Y.Z` from an up-to-date `main`.
+
+**Version gate.** The app asks `GET /api/v1/config` and compares its version with `APP_MIN_VERSION` and
+`APP_RECOMMENDED_VERSION`; how to change them is in "Mobile app endpoints (Phase 26)" above.
+
+**Development.** The `Fuorirotta Locale` scheme (configuration `DebugLocal`) talks to the dev server on the Mac
+(`http://<hostname>.local:3000`); the rule exists only in that configuration, never in Release.
+
 ### Backups (D-18)
 
 **Why.** Supabase Free has no backups, and from Phase 21 the database holds accounts, the first data
