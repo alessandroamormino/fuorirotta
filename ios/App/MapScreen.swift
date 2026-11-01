@@ -287,7 +287,7 @@ struct PinSheet: View {
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                     .accessibilityAddTraits(.isHeader)
                 if let category {
-                    Text(verbatim: category)
+                    Text(verbatim: categoryLabel(category))
                         .font(.subheadline)
                         .foregroundStyle(Color.foregroundSecondary)
                 }
@@ -314,19 +314,19 @@ struct PinSheet: View {
         let saved = saves.isSaved(event.id)
         return HStack(spacing: Spacing.sm) {
             tile(
-                "car.fill", travelTime.map(formatTravelTime) ?? "Indicazioni",
-                label: travelTime.map { "Indicazioni, \(formatTravelTime(seconds: $0)) in auto" } ?? "Indicazioni",
+                "car.fill", travelTime.map(formatTravelTime) ?? String(localized: "Indicazioni"),
+                label: travelTime.map { String(localized: "Indicazioni, \(formatTravelTime(seconds: $0)) in auto") } ?? String(localized: "Indicazioni"),
                 fill: Color.accentToken, enabled: spot != nil
             ) {
                 if let spot { openDirections(to: spot, name: event.locationName ?? event.title) }
             }
             // Senza indirizzo del sito il bottone resta, spento (il dettaglio non ha un calendario da richiamare).
-            tile("safari", "Sito", label: "Apri il sito dell'evento", fill: nil, enabled: siteURL != nil) {
+            tile("safari", String(localized: "Sito"), label: String(localized: "Apri il sito dell'evento"), fill: nil, enabled: siteURL != nil) {
                 if let siteURL { openURL(siteURL) }
             }
             tile(
-                saved ? "heart.fill" : "heart", saved ? "Salvato" : "Salva",
-                label: saved ? "Rimuovi dai salvati" : "Salva evento", fill: saved ? Color.heart : nil, enabled: true
+                saved ? "heart.fill" : "heart", saved ? String(localized: "Salvato") : String(localized: "Salva"),
+                label: saved ? String(localized: "Rimuovi dai salvati") : String(localized: "Salva evento"), fill: saved ? Color.heart : nil, enabled: true
             ) {
                 Task { await saves.toggle(event) }
             }
@@ -378,15 +378,15 @@ struct PinSheet: View {
     private var infoColumns: [Info] {
         var out: [Info] = []
         let when = placeCardWhen(dateStart: event.dateStart, dateEnd: event.dateEnd, today: romeToday(), locale: .app)
-        if !when.label.isEmpty { out.append(Info(label: "Quando", value: when.label, color: when.isActive ? Color.success : Color.foreground)) }
+        if !when.label.isEmpty { out.append(Info(label: String(localized: "Quando"), value: when.label, color: when.isActive ? Color.success : Color.foreground)) }
         if let place = [event.locationName, event.address].compactMap({ $0 }).first(where: { !$0.isEmpty }) {
-            out.append(Info(label: "Dove", value: place))
+            out.append(Info(label: String(localized: "Dove"), value: place))
         }
-        if let category { out.append(Info(label: "Categoria", value: category)) }
+        if let category { out.append(Info(label: String(localized: "Categoria"), value: categoryLabel(category))) }
         if let here = location.userCoordinate, let spot {
             let meters = CLLocation(latitude: here.latitude, longitude: here.longitude)
                 .distance(from: CLLocation(latitude: spot.latitude, longitude: spot.longitude))
-            out.append(Info(label: "Distanza", value: formatDistance(meters: meters, locale: .app)))
+            out.append(Info(label: String(localized: "Distanza"), value: formatDistance(meters: meters, locale: .app)))
         }
         return out
     }
@@ -433,7 +433,7 @@ struct ClusterListSheet: View {
         EventStack {
             List(events) { EventRow(event: $0).listRowSeparator(.hidden) }
                 .listStyle(.plain)
-                .navigationTitle(Text(verbatim: "\(events.count) eventi"))
+                .navigationTitle(Text(verbatim: events.count == 1 ? String(localized: "1 evento") : String(localized: "\(events.count) eventi")))
                 .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
@@ -597,8 +597,8 @@ struct MapScreen: View {
     private var chips: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Spacing.sm) {
-                chip("Tutte", value: nil)
-                ForEach(ApiContract.categories, id: \.self) { chip($0, value: $0) }
+                chip(String(localized: "Tutte"), value: nil)
+                ForEach(ApiContract.categories, id: \.self) { chip(categoryLabel($0), value: $0) }
             }
             .padding(.horizontal, Spacing.md)
         }
@@ -617,7 +617,7 @@ struct MapScreen: View {
         }
         .buttonStyle(.plain)
         .glassEffect(selected ? .regular.tint(Color.accentToken).interactive() : .regular.interactive(), in: .capsule)
-        .accessibilityLabel(selected ? "\(title), selezionato" : title)
+        .accessibilityLabel(selected ? Text("\(title), selezionato") : Text(verbatim: title))
     }
 
     /// Vuoto (nessun pin nella vista) e guasto (nessun dato, nemmeno in cache).

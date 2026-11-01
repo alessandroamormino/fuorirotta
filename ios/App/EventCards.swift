@@ -94,7 +94,7 @@ struct HeroCard: View {
                         .lineLimit(1)
                     if let name = category {
                         Label {
-                            Text(verbatim: name)
+                            Text(verbatim: categoryLabel(name))
                         } icon: {
                             Image(systemName: visual.symbol)
                         }
@@ -111,7 +111,7 @@ struct HeroCard: View {
             .frame(height: Self.height + topInset)
             .clipped()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
+            .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category.map(categoryLabel)].compactMap { $0 }.joined(separator: ", ")))
     }
 }
 
@@ -208,7 +208,7 @@ struct PosterCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: Radius.media))
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: [date, event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
+            .accessibilityLabel(Text(verbatim: [date, event.title, eventMeta(event), category.map(categoryLabel)].compactMap { $0 }.joined(separator: ", ")))
     }
 }
 
@@ -239,7 +239,7 @@ struct WideCard: View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             if let name = category {
                 HStack(spacing: Spacing.xs) {
-                    Text(verbatim: name).lineLimit(1)
+                    Text(verbatim: categoryLabel(name)).lineLimit(1)
                     Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).accessibilityHidden(true)
                 }
                 .font(.label)
@@ -265,7 +265,7 @@ struct WideCard: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: Radius.media))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
+        .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category.map(categoryLabel)].compactMap { $0 }.joined(separator: ", ")))
     }
 }
 
@@ -330,7 +330,7 @@ struct EventRow: View {
                 if let name = category {
                     HStack(spacing: Spacing.xs) {
                         Circle().fill(categoryVisual(name).color).frame(width: 8, height: 8)
-                        Text(verbatim: name).font(.label).foregroundStyle(Color.mutedForeground)
+                        Text(verbatim: categoryLabel(name)).font(.label).foregroundStyle(Color.mutedForeground)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -359,8 +359,8 @@ struct EventListView: View {
                     HStack(spacing: Spacing.md) {
                         RoundedRectangle(cornerRadius: Radius.md).fill(Color.surface).frame(width: 72, height: 72)
                         VStack(alignment: .leading) {
-                            Text("Titolo dell'evento in due righe").font(.body.weight(.semibold))
-                            Text("6-8 novembre · Luogo").font(.label)
+                            Text(verbatim: "Titolo dell'evento in due righe").font(.body.weight(.semibold))
+                            Text(verbatim: "6-8 novembre · Luogo").font(.label)
                         }
                     }
                     .redacted(reason: .placeholder)

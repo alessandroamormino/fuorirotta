@@ -5,15 +5,17 @@ import SwiftUI
 // Statistiche personali (MOB-07, D-13/D-14): descrivono i salvati di chi guarda e si calcolano sul telefono.
 // Niente rete in questo file e niente altro che i numeri dei propri salvati.
 
-private let monthInitials = ["G", "F", "M", "A", "M", "G", "L", "A", "S", "O", "N", "D"]
-private let monthNames = [
-    "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
-    "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
-]
+private let monthCalendar: Calendar = {
+    var c = Calendar(identifier: .gregorian)
+    c.locale = .app
+    return c
+}()
+private let monthInitials = monthCalendar.veryShortStandaloneMonthSymbols
+private let monthNames = monthCalendar.standaloneMonthSymbols
 
 /// Titolo di una scheda di statistica.
 private struct StatCard<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -154,7 +156,11 @@ struct HeatmapCard: View {
 
     private func label(_ day: String, _ n: Int) -> String {
         let when = formatDayRange(from: day, to: day, locale: .app)
-        return n == 0 ? "\(when), nessun evento salvato" : "\(when), \(n) \(n == 1 ? "evento salvato" : "eventi salvati")"
+        switch n {
+        case 0: return String(localized: "\(when), nessun evento salvato")
+        case 1: return String(localized: "\(when), 1 evento salvato")
+        default: return String(localized: "\(when), \(n) eventi salvati")
+        }
     }
 
     private var legend: some View {
@@ -183,7 +189,7 @@ private struct BarsDescriptor: AXChartDescriptorRepresentable {
         let x = AXCategoricalDataAxisDescriptor(title: xTitle, categoryOrder: names)
         let top = Double(max(values.max() ?? 1, 1))
         let y = AXNumericDataAxisDescriptor(
-            title: "Eventi salvati", range: 0...top, gridlinePositions: [],
+            title: String(localized: "Eventi salvati"), range: 0...top, gridlinePositions: [],
             valueDescriptionProvider: { "\(Int($0))" })
         let series = AXDataSeriesDescriptor(
             name: title, isContinuous: false,
@@ -201,8 +207,8 @@ struct MonthChartCard: View {
         let top = perMonth.max() ?? 0
         let peak = perMonth.firstIndex(of: top)
         let summary = top == 0
-            ? "Nessun evento salvato in questo anno."
-            : "Il mese con più eventi salvati è \(monthNames[peak!]): \(top)."
+            ? String(localized: "Nessun evento salvato in questo anno.")
+            : String(localized: "Il mese con più eventi salvati è \(monthNames[peak!]): \(top).")
         StatCard(title: "Salvati per mese") {
             Chart(perMonth.indices, id: \.self) { m in
                 BarMark(x: .value("Mese", monthNames[m]), y: .value("Eventi salvati", perMonth[m]))
@@ -226,7 +232,7 @@ struct MonthChartCard: View {
             .chartYAxis(.hidden)
             .frame(height: 160)
             .accessibilityChartDescriptor(
-                BarsDescriptor(title: "Salvati per mese", xTitle: "Mese", names: monthNames, values: perMonth, summary: summary))
+                BarsDescriptor(title: String(localized: "Salvati per mese"), xTitle: String(localized: "Mese"), names: monthNames, values: perMonth, summary: summary))
             Text(summary).font(.label).foregroundStyle(Color.mutedForeground)
         }
     }
@@ -237,7 +243,7 @@ struct CategoryBarsCard: View {
 
     var body: some View {
         let top = Double(max(rows.map(\.count).max() ?? 1, 1))
-        let summary = rows.first.map { "La categoria con più eventi salvati è \($0.name): \($0.count)." } ?? ""
+        let summary = rows.first.map { String(localized: "La categoria con più eventi salvati è \(categoryLabel($0.name)): \($0.count).") } ?? ""
         StatCard(title: "Salvati per categoria") {
             VStack(spacing: Spacing.md) {
                 ForEach(rows, id: \.name) { row in
@@ -245,7 +251,7 @@ struct CategoryBarsCard: View {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
                         HStack(spacing: Spacing.sm) {
                             Image(systemName: visual.symbol).foregroundStyle(visual.color).accessibilityHidden(true)
-                            Text(verbatim: row.name).font(.body).foregroundStyle(Color.foreground)
+                            Text(verbatim: categoryLabel(row.name)).font(.body).foregroundStyle(Color.foreground)
                             Spacer()
                             Text(verbatim: "\(row.count)").font(.body).monospacedDigit().foregroundStyle(Color.foregroundSecondary)
                         }
@@ -260,8 +266,8 @@ struct CategoryBarsCard: View {
             }
             .accessibilityChartDescriptor(
                 BarsDescriptor(
-                    title: "Salvati per categoria", xTitle: "Categoria",
-                    names: rows.map(\.name), values: rows.map(\.count), summary: summary))
+                    title: String(localized: "Salvati per categoria"), xTitle: String(localized: "Categoria"),
+                    names: rows.map { categoryLabel($0.name) }, values: rows.map(\.count), summary: summary))
         }
     }
 }

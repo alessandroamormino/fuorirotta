@@ -111,7 +111,7 @@ final class LocationModel {
 
     private func refresh() {
         if wantsDevice, !denied, let coordinate {
-            place = Place(name: deviceName ?? "La tua posizione", latitude: coordinate.latitude, longitude: coordinate.longitude)
+            place = Place(name: deviceName ?? String(localized: "La tua posizione"), latitude: coordinate.latitude, longitude: coordinate.longitude)
         } else {
             place = Place.curated.first { $0.name == chosen } ?? .milano
         }

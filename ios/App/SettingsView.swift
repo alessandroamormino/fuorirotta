@@ -191,7 +191,7 @@ struct SettingsView: View {
                         if await session.unlink(provider, in: current) {
                             await loadMethods()
                         } else {
-                            methodMessage = "Non siamo riusciti a scollegare \(provider.name). Riprova."
+                            methodMessage = String(localized: "Non siamo riusciti a scollegare \(provider.name). Riprova.")
                         }
                     }
                 }
@@ -269,7 +269,26 @@ struct SettingsView: View {
                 ForEach(Appearance.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
+            // La lingua si sceglie in iOS (Impostazioni > Fuorirotta > Lingua): e' il modo di Apple, niente selettore interno.
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+            } label: {
+                row("Lingua", symbol: "globe", color: .mutedForeground) {
+                    HStack(spacing: Spacing.xs) {
+                        Text(verbatim: Self.languageName).foregroundStyle(Color.mutedForeground)
+                        Image(systemName: "arrow.up.right").font(.label).foregroundStyle(Color.mutedForeground).accessibilityHidden(true)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Apre le Impostazioni di iOS")
         }
+    }
+
+    /// "Italiano" / "English", nella lingua stessa.
+    private static var languageName: String {
+        let code = Locale.app.language.languageCode?.identifier ?? "it"
+        return (Locale(identifier: code).localizedString(forLanguageCode: code) ?? code).localizedCapitalized
     }
 
     private var placeGroup: some View {
@@ -373,7 +392,7 @@ struct SettingsView: View {
                         // Il foglio si chiude: l'avviso sta sulla Home, sotto di lui.
                         dismiss()
                         router.tab = .home
-                        saves.show("Account eliminato.")
+                        saves.show(String(localized: "Account eliminato."))
                     } else if case .signedIn = session.state {
                         deleteFailed = true
                     }

@@ -20,7 +20,7 @@ struct SavedRow: Identifiable, Equatable, Codable {
         id = "\(prefix)\(entryID)"
         self.entryID = entryID
         self.eventID = gone ? nil : eventID
-        title = snap?.title ?? "Evento salvato"
+        title = snap?.title ?? String(localized: "Evento salvato")
         place = snap?.place
         dateStart = snap?.dateStart ?? ""
         dateEnd = snap?.dateEnd
@@ -47,9 +47,9 @@ struct Toast: Identifiable {
 }
 
 private enum Copy {
-    static let failed = "Non è andata a buon fine. Riprova tra un momento."
-    static let guestCap = "Hai raggiunto il limite di 100 salvati senza account. Accedi per salvarne fino a 500."
-    static let accountCap = "Hai raggiunto il limite di 500 salvati. Rimuovine qualcuno per aggiungerne altri."
+    static var failed: String { String(localized: "Non è andata a buon fine. Riprova tra un momento.") }
+    static var guestCap: String { String(localized: "Hai raggiunto il limite di 100 salvati senza account. Accedi per salvarne fino a 500.") }
+    static var accountCap: String { String(localized: "Hai raggiunto il limite di 500 salvati. Rimuovine qualcuno per aggiungerne altri.") }
 }
 
 @MainActor @Observable
@@ -218,7 +218,7 @@ final class SavesModel {
             show(message)
             return
         }
-        toast = Toast(message: message, actionTitle: "Annulla", action: {
+        toast = Toast(message: message, actionTitle: String(localized: "Annulla"), action: {
             Task {
                 await undo()
                 await self.reload()

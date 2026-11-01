@@ -48,7 +48,7 @@ struct LocationPickerSheet: View {
         NavigationStack {
             List {
                 Section {
-                    row("Usa la mia posizione", symbol: "location.fill", selected: location.isUsingDevice) {
+                    row(String(localized: "Usa la mia posizione"), symbol: "location.fill", selected: location.isUsingDevice) {
                         location.requestPermission()
                     }
                 } footer: {

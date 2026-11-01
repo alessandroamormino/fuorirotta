@@ -5,9 +5,10 @@ struct SavedView: View {
     @Environment(SavesModel.self) private var saves
     @Environment(Session.self) private var session
 
-    private enum Filter: String, CaseIterable {
-        case upcoming = "Prossimi"
-        case past = "Passati"
+    private enum Filter: CaseIterable {
+        case upcoming, past
+
+        var title: LocalizedStringKey { self == .upcoming ? "Prossimi" : "Passati" }
     }
 
     @State private var filter = Filter.upcoming
@@ -66,14 +67,14 @@ struct SavedView: View {
     // MARK: pezzi
 
     private func remove(_ row: SavedRow) {
-        Task { await saves.remove(row, message: "Rimosso dai salvati") }
+        Task { await saves.remove(row, message: String(localized: "Rimosso dai salvati")) }
     }
 
     private var chips: some View {
         HStack(spacing: Spacing.sm) {
             ForEach(Filter.allCases, id: \.self) { f in
                 let selected = f == filter
-                Button(f.rawValue) { filter = f }
+                Button(f.title) { filter = f }
                     .font(.label.weight(.semibold))
                     .padding(.horizontal, Spacing.md)
                     .padding(.vertical, Spacing.sm)
@@ -83,7 +84,7 @@ struct SavedView: View {
             }
             Spacer()
             if let n = saves.guestCount, n >= 90 {
-                Text(verbatim: "\(n) di 100").font(.label).foregroundStyle(Color.mutedForeground)
+                Text("\(n) di 100").font(.label).foregroundStyle(Color.mutedForeground)
             }
         }
         .padding(.horizontal, Spacing.md)
@@ -222,7 +223,7 @@ struct SavedRowView: View {
                 } else {
                     HStack(spacing: Spacing.xs) {
                         Circle().fill(visual.color).frame(width: 8, height: 8)
-                        Text(verbatim: row.category).font(.label).foregroundStyle(Color.mutedForeground)
+                        Text(verbatim: categoryLabel(row.category)).font(.label).foregroundStyle(Color.mutedForeground)
                     }
                     .accessibilityHidden(true)
                 }

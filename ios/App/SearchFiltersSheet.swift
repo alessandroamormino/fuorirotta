@@ -66,7 +66,7 @@ struct SearchFiltersSheet: View {
             ForEach([SearchFilters.When.any, .today, .weekend, .next7], id: \.self) { option in
                 optionRow(option.title(locale: .app), selected: filters.when == option) { filters.when = option }
             }
-            optionRow("Scegli le date", selected: isCustom) {
+            optionRow(String(localized: "Scegli le date"), selected: isCustom) {
                 if !isCustom { filters.when = .custom(from: romeToday(), to: romeToday()) }
             }
             if case .custom(let from, let to) = filters.when {
@@ -101,7 +101,7 @@ struct SearchFiltersSheet: View {
         group("Dove") {
             Picker("Dove", selection: nearBinding) {
                 Text("Ovunque").tag(false)
-                Text(verbatim: "Vicino a \(location.place.name)").tag(true)
+                Text("Vicino a \(location.place.name)").tag(true)
             }
             .pickerStyle(.segmented)
             if let near = filters.near {
@@ -142,7 +142,7 @@ struct SearchFiltersSheet: View {
                     } label: {
                         HStack(spacing: Spacing.sm) {
                             Circle().fill(on ? Color.white : categoryVisual(name).color).frame(width: 8, height: 8)
-                            Text(verbatim: name).font(.label).foregroundStyle(on ? Color.white : Color.foreground).lineLimit(2)
+                            Text(verbatim: categoryLabel(name)).font(.label).foregroundStyle(on ? Color.white : Color.foreground).lineLimit(2)
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, Spacing.md)

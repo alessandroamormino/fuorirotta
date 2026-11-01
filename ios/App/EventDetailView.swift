@@ -205,7 +205,7 @@ struct EventDetailView: View {
             if let name = category {
                 let visual = categoryVisual(name)
                 Label {
-                    Text(verbatim: name)
+                    Text(verbatim: categoryLabel(name))
                 } icon: {
                     Image(systemName: visual.symbol)
                 }
@@ -312,7 +312,7 @@ struct EventDetailView: View {
         .padding(.horizontal, Spacing.md)
     }
 
-    private func fact(_ symbol: String, _ label: String, _ value: String) -> some View {
+    private func fact(_ symbol: String, _ label: LocalizedStringKey, _ value: String) -> some View {
         HStack(alignment: .top, spacing: Spacing.md) {
             Image(systemName: symbol)
                 .foregroundStyle(Color.mutedForeground)

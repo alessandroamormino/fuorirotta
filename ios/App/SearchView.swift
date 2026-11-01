@@ -77,7 +77,7 @@ struct SearchView: View {
                 if events.isEmpty {
                     ContentUnavailableView {
                         Label {
-                            Text(verbatim: asked.isEmpty ? "Nessun risultato" : "Nessun risultato per \"\(asked)\"")
+                            Text(verbatim: asked.isEmpty ? String(localized: "Nessun risultato") : String(localized: "Nessun risultato per \"\(asked)\""))
                         } icon: {
                             Image(systemName: "magnifyingglass")
                         }
@@ -103,10 +103,10 @@ struct SearchView: View {
                     removable(filters.when.title(locale: .app)) { filters.when = .any }
                 }
                 if let near = filters.near {
-                    removable("Entro \(near.radiusKm) km da \(location.place.name)") { filters.near = nil }
+                    removable(String(localized: "Entro \(near.radiusKm) km da \(location.place.name)")) { filters.near = nil }
                 }
                 ForEach(filters.categories, id: \.self) { name in
-                    removable(name) { filters.categories.removeAll { $0 == name } }
+                    removable(categoryLabel(name)) { filters.categories.removeAll { $0 == name } }
                 }
             }
             .padding(.horizontal, Spacing.md)
@@ -129,7 +129,7 @@ struct SearchView: View {
             .background(Color.surface, in: Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(verbatim: "\(title), tocca per togliere"))
+        .accessibilityLabel(Text("\(title), tocca per togliere"))
     }
 
     // MARK: campo vuoto: chip recenti

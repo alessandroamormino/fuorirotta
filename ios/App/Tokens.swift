@@ -72,6 +72,10 @@ private let visuals: [String: CategoryVisual] = [
     "Food & Wine": CategoryVisual(color: Color("categoryFood"), symbol: "wineglass"),
 ]
 
+/// Il nome di una categoria nella lingua dell'app. Il nome italiano del contratto resta l'identita' (filtri, API, colori):
+/// qui si traduce solo per mostrarlo. Un nome fuori dal catalogo torna com'e'.
+func categoryLabel(_ name: String) -> String { Bundle.main.localizedString(forKey: name, value: name, table: nil) }
+
 /// Come sul web: qualunque nome sconosciuto o assente cade su Altro (alias di mutedForeground).
 func categoryVisual(_ name: String?) -> CategoryVisual {
     name.flatMap { visuals[$0] } ?? CategoryVisual(color: .mutedForeground, symbol: "tag")

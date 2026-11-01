@@ -235,7 +235,7 @@ struct HomeView: View {
                 Button { showPlaceSheet = true } label: {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
                         Text("Questo weekend").font(.display).foregroundStyle(ink)
-                        Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to) + " · " + location.place.name)
+                        Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to, locale: .app) + " · " + location.place.name)
                             .font(.label)
                             .foregroundStyle(sub)
                     }
@@ -389,8 +389,8 @@ struct HomeView: View {
         case .loaded:
             if signedIn { forYouSection }
             railSection(
-                "Vicino a te", events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
-                count: model.nearbyTotal, subtitle: "Entro 50 km da \(location.place.name)",
+                String(localized: "Vicino a te"), events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
+                count: model.nearbyTotal, subtitle: String(localized: "Entro 50 km da \(location.place.name)"),
                 list: .nearby(location.place))
             if !signedIn { inviteCard }
         }
@@ -409,8 +409,8 @@ struct HomeView: View {
                 }
             } else {
                 railSection(
-                    "Per te", events: page.items, style: .wide, icon: "sparkles", count: page.total,
-                    subtitle: "Scelti da quello che segui", list: .forYou)
+                    String(localized: "Per te"), events: page.items, style: .wide, icon: "sparkles", count: page.total,
+                    subtitle: String(localized: "Scelti da quello che segui"), list: .forYou)
             }
         } else if model.forYouFailed {
             VStack(alignment: .leading, spacing: Spacing.md) {
@@ -440,7 +440,7 @@ struct HomeView: View {
                     } label: {
                         HStack(spacing: Spacing.sm) {
                             Circle().fill(categoryVisual(name).color).frame(width: 8, height: 8)
-                            Text(verbatim: name).font(.label).foregroundStyle(Color.foreground).lineLimit(2)
+                            Text(verbatim: categoryLabel(name)).font(.label).foregroundStyle(Color.foreground).lineLimit(2)
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, Spacing.md)
@@ -475,7 +475,7 @@ struct HomeView: View {
         .padding(.horizontal, Spacing.md)
     }
 
-    private func railTitle(_ title: String) -> some View {
+    private func railTitle(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(.heading)
             .foregroundStyle(Color.foreground)
@@ -500,7 +500,7 @@ struct HomeView: View {
                         Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
                             .accessibilityHidden(true)
                         if let count {
-                            Text(verbatim: count == 1 ? "1 evento" : "\(count) eventi")
+                            Text(verbatim: count == 1 ? String(localized: "1 evento") : String(localized: "\(count) eventi"))
                                 .font(.label)
                                 .foregroundStyle(Color.mutedForeground)
                                 .lineLimit(1)
@@ -543,7 +543,7 @@ struct HomeView: View {
     }
 
     /// Stato vuoto sul modello del video: simbolo a linee grande, titolo in grassetto, una riga grigia.
-    private func emptyRow(symbol: String, title: String, line: String) -> some View {
+    private func emptyRow(symbol: String, title: LocalizedStringKey, line: LocalizedStringKey) -> some View {
         VStack(spacing: Spacing.sm) {
             Image(systemName: symbol)
                 .font(.largeTitle)
@@ -567,7 +567,7 @@ struct HomeView: View {
                 LazyHStack(alignment: .top, spacing: Spacing.md) {
                     ForEach(0..<4, id: \.self) { _ in
                         VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text("1 nov").font(.label.weight(.semibold))
+                            Text(verbatim: "1 nov").font(.label.weight(.semibold))
                             RoundedRectangle(cornerRadius: Radius.media).fill(Color.surface)
                                 .frame(width: PosterCard.width, height: PosterCard.height)
                         }
