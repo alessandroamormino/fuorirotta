@@ -267,8 +267,8 @@ public struct APIClient: Sendable {
     ) async throws -> EventsPage {
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/events"), resolvingAgainstBaseURL: false)!
         var items = [
-            URLQueryItem(name: "lat", value: String(lat)),
-            URLQueryItem(name: "lng", value: String(lng)),
+            URLQueryItem(name: "lat", value: coarseCoordinate(lat)),
+            URLQueryItem(name: "lng", value: coarseCoordinate(lng)),
             URLQueryItem(name: "radius", value: String(radiusKm)),
         ]
         if let dateFrom { items.append(URLQueryItem(name: "dateFrom", value: dateFrom)) }
@@ -459,4 +459,10 @@ public struct APIClient: Sendable {
 /// Il token APNs come lo vuole il server: esadecimale minuscolo, due cifre per byte.
 public func apnsHex(_ data: Data) -> String {
     data.map { String(format: "%02x", $0) }.joined()
+}
+
+/// Al server basta cercare entro qualche decina di km: le coordinate partono arrotondate a 2 decimali
+/// (circa 1 km), la posizione precisa resta sul telefono (distanze, tempo di percorrenza, pallino).
+public func coarseCoordinate(_ value: Double) -> String {
+    String((value * 100).rounded() / 100)
 }

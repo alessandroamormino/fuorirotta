@@ -59,7 +59,8 @@ final class LocationModel {
         explained = defaults.bool(forKey: Key.explained)
         wantsDevice = defaults.bool(forKey: Key.useDevice)
         chosen = defaults.string(forKey: Key.place)
-        manager.desiredAccuracy = kCLLocationAccuracyReduced
+        // Precisa sul telefono (nome del comune, distanze, tempo di percorrenza); al server va arrotondata (coarseCoordinate).
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         bridge.onChange = { [weak self] in self?.authorizationChanged() }
         bridge.onLocation = { [weak self] coordinate in self?.received(coordinate) }
         manager.delegate = bridge

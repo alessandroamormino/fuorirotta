@@ -65,8 +65,8 @@ public struct SearchFilters: Equatable, Sendable {
             items.append(URLQueryItem(name: "dateTo", value: range.to))
         }
         if let near {
-            items.append(URLQueryItem(name: "lat", value: String(near.lat)))
-            items.append(URLQueryItem(name: "lng", value: String(near.lng)))
+            items.append(URLQueryItem(name: "lat", value: coarseCoordinate(near.lat)))
+            items.append(URLQueryItem(name: "lng", value: coarseCoordinate(near.lng)))
             items.append(URLQueryItem(name: "radius", value: String(near.radiusKm)))
         }
         items.append(URLQueryItem(name: "limit", value: String(limit)))

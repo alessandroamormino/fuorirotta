@@ -82,7 +82,7 @@ private func items(_ f: SearchFilters, category: String? = nil, now: Date) -> [S
             text: "sagra", when: .weekend, near: .init(lat: 45.4642, lng: 9.19, radiusKm: 25), categories: ["Food & Wine"])
         #expect(items(f, category: "Food & Wine", now: wednesday) == [
             "search=sagra", "category=Food & Wine", "dateFrom=2026-11-06", "dateTo=2026-11-08",
-            "lat=45.4642", "lng=9.19", "radius=25", "limit=30",
+            "lat=45.46", "lng=9.19", "radius=25", "limit=30",
         ])
     }
 
