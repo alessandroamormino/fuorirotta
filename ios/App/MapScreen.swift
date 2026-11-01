@@ -106,9 +106,6 @@ struct MapScreen: View {
 
     @State private var pins: [FuorirottaCore.MapPin] = []
     @State private var loading = true
-    #if DEBUG
-    @State private var source = "~500"
-    #endif
 
     var body: some View {
         EventMapView(pins: pins) { _ in } // la scheda dell'evento arriva con 27-08
@@ -121,20 +118,6 @@ struct MapScreen: View {
                         .padding(.top, Spacing.md)
                 }
             }
-            #if DEBUG
-            .overlay(alignment: .topTrailing) {
-                Menu {
-                    Button("~500") { source = "~500"; Task { await load() } }
-                    Button("Tutti") { source = "Tutti"; Task { await load() } }
-                } label: {
-                    Text(verbatim: "Pin: \(source) (\(pins.count))")
-                        .font(.label)
-                        .padding(Spacing.sm)
-                        .background(.regularMaterial, in: Capsule())
-                }
-                .padding(Spacing.md)
-            }
-            #endif
             .task { await load() }
     }
 
@@ -142,13 +125,8 @@ struct MapScreen: View {
         guard let api else { return }
         loading = true
         defer { loading = false }
-        #if DEBUG
-        let all = source == "Tutti"
-        #else
-        let all = false
-        #endif
         do {
-            pins = all ? try await api.clusters().pins : try await api.mapPins(lat: 45.4642, lng: 9.19, radiusKm: radiusKm)
+            pins = try await api.mapPins(lat: 45.4642, lng: 9.19, radiusKm: radiusKm)
         } catch {
             // Primo piano di prova: con la mappa vuota il guasto si vede. L'errore con cache arriva con 27-08.
         }
