@@ -562,13 +562,13 @@ export const REGION_SCHEDULES: Record<string, string> = {
  * scrape — senza acquisire alcun lock (WR-01). Nessun P2024 quella volta, ma
  * per fortuna, non per costruzione.
  *
- * 11:00 UTC, non 09:00: nei giorni feriali lo scrape incrementale dura ~40
- * minuti e qualunque orario dopo le 04:00 andrebbe bene, ma **la domenica**
- * scatta il refresh completo (isFullDetailRefreshDay in runner.ts) e lo scrape
- * torna al suo pavimento aritmetico di ~4h37m, finendo verso le 07:54-08:10.
- * Le 09:00 lasciavano cinquanta minuti di margine un giorno su sette — un
- * margine che per giunta si assottiglia da solo, perche' il costo dello scrape
- * cresce col catalogo. 11:00 ne lascia circa tre ore.
+ * 11:00 UTC, non 09:00: fino a novembre 2026 la domenica scattava il refresh
+ * completo dei dettagli e lo scrape tornava al suo pavimento aritmetico di
+ * ~4h37m, finendo verso le 07:54-08:10. Dal backlog 999.6 il refresh e'
+ * spalmato sui 7 giorni (detailRefreshWeekday in runner.ts), ma le 11:00
+ * restano perche' coprono comunque il caso peggiore di cache vuota (prima
+ * esecuzione, fonte nuova) con margine: il costo dello scrape cresce col
+ * catalogo e 09:00 lasciava solo cinquanta minuti.
  *
  * ATTENZIONE, questo e' un rimedio d'orario, non la correzione vera. WR-01
  * resta aperto: scripts/maintenance-job.ts non acquisisce alcun RegionLock, e

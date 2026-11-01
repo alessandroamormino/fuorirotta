@@ -195,7 +195,7 @@ slice_check="$(bash scripts/dev-db.sh npx tsx -e '
   console.log(mancanze.every(n => n === 1) ? "ok" : `ko: assenze nei 7 giorni ${mancanze.join(",")}`)
   process.exit(0)
 })().catch((err) => { console.log("ko: " + err.message); process.exit(0) })
-' 2>/dev/null)"
+' 2>/dev/null | tail -n 1)"
 [[ "${slice_check}" == "ok" ]] || fail "S6: la fetta in scadenza non esce dal set (${slice_check})"
 echo "ok  S6: nel suo giorno una URL in cache esce dal set e viene riscaricata, negli altri sei resta"
 
