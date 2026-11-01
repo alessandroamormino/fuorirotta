@@ -3,17 +3,18 @@ import Foundation
 /// I filtri della scheda Cerca. I nomi dei parametri sono quelli che il sito gia' manda a /api/events
 /// (search, category, dateFrom, dateTo, lat, lng, radius): nessun campo nuovo sul server.
 public struct SearchFilters: Equatable, Sendable {
-    public enum When: Equatable, Sendable {
+    public enum When: Hashable, Sendable {
         case any, today, weekend, next7
         case custom(from: String, to: String)
 
-        public var title: String {
+        /// Le parole fisse stanno nel catalogo delle stringhe dell'app (bundle principale): senza catalogo restano italiane.
+        public func title(locale: Locale = .italian) -> String {
             switch self {
-            case .any: "Qualsiasi data"
-            case .today: "Oggi"
-            case .weekend: "Questo weekend"
-            case .next7: "Prossimi 7 giorni"
-            case .custom(let from, let to): formatDayRange(from: from, to: max(from, to))
+            case .any: String(localized: "Qualsiasi data", bundle: .main)
+            case .today: String(localized: "Oggi", bundle: .main)
+            case .weekend: String(localized: "Questo weekend", bundle: .main)
+            case .next7: String(localized: "Prossimi 7 giorni", bundle: .main)
+            case .custom(let from, let to): formatDayRange(from: from, to: max(from, to), locale: locale)
             }
         }
     }

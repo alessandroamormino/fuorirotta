@@ -92,11 +92,11 @@ private func items(_ f: SearchFilters, category: String? = nil, now: Date) -> [S
     }
 
     @Test func titlesAreItalian() {
-        #expect(SearchFilters.When.today.title == "Oggi")
-        #expect(SearchFilters.When.weekend.title == "Questo weekend")
-        #expect(SearchFilters.When.next7.title == "Prossimi 7 giorni")
-        #expect(SearchFilters.When.custom(from: "2026-12-01", to: "2026-12-05").title == "1-5 dicembre")
-        #expect(SearchFilters.When.custom(from: "2026-12-01", to: "2026-12-01").title == "1 dicembre")
+        #expect(SearchFilters.When.today.title() == "Oggi")
+        #expect(SearchFilters.When.weekend.title() == "Questo weekend")
+        #expect(SearchFilters.When.next7.title() == "Prossimi 7 giorni")
+        #expect(SearchFilters.When.custom(from: "2026-12-01", to: "2026-12-05").title() == "1-5 dicembre")
+        #expect(SearchFilters.When.custom(from: "2026-12-01", to: "2026-12-01").title() == "1 dicembre")
     }
 
     // MARK: unione di piu' categorie

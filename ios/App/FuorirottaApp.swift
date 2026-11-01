@@ -9,6 +9,12 @@ extension EnvironmentValues {
     @Entry var appConfig: AppConfig? = nil
 }
 
+extension Locale {
+    /// La lingua dell'app: quella che iOS sceglie fra le localizzazioni dichiarate (it, en), cambiabile da
+    /// Impostazioni di iOS > Fuorirotta > Lingua. Cambiarla riavvia l'app, quindi basta leggerla una volta.
+    static let app = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "it")
+}
+
 enum AppTab: Hashable { case home, map, saved, profile, search }
 
 /// Un indirizzo da mostrare in un Safari dentro l'app (foglio).

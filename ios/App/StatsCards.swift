@@ -153,7 +153,7 @@ struct HeatmapCard: View {
     }
 
     private func label(_ day: String, _ n: Int) -> String {
-        let when = formatDayRange(from: day, to: day)
+        let when = formatDayRange(from: day, to: day, locale: .app)
         return n == 0 ? "\(when), nessun evento salvato" : "\(when), \(n) \(n == 1 ? "evento salvato" : "eventi salvati")"
     }
 

@@ -39,10 +39,10 @@ public struct SignInMethods: Equatable, Sendable {
 public func linkFailureMessage(_ error: Error, provider: SignInProvider) -> String {
     if case APIError.http(let status, let code) = error {
         if status == 409 || code?.localizedCaseInsensitiveContains("ALREADY_LINKED") == true {
-            return "Questo account \(provider.name) è già collegato a un altro profilo di Fuorirotta."
+            return String(localized: "Questo account \(provider.name) è già collegato a un altro profilo di Fuorirotta.", bundle: .main)
         }
-        if code == "LINKING_NOT_ALLOWED" { return "\(provider.name) non ha confermato l'e-mail: non possiamo collegarlo." }
-        if status == 429 { return "Troppi tentativi. Riprova tra un minuto." }
+        if code == "LINKING_NOT_ALLOWED" { return String(localized: "\(provider.name) non ha confermato l'e-mail: non possiamo collegarlo.", bundle: .main) }
+        if status == 429 { return String(localized: "Troppi tentativi. Riprova tra un minuto.", bundle: .main) }
     }
-    return "Non è andata a buon fine. Riprova tra un momento."
+    return String(localized: "Non è andata a buon fine. Riprova tra un momento.", bundle: .main)
 }

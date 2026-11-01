@@ -377,7 +377,7 @@ struct PinSheet: View {
 
     private var infoColumns: [Info] {
         var out: [Info] = []
-        let when = placeCardWhen(dateStart: event.dateStart, dateEnd: event.dateEnd, today: romeToday())
+        let when = placeCardWhen(dateStart: event.dateStart, dateEnd: event.dateEnd, today: romeToday(), locale: .app)
         if !when.label.isEmpty { out.append(Info(label: "Quando", value: when.label, color: when.isActive ? Color.success : Color.foreground)) }
         if let place = [event.locationName, event.address].compactMap({ $0 }).first(where: { !$0.isEmpty }) {
             out.append(Info(label: "Dove", value: place))
@@ -386,7 +386,7 @@ struct PinSheet: View {
         if let here = location.userCoordinate, let spot {
             let meters = CLLocation(latitude: here.latitude, longitude: here.longitude)
                 .distance(from: CLLocation(latitude: spot.latitude, longitude: spot.longitude))
-            out.append(Info(label: "Distanza", value: formatDistance(meters: meters)))
+            out.append(Info(label: "Distanza", value: formatDistance(meters: meters, locale: .app)))
         }
         return out
     }

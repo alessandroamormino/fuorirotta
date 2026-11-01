@@ -63,8 +63,8 @@ struct SearchFiltersSheet: View {
 
     private var whenGroup: some View {
         group("Quando") {
-            ForEach([SearchFilters.When.any, .today, .weekend, .next7], id: \.title) { option in
-                optionRow(option.title, selected: filters.when == option) { filters.when = option }
+            ForEach([SearchFilters.When.any, .today, .weekend, .next7], id: \.self) { option in
+                optionRow(option.title(locale: .app), selected: filters.when == option) { filters.when = option }
             }
             optionRow("Scegli le date", selected: isCustom) {
                 if !isCustom { filters.when = .custom(from: romeToday(), to: romeToday()) }

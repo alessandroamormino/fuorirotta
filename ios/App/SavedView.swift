@@ -159,7 +159,7 @@ struct SavedView: View {
         guard rows.count > 8 else { return rows.isEmpty ? [] : [Group(title: nil, rows: rows)] }
         var out: [Group] = []
         for row in rows {
-            let title = row.days.flatMap { monthTitle(day: $0.startDay) }
+            let title = row.days.flatMap { monthTitle(day: $0.startDay, locale: .app) }
             if let last = out.last, last.title == title {
                 out[out.count - 1] = Group(title: title, rows: last.rows + [row])
             } else {

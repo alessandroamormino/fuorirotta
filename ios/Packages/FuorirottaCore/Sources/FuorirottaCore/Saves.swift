@@ -100,7 +100,7 @@ public func mergeGuestSaves(store: GuestStore, send: @Sendable ([DeviceEntry]) a
 public func mergeMessage(added: Int) -> String? {
     switch added {
     case ..<1: nil
-    case 1: "1 evento aggiunto ai salvati"
-    default: "\(added) eventi aggiunti ai salvati"
+    case 1: String(localized: "1 evento aggiunto ai salvati", bundle: .main)
+    default: String(localized: "\(added) eventi aggiunti ai salvati", bundle: .main)
     }
 }

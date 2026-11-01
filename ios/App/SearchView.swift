@@ -100,7 +100,7 @@ struct SearchView: View {
         ScrollView(.horizontal) {
             HStack(spacing: Spacing.sm) {
                 if filters.when != .any {
-                    removable(filters.when.title) { filters.when = .any }
+                    removable(filters.when.title(locale: .app)) { filters.when = .any }
                 }
                 if let near = filters.near {
                     removable("Entro \(near.radiusKm) km da \(location.place.name)") { filters.near = nil }

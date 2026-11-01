@@ -297,8 +297,8 @@ struct EventDetailView: View {
             Text("Dettagli").font(.heading).foregroundStyle(Color.foreground).accessibilityAddTraits(.isHeader)
             if let days = eventDays(dateStart: event.dateStart, dateEnd: event.dateEnd) {
                 let when = days.startDay == days.endDay
-                    ? formatLongDay(days.startDay)
-                    : "\(formatLongDay(days.startDay)) - \(formatLongDay(days.endDay))"
+                    ? formatLongDay(days.startDay, locale: .app)
+                    : "\(formatLongDay(days.startDay, locale: .app)) - \(formatLongDay(days.endDay, locale: .app))"
                 fact("calendar", "Quando", when)
             }
             if let time = eventTime(event.dateStart) { fact("clock", "Orario", time) }

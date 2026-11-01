@@ -32,7 +32,7 @@ struct SavedRow: Identifiable, Equatable, Codable {
 
     var meta: String {
         var parts: [String] = []
-        if let d = days { parts.append(formatDayRange(from: d.startDay, to: d.endDay)) }
+        if let d = days { parts.append(formatDayRange(from: d.startDay, to: d.endDay, locale: .app)) }
         if let place, !place.isEmpty { parts.append(place) }
         return parts.joined(separator: " · ")
     }

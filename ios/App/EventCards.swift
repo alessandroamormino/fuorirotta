@@ -21,7 +21,7 @@ struct CategoryPlaceholder: View {
 func eventMeta(_ event: Event) -> String {
     var parts: [String] = []
     if let days = eventDays(dateStart: event.dateStart, dateEnd: event.dateEnd) {
-        parts.append(formatDayRange(from: days.startDay, to: days.endDay))
+        parts.append(formatDayRange(from: days.startDay, to: days.endDay, locale: .app))
     }
     if let place = event.locationName, !place.isEmpty { parts.append(place) }
     return parts.joined(separator: " · ")
@@ -170,7 +170,7 @@ struct PosterCard: View {
     private var category: String? { event.canonicalCategory ?? event.category }
 
     var body: some View {
-        let date = railDate(dateStart: event.dateStart, dateEnd: event.dateEnd, today: romeToday())
+        let date = railDate(dateStart: event.dateStart, dateEnd: event.dateEnd, today: romeToday(), locale: .app)
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(verbatim: date.label)
                 .font(.label.weight(.semibold))
