@@ -133,7 +133,7 @@ struct RailCard: View {
 }
 
 /// Scheda verticale (REF Omniphile "Releases"): locandina 2:3 con il titolo sulla foto e la data del primo giorno SOPRA.
-/// Se l'evento e' oggi, data e bordo sottile sono in accento. Il cuore di vetro sta in alto a destra.
+/// Se l'evento inizia oggi la data e' in accento; nessun bordo. Il cuore di vetro sta in alto a destra.
 struct PosterCard: View {
     static let width: CGFloat = 148
     static let height: CGFloat = 222
@@ -154,7 +154,7 @@ struct PosterCard: View {
                 .lineLimit(1)
                 .frame(minHeight: 20, alignment: .leading)
                 .accessibilityHidden(true)
-            EventLink(event: event, slot: slot) { card(highlighted: date.isToday, date: date.label) }
+            EventLink(event: event, slot: slot) { card(date: date.label) }
                 .overlay(alignment: .topTrailing) {
                     HeartButton(event: event, style: .glass).padding(Spacing.xs)
                 }
@@ -163,7 +163,7 @@ struct PosterCard: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func card(highlighted: Bool, date: String) -> some View {
+    private func card(date: String) -> some View {
         Text(verbatim: event.title)
             .font(.label.weight(.semibold))
             .foregroundStyle(.white)
@@ -183,10 +183,6 @@ struct PosterCard: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: Radius.media))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.media)
-                    .strokeBorder(highlighted ? Color.accentToken : Color.surfaceStrong, lineWidth: 1)
-            }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: [date, event.title, eventMeta(event), category].compactMap { $0 }.joined(separator: ", ")))
     }

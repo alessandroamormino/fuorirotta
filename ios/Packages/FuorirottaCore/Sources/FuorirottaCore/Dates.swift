@@ -75,10 +75,10 @@ public func formatShortDay(_ day: String) -> String {
 }
 
 /// La data sopra una card verticale: il primo giorno ("1 nov"), oppure "In corso" se l'evento e' gia' iniziato.
-/// `isToday` = l'evento si svolge oggi (Roma): la card ha la data e il bordo in accento.
+/// `isToday` = l'evento INIZIA oggi (Roma): la data va in accento. "In corso" non e' mai in accento.
 public func railDate(dateStart: String, dateEnd: String?, today: String) -> (label: String, isToday: Bool) {
     guard let days = eventDays(dateStart: dateStart, dateEnd: dateEnd) else { return ("", false) }
-    if days.startDay < today { return (days.endDay >= today ? "In corso" : formatShortDay(days.startDay), days.endDay >= today) }
+    if days.startDay < today { return (days.endDay >= today ? "In corso" : formatShortDay(days.startDay), false) }
     return (formatShortDay(days.startDay), days.startDay == today)
 }
 
