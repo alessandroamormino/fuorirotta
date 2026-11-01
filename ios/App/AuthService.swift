@@ -55,6 +55,8 @@ final class Session {
     /// Contatori per .sensoryFeedback: cambiano a ogni esito, anche uguale al precedente.
     private(set) var successCount = 0
     private(set) var errorCount = 0
+    /// Un'eliminazione alla volta (MOB-05): mentre la richiesta e' in volo un secondo tocco non fa nulla.
+    private(set) var isDeleting = false
 
     private let api: APIClient
     private let saves: SavesModel
@@ -136,6 +138,30 @@ final class Session {
         api.bearer = nil
         state = .signedOut
         await saves.didSignOut()
+    }
+
+    /// Elimina l'account sul server. Solo dopo un 2xx si cancella cio' che resta sul telefono (T-27-32, T-27-33).
+    /// true = fatto; false = account e sessione intatti (o sessione scaduta, e allora si torna ospite).
+    func deleteAccount() async -> Bool {
+        guard !isDeleting else { return false }
+        isDeleting = true; defer { isDeleting = false }
+        do {
+            try await api.deleteUser()
+        } catch {
+            if case APIError.http(401, _) = error { handleUnauthorized() } else { errorCount += 1 }
+            return false
+        }
+        // Il server ha gia' tolto utente, salvati e dispositivi (cascata): sul telefono non resta nulla di personale.
+        Keychain.delete()
+        api.bearer = nil
+        push.forget()
+        await saves.didSignOut()
+        URLCache.shared.removeAllCachedResponses()
+        try? FileManager.default.removeItem(at: URL.cachesDirectory.appending(path: "fuorirotta"))
+        UserDefaults.standard.removeObject(forKey: "fr.recentQueries")
+        state = .signedOut
+        expiredNotice = false
+        return true
     }
 
     func handleUnauthorized() {
