@@ -23,6 +23,13 @@ enum Appearance: String, CaseIterable, Identifiable {
         case .dark: .dark
         }
     }
+    /// Per i fogli: `preferredColorScheme(nil)` su un foglio gia' forzato non lo riporta al sistema (resta scuro),
+    /// quindi "Sistema" diventa il tema reale dello schermo, che le sovrascritture delle finestre non toccano.
+    var sheetScheme: ColorScheme {
+        if let scheme { return scheme }
+        let screen = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen
+        return screen?.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+    }
 }
 
 /// Stile della mappa: una sola preferenza (@AppStorage), condivisa dal tasto della mappa e da Impostazioni > Mappa.
@@ -105,7 +112,7 @@ struct SettingsView: View {
             .sensoryFeedback(.success, trigger: push.activatedCount)
         }
         // L'aspetto si applica anche a questo foglio: un foglio non sempre eredita quello della finestra.
-        .preferredColorScheme(appearance.scheme)
+        .preferredColorScheme(appearance.sheetScheme)
     }
 
     // MARK: gruppi

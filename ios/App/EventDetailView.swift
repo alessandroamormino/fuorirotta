@@ -274,7 +274,7 @@ struct EventDetailView: View {
                     Button {
                         openURL(link)
                     } label: {
-                        Label("Apri sul sito", systemImage: "safari").frame(maxWidth: .infinity)
+                        Label("Apri link", systemImage: "safari").lineLimit(1).frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                 }

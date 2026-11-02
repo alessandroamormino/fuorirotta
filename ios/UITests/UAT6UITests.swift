@@ -46,6 +46,21 @@ final class UAT6UITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Salvati"].exists)
     }
 
+    /// Bug del giro 7: Passati e poi Prossimi deve tornare su Prossimi (le due chip nella stessa riga di List si attivavano insieme).
+    func testSavedChipsSwitchBothWays() {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES"]
+        app.launch()
+        app.tabBars.buttons["Salvati"].tap()
+        let upcoming = app.buttons["Prossimi"], past = app.buttons["Passati"]
+        XCTAssertTrue(upcoming.waitForExistence(timeout: 10))
+        past.tap()
+        XCTAssertTrue(past.isSelected)
+        upcoming.tap()
+        XCTAssertTrue(upcoming.isSelected, "dopo Passati, il tocco su Prossimi non ci torna")
+        XCTAssertFalse(past.isSelected)
+    }
+
     /// Tocco per coordinate: la lista cambia sotto le dita (il cuore pieno prende il posto di quello vuoto), un indice di elemento no.
     private func tap(_ element: XCUIElement, in app: XCUIApplication) {
         let f = element.frame

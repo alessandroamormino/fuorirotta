@@ -295,12 +295,12 @@
         }
       }
     },
-    "Apri sul sito" : {
+    "Apri link" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open on the website"
+            "value" : "Open link"
           }
         }
       }

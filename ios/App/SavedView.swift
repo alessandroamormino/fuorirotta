@@ -121,6 +121,8 @@ struct SavedView: View {
             ForEach(Filter.allCases, id: \.self) { f in
                 let selected = f == filter
                 Button(f.title) { filter = f }
+                    // In una riga di List due Button di stile default si attivano insieme (vince l'ultimo): borderless li separa.
+                    .buttonStyle(.borderless)
                     .font(.label.weight(.semibold))
                     .padding(.horizontal, Spacing.md)
                     .padding(.vertical, Spacing.sm)
