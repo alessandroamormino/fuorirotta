@@ -15,6 +15,24 @@ class LocalTestCase: XCTestCase {
     }
 }
 
+extension LocalTestCase {
+    /// Il primo bottone con quell'identificatore dentro la finestra visibile (tra la cima e la barra delle schede).
+    /// Il carosello dell'eroe avanza da solo: le sue pagine fuori schermo sono nell'albero ma non si toccano.
+    func onScreen(_ id: String, in app: XCUIApplication) -> XCUIElement? {
+        let w = app.frame
+        return app.buttons.matching(identifier: id).allElementsBoundByIndex.first {
+            $0.frame.minY > 50 && $0.frame.maxY < w.height - 140 && $0.frame.minX >= 0 && $0.frame.maxX <= w.width
+        }
+    }
+
+    /// Tocco per coordinate: la lista cambia sotto le dita (il cuore pieno prende il posto di quello vuoto), un indice di elemento no.
+    func tap(_ element: XCUIElement, in app: XCUIApplication) {
+        let f = element.frame
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+    }
+}
+
 struct NotLocal: LocalizedError {
     var errorDescription: String? {
         "Test UI fermati: questa build non punta al server locale. Usa lo schema \"Fuorirotta Locale\" (configurazione DebugLocal)."

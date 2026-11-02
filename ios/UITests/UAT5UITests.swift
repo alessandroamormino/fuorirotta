@@ -43,14 +43,17 @@ final class UAT5UITests: LocalTestCase {
     /// Salva il primo evento della Home e lo ritrova in Salvati sotto l'intestazione di un giorno.
     func testSavedGroupsByDayWithTheDayTile() {
         let app = launch()
-        let heart = app.buttons.matching(identifier: "heart").firstMatch
-        XCTAssertTrue(heart.waitForExistence(timeout: 20))
-        heart.tap()
+        XCTAssertTrue(app.buttons.matching(identifier: "heart").firstMatch.waitForExistence(timeout: 20))
+        // Il primo cuore dell'albero puo' stare su una pagina dell'eroe fuori schermo (x = -60 o 744): si tocca uno in vista.
+        guard let heart = onScreen("heart", in: app) else { return XCTFail("nessun cuore in vista nella Home") }
+        tap(heart, in: app)
         defer {
-            // Lascia la lista com'era: toglie il cuore dalla Home.
+            // Lascia la lista com'era: toglie il cuore dalla Home. Se l'eroe lo ha portato fuori schermo, si aspetta che torni.
             app.tabBars.buttons["Home"].tap()
-            let filled = app.buttons.matching(identifier: "heart.fill").firstMatch
-            if filled.waitForExistence(timeout: 5) { filled.tap() }
+            for _ in 0..<40 {
+                if let filled = onScreen("heart.fill", in: app) { tap(filled, in: app); break }
+                Thread.sleep(forTimeInterval: 0.5)
+            }
         }
         app.tabBars.buttons["Salvati"].tap()
         XCTAssertTrue(app.buttons["Prossimi"].waitForExistence(timeout: 10))

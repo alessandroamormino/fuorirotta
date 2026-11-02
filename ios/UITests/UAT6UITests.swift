@@ -61,21 +61,6 @@ final class UAT6UITests: LocalTestCase {
         XCTAssertFalse(past.isSelected)
     }
 
-    /// Tocco per coordinate: la lista cambia sotto le dita (il cuore pieno prende il posto di quello vuoto), un indice di elemento no.
-    private func tap(_ element: XCUIElement, in app: XCUIApplication) {
-        let f = element.frame
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
-        Thread.sleep(forTimeInterval: 0.5)
-    }
-
-    /// Il primo bottone con quell'identificatore dentro la finestra visibile (tra la cima e la barra delle schede).
-    private func onScreen(_ id: String, in app: XCUIApplication) -> XCUIElement? {
-        let w = app.frame
-        return app.buttons.matching(identifier: id).allElementsBoundByIndex.first {
-            $0.frame.minY > 50 && $0.frame.maxY < w.height - 140 && $0.frame.minX >= 0 && $0.frame.maxX <= w.width
-        }
-    }
-
     private func shot(_ app: XCUIApplication, _ name: String) {
         let s = app.screenshot()
         let a = XCTAttachment(screenshot: s)
