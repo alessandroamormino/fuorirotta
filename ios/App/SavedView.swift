@@ -12,6 +12,18 @@ struct SavedView: View {
     }
 
     @State private var filter = Filter.upcoming
+    @State private var sheet: SavedSheet?
+
+    /// B2: i due fogli del menu della barra.
+    private enum SavedSheet: Identifiable {
+        case share, calendar
+        var id: Self { self }
+    }
+
+    private var signedIn: Bool {
+        if case .signedIn = session.state { return true }
+        return false
+    }
 
     /// Una riga della lista: la timeline e' piatta (una riga per elemento) cosi' lo scorrimento per Rimuovi resta di List.
     private enum Item: Identifiable {
@@ -77,6 +89,26 @@ struct SavedView: View {
             .navigationBarTitleDisplayMode(.large)
             // Sotto la barra di sistema il contenuto sfuma nel bordo morbido di iOS 26.
             .scrollEdgeEffectStyle(.soft, for: .top)
+            // B2: con l'account, un menu di sistema nella barra (vetro tondo in alto a destra, come il Profilo).
+            .toolbar {
+                if signedIn {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button { sheet = .share } label: { Label("Condividi la lista", systemImage: "square.and.arrow.up") }
+                            Button { sheet = .calendar } label: { Label("Iscriviti nel Calendario", systemImage: "calendar.badge.plus") }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
+                        .accessibilityLabel("Altre azioni")
+                    }
+                }
+            }
+            .sheet(item: $sheet) { which in
+                switch which {
+                case .share: ShareListSheet()
+                case .calendar: CalendarFeedSheet()
+                }
+            }
             .task { await saves.reload() }
             .refreshable { await saves.reload() }
             .sensoryFeedback(.selection, trigger: filter)

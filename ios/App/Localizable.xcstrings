@@ -224,6 +224,26 @@
         }
       }
     },
+    "Al momento non hai eventi in arrivo tra i salvati: chi apre il link vedrà quelli che salverai da ora in poi." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have no upcoming saved events right now: whoever opens the link will see the ones you save from now on."
+          }
+        }
+      }
+    },
+    "Altre azioni" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More actions"
+          }
+        }
+      }
+    },
     "Altro" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -496,6 +516,46 @@
         }
       }
     },
+    "Chi apre il link vede il titolo «Eventi salvati»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "People who open the link see the title “Saved events”."
+          }
+        }
+      }
+    },
+    "Chi apre il link vede il titolo «I salvati di %@»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "People who open the link see the title “%@'s saved events”."
+          }
+        }
+      }
+    },
+    "Chi ha il link attuale non potrà più aprirlo. Il nuovo link funziona subito." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with the current link won't be able to open it anymore. The new link works right away."
+          }
+        }
+      }
+    },
+    "Chi ha il link attuale non potrà più aprirlo. Potrai crearne uno nuovo quando vuoi." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with the current link won't be able to open it anymore. You can create a new one whenever you want."
+          }
+        }
+      }
+    },
     "Chiaro" : {
       "localizations" : {
         "en" : {
@@ -512,6 +572,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Close"
+          }
+        }
+      }
+    },
+    "Chiunque abbia il link vedrà i tuoi %lld eventi in arrivo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with the link will see your %lld upcoming events."
+          }
+        }
+      }
+    },
+    "Chiunque abbia il link vedrà il tuo evento in arrivo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with the link will see your upcoming event."
+          }
+        }
+      }
+    },
+    "Chiunque abbia questo link può vedere i tuoi eventi salvati. Non condividerlo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with this link can see your saved events. Don't share it."
+          }
+        }
+      }
+    },
+    "Chiunque abbia questo link vede i tuoi %lld eventi in arrivo, anche senza account. Non vede la tua email né altri dati del tuo account." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with this link sees your %lld upcoming events, even without an account. They don't see your email or any other account data."
+          }
+        }
+      }
+    },
+    "Chiunque abbia questo link vede il tuo evento in arrivo, anche senza account. Non vede la tua email né altri dati del tuo account." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with this link sees your upcoming event, even without an account. They don't see your email or any other account data."
+          }
+        }
+      }
+    },
+    "Chiunque abbia questo link vede la tua lista, che al momento non ha eventi in arrivo. Non vede la tua email né altri dati del tuo account." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with this link sees your list, which has no upcoming events right now. They don't see your email or any other account data."
           }
         }
       }
@@ -546,12 +666,32 @@
         }
       }
     },
+    "Condividi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share"
+          }
+        }
+      }
+    },
     "Condividi evento" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Share event"
+          }
+        }
+      }
+    },
+    "Condividi la lista" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share the list"
           }
         }
       }
@@ -596,6 +736,26 @@
         }
       }
     },
+    "Copia il link. In Google Calendar, accanto ad Altri calendari, tocca + e scegli Da URL. Incolla il link e conferma." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy the link. In Google Calendar, next to Other calendars, tap + and choose From URL. Paste the link and confirm."
+          }
+        }
+      }
+    },
+    "Copia link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy link"
+          }
+        }
+      }
+    },
     "Cosa segui" : {
       "localizations" : {
         "en" : {
@@ -612,6 +772,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "What you follow isn't available"
+          }
+        }
+      }
+    },
+    "Crea link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create link"
           }
         }
       }
@@ -642,6 +812,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Details"
+          }
+        }
+      }
+    },
+    "Disattiva link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn off link"
+          }
+        }
+      }
+    },
+    "Disattivare il link?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn off the link?"
           }
         }
       }
@@ -722,6 +912,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saved events"
+          }
+        }
+      }
+    },
+    "Eventi salvati su Fuorirotta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved events on Fuorirotta"
           }
         }
       }
@@ -828,6 +1028,26 @@
         }
       }
     },
+    "Genera nuovo link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate new link"
+          }
+        }
+      }
+    },
+    "Generare un nuovo link?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate a new link?"
+          }
+        }
+      }
+    },
     "Già seguito" : {
       "localizations" : {
         "en" : {
@@ -844,6 +1064,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saved events that have already ended will show up here."
+          }
+        }
+      }
+    },
+    "Google Calendar" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Calendar"
+          }
+        }
+      }
+    },
+    "Guarda gli eventi che ho salvato su Fuorirotta." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check out the events I saved on Fuorirotta."
           }
         }
       }
@@ -888,6 +1128,16 @@
         }
       }
     },
+    "I tuoi salvati compaiono nel calendario e si aggiornano da soli. Ogni evento ha un promemoria alle 18:00 del giorno prima, se il tuo calendario lo supporta." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your saved events show up in your calendar and update on their own. Each event has a reminder at 6:00 PM the day before, if your calendar supports it."
+          }
+        }
+      }
+    },
     "I tuoi salvati restano sull'account; su questo iPhone la lista torna vuota." : {
       "localizations" : {
         "en" : {
@@ -904,6 +1154,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hybrid"
+          }
+        }
+      }
+    },
+    "Il link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The link"
+          }
+        }
+      }
+    },
+    "Il link attuale smetterà di funzionare e dovrai iscriverti di nuovo da ogni calendario." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The current link will stop working and you'll need to subscribe again from every calendar."
+          }
+        }
+      }
+    },
+    "Il link non era più attivo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The link was no longer active."
           }
         }
       }
@@ -969,12 +1249,32 @@
         }
       }
     },
+    "Iscriviti nel Calendario" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subscribe in Calendar"
+          }
+        }
+      }
+    },
     "La categoria con più eventi salvati è %@: %lld." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "The category with the most saved events is %@: %lld."
+          }
+        }
+      }
+    },
+    "La lista si aggiorna da sola: se aggiungi o togli un evento, chi ha il link lo vede subito. Non vede la tua email né altri dati del tuo account. La tua lista resta privata finché non crei un link." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The list updates on its own: if you add or remove an event, whoever has the link sees it right away. They don't see your email or any other account data. Your list stays private until you create a link."
           }
         }
       }
@@ -1019,12 +1319,42 @@
         }
       }
     },
+    "Link copiato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link copied"
+          }
+        }
+      }
+    },
+    "Link disattivato. Chi lo aveva non può più aprirlo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link turned off. Whoever had it can no longer open it."
+          }
+        }
+      }
+    },
     "Luoghi" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Places"
+          }
+        }
+      }
+    },
+    "Manda la tua lista di eventi salvati a chi vuoi con un link: si apre senza account." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send your list of saved events to anyone with a link: it opens without an account."
           }
         }
       }
@@ -1085,6 +1415,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sign-in methods"
+          }
+        }
+      }
+    },
+    "Mostra il mio nome" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show my name"
           }
         }
       }
@@ -1310,6 +1650,16 @@
         }
       }
     },
+    "Non riusciamo a caricare lo stato del link. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We can't load the link status. Try again shortly."
+          }
+        }
+      }
+    },
     "Non riusciamo a cercare adesso. Riprova tra poco." : {
       "localizations" : {
         "en" : {
@@ -1320,12 +1670,52 @@
         }
       }
     },
+    "Non riusciamo a creare il link. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We can't create the link. Try again shortly."
+          }
+        }
+      }
+    },
     "Non segui ancora nessun luogo." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "You don't follow any place yet."
+          }
+        }
+      }
+    },
+    "Non siamo riusciti a disattivare il link. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't turn off the link. Try again shortly."
+          }
+        }
+      }
+    },
+    "Non siamo riusciti a generare un nuovo link. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't generate a new link. Try again shortly."
+          }
+        }
+      }
+    },
+    "Non siamo riusciti a salvare la scelta. Riprova." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save your choice. Try again."
           }
         }
       }
@@ -1366,6 +1756,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Notifications"
+          }
+        }
+      }
+    },
+    "Nuovo link creato. Quello vecchio non funziona più." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New link created. The old one no longer works."
           }
         }
       }
@@ -1640,6 +2040,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Recent"
+          }
+        }
+      }
+    },
+    "Rigenera link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regenerate link"
+          }
+        }
+      }
+    },
+    "Rigenerare il link?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regenerate the link?"
           }
         }
       }
@@ -2012,6 +2432,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Map style"
+          }
+        }
+      }
+    },
+    "Sì, disattiva" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yes, turn off"
+          }
+        }
+      }
+    },
+    "Sì, genera" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yes, generate"
+          }
+        }
+      }
+    },
+    "Sì, rigenera" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yes, regenerate"
           }
         }
       }

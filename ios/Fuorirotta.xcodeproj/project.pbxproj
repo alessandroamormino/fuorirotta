@@ -29,6 +29,7 @@
 		9EFA970089F19DF478C0C7C5 /* LocationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7EA14984C6205355CBF543 /* LocationViews.swift */; };
 		A007C8DE54E9C78CD03299A7 /* UAT4UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A484D201F91D6043BF89978A /* UAT4UITests.swift */; };
 		A293F601DC0B1A50BBD8AB77 /* FuorirottaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB922A66158CC37247D8879 /* FuorirottaApp.swift */; };
+		A8450C0A47624F35F5A172A6 /* SavedSharing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DF6AA99F9E758F9FAD1381 /* SavedSharing.swift */; };
 		B772334C3F88B18C0A811DC6 /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30E1CFACE53CA40F0614F34 /* EventDetailView.swift */; };
 		BBE468D771B4B1AC14E340DC /* UAT7BUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ADED2F7579BCA98280BBA51 /* UAT7BUITests.swift */; };
 		BF974CD1C09D61EB4E6C78DD /* StatsCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */; };
@@ -70,6 +71,7 @@
 		5AB1F4869F62CA6FE0391753 /* Directions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Directions.swift; sourceTree = "<group>"; };
 		629E3D4482469EA6F7F6953D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6E616087A4FBE9B4B99A3D40 /* SavedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedView.swift; sourceTree = "<group>"; };
+		74DF6AA99F9E758F9FAD1381 /* SavedSharing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSharing.swift; sourceTree = "<group>"; };
 		8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImage.swift; sourceTree = "<group>"; };
 		8F43F238906AC5743558049B /* UAT5UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UAT5UITests.swift; sourceTree = "<group>"; };
 		8FB95769BD3D9DD0097F97FE /* EventCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCards.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				D8B41CF87D602B3F4D0B0579 /* ProfileView.swift */,
 				3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */,
 				8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */,
+				74DF6AA99F9E758F9FAD1381 /* SavedSharing.swift */,
 				6E616087A4FBE9B4B99A3D40 /* SavedView.swift */,
 				3F0958FA7AA361C947B83B04 /* SavesModel.swift */,
 				3C502ED14CE515B4DEC1BA5B /* SearchFiltersSheet.swift */,
@@ -324,6 +327,7 @@
 				12751BD6A00CE42B31CBF53B /* ProfileView.swift in Sources */,
 				DA5A9A54EE87CEF48C914118 /* PushRegistration.swift in Sources */,
 				0C552E8B611CE7C46F6741AA /* RemoteImage.swift in Sources */,
+				A8450C0A47624F35F5A172A6 /* SavedSharing.swift in Sources */,
 				18006C9D52BAB281B4C5C9F5 /* SavedView.swift in Sources */,
 				E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */,
 				73CF3C85C98DF9508363A98D /* SearchFiltersSheet.swift in Sources */,

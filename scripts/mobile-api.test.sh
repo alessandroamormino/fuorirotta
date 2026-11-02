@@ -29,6 +29,7 @@
 #   C1  tracer: GET /api/v1/config?version= senza credenziali -> update-required / update-recommended / ok dalle soglie dell'ambiente
 #   V1  UAT 5: la foto negli eventi salvati: imageUrl additivo in /me/saved e /saved/resolve, null se manca o l'evento e' sparito, chiavi = contratto
 #   E1  UAT 7 B1: GET /api/events/<id> porta `comune` con le chiavi EVENT_COMUNE_KEYS del contratto (null senza comune)
+#   S1  UAT 7 B2: condivisione della lista e feed del calendario col solo bearer, nelle forme che l'app decodifica
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -795,3 +796,28 @@ code="$(call e1a GET "/api/events/${e1_with}" 198.51.100.241)"
 code="$(call e1b GET "/api/events/${e1_bare}" 198.51.100.241)"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/e1b.b" 'j.comune === null')" == "true" ]] || fail "E1: senza comune atteso comune null: $(cat "${tmp_dir}/e1b.b")"
 echo "ok  E1: GET /api/events/<id> -> comune con le chiavi EVENT_COMUNE_KEYS del contratto (ISTAT e sigla), null senza comune"
+
+# --- S1: UAT 7 B2, condividi la lista e iscriviti nel calendario dall'app ---------------------------------------
+# Le forme che decodifica FuorirottaCore (Sharing.swift): GET share {link:null|{path,showName}, upcoming}, POST e rotate
+# {path:/l/..., showName}, PATCH {showName}, DELETE; calendar-feed e rotate {path:/cal/....ics}. Solo bearer.
+mint_app_user s1 "${app_ua}"
+code="$(bearer_call s1a GET /api/v1/me/share 198.51.100.242 "${s1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1a.b" 'j.link === null && typeof j.upcoming === "number"')" == "true" ]] || fail "S1: GET share senza link: atteso {link:null, upcoming:n}, ottenuto ${code} $(cat "${tmp_dir}/s1a.b")"
+code="$(bearer_call s1b POST /api/v1/me/share 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1b.b" '/^\/l\/[A-Za-z0-9_-]+$/.test(j.path) && j.showName === false')" == "true" ]] || fail "S1: POST share: atteso {path:/l/..., showName:false}, ottenuto ${code} $(cat "${tmp_dir}/s1b.b")"
+s1_first="$(json_get "${tmp_dir}/s1b.b" 'j.path')"
+code="$(bearer_call s1c PATCH /api/v1/me/share 198.51.100.242 "${s1_cookie}" '{"showName":true}')"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/s1c.b")" == '{"showName":true}' ]] || fail "S1: PATCH share: atteso {showName:true}, ottenuto ${code} $(cat "${tmp_dir}/s1c.b")"
+code="$(bearer_call s1d POST /api/v1/me/share/rotate 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1d.b" "j.path.startsWith('/l/') && j.path !== '${s1_first}' && j.showName === true")" == "true" ]] || fail "S1: rotate share: atteso un path /l/ nuovo col nome acceso, ottenuto ${code} $(cat "${tmp_dir}/s1d.b")"
+code="$(bearer_call s1e GET /api/v1/me/share 198.51.100.242 "${s1_cookie}")"
+[[ "$(json_get "${tmp_dir}/s1e.b" "j.link.path === '$(json_get "${tmp_dir}/s1d.b" 'j.path')' && j.link.showName === true")" == "true" ]] || fail "S1: GET share dopo rotate: $(cat "${tmp_dir}/s1e.b")"
+code="$(bearer_call s1f DELETE /api/v1/me/share 198.51.100.242 "${s1_cookie}")"
+[[ "${code}" == "200" ]] || fail "S1: DELETE share: atteso 200, ottenuto ${code}"
+code="$(bearer_call s1g POST /api/v1/me/share/rotate 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "404" ]] || fail "S1: rotate senza link: atteso 404 (l'app dice 'Il link non era piu' attivo'), ottenuto ${code}"
+code="$(bearer_call s1h POST /api/v1/me/calendar-feed 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1h.b" '/^\/cal\/[A-Za-z0-9_-]+\.ics$/.test(j.path)')" == "true" ]] || fail "S1: calendar-feed: atteso {path:/cal/....ics}, ottenuto ${code} $(cat "${tmp_dir}/s1h.b")"
+code="$(bearer_call s1i POST /api/v1/me/calendar-feed/rotate 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1i.b" "j.path.startsWith('/cal/') && j.path !== '$(json_get "${tmp_dir}/s1h.b" 'j.path')'")" == "true" ]] || fail "S1: calendar-feed/rotate: atteso un path /cal/ nuovo, ottenuto ${code} $(cat "${tmp_dir}/s1i.b")"
+echo "ok  S1: share (GET/POST/PATCH/rotate/DELETE, rotate senza link 404) e calendar-feed (POST, rotate) col solo bearer, nelle forme di Sharing.swift"

@@ -24,4 +24,12 @@ final class UAT7BUITests: LocalTestCase {
         follow.tap()
         XCTAssertTrue(app.buttons["Continua con Google"].waitForExistence(timeout: 5), "da ospite Segui non apre l'accesso")
     }
+
+    /// B2: il menu di Salvati (condividi la lista, iscriviti nel calendario) c'e' solo con l'account.
+    func testGuestSavedHasNoSharingMenu() {
+        let app = launch()
+        app.tabBars.buttons["Salvati"].tap()
+        XCTAssertTrue(app.buttons["Prossimi"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Altre azioni"].exists, "da ospite Salvati non deve avere il menu di condivisione")
+    }
 }
