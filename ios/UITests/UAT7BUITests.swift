@@ -10,7 +10,8 @@ final class UAT7BUITests: LocalTestCase {
         return app
     }
 
-    /// B1: nel dettaglio c'e' "Segui" (sotto "Dove", nella scheda Dettagli); da ospite apre il foglio di accesso, come il sito.
+    /// B1 e C4: nel dettaglio c'e' "Segui" (sotto "Dove", nella scheda Dettagli). Da ospite apre lo stesso menu; la scelta
+    /// apre il foglio di accesso (e dopo l'accesso si ripete da sola: si prova sul telefono, qui non c'e' un account).
     func testGuestFollowOpensSignIn() {
         let app = launch()
         XCTAssertTrue(app.buttons.matching(identifier: "heart").firstMatch.waitForExistence(timeout: 20))
@@ -21,6 +22,11 @@ final class UAT7BUITests: LocalTestCase {
         XCTAssertTrue(follow.waitForExistence(timeout: 10), "nessuna riga Segui nel dettaglio")
         for _ in 0..<4 where !follow.isHittable { app.swipeUp() }
         follow.tap()
+        // Il menu di sistema: la categoria c'e' sempre, ed e' l'ultima voce.
+        let choice = app.collectionViews.firstMatch.descendants(matching: .any).matching(NSPredicate(format: "elementType IN {%d, %d}", XCUIElement.ElementType.button.rawValue, XCUIElement.ElementType.switch.rawValue))
+        XCTAssertTrue(choice.firstMatch.waitForExistence(timeout: 5), "da ospite Segui non apre il menu")
+        shot(app, "segui-ospite-menu")
+        choice.element(boundBy: choice.count - 1).tap()
         XCTAssertTrue(app.buttons["Continua con Google"].waitForExistence(timeout: 5), "da ospite Segui non apre l'accesso")
     }
 

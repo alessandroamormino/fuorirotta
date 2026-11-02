@@ -97,7 +97,9 @@ struct FuorirottaApp: App {
         let pushModel = PushRegistration(api: client)
         AppDelegate.push = pushModel
         _saves = State(initialValue: savesModel)
-        _follows = State(initialValue: FollowsModel(api: client))
+        let followsModel = FollowsModel(api: client)
+        followsModel.notify = { [weak savesModel] in savesModel?.show($0) }
+        _follows = State(initialValue: followsModel)
         _push = State(initialValue: pushModel)
         _session = State(initialValue: Session(api: client, saves: savesModel, push: pushModel))
         #if DEBUG
@@ -222,7 +224,10 @@ struct RootView: View {
         // Qui e non nella scena: il contenuto di un foglio eredita l'ambiente della vista a cui e' attaccato, e i
         // `.environment(...)` della scena stanno SOTTO il foglio. Attaccato alla scena, SignInSheet non trovava la
         // Session e l'app si chiudeva (UAT 4, crash EnvironmentValues.subscript).
-        .sheet(isPresented: Bindable(session).presentSignIn) { SignInSheet() }
+        // Chiuso senza accedere: il "Segui" dell'ospite si scarta (C4, come il sito).
+        .sheet(isPresented: Bindable(session).presentSignIn, onDismiss: { if session.state == .signedOut { follows.forgetIntent() } }) {
+            SignInSheet()
+        }
     }
 }
 

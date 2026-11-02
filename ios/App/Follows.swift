@@ -17,9 +17,19 @@ final class FollowsModel {
     /// lista non arrivata). Una volta vera resta vera fino all'uscita: come il sito, non si ripropone nella stessa sessione.
     private(set) var onboarded: Bool?
 
+    /// Il "Segui" toccato da ospite, ripetuto dopo l'accesso (C4).
+    private var intent = FollowIntent()
+    /// Gli avvisi della ripetizione (il toast dell'app).
+    var notify: (@MainActor (String) -> Void)?
+
     private let api: APIClient
 
     init(api: APIClient) { self.api = api }
+
+    /// Ospite: ricorda cosa voleva seguire; chi chiama apre l'accesso.
+    func rememberForSignIn(_ item: FollowItem) { intent.write(item) }
+    /// Foglio di accesso chiuso senza accedere.
+    func forgetIntent() { intent.clear() }
 
     var placeCount: Int { items?.filter(\.isPlace).count ?? 0 }
     var capReached: Bool { placeCount >= ApiContract.placeCap }
@@ -29,9 +39,22 @@ final class FollowsModel {
         do {
             let list = try await api.follows()
             items = list.follows
+            // Come FollowSync.tsx: prima la ripetizione, poi il segno degli interessi, cosi' un luogo appena seguito e'
+            // gia' nella lista quando la scelta si apre. Se la lista non arriva l'intento resta (scade in 15 minuti).
+            if let item = intent.take() { await replay(item) }
             if onboarded != true { onboarded = list.onboarded }
         } catch {
             if items == nil { failed = true }
+        }
+    }
+
+    private func replay(_ item: FollowItem) async {
+        var name = item.kind == "category" ? categoryLabel(item.key) : item.label
+        if name.hasPrefix("Provincia di ") { name = "p" + name.dropFirst() }  // noticeName del sito
+        switch await set(item, on: true) {
+        case .done: notify?(String(localized: "Ora segui \(name)"))
+        case .cap: notify?(String(localized: "Hai raggiunto il limite di 50 luoghi seguiti"))
+        case .failed: notify?(String(localized: "Non siamo riusciti a seguire \(name). Riprova tra poco."))
         }
     }
 
@@ -295,9 +318,8 @@ struct CategoryCheckRow: View {
     }
 }
 
-/// "Segui" nel dettaglio evento: comune, provincia e categoria in un menu di sistema con le spunte. Da ospite apre
-/// l'accesso (come FollowButton.tsx); l'intento non si ricorda.
-// ponytail: il sito ricorda cosa l'ospite voleva seguire e lo segue dopo l'accesso (intent in sessionStorage); qui no.
+/// "Segui" nel dettaglio evento: comune, provincia e categoria in un menu di sistema con le spunte. Da ospite la scelta
+/// apre l'accesso e si ripete da sola dopo (C4, come FollowButton.tsx con l'intento).
 struct EventFollowRow: View {
     let event: Event
 
@@ -313,20 +335,16 @@ struct EventFollowRow: View {
     var body: some View {
         let targets = followTargets(for: event)
         if !targets.isEmpty {
-            if signedIn {
-                Menu {
-                    ForEach(targets) { target in
-                        Toggle(isOn: Binding(get: { follows.isFollowing(target) }, set: { on in toggle(target, on: on) })) {
-                            Label { Text(verbatim: title(target)) } icon: { Image(systemName: followSymbol(target)) }
-                        }
+            Menu {
+                ForEach(targets) { target in
+                    Toggle(isOn: Binding(get: { follows.isFollowing(target) }, set: { on in toggle(target, on: on) })) {
+                        Label { Text(verbatim: title(target)) } icon: { Image(systemName: followSymbol(target)) }
                     }
-                } label: {
-                    label(targets)
                 }
-                .task { if follows.items == nil { await follows.load() } }
-            } else {
-                Button { session.presentSignIn = true } label: { label(targets) }
+            } label: {
+                label(targets)
             }
+            .task(id: signedIn) { if signedIn, follows.items == nil { await follows.load() } }
         }
     }
 
@@ -356,6 +374,11 @@ struct EventFollowRow: View {
     }
 
     private func toggle(_ item: FollowItem, on: Bool) {
+        guard signedIn else {
+            follows.rememberForSignIn(item)
+            session.presentSignIn = true
+            return
+        }
         Task { if let text = FollowsModel.message(await follows.set(item, on: on)) { saves.show(text) } }
     }
 }

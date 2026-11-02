@@ -2000,6 +2000,16 @@
         }
       }
     },
+    "Non siamo riusciti a seguire %@. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't follow %@. Please try again shortly."
+          }
+        }
+      }
+    },
     "Non è andata a buon fine. Riprova tra un momento." : {
       "localizations" : {
         "en" : {
@@ -2037,6 +2047,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Today"
+          }
+        }
+      }
+    },
+    "Ora segui %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now following %@"
           }
         }
       }

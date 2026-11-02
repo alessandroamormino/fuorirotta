@@ -90,3 +90,26 @@ public func followTargets(for event: Event) -> [FollowItem] {
     }
     return out
 }
+
+/// "Segui" toccato da ospite (UAT7 C4), come lib/follows/intent.ts: cosa voleva seguire resta solo in memoria, una
+/// volta sola e per 15 minuti; dopo l'accesso si segue senza un secondo tocco. Niente parte prima dell'accesso.
+public struct FollowIntent: Sendable {
+    public static let maxAge: TimeInterval = 15 * 60
+
+    private var pending: (item: FollowItem, at: Date)?
+
+    public init() {}
+
+    public mutating func write(_ item: FollowItem, now: Date = .now) { pending = (item, now) }
+
+    /// Legge e TOGLIE sempre: un intento si usa una volta sola, anche se scaduto.
+    public mutating func take(now: Date = .now) -> FollowItem? {
+        defer { pending = nil }
+        guard let pending else { return nil }
+        let age = now.timeIntervalSince(pending.at)
+        return age >= 0 && age <= Self.maxAge ? pending.item : nil
+    }
+
+    /// Il foglio di accesso chiuso senza accedere: l'intento si scarta, come sul sito.
+    public mutating func clear() { pending = nil }
+}
