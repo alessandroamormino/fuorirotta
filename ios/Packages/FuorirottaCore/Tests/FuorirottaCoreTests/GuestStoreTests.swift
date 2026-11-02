@@ -67,6 +67,18 @@ private func at(_ n: Int) -> Date { Date(timeIntervalSince1970: 1_790_000_000 + 
         #expect(await store.mergePayload().isEmpty)
     }
 
+    @Test func photoIsKeptOnThePhoneButNeverSentToTheServer() async throws {
+        let file = tempFile()
+        var s = snap(1)
+        s.imageUrl = "https://x.test/f.jpg"
+        let a = GuestStore(fileURL: file)
+        _ = await a.toggle(id: 1, snap: s, now: at(1))
+        #expect(await GuestStore(fileURL: file).all().first?.snap?.imageUrl == "https://x.test/f.jpg")
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(await a.mergePayload())) as! [[String: Any]]
+        #expect(Set((json[0]["snap"] as! [String: Any]).keys) == ["title", "dateStart", "category", "source", "sourceId"])
+        #expect(await a.all().first?.snap?.imageUrl != nil)
+    }
+
     @Test func corruptFileIsKeptAside() async throws {
         let file = tempFile()
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)

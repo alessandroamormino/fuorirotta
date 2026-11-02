@@ -54,11 +54,11 @@ private func fixture(_ name: String) -> Data {
     try! Data(contentsOf: Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures")!)
 }
 
-private func event(sourceUrl: String? = "https://example.test/e/1", source: String? = "src", sourceId: String? = "1") -> Event {
+private func event(sourceUrl: String? = "https://example.test/e/1", source: String? = "src", sourceId: String? = "1", imageUrl: String? = nil) -> Event {
     func lit(_ s: String?) -> String { s.map { "\"\($0)\"" } ?? "null" }
     let json = """
     {"id": 7, "title": "Sagra", "dateStart": "2026-11-08T00:00:00.000Z", "dateEnd": null, "locationName": "Lodi",
-     "canonicalCategory": null, "category": null, "sourceUrl": \(lit(sourceUrl)), "source": \(lit(source)), "sourceId": \(lit(sourceId))}
+     "imageUrl": \(lit(imageUrl)), "canonicalCategory": null, "category": null, "sourceUrl": \(lit(sourceUrl)), "source": \(lit(source)), "sourceId": \(lit(sourceId))}
     """
     return try! JSONDecoder().decode(Event.self, from: Data(json.utf8))
 }
@@ -76,6 +76,43 @@ private func event(sourceUrl: String? = "https://example.test/e/1", source: Stri
         #expect(items.count == 2)
         #expect(items[0].eventId == 2704 && items[0].live?.title == "SOCAFEST 2026" && items[0].live?.place == "PALAZZAGO")
         #expect(items[1].ref == 99999 && items[1].eventId == nil && items[1].live == nil)
+    }
+
+    // MARK: la foto (UAT 5)
+
+    @Test func resolveCarriesTheEventPhoto() async throws {
+        SavesStub.reset([.init(body: String(decoding: fixture("resolve-sample"), as: UTF8.self))])
+        let items = try await savesClient().resolve(ids: [2704, 99999])
+        #expect(items[0].imageUrl == "https://www.example.test/foto/socafest.jpg")
+        #expect(items[1].imageUrl == nil)
+    }
+
+    @Test func aServerWithoutThePhotoStillDecodes() async throws {
+        SavesStub.reset([.init(body: #"{"items":[{"ref":1,"eventId":1,"live":null,"siblings":[]}]}"#)])
+        let items = try await savesClient().resolve(ids: [1])
+        #expect(items.count == 1 && items[0].imageUrl == nil)
+    }
+
+    @Test func shownSnapIsTheLiveOneWithThePhotoOtherwiseTheFallback() throws {
+        let stored = Snap(title: "Vecchio", dateStart: "2026-11-08T00:00:00.000Z", dateEnd: nil, place: nil, category: "Altro",
+                          source: "s", sourceId: "1", sourceUrl: nil, imageUrl: "https://x.test/offline.jpg")
+        let live = Snap(title: "Nuovo", dateStart: "2026-11-08T00:00:00.000Z", dateEnd: nil, place: nil, category: "Altro",
+                        source: "s", sourceId: "1", sourceUrl: nil)
+        func item(live: Snap?, image: String?) throws -> SavedItem {
+            struct W: Encodable { let ref = 1; let eventId = 1; let savedAt: String? = nil; let snap: Snap? = nil; let live: Snap?; let imageUrl: String? }
+            return try JSONDecoder().decode(SavedItem.self, from: JSONEncoder().encode(W(live: live, imageUrl: image)))
+        }
+        let withPhoto = try #require(try item(live: live, image: "https://x.test/live.jpg").shown(or: stored))
+        #expect(withPhoto.title == "Nuovo" && withPhoto.imageUrl == "https://x.test/live.jpg")
+        // Evento vivo ma senza foto: la riga non ne inventa una dalla vecchia istantanea.
+        #expect(try #require(try item(live: live, image: nil).shown(or: stored)).imageUrl == nil)
+        // Evento sparito: resta l'istantanea tenuta, foto compresa.
+        #expect(try item(live: nil, image: nil).shown(or: stored) == stored)
+    }
+
+    @Test func snapFromEventKeepsThePhoto() throws {
+        #expect(try #require(Snap(event: event(imageUrl: "https://x.test/f.jpg"))).imageUrl == "https://x.test/f.jpg")
+        #expect(try #require(Snap(event: event())).imageUrl == nil)
     }
 
     @Test func snapFromEventUsesTheFallbacks() throws {

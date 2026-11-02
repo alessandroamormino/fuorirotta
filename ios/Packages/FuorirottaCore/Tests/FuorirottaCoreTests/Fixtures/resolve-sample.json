@@ -13,12 +13,14 @@
         "sourceId": "24535",
         "sourceUrl": "https://www.procedimenti.servizirl.it/sagre/public/programma/24535"
       },
+      "imageUrl": "https://www.example.test/foto/socafest.jpg",
       "siblings": []
     },
     {
       "ref": 99999,
       "eventId": null,
       "live": null,
+      "imageUrl": null,
       "siblings": []
     }
   ]

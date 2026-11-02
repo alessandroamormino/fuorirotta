@@ -11,6 +11,17 @@ public struct SavedItem: Codable, Hashable, Sendable {
     public let savedAt: String?
     public let snap: Snap?
     public let live: Snap?
+    /// La foto dell'evento vivo (UAT 5); nil senza foto, con l'evento sparito o da un server che non la manda ancora.
+    public let imageUrl: String?
+}
+
+extension SavedItem {
+    /// L'istantanea da mostrare: quella viva con la foto della voce; con l'evento sparito, `fallback` com'e' (foto tenuta compresa).
+    public func shown(or fallback: Snap?) -> Snap? {
+        guard var s = live else { return fallback }
+        s.imageUrl = imageUrl
+        return s
+    }
 }
 
 private struct Items: Decodable { let items: [SavedItem] }
@@ -29,7 +40,7 @@ extension Snap {
         self.init(
             title: event.title, dateStart: event.dateStart, dateEnd: event.dateEnd, place: event.locationName,
             category: event.canonicalCategory ?? event.category ?? "Altro",
-            source: source, sourceId: sourceId, sourceUrl: url)
+            source: source, sourceId: sourceId, sourceUrl: url, imageUrl: event.imageUrl)
     }
 }
 

@@ -13,9 +13,12 @@ public struct Snap: Codable, Hashable, Sendable {
     public var source: String
     public var sourceId: String
     public var sourceUrl: String?
-    public init(title: String, dateStart: String, dateEnd: String?, place: String?, category: String, source: String, sourceId: String, sourceUrl: String?) {
+    /// Solo sul telefono (UAT 5): la foto dell'evento al momento del salvataggio, per le righe offline. Il server
+    /// non la ricava da qui (validateSnap la ignora), la manda a parte nella voce (`SavedItem.imageUrl`).
+    public var imageUrl: String?
+    public init(title: String, dateStart: String, dateEnd: String?, place: String?, category: String, source: String, sourceId: String, sourceUrl: String?, imageUrl: String? = nil) {
         self.title = title; self.dateStart = dateStart; self.dateEnd = dateEnd; self.place = place
-        self.category = category; self.source = source; self.sourceId = sourceId; self.sourceUrl = sourceUrl
+        self.category = category; self.source = source; self.sourceId = sourceId; self.sourceUrl = sourceUrl; self.imageUrl = imageUrl
     }
 }
 
@@ -73,7 +76,10 @@ public actor GuestStore {
     }
 
     /// Il corpo di POST /api/v1/me/saved/merge, campo items: invariato finche' non si chiama clear().
-    public func mergePayload() -> [DeviceEntry] { loaded() }
+    /// Senza la foto locale: il corpo resta quello che il server accetta, byte per byte come prima di UAT 5.
+    public func mergePayload() -> [DeviceEntry] {
+        loaded().map { var e = $0; e.snap?.imageUrl = nil; return e }
+    }
 
     public func clear() { commit([]) }
 
