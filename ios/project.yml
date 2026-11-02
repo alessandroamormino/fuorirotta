@@ -50,6 +50,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: it.fuorirotta.app
+        # Solo iPhone: sul target, perche' xcodegen mette "1,2" di suo e vince sul valore di progetto.
+        # Con l'iPad Apple rifiuta l'upload (90474) se non ci sono tutte le rotazioni.
+        TARGETED_DEVICE_FAMILY: "1"
         # Identificatori pubblici (nessun segreto per un client iOS). Il server verifica contro il client web.
         GOOGLE_IOS_CLIENT_ID: 800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0.apps.googleusercontent.com
         GOOGLE_REVERSED_CLIENT_ID: com.googleusercontent.apps.800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0
