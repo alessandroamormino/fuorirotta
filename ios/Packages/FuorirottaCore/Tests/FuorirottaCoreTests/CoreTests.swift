@@ -72,6 +72,8 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
         #expect(formatDayRange(from: "2026-11-06", to: "2026-11-08") == "6-8 novembre")
         #expect(formatDayRange(from: "2026-10-30", to: "2026-11-01") == "30 ottobre - 1 novembre")
         #expect(formatDayRange(from: "2026-11-08", to: "2026-11-08") == "8 novembre")
+        #expect(formatDayRange(from: "2025-12-27", to: "2026-12-06") == "27 dicembre 2025 - 6 dicembre 2026")
+        #expect(formatDayRange(from: "2026-12-27", to: "2027-01-06") == "27 dicembre 2026 - 6 gennaio 2027")
     }
 
     @Test func eventDaysUtcEndOfDay() {

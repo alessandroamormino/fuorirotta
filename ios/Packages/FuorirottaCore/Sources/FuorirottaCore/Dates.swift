@@ -81,6 +81,10 @@ public func formatDayRange(from: String, to: String, locale: Locale = .italian) 
     guard let a = parseDay(from), let b = parseDay(to) else { return from }
     let months = names(locale).monthSymbols
     if a == b { return dayMonth(a.d, months[a.m - 1], locale) }
+    let ya = from.prefix(4), yb = to.prefix(4)
+    if ya != yb {  // a cavallo d'anno: senza l'anno "27 dic - 6 dic" sembrerebbe all'indietro
+        return "\(dayMonth(a.d, months[a.m - 1], locale)) \(ya) - \(dayMonth(b.d, months[b.m - 1], locale)) \(yb)"
+    }
     if a.m == b.m { return monthFirst(locale) ? "\(months[a.m - 1]) \(a.d)-\(b.d)" : "\(a.d)-\(b.d) \(months[a.m - 1])" }
     return "\(dayMonth(a.d, months[a.m - 1], locale)) - \(dayMonth(b.d, months[b.m - 1], locale))"
 }
