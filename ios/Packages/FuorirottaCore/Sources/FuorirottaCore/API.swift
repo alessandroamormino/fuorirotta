@@ -32,6 +32,8 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     public var sourceId: String? = nil
     /// Solo da GET /api/events/{id} (UAT7 B1): il comune agganciato, null per gli eventi senza. Serve a "Segui".
     public var comune: EventComune? = nil
+    /// Il telefono della fonte, com'e' (UAT7 C1): il sito lo mostra cosi'. `$.phone` e' gia' nei golden dell'evento.
+    public var phone: String? = nil
 }
 
 /// Il comune di un evento, con le chiavi dei follow (ISTAT e sigla). Chiavi = ApiContract.eventComuneKeys.

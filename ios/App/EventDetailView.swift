@@ -323,6 +323,22 @@ struct EventDetailView: View {
             if !where_.isEmpty { fact("mappin", "Dove", where_.joined(separator: "\n")) }
             // B1: sotto "Dove", come la riga del calendario; il menu ha comune, provincia e categoria.
             EventFollowRow(event: event)
+            // C1: il numero com'e' nella fonte, come il sito; il tocco chiama. Senza un numero componibile la riga non c'e'.
+            if let phone = event.phone?.trimmingCharacters(in: .whitespacesAndNewlines), let dial = phoneDialURL(phone) {
+                Button { openURL(dial) } label: {
+                    HStack(alignment: .top, spacing: Spacing.md) {
+                        Image(systemName: "phone").foregroundStyle(Color.mutedForeground).frame(width: 28).accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("Telefono").font(.label).foregroundStyle(Color.mutedForeground)
+                            Text(verbatim: phone).font(.body).foregroundStyle(Color.accentToken)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Chiama \(phone)"))
+            }
             if let host = sourceLink?.host(percentEncoded: false) {
                 fact("link", "Fonte", host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
             }
