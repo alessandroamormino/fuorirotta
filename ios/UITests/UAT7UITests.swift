@@ -11,12 +11,17 @@ final class UAT7UITests: LocalTestCase {
     }
 
     /// Apre il dettaglio dell'eroe della Home (un evento vicino, quindi con le coordinate). Al centro: in alto c'e' "Questo weekend".
-    private func openHeroDetail(_ app: XCUIApplication) {
+    /// Torna il titolo dell'evento (la prima parte dell'etichetta dell'eroe).
+    @discardableResult
+    private func openHeroDetail(_ app: XCUIApplication) -> String {
         XCTAssertTrue(app.buttons.matching(identifier: "heart").firstMatch.waitForExistence(timeout: 20))
         let hero = app.buttons.allElementsBoundByIndex.first { $0.frame.height > 340 && abs($0.frame.minX) < 1 }
         XCTAssertNotNil(hero, "nessun eroe nella Home")
-        guard let f = hero?.frame else { return }
+        guard let hero else { return "" }
+        let f = hero.frame
+        let title = hero.label.components(separatedBy: ", ")[0]
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
+        return title
     }
 
     /// A3: nel simulatore c'e' solo Mappe, quindi "Indicazioni" resta un bottone che apre subito (niente menu) e la riga
@@ -37,5 +42,43 @@ final class UAT7UITests: LocalTestCase {
         // Solo Mappe: il tocco apre Mappe e l'app va in secondo piano, senza menu in mezzo.
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10), "il tocco non ha aperto Mappe")
         app.activate()
+    }
+
+    /// A2: "Aggiungi al calendario" in "Dettagli" apre il foglio di sistema precompilato col titolo dell'evento;
+    /// Annulla lo chiude senza salvare. Il foglio gira in un altro processo, con la lingua del telefono: si cerca per
+    /// identificatore (cancel-button, title-field), non per etichetta.
+    func testAddToCalendarOpensTheSystemSheet() {
+        let app = launch()
+        let title = openHeroDetail(app)
+        let add = app.buttons["Aggiungi al calendario"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10), "nessuna riga Aggiungi al calendario")
+        for _ in 0..<3 where !add.isHittable { app.swipeUp() }
+        add.tap()
+        let cancel = app.buttons["cancel-button"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "il foglio del calendario non si e' aperto")
+        let field = app.textFields["title-field"]
+        XCTAssertTrue(field.exists)
+        // Il campo puo' troncare il valore con i puntini: basta l'inizio del titolo.
+        let shown = (field.value as? String ?? "").replacingOccurrences(of: "...", with: "").replacingOccurrences(of: "…", with: "")
+        XCTAssertTrue(!shown.isEmpty && title.hasPrefix(shown), "titolo precompilato \(shown) invece di \(title)")
+        shot(app, "calendar-sheet")
+        cancel.tap()
+        // Annulla puo' chiedere conferma per un evento precompilato: si scartano le modifiche.
+        let discard = app.buttons.matching(NSPredicate(format: "label IN {'Elimina modifiche', 'Discard Changes'}")).firstMatch
+        if discard.waitForExistence(timeout: 2) { discard.tap() }
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "il foglio non si e' chiuso")
+        XCTAssertTrue(add.exists)
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
+    private func shot(_ app: XCUIApplication, _ name: String) {
+        let s = app.screenshot()
+        let a = XCTAttachment(screenshot: s)
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
+        if let dir = ProcessInfo.processInfo.environment["UAT_SHOT_DIR"] {
+            try? s.pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
+        }
     }
 }

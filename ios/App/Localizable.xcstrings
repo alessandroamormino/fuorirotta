@@ -204,6 +204,16 @@
         }
       }
     },
+    "Aggiungi al calendario" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add to Calendar"
+          }
+        }
+      }
+    },
     "Al" : {
       "localizations" : {
         "en" : {
@@ -753,6 +763,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Source"
+          }
+        }
+      }
+    },
+    "Fonte: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source: %@"
           }
         }
       }

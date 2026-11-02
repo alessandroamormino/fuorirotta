@@ -100,6 +100,7 @@ struct EventDetailView: View {
     @State private var photo: UIImage?
     @State private var tint: Color?
     @State private var similar: [Event] = []
+    @State private var draft: CalendarDraft?
 
     // Misura di decodifica della foto: larghezza di un iPhone, 4:3.
     private static let imageSize = CGSize(width: 440, height: 330)
@@ -156,6 +157,9 @@ struct EventDetailView: View {
                 .accessibilityLabel("Condividi evento")
                 HeartButton(event: event, style: .plain)
             }
+        }
+        .sheet(isPresented: Binding(get: { draft != nil }, set: { if !$0 { draft = nil } })) {
+            if let draft { EventEditSheet(draft: draft) { self.draft = nil }.ignoresSafeArea() }
         }
         .task(id: event.id) { await fetch() }
         .task(id: event.imageUrl) { await loadPhoto() }
@@ -303,6 +307,18 @@ struct EventDetailView: View {
                 fact("calendar", "Quando", when)
             }
             if let time = eventTime(event.dateStart) { fact("clock", "Orario", time) }
+            // A2: sotto data e orario, come le righe d'azione di Contatti e Mappe; la riga dei due bottoni resta com'e'.
+            if let ready = calendarDraft(for: event) {
+                Button { draft = ready } label: {
+                    HStack(spacing: Spacing.md) {
+                        Image(systemName: "calendar.badge.plus").frame(width: 28).accessibilityHidden(true)
+                        Text("Aggiungi al calendario").font(.body)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .foregroundStyle(Color.accentToken)
+            }
             let where_ = [event.locationName, event.address].compactMap { $0 }.filter { !$0.isEmpty }
             if !where_.isEmpty { fact("mappin", "Dove", where_.joined(separator: "\n")) }
             if let host = sourceLink?.host(percentEncoded: false) {
