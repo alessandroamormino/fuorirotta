@@ -14,6 +14,8 @@ struct SavedRow: Identifiable, Equatable, Codable {
     let dateEnd: String?
     let category: String
     let gone: Bool
+    /// La foto dell'evento (https); nil senza foto, con l'evento sparito o offline senza una foto tenuta: vale il segnaposto di categoria.
+    let imageUrl: String?
 
     /// Vive dal resolver (live) con ripiego sull'istantanea salvata; senza nessuna delle due resta il segnaposto.
     init(entryID: Int, eventID: Int?, snap: Snap?, gone: Bool, prefix: String) {
@@ -26,17 +28,20 @@ struct SavedRow: Identifiable, Equatable, Codable {
         dateEnd = snap?.dateEnd
         category = snap?.category ?? "Altro"
         self.gone = gone
+        imageUrl = gone ? nil : snap?.imageUrl
     }
 
     var days: (startDay: String, endDay: String)? { eventDays(dateStart: dateStart, dateEnd: dateEnd) }
 
-    var meta: String {
-        var parts: [String] = []
-        if let d = days { parts.append(formatDayRange(from: d.startDay, to: d.endDay, locale: .app)) }
-        if let place, !place.isEmpty { parts.append(place) }
-        return parts.joined(separator: " · ")
+    /// Sotto il titolo: per un evento di piu' giorni l'intervallo, per uno di un giorno l'orario (se la fonte lo da).
+    /// Il giorno di inizio sta gia' nell'intestazione della timeline.
+    var when: String {
+        if let d = days, d.endDay != d.startDay { return formatDayRange(from: d.startDay, to: d.endDay, locale: .app) }
+        return eventTime(dateStart) ?? ""
     }
 }
+
+extension SavedRow: SavedTimelineItem {}
 
 /// Avviso non bloccante in basso, sopra la barra delle schede (UI-SPEC: unione, tetti, rimozione).
 struct Toast: Identifiable {
@@ -242,11 +247,12 @@ final class SavesModel {
             }
             rows = entries.map { e in
                 let item = resolved[e.id]
-                let live = item?.live
-                return SavedRow(entryID: e.id, eventID: item?.eventId, snap: live ?? e.snap, gone: live == nil, prefix: "g")
+                return SavedRow(entryID: e.id, eventID: item?.eventId, snap: item?.shown(or: e.snap) ?? e.snap, gone: item?.live == nil, prefix: "g")
             }
-            // Un'istantanea nuova dal server sostituisce quella tenuta sul telefono.
-            for e in entries { if let live = resolved[e.id]?.live, live != e.snap { await store.setSnap(e.id, live) } }
+            // Un'istantanea nuova dal server (foto compresa) sostituisce quella tenuta sul telefono.
+            for e in entries {
+                if let item = resolved[e.id], item.live != nil, let shown = item.shown(or: e.snap), shown != e.snap { await store.setSnap(e.id, shown) }
+            }
             offline = false
         } catch {
             // Senza rete restano le istantanee del telefono (non sappiamo se qualcuno e' sparito).
@@ -259,7 +265,7 @@ final class SavesModel {
         do {
             let items = try await api.savedList()
             rows = items.map {
-                SavedRow(entryID: $0.ref, eventID: $0.eventId, snap: $0.live ?? $0.snap, gone: $0.eventId == nil, prefix: "a")
+                SavedRow(entryID: $0.ref, eventID: $0.eventId, snap: $0.shown(or: $0.snap), gone: $0.eventId == nil, prefix: "a")
             }
             ids = Set(items.compactMap(\.eventId))
             offline = false

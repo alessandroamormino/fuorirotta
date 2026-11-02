@@ -13,15 +13,28 @@ struct SavedView: View {
 
     @State private var filter = Filter.upcoming
 
-    private struct Group: Identifiable {
-        let title: String?
-        let rows: [SavedRow]
-        var id: String { title ?? "-" }
+    /// Una riga della lista: la timeline e' piatta (una riga per elemento) cosi' lo scorrimento per Rimuovi resta di List.
+    private enum Item: Identifiable {
+        case month(String)
+        case day(SavedDay<SavedRow>)
+        case event(SavedRow, last: Bool)
+
+        var id: String {
+            switch self {
+            case .month(let title): "m-\(title)"
+            case .day(let d): d.id
+            case .event(let row, _): row.id
+            }
+        }
     }
+
+    // Piastrina del giorno e colonna della linea: misure della timeline.
+    private static let tile = CGSize(width: 52, height: 56)
+    private static let lineWidth: CGFloat = 2
 
     var body: some View {
         let today = romeToday()
-        let shown = rows(for: filter, today: today)
+        let days = savedTimeline(saves.rows, past: filter == .past, today: today, locale: .app)
         EventStack {
             List {
                 if saves.offline {
@@ -36,28 +49,33 @@ struct SavedView: View {
                 if saves.loading && saves.rows.isEmpty {
                     ForEach(0..<4, id: \.self) { _ in skeletonRow }
                 } else {
-                    ForEach(groups(shown)) { group in
-                        Section {
-                            ForEach(group.rows) { row in
+                    ForEach(items(days)) { item in
+                        switch item {
+                        case .month(let title):
+                            monthRow(title)
+                        case .day(let day):
+                            dayRow(day)
+                        case .event(let row, let last):
+                            timelineRow(last: last) {
                                 SavedRowView(row: row)
-                                    .listRowSeparator(.hidden)
-                                    .swipeActions(edge: .trailing) {
-                                        Button("Rimuovi", role: .destructive) { remove(row) }
-                                    }
-                                    .accessibilityAction(named: "Rimuovi") { remove(row) }
                             }
-                        } header: {
-                            if let title = group.title {
-                                Text(verbatim: title).font(.heading).foregroundStyle(Color.foreground).textCase(nil)
+                            .swipeActions(edge: .trailing) {
+                                Button("Rimuovi", role: .destructive) { remove(row) }
                             }
+                            .accessibilityAction(named: "Rimuovi") { remove(row) }
                         }
                     }
                 }
             }
             .listStyle(.plain)
-            .overlay { if !(saves.loading && saves.rows.isEmpty) && shown.isEmpty { emptyState } }
+            .listRowSpacing(0)
+            .environment(\.defaultMinListRowHeight, 0)
+            .overlay { if !(saves.loading && saves.rows.isEmpty) && days.isEmpty { emptyState } }
             .navigationTitle("Salvati")
-            .safeAreaInset(edge: .top, spacing: 0) { chips }
+            .navigationBarTitleDisplayMode(.large)
+            // UAT 5: il fondo "bar" va tenuto dentro l'inserto. Senza `ignoresSafeAreaEdges: []` il materiale si stendeva
+            // anche sotto la barra di navigazione e copriva il titolo grande, che sta nel contenuto della lista.
+            .safeAreaInset(edge: .top, spacing: 0) { header(summary(days, today: today)) }
             .task { await saves.reload() }
             .refreshable { await saves.reload() }
             .sensoryFeedback(.selection, trigger: filter)
@@ -68,6 +86,31 @@ struct SavedView: View {
 
     private func remove(_ row: SavedRow) {
         Task { await saves.remove(row, message: String(localized: "Rimosso dai salvati")) }
+    }
+
+    /// Sotto il titolo grande: il riepilogo in grigio e le chip, agganciate quando il titolo si riduce.
+    private func header(_ summary: String?) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            if let summary {
+                Text(verbatim: summary)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.foregroundSecondary)
+            }
+            chips
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar, ignoresSafeAreaEdges: [])
+    }
+
+    /// "12 eventi · 3 questa settimana" (la parte della settimana solo nei Prossimi); nil se non c'e' nulla.
+    private func summary(_ days: [SavedDay<SavedRow>], today: String) -> String? {
+        let s = savedSummary(days, today: today)
+        guard s.total > 0 else { return nil }
+        let all = s.total == 1 ? String(localized: "1 evento") : String(localized: "\(s.total) eventi")
+        guard filter == .upcoming, s.thisWeek > 0 else { return all }
+        return all + " · " + String(localized: "\(s.thisWeek) questa settimana")
     }
 
     private var chips: some View {
@@ -87,9 +130,6 @@ struct SavedView: View {
                 Text("\(n) di 100").font(.label).foregroundStyle(Color.mutedForeground)
             }
         }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
-        .background(.bar)
     }
 
     private var guestBanner: some View {
@@ -103,13 +143,14 @@ struct SavedView: View {
     }
 
     private var skeletonRow: some View {
-        SavedRowView(row: SavedRow(
-            entryID: 0, eventID: nil,
-            snap: Snap(title: "Titolo dell'evento salvato", dateStart: "2026-01-01T00:00:00.000Z", dateEnd: nil, place: "Luogo", category: "Altro", source: "", sourceId: "", sourceUrl: nil),
-            gone: false, prefix: "sk"))
-            .redacted(reason: .placeholder)
-            .listRowSeparator(.hidden)
-            .accessibilityHidden(true)
+        timelineRow(last: false) {
+            SavedRowView(row: SavedRow(
+                entryID: 0, eventID: nil,
+                snap: Snap(title: "Titolo dell'evento salvato", dateStart: "2026-01-01T00:00:00.000Z", dateEnd: nil, place: "Luogo", category: "Altro", source: "", sourceId: "", sourceUrl: nil),
+                gone: false, prefix: "sk"))
+                .redacted(reason: .placeholder)
+        }
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder private var emptyState: some View {
@@ -141,33 +182,82 @@ struct SavedView: View {
         }
     }
 
-    // MARK: ordine e gruppi
+    // MARK: timeline
 
-    /// Prossimi per giorno di inizio crescente, Passati dal piu' recente; le righe senza data in fondo.
-    private func rows(for filter: Filter, today: String) -> [SavedRow] {
-        let wanted = filter == .past
-        let picked = saves.rows.filter { isPastEvent(dateStart: $0.dateStart, dateEnd: $0.dateEnd, today: today) == wanted }
-        func key(_ r: SavedRow) -> String { r.days?.startDay ?? "" }
-        return picked.sorted { a, b in
-            if key(a).isEmpty != key(b).isEmpty { return !key(a).isEmpty }
-            if key(a) != key(b) { return wanted ? key(a) > key(b) : key(a) < key(b) }
-            return a.title < b.title
-        }
-    }
-
-    /// Oltre 8 righe, intestazioni di mese (Heading); altrimenti un solo gruppo senza titolo.
-    private func groups(_ rows: [SavedRow]) -> [Group] {
-        guard rows.count > 8 else { return rows.isEmpty ? [] : [Group(title: nil, rows: rows)] }
-        var out: [Group] = []
-        for row in rows {
-            let title = row.days.flatMap { monthTitle(day: $0.startDay, locale: .app) }
-            if let last = out.last, last.title == title {
-                out[out.count - 1] = Group(title: title, rows: last.rows + [row])
-            } else {
-                out.append(Group(title: title, rows: [row]))
+    /// Intestazione di mese (quando cambia), intestazione del giorno, poi gli eventi del giorno.
+    private func items(_ days: [SavedDay<SavedRow>]) -> [Item] {
+        var out: [Item] = []
+        for (i, day) in days.enumerated() {
+            if let month = day.month { out.append(.month(month)) }
+            out.append(.day(day))
+            for (j, row) in day.items.enumerated() {
+                out.append(.event(row, last: i == days.count - 1 && j == day.items.count - 1))
             }
         }
         return out
+    }
+
+    /// Una riga di timeline: a sinistra la linea verticale che collega i giorni, a destra il contenuto.
+    private func timelineRow<Content: View>(
+        rail: some View = EmptyView(), last: Bool, @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .top, spacing: Spacing.md) {
+            ZStack(alignment: .top) {
+                Color.surfaceStrong
+                    .frame(width: Self.lineWidth)
+                    .frame(maxHeight: last ? Spacing.xl : .infinity)
+                rail
+            }
+            .frame(width: Self.tile.width)
+            content()
+        }
+        .padding(.horizontal, Spacing.md)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    private func monthRow(_ title: String) -> some View {
+        timelineRow(last: false) {
+            Text(verbatim: title)
+                .font(.heading)
+                .foregroundStyle(Color.foreground)
+                .padding(.top, Spacing.md)
+                .padding(.bottom, Spacing.sm)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    private func dayRow(_ day: SavedDay<SavedRow>) -> some View {
+        let heading: String = day.isOngoing
+            ? String(localized: "In corso")
+            : day.day.map { formatTimelineDay($0, locale: .app) } ?? String(localized: "Senza data")
+        return timelineRow(rail: dayTile(day), last: false) {
+            Text(verbatim: heading)
+                .font(.body)
+                .foregroundStyle(Color.mutedForeground)
+                .frame(height: Self.tile.height, alignment: .center)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .padding(.top, Spacing.sm)
+    }
+
+    /// Il numero del giorno grande e il giorno della settimana sotto; "In corso" e senza data hanno un simbolo.
+    private func dayTile(_ day: SavedDay<SavedRow>) -> some View {
+        VStack(spacing: 0) {
+            if let d = day.day {
+                let t = timelineDayTile(d, locale: .app)
+                Text(verbatim: t.number).font(.title2.weight(.bold)).foregroundStyle(Color.foreground)
+                Text(verbatim: t.weekday).font(.label).foregroundStyle(Color.mutedForeground)
+            } else {
+                Image(systemName: day.isOngoing ? "clock" : "calendar.badge.exclamationmark")
+                    .font(.title3)
+                    .foregroundStyle(Color.mutedForeground)
+            }
+        }
+        .frame(width: Self.tile.width, height: Self.tile.height)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: Radius.md))
+        .accessibilityHidden(true)
     }
 }
 
@@ -184,6 +274,10 @@ private extension View {
 
 struct SavedRowView: View {
     let row: SavedRow
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    // Locandina grande della timeline; la misura di decodifica e' la stessa del riquadro.
+    private static let photo = CGSize(width: 120, height: 150)
 
     var body: some View {
         // Una riga il cui evento non esiste piu' non si apre.
@@ -196,27 +290,27 @@ struct SavedRowView: View {
 
     /// Dall'istantanea: basta per aprire il dettaglio subito, il resto lo carica `event(id:)`.
     private func event(_ id: Int) -> Event {
-        Event(id: id, title: row.title, dateStart: row.dateStart, dateEnd: row.dateEnd, locationName: row.place, category: row.category)
+        Event(id: id, title: row.title, dateStart: row.dateStart, dateEnd: row.dateEnd, imageUrl: row.imageUrl, locationName: row.place, category: row.category)
     }
 
     private var content: some View {
         let visual = categoryVisual(row.category)
         return HStack(spacing: Spacing.md) {
-            // Lo snapshot del server non ha l'immagine (per scelta): le righe usano il segnaposto di categoria.
-            RemoteImage(url: nil, category: row.category, size: CGSize(width: 72, height: 72))
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+            // Foto dell'evento (https) se c'e'; altrimenti il segnaposto di categoria.
+            RemoteImage(url: row.imageUrl, category: row.category, size: Self.photo)
+                .frame(width: Self.photo.width, height: Self.photo.height)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.card))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(verbatim: row.title)
-                    .font(.body.weight(.semibold))
+                    .font(.body.weight(.bold))
                     .foregroundStyle(Color.foreground)
-                    .lineLimit(2)
-                if !row.meta.isEmpty {
-                    Text(verbatim: row.meta)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
+                ForEach([row.when, row.place ?? ""].filter { !$0.isEmpty }, id: \.self) { line in
+                    Text(verbatim: line)
                         .font(.label)
                         .foregroundStyle(Color.foregroundSecondary)
-                        .lineLimit(1)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                 }
                 if row.gone {
                     Text("Evento non più disponibile").font(.label).foregroundStyle(Color.mutedForeground)
@@ -228,7 +322,9 @@ struct SavedRowView: View {
                     .accessibilityHidden(true)
                 }
             }
+            Spacer(minLength: 0)
         }
+        .padding(.vertical, Spacing.sm)
         .accessibilityElement(children: .combine)
     }
 }

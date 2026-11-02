@@ -93,6 +93,16 @@
         }
       }
     },
+    "%lld questa settimana" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld this week"
+          }
+        }
+      }
+    },
     "1 evento" : {
       "localizations" : {
         "en" : {
@@ -1731,6 +1741,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "You're offline. Showing the last saved data."
+          }
+        }
+      }
+    },
+    "Senza data" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No date"
           }
         }
       }
