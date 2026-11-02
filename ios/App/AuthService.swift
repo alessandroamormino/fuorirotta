@@ -136,8 +136,18 @@ final class Session {
         do { try await api.signOut() } catch { print("sign-out fallito: \(error)") }
         Keychain.delete()
         api.bearer = nil
+        await forgetGoogle(revoke: false)
         state = .signedOut
         await saves.didSignOut()
+    }
+
+    /// Google ricorda l'utente nel Portachiavi dell'SDK. "Esci" lo dimentica sul telefono (`signOut`, la concessione
+    /// resta); "Scollega Google" ed "Elimina account" la revocano (`disconnect`, serve l'utente corrente: lo si ripristina).
+    private func forgetGoogle(revoke: Bool) async {
+        let google = GIDSignIn.sharedInstance
+        guard revoke else { return google.signOut() }
+        if google.currentUser == nil, google.hasPreviousSignIn() { _ = try? await google.restorePreviousSignIn() }
+        do { try await google.disconnect() } catch { google.signOut() }
     }
 
     /// Elimina l'account sul server. Solo dopo un 2xx si cancella cio' che resta sul telefono (T-27-32, T-27-33).
@@ -155,6 +165,7 @@ final class Session {
         Keychain.delete()
         api.bearer = nil
         push.forget()
+        await forgetGoogle(revoke: true)
         await saves.didSignOut()
         URLCache.shared.removeAllCachedResponses()
         try? FileManager.default.removeItem(at: URL.cachesDirectory.appending(path: "fuorirotta"))
@@ -251,6 +262,7 @@ final class Session {
         busy = true; defer { busy = false }
         do {
             try await api.unlinkAccount(id: id)
+            if provider == .google { await forgetGoogle(revoke: true) }
             successCount += 1
             return true
         } catch {
