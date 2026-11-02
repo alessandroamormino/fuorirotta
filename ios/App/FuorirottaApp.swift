@@ -71,6 +71,7 @@ struct FuorirottaApp: App {
     @State private var session: Session
     @State private var push: PushRegistration
     @State private var saves: SavesModel
+    @State private var follows: FollowsModel
     @State private var location = LocationModel()
     @State private var router = Router()
     @State private var config: AppConfig?
@@ -88,6 +89,7 @@ struct FuorirottaApp: App {
         let pushModel = PushRegistration(api: client)
         AppDelegate.push = pushModel
         _saves = State(initialValue: savesModel)
+        _follows = State(initialValue: FollowsModel(api: client))
         _push = State(initialValue: pushModel)
         _session = State(initialValue: Session(api: client, saves: savesModel, push: pushModel))
     }
@@ -111,6 +113,7 @@ struct FuorirottaApp: App {
                 .environment(session)
                 .environment(push)
                 .environment(saves)
+                .environment(follows)
                 .environment(location)
                 .environment(router)
                 .environment(\.appConfig, config)
@@ -139,6 +142,7 @@ struct FuorirottaApp: App {
 
 struct RootView: View {
     @Environment(SavesModel.self) private var saves
+    @Environment(FollowsModel.self) private var follows
     @Environment(Router.self) private var router
     @Environment(Session.self) private var session
     /// La foto dell'account come icona della scheda Profilo (REF Omniphile), gia' tonda e a colori originali.
@@ -175,6 +179,10 @@ struct RootView: View {
                     .padding(.bottom, Spacing.xxxl)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        // Cosa segue l'account: caricato all'accesso, dimenticato all'uscita (anche per un 401).
+        .task(id: session.state == .signedOut) {
+            if session.state == .signedOut { follows.reset() } else { await follows.load() }
         }
         .task(id: photoURL) {
             profileIcon = nil

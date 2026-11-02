@@ -15,8 +15,11 @@ export async function GET(
 			return NextResponse.json({ error: "Invalid event ID" }, { status: 400 });
 		}
 
+		// comune (UAT7 B1): l'app segue comune e provincia dal dettaglio con le stesse chiavi del sito
+		// (istatCode, provinceCode). Select ristretta: mai la riga intera (EVENT_COMUNE_KEYS nel contratto dell app).
 		const event = await prisma.event.findUnique({
 			where: { id: eventId },
+			include: { comune: { select: { istatCode: true, name: true, provinceCode: true, provinceName: true } } },
 		});
 
 		if (!event) {

@@ -18,6 +18,21 @@
     "$.category": [
       "string"
     ],
+    "$.comune": [
+      "object"
+    ],
+    "$.comune.istatCode": [
+      "string"
+    ],
+    "$.comune.name": [
+      "string"
+    ],
+    "$.comune.provinceCode": [
+      "string"
+    ],
+    "$.comune.provinceName": [
+      "string"
+    ],
     "$.comuneId": [
       "number"
     ],

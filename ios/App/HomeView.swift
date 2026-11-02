@@ -14,7 +14,6 @@ final class HomeModel {
     /// "Per te": nil = non caricato (ospite) o non riuscito (`forYouFailed`).
     private(set) var forYou: FeedPage?
     private(set) var forYouFailed = false
-    private(set) var followCount = 0  // contatore per .sensoryFeedback(.selection)
     /// Rete assente: si mostra l'ultimo Home riuscito per questo luogo, con l'avviso "Sei offline...".
     private(set) var offline = false
     let window = weekendWindow()
@@ -80,14 +79,11 @@ final class HomeModel {
         return try? JSONDecoder().decode(Snapshot.self, from: data)
     }
 
-    /// Zero seguiti: un tocco su una categoria la segue e ricarica la fila (un 401 lo gestisce Session).
-    func follow(api: APIClient, category: String) async {
-        do {
-            try await api.follow(kind: "category", key: category)
-            forYou = try await api.feed(limit: 16, offset: 0)
-            forYouFailed = false
-            followCount += 1
-        } catch {}  // il tocco non e' andato a buon fine: la fila resta com'era e si puo' ritoccare
+    /// Dopo un cambio in cio' che si segue (qui, nel dettaglio o in "Cosa segui"): solo "Per te", il resto non cambia.
+    func reloadFeed(api: APIClient) async {
+        guard let page = try? await api.feed(limit: 16, offset: 0) else { return }  // resta la fila di prima
+        forYou = page
+        forYouFailed = false
     }
 }
 
@@ -101,7 +97,9 @@ struct HomeView: View {
     @Environment(\.appConfig) private var appConfig
     @Environment(\.openURL) private var openURL
     @Environment(Router.self) private var router
+    @Environment(FollowsModel.self) private var follows
 
+    @State private var followCount = 0  // contatore per .sensoryFeedback(.selection)
     @State private var dismissedRecommended = UserDefaults.standard.string(forKey: "fr.dismissedRecommended")
     @State private var model = HomeModel()
     @State private var current: Int?
@@ -147,7 +145,11 @@ struct HomeView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
-        .sensoryFeedback(.selection, trigger: model.followCount)
+        .sensoryFeedback(.selection, trigger: followCount)
+        .onChange(of: follows.revision) {
+            guard signedIn, let api else { return }
+            Task { await model.reloadFeed(api: api) }
+        }
     }
 
     private struct LoadKey: Equatable {
@@ -435,8 +437,8 @@ struct HomeView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Spacing.sm)], spacing: Spacing.sm) {
                 ForEach(ApiContract.categories, id: \.self) { name in
                     Button {
-                        guard let api else { return }
-                        Task { await model.follow(api: api, category: name) }
+                        // Zero seguiti: un tocco segue la categoria; "Per te" si ricarica da follows.revision.
+                        Task { if await follows.set(FollowItem(kind: "category", key: name, label: name), on: true) == .done { followCount += 1 } }
                     } label: {
                         HStack(spacing: Spacing.sm) {
                             Circle().fill(categoryVisual(name).color).frame(width: 8, height: 8)

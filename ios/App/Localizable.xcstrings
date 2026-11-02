@@ -466,12 +466,32 @@
         }
       }
     },
+    "Cerca comune, provincia o regione" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search town, province or region"
+          }
+        }
+      }
+    },
     "Cerca eventi" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Search events"
+          }
+        }
+      }
+    },
+    "Cerca un comune, una provincia o una regione qui sopra per aggiungerlo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search for a town, province or region above to add it."
           }
         }
       }
@@ -572,6 +592,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Check the spelling or try a place or a category."
+          }
+        }
+      }
+    },
+    "Cosa segui" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What you follow"
+          }
+        }
+      }
+    },
+    "Cosa segui non è disponibile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What you follow isn't available"
           }
         }
       }
@@ -788,6 +828,16 @@
         }
       }
     },
+    "Già seguito" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Already followed"
+          }
+        }
+      }
+    },
     "Gli eventi salvati che sono già finiti compariranno qui." : {
       "localizations" : {
         "en" : {
@@ -804,6 +854,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "You have reached the limit of 100 saved events without an account. Sign in to save up to 500."
+          }
+        }
+      }
+    },
+    "Hai raggiunto il limite di 50 luoghi seguiti" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've reached the limit of 50 followed places"
           }
         }
       }
@@ -959,6 +1019,16 @@
         }
       }
     },
+    "Luoghi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Places"
+          }
+        }
+      }
+    },
     "Mappa" : {
       "localizations" : {
         "en" : {
@@ -1100,6 +1170,16 @@
         }
       }
     },
+    "Nessun luogo trovato per «%@»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No place found for “%@”."
+          }
+        }
+      }
+    },
     "Nessun risultato" : {
       "localizations" : {
         "en" : {
@@ -1190,6 +1270,16 @@
         }
       }
     },
+    "Non riusciamo a caricare cosa segui. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We can't load what you follow. Try again shortly."
+          }
+        }
+      }
+    },
     "Non riusciamo a caricare gli eventi. Controlla la connessione e riprova." : {
       "localizations" : {
         "en" : {
@@ -1216,6 +1306,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "We can't load your saved events. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "Non riusciamo a cercare adesso. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We can't search right now. Try again shortly."
+          }
+        }
+      }
+    },
+    "Non segui ancora nessun luogo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You don't follow any place yet."
+          }
+        }
+      }
+    },
+    "Non siamo riusciti a salvare. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save. Try again shortly."
           }
         }
       }
@@ -1408,6 +1528,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Try widening the area: change location from the button at the top."
+          }
+        }
+      }
+    },
+    "Provincia di %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Province of %@"
           }
         }
       }
@@ -1765,6 +1895,16 @@
         }
       }
     },
+    "Segui" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow"
+          }
+        }
+      }
+    },
     "Sei offline. Mostriamo gli ultimi dati salvati." : {
       "localizations" : {
         "en" : {
@@ -1801,6 +1941,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Website"
+          }
+        }
+      }
+    },
+    "Smetti di seguire" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unfollow"
           }
         }
       }

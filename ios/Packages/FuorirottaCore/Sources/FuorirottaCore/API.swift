@@ -30,6 +30,23 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     // Servono a Snap(event:) (Salvati): la chiave naturale dell'evento, come sul web.
     public var source: String? = nil
     public var sourceId: String? = nil
+    /// Solo da GET /api/events/{id} (UAT7 B1): il comune agganciato, null per gli eventi senza. Serve a "Segui".
+    public var comune: EventComune? = nil
+}
+
+/// Il comune di un evento, con le chiavi dei follow (ISTAT e sigla). Chiavi = ApiContract.eventComuneKeys.
+/// La lista (GET /api/events) ne manda solo `name` e `provinceCode`: gli altri due arrivano solo dal dettaglio.
+public struct EventComune: Codable, Hashable, Sendable {
+    public let istatCode: String?
+    public let name: String
+    public let provinceCode: String
+    public let provinceName: String?
+
+    enum CodingKeys: String, CodingKey, CaseIterable { case istatCode, name, provinceCode, provinceName }
+
+    public init(istatCode: String?, name: String, provinceCode: String, provinceName: String?) {
+        self.istatCode = istatCode; self.name = name; self.provinceCode = provinceCode; self.provinceName = provinceName
+    }
 }
 
 extension Event {
@@ -342,9 +359,29 @@ public struct APIClient: Sendable {
         return try await get(comps.url!, as: FeedPage.self)
     }
 
-    /// Segue una categoria (o un luogo): `key` e' il nome canonico, il server controlla ogni chiave.
-    public func follow(kind: String, key: String) async throws {
-        _ = try await send(method: "PUT", path: "api/v1/me/follows", body: JSONSerialization.data(withJSONObject: ["kind": kind, "key": key]))
+    /// Segue una categoria o un luogo; il server controlla ogni chiave (404 = non esiste, 409 `cap` = 50 luoghi).
+    /// Torna l'etichetta che il server ha costruito (nil se la risposta non la porta).
+    @discardableResult
+    public func follow(kind: String, key: String) async throws -> String? {
+        let (data, _) = try await send(method: "PUT", path: "api/v1/me/follows", body: JSONSerialization.data(withJSONObject: ["kind": kind, "key": key]))
+        return (try? JSONDecoder().decode([String: AnyLabel].self, from: data))?["label"]?.text
+    }
+
+    /// Smette di seguire: (kind, key) solo nel corpo, mai nell'indirizzo (T-23-05). 200 anche se non c'era.
+    public func unfollow(kind: String, key: String) async throws {
+        _ = try await send(method: "DELETE", path: "api/v1/me/follows", body: JSONSerialization.data(withJSONObject: ["kind": kind, "key": key]))
+    }
+
+    /// Cosa segue l'utente, gia' ordinato e con le etichette del server.
+    public func follows() async throws -> FollowList {
+        try await get(baseURL.appendingPathComponent("api/v1/me/follows"), as: FollowList.self)
+    }
+
+    /// Luoghi da seguire (regioni, province, comuni): la stessa ricerca pubblica del sito, senza bearer.
+    public func searchPlaces(q: String) async throws -> [PlaceOption] {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("api/places/search"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "q", value: q)]
+        return try await get(comps.url!, as: PlaceResults.self).results
     }
 
     /// Politica di versione (pubblica, niente bearer). nil se il server non risponde o risponde male:
@@ -454,6 +491,12 @@ public struct APIClient: Sendable {
         }
         return (data, http)
     }
+}
+
+/// Un valore JSON di cui interessa solo il testo: `{"followed": true, "label": "..."}` non si decodifica come [String: String].
+struct AnyLabel: Decodable {
+    let text: String?
+    init(from decoder: Decoder) throws { text = try? decoder.singleValueContainer().decode(String.self) }
 }
 
 /// Il token APNs come lo vuole il server: esadecimale minuscolo, due cifre per byte.

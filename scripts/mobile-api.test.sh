@@ -28,6 +28,7 @@
 #   A1  UAT 2: i metodi di accesso dall'app: list-accounts e link-social accettano il solo bearer, un id token falso e' rifiutato senza collegare nulla
 #   C1  tracer: GET /api/v1/config?version= senza credenziali -> update-required / update-recommended / ok dalle soglie dell'ambiente
 #   V1  UAT 5: la foto negli eventi salvati: imageUrl additivo in /me/saved e /saved/resolve, null se manca o l'evento e' sparito, chiavi = contratto
+#   E1  UAT 7 B1: GET /api/events/<id> porta `comune` con le chiavi EVENT_COMUNE_KEYS del contratto (null senza comune)
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -774,3 +775,23 @@ code="$(call v1r POST /api/v1/saved/resolve 198.51.100.240 -H 'Content-Type: app
 [[ "$(json_get "${tmp_dir}/v1r.b" "j.items.map((i) => i.imageUrl).join('|')")" == "${v1_img}||" ]] \
   || fail "V1: imageUrl in /saved/resolve: attesi foto, null, null (in ordine di richiesta): $(cat "${tmp_dir}/v1r.b")"
 echo "ok  V1: /me/saved e /saved/resolve: imageUrl = events.image_url dell'evento vivo, null senza foto o con l'evento sparito; chiavi di ogni voce = SAVED_*_ITEM_KEYS del contratto"
+
+# --- E1: UAT 7 B1, il comune nel dettaglio evento (aggiunta compatibile) ---------------------------------------
+# L'app segue comune e provincia dal dettaglio con le chiavi del sito: GET /api/events/<id> porta `comune` con
+# ESATTAMENTE le chiavi EVENT_COMUNE_KEYS di lib/api-contract.ts, e null per un evento senza comune.
+e1_keys="$(bash scripts/dev-db.sh npx tsx -e "import('./lib/api-contract.ts').then((mod) => { const m = mod.default ?? mod; console.log(JSON.stringify([...m.EVENT_COMUNE_KEYS].sort())) })" | tail -n 1)"
+[[ "${e1_keys}" == \[* ]] || fail "E1: non riesco a leggere EVENT_COMUNE_KEYS da lib/api-contract.ts (ottenuto '${e1_keys}')"
+e1_with="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, canonical_category, comune_id)
+  VALUES ('__mobile_api__', 'e1-comune', 'Prova comune', now() + interval '3 days', 'Altro', (SELECT id FROM comuni WHERE name = 'Vigolzone' LIMIT 1))
+  RETURNING id" | head -n 1)"
+e1_bare="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, canonical_category)
+  VALUES ('__mobile_api__', 'e1-senza', 'Prova senza comune', now() + interval '3 days', 'Altro')
+  RETURNING id" | head -n 1)"
+[[ "${e1_with}" =~ ^[0-9]+$ && "${e1_bare}" =~ ^[0-9]+$ ]] || fail "E1: eventi di prova non inseriti ('${e1_with}' '${e1_bare}')"
+code="$(call e1a GET "/api/events/${e1_with}" 198.51.100.241)"
+[[ "${code}" == "200" ]] || fail "E1: GET /api/events/${e1_with}: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/e1a.b" "JSON.stringify(Object.keys(j.comune).sort()) === JSON.stringify(${e1_keys}) && /^\\d{6}$/.test(j.comune.istatCode) && /^[A-Z]{2}$/.test(j.comune.provinceCode)")" == "true" ]] \
+  || fail "E1: comune deve avere esattamente le chiavi ${e1_keys} (ISTAT a 6 cifre, sigla a 2 lettere): $(cat "${tmp_dir}/e1a.b")"
+code="$(call e1b GET "/api/events/${e1_bare}" 198.51.100.241)"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/e1b.b" 'j.comune === null')" == "true" ]] || fail "E1: senza comune atteso comune null: $(cat "${tmp_dir}/e1b.b")"
+echo "ok  E1: GET /api/events/<id> -> comune con le chiavi EVENT_COMUNE_KEYS del contratto (ISTAT e sigla), null senza comune"

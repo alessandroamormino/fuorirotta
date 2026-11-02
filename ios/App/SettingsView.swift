@@ -57,6 +57,9 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
     }
 }
 
+/// Le schermate che Impostazioni spinge nella sua pila.
+enum SettingsRoute: Hashable { case follows }
+
 /// Impostazioni (REF Omniphile): foglio a tutta altezza chiuso da una X tonda in alto a sinistra, gruppi in card.
 /// Le righe stavano nella pagina Profilo; il Profilo tiene l'intestazione utente e le statistiche.
 struct SettingsView: View {
@@ -91,6 +94,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     if signedIn { accountGroup }
+                    if signedIn { followsGroup }
                     if signedIn { methodsGroup }
                     appearanceGroup
                     placeGroup
@@ -103,6 +107,11 @@ struct SettingsView: View {
             }
             .background(Color.background)
             .navigationTitle("Impostazioni")
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .follows: FollowsView()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { dismiss() }
@@ -164,6 +173,18 @@ struct SettingsView: View {
             } message: {
                 Text("I tuoi salvati restano sull'account; su questo iPhone la lista torna vuota.")
             }
+        }
+    }
+
+    /// B1: "Cosa segui". La vista e' riusabile: con B6 si apre anche dal Profilo.
+    private var followsGroup: some View {
+        group("Per te") {
+            NavigationLink(value: SettingsRoute.follows) {
+                row("Cosa segui", symbol: "sparkles", color: .mutedForeground) {
+                    Image(systemName: "chevron.right").font(.label).foregroundStyle(Color.mutedForeground).accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.plain)
         }
     }
 

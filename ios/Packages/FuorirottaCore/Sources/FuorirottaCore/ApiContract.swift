@@ -1,4 +1,4 @@
-// Specchio di lib/api-contract.ts (piu' CANONICAL_CATEGORIES e i tetti GUEST_CAP/ACCOUNT_CAP).
+// Specchio di lib/api-contract.ts (piu' CANONICAL_CATEGORIES, i tetti GUEST_CAP/ACCOUNT_CAP e PLACE_CAP dei follow).
 // Si modifica SOLO insieme a quel file: check:ios-contract (test:ci) fallisce se i valori divergono.
 // Una `static let` per riga, valori letterali: il gate li legge come testo.
 
@@ -15,4 +15,6 @@ public enum ApiContract {
     public static let savedResolveItemKeys = ["ref", "eventId", "live", "imageUrl", "siblings"]
     public static let guestCap = 100
     public static let accountCap = 500
+    public static let placeCap = 50
+    public static let eventComuneKeys = ["istatCode", "name", "provinceCode", "provinceName"]
 }

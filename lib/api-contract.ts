@@ -68,6 +68,12 @@ export type DeviceRegistration = { token: string; environment: ApnsEnvironment; 
 export const SAVED_LIST_ITEM_KEYS = ['ref', 'eventId', 'savedAt', 'snap', 'live', 'imageUrl', 'siblings'] as const
 export const SAVED_RESOLVE_ITEM_KEYS = ['ref', 'eventId', 'live', 'imageUrl', 'siblings'] as const
 
+// Dettaglio evento (Fase 27, UAT7 B1). GET /api/events/{id} porta anche `comune`: {istatCode, name, provinceCode,
+// provinceName} del comune agganciato, `null` se l'evento non ne ha (circa un terzo). E' cio' che serve all'app per
+// "Segui" comune (kind 'comune', key = istatCode) e provincia (kind 'province', key = provinceCode) con le chiavi del
+// sito. Aggiunta compatibile; le chiavi sono queste, il gate (check:mobile-api, E1) le confronta con la risposta vera.
+export const EVENT_COMUNE_KEYS = ['istatCode', 'name', 'provinceCode', 'provinceName'] as const
+
 // Politica di versione (Fase 26, API-04). GET /api/v1/config[?version=1.4.0] e' pubblica: niente
 // sessione, niente database. Per l'app: `update-required` = schermata bloccante "Aggiorna";
 // `update-recommended` = avviso che si puo' chiudere; `ok` o nessun `status` (versione mancante o

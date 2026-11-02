@@ -321,6 +321,8 @@ struct EventDetailView: View {
             }
             let where_ = [event.locationName, event.address].compactMap { $0 }.filter { !$0.isEmpty }
             if !where_.isEmpty { fact("mappin", "Dove", where_.joined(separator: "\n")) }
+            // B1: sotto "Dove", come la riga del calendario; il menu ha comune, provincia e categoria.
+            EventFollowRow(event: event)
             if let host = sourceLink?.host(percentEncoded: false) {
                 fact("link", "Fonte", host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
             }
