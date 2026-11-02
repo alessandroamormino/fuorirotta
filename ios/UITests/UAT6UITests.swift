@@ -2,7 +2,7 @@ import XCTest
 
 /// Regressioni del giro UAT 6 (Fase 27): niente fasce fisse con fondo, riepilogo e chip scorrono via con la lista.
 @MainActor
-final class UAT6UITests: XCTestCase {
+final class UAT6UITests: LocalTestCase {
     /// Salva alcuni eventi della Home, apre Salvati, scorre: il titolo di sistema resta, riepilogo e chip se ne vanno.
     func testSavedSummaryAndChipsScrollAwayWithTheList() {
         let app = XCUIApplication()

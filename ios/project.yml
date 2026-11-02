@@ -109,6 +109,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: it.fuorirotta.app.uitests
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: Fuorirotta
+      configs:
+        # A1: solo qui i test sanno di girare contro il server locale; altrove LocalTestCase li ferma prima di partire.
+        DebugLocal:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) LOCAL_API
 schemes:
   Fuorirotta:
     build:
@@ -118,10 +122,8 @@ schemes:
       config: Debug
     archive:
       config: Release
-    test:
-      config: Debug
-      targets:
-        - FuorirottaUITests
+    # A1 (UAT7): niente test UI sullo schema di produzione. Salvano e tolgono eventi: su fuori-rotta.it
+    # sporcherebbero un account vero. Vivono solo in "Fuorirotta Locale" (gate S8).
   Fuorirotta Locale:
     build:
       targets:

@@ -2,7 +2,7 @@ import XCTest
 
 /// Regressioni del giro UAT 5 (Fase 27): la pagina Salvati.
 @MainActor
-final class UAT5UITests: XCTestCase {
+final class UAT5UITests: LocalTestCase {
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         // Lingua e spiegazione della posizione fissate: nessun dialogo di sistema in mezzo.

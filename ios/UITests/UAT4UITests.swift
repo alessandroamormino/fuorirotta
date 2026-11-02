@@ -2,7 +2,7 @@ import XCTest
 
 /// Regressioni del giro UAT 4 (Fase 27): il foglio di accesso aperto dai Salvati e i tocchi sulle card.
 @MainActor
-final class UAT4UITests: XCTestCase {
+final class UAT4UITests: LocalTestCase {
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         // Lingua e spiegazione della posizione fissate: nessun dialogo di sistema in mezzo.

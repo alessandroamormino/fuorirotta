@@ -218,3 +218,25 @@ const tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' 
 check('S5', tracked.length === 0, `tracciati: ${tracked.join(', ')}`)
 check('S5', /<key>NSPrivacyTracking<\/key>\s*<false\/>/.test(read('ios/App/PrivacyInfo.xcprivacy')), 'NSPrivacyTracking non e\' false')
 ok('S5', 'rilascio app: solo tag ios-, solo tester interni, nessuna chiave tracciata (il matcher fallisce su un tag v piantato)')
+
+// S8 test UI solo in locale (UAT7 A1): salvano e tolgono eventi, su produzione sporcherebbero un account vero.
+// Lo schema di produzione non ha target di test UI; ogni classe di test UI passa da LocalTestCase (il guardiano).
+export function uiTestsInProdScheme(text: string): string[] {
+  const uiTargets = [...text.matchAll(/^ {2}(\S[^:\n]*):\n {4}type: bundle\.ui-testing$/gm)].map((m) => m[1])
+  if (uiTargets.length === 0) return ['nessun target bundle.ui-testing trovato']
+  const schemes = text.slice(text.indexOf('\nschemes:\n'))
+  const prod = /^ {2}Fuorirotta:\n((?:(?: {4}.*)?\n)*)/m.exec(schemes)
+  if (!schemes.startsWith('\nschemes:') || !prod) return ['schema Fuorirotta mancante']
+  return uiTargets.filter((t) => prod[1].includes(t)).map((t) => `${t} nello schema di produzione`)
+}
+const planted = 'targets:\n  App:\n    type: application\n  AppUITests:\n    type: bundle.ui-testing\nschemes:\n  Fuorirotta:\n    test:\n      targets:\n        - AppUITests\n  Fuorirotta Locale:\n    test:\n      targets:\n        - AppUITests\n'
+check('S8', uiTestsInProdScheme(planted).length === 1, 'il matcher non vede un test UI piantato nello schema di produzione')
+check('S8', uiTestsInProdScheme(planted.replace('    test:\n      targets:\n        - AppUITests\n  Fuorirotta Locale', '  Fuorirotta Locale')).length === 0, 'falso positivo con i test solo nello schema Locale')
+const prodUi = uiTestsInProdScheme(yml)
+check('S8', prodUi.length === 0, prodUi.join('; '))
+check('S8', /DebugLocal:\n {10}SWIFT_ACTIVE_COMPILATION_CONDITIONS: \$\(inherited\) LOCAL_API/.test(yml) && (yml.match(/LOCAL_API/g) ?? []).length === 1, 'LOCAL_API non e\' solo nella configurazione DebugLocal dei test UI')
+const unguarded = swiftFiles(join(ROOT, 'ios/UITests'))
+  .flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/class (\w+): XCTestCase/g)].map((m) => m[1]))
+  .filter((c) => c !== 'LocalTestCase')
+check('S8', unguarded.length === 0, `classi di test UI senza LocalTestCase: ${unguarded.join(', ')}`)
+ok('S8', 'test UI fuori dallo schema di produzione e fermati senza LOCAL_API (il matcher fallisce su uno schema piantato)')
