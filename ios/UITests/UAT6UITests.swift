@@ -1,0 +1,75 @@
+import XCTest
+
+/// Regressioni del giro UAT 6 (Fase 27): niente fasce fisse con fondo, riepilogo e chip scorrono via con la lista.
+@MainActor
+final class UAT6UITests: XCTestCase {
+    /// Salva alcuni eventi della Home, apre Salvati, scorre: il titolo di sistema resta, riepilogo e chip se ne vanno.
+    func testSavedSummaryAndChipsScrollAwayWithTheList() {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES"]
+        app.launch()
+        let first = app.buttons.matching(identifier: "heart").firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 20))
+        var saved = 0
+        // Cuori fuori schermo non si toccano: si scorre finche' ce n'e' uno raggiungibile.
+        for _ in 0..<20 where saved < 6 {
+            if let heart = onScreen("heart", in: app) {
+                tap(heart, in: app)
+                saved += 1
+            } else {
+                app.swipeUp()
+            }
+        }
+        defer {
+            // Lo scorrimento riduce la barra delle schede: risalire la fa tornare intera.
+            for _ in 0..<3 { app.swipeDown() }
+            app.tabBars.buttons["Home"].tap()
+            for _ in 0..<14 {
+                if let filled = onScreen("heart.fill", in: app) { tap(filled, in: app) } else { app.swipeDown(velocity: .slow) }
+            }
+        }
+        for _ in 0..<3 { app.swipeDown() }
+        app.tabBars.buttons["Salvati"].tap()
+        let chip = app.buttons["Prossimi"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 10))
+        let summary = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ event[oi].*'")).firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        // Servono almeno 4 salvati perche' la lista scorra (quelli gia' presenti piu' quelli appena messi).
+        XCTAssertGreaterThanOrEqual(Int(summary.label.prefix { $0.isNumber }) ?? 0, 4, "pochi eventi salvati per scorrere: \(summary.label)")
+        shot(app, "salvati-before")
+        let startY = chip.frame.minY
+        for _ in 0..<3 { app.swipeUp() }
+        shot(app, "salvati-after")
+        // Il riepilogo e le chip sono contenuto: salgono con la lista (prima restavano fissi).
+        XCTAssertFalse(chip.isHittable && chip.frame.minY >= startY - 1, "le chip sono rimaste ferme: sono ancora una fascia fissa")
+        // La barra di sistema col titolo (inline) c'e' ancora.
+        XCTAssertTrue(app.navigationBars["Salvati"].exists)
+    }
+
+    /// Tocco per coordinate: la lista cambia sotto le dita (il cuore pieno prende il posto di quello vuoto), un indice di elemento no.
+    private func tap(_ element: XCUIElement, in app: XCUIApplication) {
+        let f = element.frame
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
+        Thread.sleep(forTimeInterval: 0.5)
+    }
+
+    /// Il primo bottone con quell'identificatore dentro la finestra visibile (tra la cima e la barra delle schede).
+    private func onScreen(_ id: String, in app: XCUIApplication) -> XCUIElement? {
+        let w = app.frame
+        return app.buttons.matching(identifier: id).allElementsBoundByIndex.first {
+            $0.frame.minY > 50 && $0.frame.maxY < w.height - 140 && $0.frame.minX >= 0 && $0.frame.maxX <= w.width
+        }
+    }
+
+    private func shot(_ app: XCUIApplication, _ name: String) {
+        let s = app.screenshot()
+        let a = XCTAttachment(screenshot: s)
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
+        // Facoltativo: UAT_SHOT_DIR (passato come TEST_RUNNER_UAT_SHOT_DIR) salva anche i PNG su disco.
+        if let dir = ProcessInfo.processInfo.environment["UAT_SHOT_DIR"] {
+            try? s.pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
+        }
+    }
+}

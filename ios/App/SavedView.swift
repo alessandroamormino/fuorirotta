@@ -37,6 +37,8 @@ struct SavedView: View {
         let days = savedTimeline(saves.rows, past: filter == .past, today: today, locale: .app)
         EventStack {
             List {
+                // UAT 6: riepilogo e chip sono contenuto, scorrono via con la lista (niente fascia fissa con fondo).
+                header(summary(days, today: today))
                 if saves.offline {
                     Label("Sei offline. Mostriamo gli ultimi dati salvati.", systemImage: "wifi.slash")
                         .font(.label)
@@ -73,9 +75,8 @@ struct SavedView: View {
             .overlay { if !(saves.loading && saves.rows.isEmpty) && days.isEmpty { emptyState } }
             .navigationTitle("Salvati")
             .navigationBarTitleDisplayMode(.large)
-            // UAT 5: il fondo "bar" va tenuto dentro l'inserto. Senza `ignoresSafeAreaEdges: []` il materiale si stendeva
-            // anche sotto la barra di navigazione e copriva il titolo grande, che sta nel contenuto della lista.
-            .safeAreaInset(edge: .top, spacing: 0) { header(summary(days, today: today)) }
+            // Sotto la barra di sistema il contenuto sfuma nel bordo morbido di iOS 26.
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .task { await saves.reload() }
             .refreshable { await saves.reload() }
             .sensoryFeedback(.selection, trigger: filter)
@@ -88,7 +89,7 @@ struct SavedView: View {
         Task { await saves.remove(row, message: String(localized: "Rimosso dai salvati")) }
     }
 
-    /// Sotto il titolo grande: il riepilogo in grigio e le chip, agganciate quando il titolo si riduce.
+    /// Prima riga della lista, sotto il titolo grande: il riepilogo in grigio e le chip.
     private func header(_ summary: String?) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             if let summary {
@@ -101,7 +102,9 @@ struct SavedView: View {
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar, ignoresSafeAreaEdges: [])
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
 
     /// "12 eventi · 3 questa settimana" (la parte della settimana solo nei Prossimi); nil se non c'e' nulla.

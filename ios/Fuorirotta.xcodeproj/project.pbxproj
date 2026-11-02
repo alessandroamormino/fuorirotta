@@ -33,6 +33,7 @@
 		EDE92368B28C202B226BD8A3 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25216E6A8579546E42AB6C7 /* MapScreen.swift */; };
 		EF3E19878871957FBB83964E /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA1EFD13439D79FEAA07CC85 /* InfoPlist.xcstrings */; };
 		F20751FFE20CBEBA442676C1 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C8F9D162C9C8A7A08EB24DB5 /* Localizable.xcstrings */; };
+		F6D4C07A4676D5DABA3F97CF /* UAT6UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 068C9F23359010D522E4E74B /* UAT6UITests.swift */; };
 		F84D74B4A0B733D401202D12 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A88DE6B36D790BA575926AF1 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -48,6 +49,7 @@
 
 /* Begin PBXFileReference section */
 		03EA1D39A1FFD244E022F195 /* Fuorirotta.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fuorirotta.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		068C9F23359010D522E4E74B /* UAT6UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UAT6UITests.swift; sourceTree = "<group>"; };
 		08E8F863A79CE57299E007F7 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		1D390E4AC527266354138DCC /* FuorirottaUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FuorirottaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 			children = (
 				A484D201F91D6043BF89978A /* UAT4UITests.swift */,
 				8F43F238906AC5743558049B /* UAT5UITests.swift */,
+				068C9F23359010D522E4E74B /* UAT6UITests.swift */,
 			);
 			path = UITests;
 			sourceTree = "<group>";
@@ -317,6 +320,7 @@
 			files = (
 				A007C8DE54E9C78CD03299A7 /* UAT4UITests.swift in Sources */,
 				84E4631F5E0841B3125E38AA /* UAT5UITests.swift in Sources */,
+				F6D4C07A4676D5DABA3F97CF /* UAT6UITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

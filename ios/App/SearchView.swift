@@ -52,9 +52,9 @@ struct SearchView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 0) {
+        // UAT 6: barra di sistema (safeAreaBar), non una fascia con fondo: i risultati scorrono sotto il bordo sfumato.
+        results.safeAreaBar(edge: .top, spacing: 0) {
             if filters.hasFilters { activeFilters }
-            results
         }
     }
 
