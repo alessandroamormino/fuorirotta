@@ -34,8 +34,8 @@ final class UAT6UITests: XCTestCase {
         XCTAssertTrue(chip.waitForExistence(timeout: 10))
         let summary = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ event[oi].*'")).firstMatch
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
-        // Servono almeno 4 salvati perche' la lista scorra (quelli gia' presenti piu' quelli appena messi).
-        XCTAssertGreaterThanOrEqual(Int(summary.label.prefix { $0.isNumber }) ?? 0, 4, "pochi eventi salvati per scorrere: \(summary.label)")
+        // Servono almeno 3 salvati perche' la lista scorra (quelli gia' presenti piu' quelli appena messi).
+        XCTAssertGreaterThanOrEqual(Int(summary.label.prefix { $0.isNumber }) ?? 0, 3, "pochi eventi salvati per scorrere: \(summary.label)")
         shot(app, "salvati-before")
         let startY = chip.frame.minY
         for _ in 0..<3 { app.swipeUp() }

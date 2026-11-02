@@ -52,10 +52,17 @@ struct SearchView: View {
     }
 
     private var content: some View {
-        // UAT 6: barra di sistema (safeAreaBar), non una fascia con fondo: i risultati scorrono sotto il bordo sfumato.
-        results.safeAreaBar(edge: .top, spacing: 0) {
-            if filters.hasFilters { activeFilters }
+        // UAT 6: con una lista di risultati i filtri attivi sono la prima riga e scorrono via con lei (niente fascia fissa);
+        // negli altri stati (caricamento, vuoto, errore) non c'e' nulla che scorra e stanno in cima.
+        VStack(spacing: 0) {
+            if filters.hasFilters, !showsList { activeFilters }
+            results
         }
+    }
+
+    private var showsList: Bool {
+        if !filters.isEmpty, case .results(let events, _) = phase { return !events.isEmpty }
+        return false
     }
 
     @ViewBuilder private var results: some View {
@@ -87,8 +94,16 @@ struct SearchView: View {
                             : "Controlla la parola o prova con un luogo o una categoria.")
                     }
                 } else {
-                    List(events) { EventRow(event: $0).listRowSeparator(.hidden) }
-                        .listStyle(.plain)
+                    List {
+                        if filters.hasFilters {
+                            activeFilters
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                        ForEach(events) { EventRow(event: $0).listRowSeparator(.hidden) }
+                    }
+                    .listStyle(.plain)
                 }
             }
         }
