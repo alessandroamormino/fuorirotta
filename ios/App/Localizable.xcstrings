@@ -244,6 +244,16 @@
         }
       }
     },
+    "Altri dispositivi scollegati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other devices signed out"
+          }
+        }
+      }
+    },
     "Altro" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -352,6 +362,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Appearance"
+          }
+        }
+      }
+    },
+    "Attiva %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active %@"
           }
         }
       }
@@ -786,6 +806,16 @@
         }
       }
     },
+    "Da 1 a 50 caratteri." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 to 50 characters."
+          }
+        }
+      }
+    },
     "Dal" : {
       "localizations" : {
         "en" : {
@@ -832,6 +862,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Turn off the link?"
+          }
+        }
+      }
+    },
+    "Dispositivo scollegato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Device signed out"
           }
         }
       }
@@ -892,6 +932,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sign out"
+          }
+        }
+      }
+    },
+    "Esci da %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign out of %@"
+          }
+        }
+      }
+    },
+    "Esci da tutti gli altri dispositivi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign out of all other devices"
+          }
+        }
+      }
+    },
+    "Esporta i miei dati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export my data"
           }
         }
       }
@@ -1550,6 +1620,26 @@
         }
       }
     },
+    "Nome" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "Nome salvato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name saved"
+          }
+        }
+      }
+    },
     "Non c'è ancora niente qui. Riprova più tardi." : {
       "localizations" : {
         "en" : {
@@ -1650,6 +1740,16 @@
         }
       }
     },
+    "Non riusciamo a caricare le sessioni. Riprova tra poco." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We can't load your sessions. Try again shortly."
+          }
+        }
+      }
+    },
     "Non riusciamo a caricare lo stato del link. Riprova tra poco." : {
       "localizations" : {
         "en" : {
@@ -1710,6 +1810,26 @@
         }
       }
     },
+    "Non siamo riusciti a preparare il file. Riprova." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't prepare the file. Try again."
+          }
+        }
+      }
+    },
+    "Non siamo riusciti a salvare il nome. Riprova." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save the name. Try again."
+          }
+        }
+      }
+    },
     "Non siamo riusciti a salvare la scelta. Riprova." : {
       "localizations" : {
         "en" : {
@@ -1736,6 +1856,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "We couldn't unlink %@. Try again."
+          }
+        }
+      }
+    },
+    "Non siamo riusciti a scollegare il dispositivo. Riprova." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't sign out the device. Try again."
           }
         }
       }
@@ -2004,6 +2134,16 @@
         }
       }
     },
+    "Questo dispositivo" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This device"
+          }
+        }
+      }
+    },
     "Questo evento è stato rimosso dal calendario." : {
       "localizations" : {
         "en" : {
@@ -2020,6 +2160,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This weekend"
+          }
+        }
+      }
+    },
+    "Questo è l'unico dispositivo collegato." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is the only signed-in device."
           }
         }
       }
@@ -2295,6 +2445,16 @@
         }
       }
     },
+    "Scrivi un nome da 1 a 50 caratteri." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a name of 1 to 50 characters."
+          }
+        }
+      }
+    },
     "Scrivi un titolo, un luogo o una categoria." : {
       "localizations" : {
         "en" : {
@@ -2341,6 +2501,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No date"
+          }
+        }
+      }
+    },
+    "Sessioni attive" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active sessions"
+          }
+        }
+      }
+    },
+    "Sessioni non disponibili" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessions unavailable"
           }
         }
       }

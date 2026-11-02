@@ -205,6 +205,19 @@ final class Session {
 
     func clearError() { errorMessage = nil }
 
+    /// B3: cambia il nome visualizzato. true = salvato (e la sessione mostra subito il nome nuovo).
+    func rename(_ name: String) async -> Bool {
+        guard case .signedIn(let user) = state else { return false }
+        do {
+            state = .signedIn(user.renamed(try await api.renameProfile(name)))
+            successCount += 1
+            return true
+        } catch {
+            errorCount += 1
+            return false
+        }
+    }
+
     // MARK: metodi di accesso (UAT 2)
     // Collegare un secondo metodo e' sempre un gesto esplicito dalla sessione aperta (AUTH-07): l'id token lo verifica il
     // server, che rifiuta senza sessione. Nessun collegamento avviene all'accesso.

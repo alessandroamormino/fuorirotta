@@ -58,7 +58,7 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
 }
 
 /// Le schermate che Impostazioni spinge nella sua pila.
-enum SettingsRoute: Hashable { case follows }
+enum SettingsRoute: Hashable { case follows, sessions }
 
 /// Impostazioni (REF Omniphile): foglio a tutta altezza chiuso da una X tonda in alto a sinistra, gruppi in card.
 /// Le righe stavano nella pagina Profilo; il Profilo tiene l'intestazione utente e le statistiche.
@@ -70,6 +70,7 @@ struct SettingsView: View {
     @Environment(Router.self) private var router
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.api) private var api
     @AppStorage(Appearance.key) private var appearance = Appearance.system
     @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
 
@@ -83,6 +84,13 @@ struct SettingsView: View {
     @State private var linking: SignInProvider?
     @State private var unlinkTarget: SignInProvider?
     @State private var methodMessage: String?
+    // B3: nome, esportazione.
+    @State private var renaming = false
+    @State private var newName = ""
+    @State private var accountMessage: String?
+    @State private var accountFailed = false
+    @State private var exporting = false
+    @State private var exportFile: ExportFile?
 
     private var signedIn: Bool {
         if case .signedIn = session.state { return true }
@@ -110,6 +118,7 @@ struct SettingsView: View {
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
                 case .follows: FollowsView()
+                case .sessions: SessionsView()
                 }
             }
             .toolbar {
@@ -118,6 +127,9 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
+            .sheet(item: $exportFile, onDismiss: removeExport) { file in
+                ActivityView(items: [file.url]).presentationDetents([.medium, .large]).ignoresSafeArea()
+            }
             .sensoryFeedback(.success, trigger: push.activatedCount)
         }
         // L'aspetto si applica anche a questo foglio: un foglio non sempre eredita quello della finestra.
@@ -156,8 +168,53 @@ struct SettingsView: View {
         .contentShape(Rectangle())
     }
 
+    private var userName: String {
+        if case .signedIn(let user) = session.state { return user.name }
+        return ""
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right").font(.label).foregroundStyle(Color.mutedForeground).accessibilityHidden(true)
+    }
+
+    /// B3 (ProfileCard, SessionsList, AccountActions del sito): nome, sessioni attive, esportazione, uscita.
     private var accountGroup: some View {
         group("Account") {
+            Button {
+                newName = userName
+                renaming = true
+            } label: {
+                row("Nome", symbol: "person.text.rectangle", color: .mutedForeground) {
+                    HStack(spacing: Spacing.xs) {
+                        Text(verbatim: userName).foregroundStyle(Color.mutedForeground).lineLimit(1)
+                        chevron
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .alert("Nome", isPresented: $renaming) {
+                TextField("Nome", text: $newName)
+                    .textContentType(.name)
+                    .textInputAutocapitalization(.words)
+                Button("Annulla", role: .cancel) {}
+                Button("Salva") { Task { await rename() } }
+            } message: {
+                Text("Da 1 a 50 caratteri.")
+            }
+            NavigationLink(value: SettingsRoute.sessions) {
+                row("Sessioni attive", symbol: "laptopcomputer.and.iphone", color: .mutedForeground) { chevron }
+            }
+            .buttonStyle(.plain)
+            Button { Task { await export() } } label: {
+                row("Esporta i miei dati", symbol: "square.and.arrow.down", color: .mutedForeground) {
+                    if exporting { ProgressView() }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(exporting)
+            if let accountMessage {
+                Text(verbatim: accountMessage).font(.label).foregroundStyle(accountFailed ? Color.destructive : Color.mutedForeground)
+            }
             Button { confirmSignOut = true } label: {
                 row("Esci", symbol: "rectangle.portrait.and.arrow.right", color: .mutedForeground) { EmptyView() }
             }
@@ -185,6 +242,41 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func rename() async {
+        accountMessage = nil
+        if normalizedDisplayName(newName) == userName { return }
+        guard let clean = normalizedDisplayName(newName) else {
+            return report(String(localized: "Scrivi un nome da 1 a 50 caratteri."), failed: true)
+        }
+        if await session.rename(clean) {
+            report(String(localized: "Nome salvato"), failed: false)
+        } else if case .signedIn = session.state {
+            report(String(localized: "Non siamo riusciti a salvare il nome. Riprova."), failed: true)
+        }
+    }
+
+    private func report(_ text: String, failed: Bool) {
+        accountMessage = text
+        accountFailed = failed
+    }
+
+    /// Il JSON dell'esportazione va in un file temporaneo col nome del server e passa al foglio di condivisione;
+    /// chiuso il foglio, il file si cancella (sono tutti i dati dell'account).
+    private func export() async {
+        guard let api, !exporting else { return }
+        exporting = true
+        accountMessage = nil
+        defer { exporting = false }
+        do {
+            let (data, name) = try await api.exportData()
+            let url = URL.temporaryDirectory.appending(path: name)
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            exportFile = ExportFile(url: url)
+        } catch {
+            if case .signedIn = session.state { report(String(localized: "Non siamo riusciti a preparare il file. Riprova."), failed: true) }
         }
     }
 
@@ -429,6 +521,140 @@ struct SettingsView: View {
             Button("Annulla", role: .cancel) {}
         } message: {
             Text("Vuoi eliminare definitivamente il tuo account? L'operazione non si può annullare.")
+        }
+    }
+}
+
+extension SettingsView {
+    private func removeExport() {
+        if let url = exportFile?.url { try? FileManager.default.removeItem(at: url) }
+    }
+}
+
+/// Il file dell'esportazione da passare al foglio di condivisione.
+struct ExportFile: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+/// Il foglio di condivisione di sistema per un file (ShareLink vuole il file prima del tocco; qui arriva dopo la rete).
+struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+/// "Sessioni attive" (SessionsList.tsx): dispositivo, ultima attivita', "Esci" su ogni altro dispositivo e su tutti
+/// insieme. Nessuna conferma per le revoche, come sul sito: si rimedia accedendo di nuovo. IP e luogo non si mostrano.
+struct SessionsView: View {
+    @Environment(\.api) private var api
+
+    @State private var rows: [SessionInfo]?
+    @State private var failed = false
+    /// Una revoca alla volta: l'id in volo, "all" per quella di gruppo.
+    @State private var pending: String?
+    @State private var message: String?
+
+    var body: some View {
+        List {
+            if let rows {
+                Section {
+                    ForEach(rows) { row in sessionRow(row) }
+                } footer: {
+                    if rows.count <= 1 { Text("Questo è l'unico dispositivo collegato.") }
+                }
+                if rows.count > 1 {
+                    Section {
+                        Button(role: .destructive) { Task { await revoke("all") } } label: {
+                            HStack {
+                                Text("Esci da tutti gli altri dispositivi")
+                                if pending == "all" { Spacer(); ProgressView() }
+                            }
+                        }
+                        .disabled(pending != nil)
+                    }
+                }
+                if let message {
+                    Section { Text(verbatim: message).foregroundStyle(Color.foregroundSecondary) }
+                }
+            } else if failed {
+                ContentUnavailableView {
+                    Label("Sessioni non disponibili", systemImage: "wifi.slash")
+                } description: {
+                    Text("Non riusciamo a caricare le sessioni. Riprova tra poco.")
+                } actions: {
+                    Button("Riprova") { Task { await load() } }
+                }
+                .listRowBackground(Color.clear)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 88).listRowBackground(Color.clear)
+            }
+        }
+        .navigationTitle("Sessioni attive")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func sessionRow(_ row: SessionInfo) -> some View {
+        HStack(spacing: Spacing.md) {
+            Image(systemName: row.kind == "phone" ? "iphone" : row.kind == "tablet" ? "ipad" : "desktopcomputer")
+                .foregroundStyle(Color.mutedForeground)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text(verbatim: row.device).foregroundStyle(Color.foreground)
+                Group {
+                    if row.current {
+                        Text("Questo dispositivo")
+                    } else {
+                        Text("Attiva \(Text(row.lastActive, format: .relative(presentation: .named)))")
+                    }
+                }
+                .font(.label)
+                .foregroundStyle(Color.mutedForeground)
+            }
+            Spacer()
+            if !row.current {
+                if pending == row.id {
+                    ProgressView()
+                } else {
+                    Button("Esci") { Task { await revoke(row.id) } }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(pending != nil)
+                        .accessibilityLabel("Esci da \(row.device)")
+                }
+            }
+        }
+        .frame(minHeight: 44)
+    }
+
+    private func load() async {
+        guard let api else { return }
+        failed = false
+        do { rows = try await api.sessions() } catch { if rows == nil { failed = true } }
+    }
+
+    private func revoke(_ target: String) async {
+        guard let api, pending == nil else { return }
+        pending = target
+        message = nil
+        defer { pending = nil }
+        do {
+            if target == "all" {
+                try await api.revokeOtherSessions()
+                rows = rows?.filter(\.current)
+                message = String(localized: "Altri dispositivi scollegati")
+            } else {
+                try await api.revokeSession(id: target)
+                rows = rows?.filter { $0.id != target }
+                message = String(localized: "Dispositivo scollegato")
+            }
+        } catch {
+            message = String(localized: "Non siamo riusciti a scollegare il dispositivo. Riprova.")
         }
     }
 }

@@ -30,6 +30,7 @@
 #   V1  UAT 5: la foto negli eventi salvati: imageUrl additivo in /me/saved e /saved/resolve, null se manca o l'evento e' sparito, chiavi = contratto
 #   E1  UAT 7 B1: GET /api/events/<id> porta `comune` con le chiavi EVENT_COMUNE_KEYS del contratto (null senza comune)
 #   S1  UAT 7 B2: condivisione della lista e feed del calendario col solo bearer, nelle forme che l'app decodifica
+#   A7  UAT 7 B3: nome, sessioni (elenco, revoca di una e delle altre) ed esportazione col solo bearer, nelle forme dell'app
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -821,3 +822,24 @@ code="$(bearer_call s1h POST /api/v1/me/calendar-feed 198.51.100.242 "${s1_cooki
 code="$(bearer_call s1i POST /api/v1/me/calendar-feed/rotate 198.51.100.242 "${s1_cookie}" '{}')"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1i.b" "j.path.startsWith('/cal/') && j.path !== '$(json_get "${tmp_dir}/s1h.b" 'j.path')'")" == "true" ]] || fail "S1: calendar-feed/rotate: atteso un path /cal/ nuovo, ottenuto ${code} $(cat "${tmp_dir}/s1i.b")"
 echo "ok  S1: share (GET/POST/PATCH/rotate/DELETE, rotate senza link 404) e calendar-feed (POST, rotate) col solo bearer, nelle forme di Sharing.swift"
+
+# --- A7: UAT 7 B3, nome, sessioni ed esportazione dall'app ----------------------------------------------------
+# Le forme che decodifica FuorirottaCore (Account.swift): PATCH profile {name}, GET sessions {sessions:[{id, device, kind,
+# lastActive ISO, current}]}, DELETE sessions/<id> {revoked:1}, DELETE sessions {revoked:n}, export con Content-Disposition.
+mint_app_user a7 "${app_ua}"
+code="$(bearer_call a7a PATCH /api/v1/me/profile 198.51.100.243 "${a7_cookie}" '{"name":"  Nome  Nuovo "}')"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/a7a.b")" == '{"name":"Nome  Nuovo"}' ]] || fail "A7: PATCH profile: atteso {name} normalizzato, ottenuto ${code} $(cat "${tmp_dir}/a7a.b")"
+read -r a7_other _ _ <<<"$(helper session "${a7_user}" 0 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15' | tail -n 1)"
+helper session "${a7_user}" 0 >/dev/null
+code="$(bearer_call a7b GET /api/v1/me/sessions 198.51.100.243 "${a7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/a7b.b" 'j.sessions.length === 3 && j.sessions[0].current === true && j.sessions[0].device === "App iPhone" && j.sessions.every((s) => typeof s.id === "string" && typeof s.device === "string" && ["phone","tablet","desktop"].includes(s.kind) && !isNaN(Date.parse(s.lastActive)) && typeof s.current === "boolean")')" == "true" ]] \
+  || fail "A7: GET sessions: attese 3 righe {id, device, kind, lastActive, current}, la corrente per prima ('App iPhone'): $(cat "${tmp_dir}/a7b.b")"
+code="$(bearer_call a7c DELETE "/api/v1/me/sessions/${a7_other}" 198.51.100.243 "${a7_cookie}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/a7c.b")" == '{"revoked":1}' ]] || fail "A7: DELETE sessions/<id>: atteso {revoked:1}, ottenuto ${code} $(cat "${tmp_dir}/a7c.b")"
+code="$(bearer_call a7d DELETE /api/v1/me/sessions 198.51.100.243 "${a7_cookie}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/a7d.b")" == '{"revoked":1}' ]] || fail "A7: DELETE sessions: atteso {revoked:1} (resta solo questa), ottenuto ${code} $(cat "${tmp_dir}/a7d.b")"
+code="$(bearer_call a7e GET /api/v1/me/export 198.51.100.243 "${a7_cookie}")"
+a7_cd="$(grep -i '^content-disposition:' "${tmp_dir}/a7e.h" | head -n 1 | tr -d '\r')"
+[[ "${code}" == "200" && "${a7_cd}" =~ filename=\"fuorirotta-dati-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json\" && "$(json_get "${tmp_dir}/a7e.b" 'j.format === 1 && j.profile.name === "Nome  Nuovo"')" == "true" ]] \
+  || fail "A7: GET export: atteso 200 con filename fuorirotta-dati-<giorno>.json e il nome nuovo, ottenuto ${code} '${a7_cd}'"
+echo "ok  A7: profile (nome normalizzato), sessions (righe, revoca di una e di tutte le altre) ed export (Content-Disposition) col solo bearer, nelle forme di Account.swift"

@@ -200,6 +200,9 @@ public struct MeUser: Codable, Equatable, Sendable {
     public let name: String
     public let email: String
     public let image: String?
+
+    /// Lo stesso utente col nome appena salvato (B3): la sessione si aggiorna senza rileggere /me/state.
+    public func renamed(_ name: String) -> MeUser { MeUser(name: name, email: email, image: image) }
 }
 
 public struct MeState: Decodable, Sendable {
