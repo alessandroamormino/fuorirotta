@@ -94,6 +94,8 @@ struct EventDetailView: View {
 
     @Environment(\.api) private var api
     @Environment(\.openURL) private var openURL
+    @Environment(Router.self) private var router
+    @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
 
     @State private var event: Event
     @State private var load = Load.loading
@@ -321,6 +323,7 @@ struct EventDetailView: View {
             }
             let where_ = [event.locationName, event.address].compactMap { $0 }.filter { !$0.isEmpty }
             if !where_.isEmpty { fact("mappin", "Dove", where_.joined(separator: "\n")) }
+            if let spot = coordinate { miniMap(spot) }
             // B1: sotto "Dove", come la riga del calendario; il menu ha comune, provincia e categoria.
             EventFollowRow(event: event)
             // C1: il numero com'e' nella fonte, come il sito; il tocco chiama. Senza un numero componibile la riga non c'e'.
@@ -345,6 +348,27 @@ struct EventDetailView: View {
         }
         .card()
         .padding(.horizontal, Spacing.md)
+    }
+
+    /// C2: la mappa piccola del sito, nativa e ferma, con lo stile scelto in Impostazioni. Il tocco apre la scheda Mappa
+    /// centrata sull'evento; dentro il foglio della mappa (`onClose`) la mappa c'e' gia' dietro: il foglio si chiude.
+    private func miniMap(_ spot: CLLocationCoordinate2D) -> some View {
+        let visual = categoryVisual(category)
+        return Button {
+            if let onClose { onClose() } else { router.showOnMap(event) }
+        } label: {
+            Map(initialPosition: .camera(MapCamera(centerCoordinate: spot, distance: 2_500)), interactionModes: []) {
+                Marker(event.title, systemImage: visual.symbol, coordinate: spot).tint(visual.color)
+            }
+            .mapStyle(mapStyle.style)
+            .id("\(spot.latitude),\(spot.longitude)")
+            .allowsHitTesting(false)
+            .frame(height: 160)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.media))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.media))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Mostra sulla mappa"))
     }
 
     private func fact(_ symbol: String, _ label: LocalizedStringKey, _ value: String) -> some View {

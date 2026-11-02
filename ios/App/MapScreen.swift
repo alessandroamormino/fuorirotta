@@ -21,6 +21,8 @@ struct MapFocus: Equatable {
     var id = 0
     /// Prima il pallino dell'utente (se la posizione e' consentita), poi il luogo.
     var userFirst = false
+    /// Lato della regione: 100 km (raggio di 50) per un luogo, pochi km per un evento aperto dal dettaglio.
+    var meters: CLLocationDistance = 100_000
 }
 
 /// MKMapView vera: il clustering e' nativo. Le annotazioni si aggiungono UNA volta e si aggiornano per differenza di id
@@ -77,8 +79,8 @@ struct EventMapView: UIViewRepresentable {
             if focus.userFirst, showsUser, let here = map.userLocation.location?.coordinate, CLLocationCoordinate2DIsValid(here) {
                 target = here
             }
-            // Raggio di 50 km attorno al punto (UI-SPEC "Mappa").
-            map.setRegion(MKCoordinateRegion(center: target, latitudinalMeters: 100_000, longitudinalMeters: 100_000), animated: true)
+            // Raggio di 50 km attorno al punto (UI-SPEC "Mappa"); attorno a un evento, la regione chiesta.
+            map.setRegion(MKCoordinateRegion(center: target, latitudinalMeters: focus.meters, longitudinalMeters: focus.meters), animated: true)
         }
         c.apply(pins, to: map)
     }
@@ -469,6 +471,12 @@ struct MapScreen: View {
 
     @Environment(\.api) private var api
     @Environment(LocationModel.self) private var location
+    @Environment(Router.self) private var router
+
+    /// Un evento aperto dalla mappa piccola del dettaglio (C2): la mappa si centra li' e carica i pin attorno a lui,
+    /// finche' non cambia il luogo della Home.
+    @State private var eventSpot: Place?
+    private var origin: Place { eventSpot ?? location.place }
 
     @State private var pins: [FuorirottaCore.MapPin] = []
     @State private var phase = Phase.loading
@@ -494,7 +502,7 @@ struct MapScreen: View {
             ZStack {
                 EventMapView(
                     pins: shownPins,
-                    center: CLLocationCoordinate2D(latitude: location.place.latitude, longitude: location.place.longitude),
+                    center: CLLocationCoordinate2D(latitude: origin.latitude, longitude: origin.longitude),
                     focus: focus,
                     showsUser: location.authorised,
                     mapType: mapStyle.mapType,
@@ -524,8 +532,14 @@ struct MapScreen: View {
                 ClusterListSheet(events: group.events)
             }
         }
-        .task(id: location.place) { await load() }
-        .onChange(of: location.place) { focus = MapFocus(id: focus.id + 1) }
+        .task(id: origin) { await load() }
+        .onChange(of: location.place) {
+            eventSpot = nil
+            focus = MapFocus(id: focus.id + 1)
+        }
+        // La scheda puo' nascere proprio adesso (prima visita): anche onAppear.
+        .onAppear(perform: showRequestedEvent)
+        .onChange(of: router.mapEvent) { showRequestedEvent() }
         .onChange(of: filter) { sheet = nil }
         .sensoryFeedback(.selection, trigger: filter)
     }
@@ -651,11 +665,30 @@ struct MapScreen: View {
         }
     }
 
+    /// C2: centra la mappa sull'evento chiesto dal dettaglio e ne apre la scheda del pin.
+    private func showRequestedEvent() {
+        guard let event = router.mapEvent else { return }
+        router.mapEvent = nil
+        guard let lat = event.resolvedLatitude ?? event.latitude, let lng = event.resolvedLongitude ?? event.longitude else { return }
+        eventSpot = Place(name: event.title, latitude: lat, longitude: lng)
+        focus = MapFocus(id: focus.id + 1, meters: 4_000)
+        let pin = FuorirottaCore.MapPin(
+            id: event.id, title: event.title, category: event.canonicalCategory ?? event.category, imageUrl: event.imageUrl,
+            dateStart: event.dateStart, locationName: event.locationName, lat: lat, lng: lng)
+        // Un filtro di categoria che lo nasconderebbe si toglie; la scheda dopo, o il cambio di filtro la chiuderebbe.
+        if let filter, filter != (pin.category ?? "Altro") {
+            self.filter = nil
+            Task { sheet = .pin(pin) }
+        } else {
+            sheet = .pin(pin)
+        }
+    }
+
     // MARK: dati
 
     private func load() async {
         guard let api else { return }
-        let place = location.place
+        let place = origin
         phase = .loading
         do {
             let fresh = try await api.mapPins(lat: place.latitude, lng: place.longitude, radiusKm: radiusKm)
@@ -663,7 +696,7 @@ struct MapScreen: View {
             pins = fresh
             offline = false
             phase = .loaded
-            Self.write(fresh, for: place)
+            if eventSpot == nil { Self.write(fresh, for: place) }  // la cache offline resta quella dei luoghi
         } catch {
             guard !Task.isCancelled else { return }
             // Senza rete si mostrano gli ultimi pin di questo luogo; senza nemmeno quelli, un messaggio con "Riprova".

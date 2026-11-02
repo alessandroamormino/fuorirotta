@@ -48,6 +48,14 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
         case .satellite: "Satellite"
         }
     }
+    /// Lo stesso stile per le mappe SwiftUI (la mappa piccola del dettaglio).
+    var style: MapStyle {
+        switch self {
+        case .standard: .standard
+        case .hybrid: .hybrid
+        case .satellite: .imagery
+        }
+    }
     var mapType: MKMapType {
         switch self {
         case .standard: .standard

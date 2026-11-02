@@ -29,6 +29,13 @@ final class Router {
     var tab = AppTab.home
     var homePath = NavigationPath()
     var safari: SafariTarget?
+    /// L'evento da mostrare nella scheda Mappa (la mappa piccola del dettaglio, UAT7 C2): la mappa lo consuma.
+    var mapEvent: Event?
+
+    func showOnMap(_ event: Event) {
+        mapEvent = event
+        tab = .map
+    }
 
     /// Link universali (T-27-29): solo https://fuori-rotta.it/eventi/<cifre> e /l/<token>. L'id si verifica con
     /// l'API, la pagina della lista si mostra in Safari: niente viene eseguito o salvato. Altro: ignorato.

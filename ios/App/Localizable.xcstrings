@@ -1589,6 +1589,16 @@
         }
       }
     },
+    "Mostra sulla mappa" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show on Map"
+          }
+        }
+      }
+    },
     "Musica e spettacolo" : {
       "extractionState" : "manual",
       "localizations" : {
