@@ -5,8 +5,7 @@ import XCTest
 final class UAT6UITests: LocalTestCase {
     /// Salva alcuni eventi della Home, apre Salvati, scorre: il titolo di sistema resta, riepilogo e chip se ne vanno.
     func testSavedSummaryAndChipsScrollAwayWithTheList() {
-        let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES"]
+        let app = localApp()
         app.launch()
         let first = app.buttons.matching(identifier: "heart").firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 20))
@@ -48,8 +47,7 @@ final class UAT6UITests: LocalTestCase {
 
     /// Bug del giro 7: Passati e poi Prossimi deve tornare su Prossimi (le due chip nella stessa riga di List si attivavano insieme).
     func testSavedChipsSwitchBothWays() {
-        let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES"]
+        let app = localApp()
         app.launch()
         app.tabBars.buttons["Salvati"].tap()
         let upcoming = app.buttons["Prossimi"], past = app.buttons["Passati"]
@@ -59,17 +57,5 @@ final class UAT6UITests: LocalTestCase {
         upcoming.tap()
         XCTAssertTrue(upcoming.isSelected, "dopo Passati, il tocco su Prossimi non ci torna")
         XCTAssertFalse(past.isSelected)
-    }
-
-    private func shot(_ app: XCUIApplication, _ name: String) {
-        let s = app.screenshot()
-        let a = XCTAttachment(screenshot: s)
-        a.name = name
-        a.lifetime = .keepAlways
-        add(a)
-        // Facoltativo: UAT_SHOT_DIR (passato come TEST_RUNNER_UAT_SHOT_DIR) salva anche i PNG su disco.
-        if let dir = ProcessInfo.processInfo.environment["UAT_SHOT_DIR"] {
-            try? s.pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
-        }
     }
 }

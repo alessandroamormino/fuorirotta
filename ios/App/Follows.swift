@@ -13,6 +13,9 @@ final class FollowsModel {
     private(set) var failed = false
     /// Cambia a ogni modifica riuscita: la Home ricarica "Per te".
     private(set) var revision = 0
+    /// La scelta degli interessi e' gia' stata vista, qui o sul sito (`onboarded` del server). nil = non si sa (ospite,
+    /// lista non arrivata). Una volta vera resta vera fino all'uscita: come il sito, non si ripropone nella stessa sessione.
+    private(set) var onboarded: Bool?
 
     private let api: APIClient
 
@@ -24,7 +27,9 @@ final class FollowsModel {
     func load() async {
         failed = false
         do {
-            items = try await api.follows().follows
+            let list = try await api.follows()
+            items = list.follows
+            if onboarded != true { onboarded = list.onboarded }
         } catch {
             if items == nil { failed = true }
         }
@@ -34,6 +39,28 @@ final class FollowsModel {
     func reset() {
         items = nil
         failed = false
+        onboarded = nil
+    }
+
+    /// "Fatto" della scelta degli interessi: luoghi e categorie col segno "vista" in una richiesta sola, poi la lista
+    /// si rilegge (le etichette le decide il server).
+    func finishOnboarding(places: [FollowItem], categories: [String]) async -> Outcome {
+        do {
+            try await api.onboarding(places: places, categories: categories)
+        } catch {
+            if case APIError.http(409, "cap") = error { return .cap }
+            return .failed
+        }
+        onboarded = true
+        await load()
+        revision += 1
+        return .done
+    }
+
+    /// "Salta": solo il segno. La scelta si chiude anche se il segno non si salva e si ripropone al prossimo avvio, come sul sito.
+    func skipOnboarding() {
+        onboarded = true
+        Task { [api] in try? await api.onboarding(places: [], categories: []) }
     }
 
     func isFollowing(_ item: FollowItem) -> Bool { items?.contains { $0.id == item.id } ?? false }
@@ -97,17 +124,15 @@ struct FollowsView: View {
     @Environment(FollowsModel.self) private var follows
     @Environment(\.api) private var api
 
-    @State private var query = ""
-    @State private var results: [PlaceOption]?
-    @State private var searchFailed = false
+    @State private var search = PlaceSearch()
     @State private var message: String?
-
-    private var searching: Bool { query.trimmingCharacters(in: .whitespaces).count >= 2 }
 
     var body: some View {
         List {
-            if searching {
-                searchSection
+            if search.active {
+                Section {
+                    PlaceSearchRows(search: search, capReached: follows.capReached, isFollowed: follows.isFollowing) { change($0, on: true) }
+                }
             } else if let items = follows.items {
                 Section {
                     let places = items.filter(\.isPlace)
@@ -132,7 +157,11 @@ struct FollowsView: View {
                     }
                 }
                 Section("Categorie") {
-                    ForEach(ApiContract.categories, id: \.self) { name in categoryRow(name) }
+                    ForEach(ApiContract.categories, id: \.self) { name in
+                        let item = FollowItem(kind: "category", key: name, label: name)
+                        let on = follows.isFollowing(item)
+                        CategoryCheckRow(name: name, on: on) { change(item, on: !on) }
+                    }
                 }
                 if let message {
                     Section { Text(verbatim: message).foregroundStyle(Color.destructive) }
@@ -152,75 +181,98 @@ struct FollowsView: View {
         }
         .navigationTitle("Cosa segui")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: Text("Cerca comune, provincia o regione"))
+        .searchable(text: Bindable(search).query, placement: .navigationBarDrawer(displayMode: .always), prompt: Text("Cerca comune, provincia o regione"))
         .toolbar { if follows.items?.contains(where: \.isPlace) == true { EditButton() } }
         .task { await follows.load() }
-        .task(id: query) { await search() }
+        .task(id: search.query) { await search.run(api) }
     }
 
-    // MARK: ricerca dei luoghi
-
-    @ViewBuilder private var searchSection: some View {
-        Section {
-            if follows.capReached {
-                Text("Hai raggiunto il limite di 50 luoghi seguiti").foregroundStyle(Color.mutedForeground)
-            } else if searchFailed {
-                Text("Non riusciamo a cercare adesso. Riprova tra poco.").foregroundStyle(Color.mutedForeground)
-            } else if let results {
-                if results.isEmpty {
-                    Text("Nessun luogo trovato per «\(query.trimmingCharacters(in: .whitespaces))».").foregroundStyle(Color.mutedForeground)
-                }
-                ForEach(results) { option in
-                    let already = follows.isFollowing(option.item)
-                    Button {
-                        change(option.item, on: true)
-                        query = ""
-                    } label: {
-                        VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text(verbatim: option.label).foregroundStyle(Color.foreground)
-                            if already {
-                                Label("Già seguito", systemImage: "checkmark").font(.label).foregroundStyle(Color.mutedForeground)
-                            } else {
-                                Text(verbatim: option.sublabel).font(.label).foregroundStyle(Color.mutedForeground)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(already)
-                }
-            } else {
-                ProgressView().frame(maxWidth: .infinity)
-            }
-        }
+    private func change(_ item: FollowItem, on: Bool) {
+        message = nil
+        Task { message = FollowsModel.message(await follows.set(item, on: on)) }
     }
+}
 
-    /// Come PlacePicker.tsx: 200 ms di pausa dopo l'ultima lettera, poi una richiesta (la precedente si annulla con il task).
-    private func search() async {
+/// La ricerca dei luoghi di PlacePicker.tsx: /api/places/search (pubblica, copre anche province e regioni), 200 ms di
+/// pausa dopo l'ultima lettera, la richiesta precedente si annulla col task. La usano "Cosa segui" e la scelta degli interessi.
+@MainActor @Observable
+final class PlaceSearch {
+    var query = ""
+    private(set) var results: [PlaceOption]?
+    private(set) var failed = false
+
+    var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
+    var active: Bool { trimmed.count >= 2 }
+
+    /// Da `.task(id: query)` di chi la usa.
+    func run(_ api: APIClient?) async {
         results = nil
-        searchFailed = false
-        guard searching, let api else { return }
+        failed = false
+        guard active, let api else { return }
         try? await Task.sleep(for: .milliseconds(200))
         guard !Task.isCancelled else { return }
         do {
-            let found = try await api.searchPlaces(q: query.trimmingCharacters(in: .whitespaces))
+            let found = try await api.searchPlaces(q: trimmed)
             guard !Task.isCancelled else { return }
             results = found
         } catch {
             guard !Task.isCancelled else { return }
-            searchFailed = true
+            failed = true
         }
     }
+}
 
-    // MARK: categorie
+/// Le righe dei risultati: "Già seguito" su quelli che ci sono gia', il tetto dei 50 luoghi al posto della lista.
+/// Il tocco passa la voce a `pick` e svuota la ricerca.
+struct PlaceSearchRows: View {
+    let search: PlaceSearch
+    let capReached: Bool
+    let isFollowed: (FollowItem) -> Bool
+    let pick: (FollowItem) -> Void
 
-    private func categoryRow(_ name: String) -> some View {
-        let item = FollowItem(kind: "category", key: name, label: name)
-        let on = follows.isFollowing(item)
-        return Button {
-            change(item, on: !on)
-        } label: {
+    var body: some View {
+        if capReached {
+            Text("Hai raggiunto il limite di 50 luoghi seguiti").foregroundStyle(Color.mutedForeground)
+        } else if search.failed {
+            Text("Non riusciamo a cercare adesso. Riprova tra poco.").foregroundStyle(Color.mutedForeground)
+        } else if let results = search.results {
+            if results.isEmpty {
+                Text("Nessun luogo trovato per «\(search.trimmed)».").foregroundStyle(Color.mutedForeground)
+            }
+            ForEach(results) { option in
+                let already = isFollowed(option.item)
+                Button {
+                    pick(option.item)
+                    search.query = ""
+                } label: {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text(verbatim: option.label).foregroundStyle(Color.foreground)
+                        if already {
+                            Label("Già seguito", systemImage: "checkmark").font(.label).foregroundStyle(Color.mutedForeground)
+                        } else {
+                            Text(verbatim: option.sublabel).font(.label).foregroundStyle(Color.mutedForeground)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(already)
+            }
+        } else {
+            ProgressView().frame(maxWidth: .infinity)
+        }
+    }
+}
+
+/// Una categoria con la spunta (CategoryToggles.tsx): pallino del colore, nome nella lingua dell'app.
+struct CategoryCheckRow: View {
+    let name: String
+    let on: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
             HStack(spacing: Spacing.md) {
                 Circle().fill(categoryVisual(name).color).frame(width: 10, height: 10).accessibilityHidden(true)
                 Text(verbatim: categoryLabel(name)).foregroundStyle(Color.foreground)
@@ -232,11 +284,6 @@ struct FollowsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
-    }
-
-    private func change(_ item: FollowItem, on: Bool) {
-        message = nil
-        Task { message = FollowsModel.message(await follows.set(item, on: on)) }
     }
 }
 

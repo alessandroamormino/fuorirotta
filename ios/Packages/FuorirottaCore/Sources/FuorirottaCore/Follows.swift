@@ -18,7 +18,7 @@ public struct FollowItem: Codable, Hashable, Sendable, Identifiable {
     public var isPlace: Bool { kind != "category" }
 }
 
-/// GET /api/v1/me/follows: `onboarded` = la scelta degli interessi e' gia' stata vista (B5 lo usera').
+/// GET /api/v1/me/follows: `onboarded` = la scelta degli interessi e' gia' stata vista (qui o sul sito): l'app non la ripropone.
 public struct FollowList: Decodable, Sendable {
     public let onboarded: Bool
     public let follows: [FollowItem]

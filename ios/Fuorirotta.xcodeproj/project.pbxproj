@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */; };
+		071E1060A00BC141333EE753 /* UAT7B2UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7519551EA4ABD3D580DDAD8 /* UAT7B2UITests.swift */; };
 		0820FC5D04B8A9FE05FEFC2A /* UAT7UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1922BC76CD389C345960D86 /* UAT7UITests.swift */; };
 		0C552E8B611CE7C46F6741AA /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB0A50EA5AB0D41DF33CF81 /* RemoteImage.swift */; };
 		12751BD6A00CE42B31CBF53B /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B41CF87D602B3F4D0B0579 /* ProfileView.swift */; };
@@ -21,6 +22,7 @@
 		5E5E3C5A38DD40BF69888CD8 /* AddToCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2AB868D278CFF4C90A97BF /* AddToCalendar.swift */; };
 		6FC2DB582A818547A174AF6F /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3507B17FD1396D1BEC002E7 /* AuthService.swift */; };
 		73CF3C85C98DF9508363A98D /* SearchFiltersSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C502ED14CE515B4DEC1BA5B /* SearchFiltersSheet.swift */; };
+		7E5B02C6D3F0F6BB3F92B089 /* Welcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7BFDEB129782AA46C74DEFE /* Welcome.swift */; };
 		84E4631F5E0841B3125E38AA /* UAT5UITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F43F238906AC5743558049B /* UAT5UITests.swift */; };
 		8825BD1EF35DDF3DC5A3745E /* LocationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39BA12BB79474FEB80925711 /* LocationModel.swift */; };
 		8E129A855E96575AA2C020FF /* Follows.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2395172A8F539F18F3D6C9C /* Follows.swift */; };
@@ -83,6 +85,7 @@
 		BA4676EE0AF931C39E743D49 /* FuorirottaCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FuorirottaCore; path = Packages/FuorirottaCore; sourceTree = SOURCE_ROOT; };
 		BCB922A66158CC37247D8879 /* FuorirottaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuorirottaApp.swift; sourceTree = "<group>"; };
 		C30E1CFACE53CA40F0614F34 /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
+		C7BFDEB129782AA46C74DEFE /* Welcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Welcome.swift; sourceTree = "<group>"; };
 		C8F9D162C9C8A7A08EB24DB5 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		CA1EFD13439D79FEAA07CC85 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		CA2AB868D278CFF4C90A97BF /* AddToCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToCalendar.swift; sourceTree = "<group>"; };
@@ -93,6 +96,7 @@
 		E25216E6A8579546E42AB6C7 /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
 		E3507B17FD1396D1BEC002E7 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		E5D39164BA3095540C27C68C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E7519551EA4ABD3D580DDAD8 /* UAT7B2UITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UAT7B2UITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -167,6 +171,7 @@
 				4467811081BDB08735B3CFEB /* SignInSheet.swift */,
 				5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */,
 				26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */,
+				C7BFDEB129782AA46C74DEFE /* Welcome.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -178,6 +183,7 @@
 				A484D201F91D6043BF89978A /* UAT4UITests.swift */,
 				8F43F238906AC5743558049B /* UAT5UITests.swift */,
 				068C9F23359010D522E4E74B /* UAT6UITests.swift */,
+				E7519551EA4ABD3D580DDAD8 /* UAT7B2UITests.swift */,
 				1ADED2F7579BCA98280BBA51 /* UAT7BUITests.swift */,
 				A1922BC76CD389C345960D86 /* UAT7UITests.swift */,
 			);
@@ -336,6 +342,7 @@
 				399D5E2B4C97E1D979BDFF58 /* SignInSheet.swift in Sources */,
 				BF974CD1C09D61EB4E6C78DD /* StatsCards.swift in Sources */,
 				01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */,
+				7E5B02C6D3F0F6BB3F92B089 /* Welcome.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -347,6 +354,7 @@
 				A007C8DE54E9C78CD03299A7 /* UAT4UITests.swift in Sources */,
 				84E4631F5E0841B3125E38AA /* UAT5UITests.swift in Sources */,
 				F6D4C07A4676D5DABA3F97CF /* UAT6UITests.swift in Sources */,
+				071E1060A00BC141333EE753 /* UAT7B2UITests.swift in Sources */,
 				BBE468D771B4B1AC14E340DC /* UAT7BUITests.swift in Sources */,
 				0820FC5D04B8A9FE05FEFC2A /* UAT7UITests.swift in Sources */,
 			);

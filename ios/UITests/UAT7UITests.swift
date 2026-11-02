@@ -4,8 +4,7 @@ import XCTest
 @MainActor
 final class UAT7UITests: LocalTestCase {
     private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES"]
+        let app = localApp()
         app.launch()
         return app
     }
@@ -69,16 +68,5 @@ final class UAT7UITests: LocalTestCase {
         XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "il foglio non si e' chiuso")
         XCTAssertTrue(add.exists)
         XCTAssertEqual(app.state, .runningForeground)
-    }
-
-    private func shot(_ app: XCUIApplication, _ name: String) {
-        let s = app.screenshot()
-        let a = XCTAttachment(screenshot: s)
-        a.name = name
-        a.lifetime = .keepAlways
-        add(a)
-        if let dir = ProcessInfo.processInfo.environment["UAT_SHOT_DIR"] {
-            try? s.pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
-        }
     }
 }

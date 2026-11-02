@@ -5,8 +5,7 @@ import XCTest
 @MainActor
 final class UAT7BUITests: LocalTestCase {
     private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES"]
+        let app = localApp()
         app.launch()
         return app
     }

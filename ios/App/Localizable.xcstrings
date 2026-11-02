@@ -406,6 +406,16 @@
         }
       }
     },
+    "Avanti" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next"
+          }
+        }
+      }
+    },
     "Azzera i filtri" : {
       "localizations" : {
         "en" : {
@@ -796,6 +806,16 @@
         }
       }
     },
+    "Cosa vuoi seguire?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What do you want to follow?"
+          }
+        }
+      }
+    },
     "Crea link" : {
       "localizations" : {
         "en" : {
@@ -1046,6 +1066,16 @@
         }
       }
     },
+    "Fatto" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
     "Fiere e mercati" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1144,6 +1174,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Google Calendar"
+          }
+        }
+      }
+    },
+    "Guarda cosa c'è in giro sulla mappa. Tocca un punto per i dettagli e le indicazioni." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See what's going on around you on the map. Tap a pin for details and directions."
           }
         }
       }
@@ -1319,6 +1359,16 @@
         }
       }
     },
+    "Inizia" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get started"
+          }
+        }
+      }
+    },
     "Iscriviti nel Calendario" : {
       "localizations" : {
         "en" : {
@@ -1345,6 +1395,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The list updates on its own: if you add or remove an event, whoever has the link sees it right away. They don't see your email or any other account data. Your list stays private until you create a link."
+          }
+        }
+      }
+    },
+    "La mappa" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The map"
           }
         }
       }
@@ -1840,6 +1900,16 @@
         }
       }
     },
+    "Non siamo riusciti a salvare le tue scelte. Riprova." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save your choices. Try again."
+          }
+        }
+      }
+    },
     "Non siamo riusciti a salvare. Riprova tra poco." : {
       "localizations" : {
         "en" : {
@@ -1997,6 +2067,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Location is off. We show events near Milan: you can change area at any time."
+          }
+        }
+      }
+    },
+    "Preferenze salvate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preferences saved"
           }
         }
       }
@@ -2265,12 +2345,42 @@
         }
       }
     },
+    "Sagre, concerti, mercati e mostre intorno a te: in Home trovi cosa c'è questo weekend e vicino a te." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Festivals, concerts, markets and exhibitions around you: Home shows what's on this weekend and near you."
+          }
+        }
+      }
+    },
+    "Salta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip"
+          }
+        }
+      }
+    },
     "Salva" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Save"
+          }
+        }
+      }
+    },
+    "Salva col cuore" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save with the heart"
           }
         }
       }
@@ -2385,6 +2495,16 @@
         }
       }
     },
+    "Scegli i posti e le categorie che ti interessano: li ritrovi in «Per te» nella Home. Puoi cambiare tutto quando vuoi da «Cosa segui»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick the places and categories you're interested in: you'll find them in “For you” on Home. You can change everything anytime from “What you follow”."
+          }
+        }
+      }
+    },
     "Scegli la zona" : {
       "localizations" : {
         "en" : {
@@ -2481,6 +2601,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Follow"
+          }
+        }
+      }
+    },
+    "Segui categorie e luoghi: «Per te» in Home raccoglie i loro eventi e le notifiche ti avvisano delle novità." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow categories and places: “For you” on Home gathers their events and notifications tell you what's new."
+          }
+        }
+      }
+    },
+    "Segui ciò che ti piace" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow what you like"
           }
         }
       }
@@ -2646,6 +2786,16 @@
         }
       }
     },
+    "Tocca il cuore su un evento e lo ritrovi in Salvati, giorno per giorno. Con l'account li hai su ogni dispositivo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the heart on an event and find it in Saved, day by day. With an account they're on every device."
+          }
+        }
+      }
+    },
     "Tocca il cuore su un evento per ritrovarlo qui." : {
       "localizations" : {
         "en" : {
@@ -2662,6 +2812,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tap the categories you follow and events picked for you will show up here."
+          }
+        }
+      }
+    },
+    "Togli" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove"
           }
         }
       }

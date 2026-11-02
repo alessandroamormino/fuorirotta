@@ -56,6 +56,8 @@ extension Font {
     // Simboli illustrativi (schermata della posizione 64, carta dell'invito 28): non sono testo, restano fissi.
     static let symbolHero = Font.system(size: 64, weight: .regular)
     static let symbolCard = Font.system(size: 28, weight: .regular)
+    // Le illustrazioni del benvenuto (UAT7 B5): una per pagina, a tutto schermo.
+    static let symbolWelcome = Font.system(size: 96, weight: .light)
 }
 
 struct CategoryVisual {

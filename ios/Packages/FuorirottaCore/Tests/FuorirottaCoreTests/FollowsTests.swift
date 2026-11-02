@@ -105,6 +105,32 @@ extension MeTests {
             #expect(sent.headers["Authorization"] == nil)
         }
 
+        @Test func onboardingSendsPicksAndTheMarkInOneRequest() async throws {
+            MeStub.reset([.init(body: #"{"onboarded":true,"added":2}"#)])
+            try await MeStub.client().onboarding(places: [FollowItem(kind: "comune", key: "016024", label: "Bergamo (BG)")], categories: ["Sagre e feste"])
+            let sent = try #require(MeStub.requests.first)
+            #expect(sent.method == "POST" && sent.url.path == "/api/v1/me/onboarding")
+            #expect(sent.headers["Authorization"] == "Bearer b.sig")
+            let body = MeStub.json(sent)
+            // Solo kind e key, come il sito: l'etichetta resta sul telefono.
+            #expect(body["places"] as? [[String: String]] == [["kind": "comune", "key": "016024"]])
+            #expect(body["categories"] as? [String] == ["Sagre e feste"])
+        }
+
+        @Test func onboardingSkipIsTwoEmptyLists() async throws {
+            MeStub.reset([.init(body: #"{"onboarded":true,"added":0}"#)])
+            try await MeStub.client().onboarding(places: [], categories: [])
+            let body = MeStub.json(try #require(MeStub.requests.first))
+            #expect((body["places"] as? [Any])?.isEmpty == true && (body["categories"] as? [Any])?.isEmpty == true)
+        }
+
+        @Test func onboardingOverTheCapIsA409WithCode() async {
+            MeStub.reset([.init(status: 409, body: #"{"error":"cap"}"#)])
+            await #expect(throws: APIError.http(status: 409, code: "cap")) {
+                try await MeStub.client().onboarding(places: [FollowItem(kind: "province", key: "BG", label: "x")], categories: [])
+            }
+        }
+
         @Test func sortIsLikeTheSite() {
             let mixed = [
                 FollowItem(kind: "category", key: "Musica e spettacolo", label: "Musica e spettacolo"),

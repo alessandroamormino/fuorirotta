@@ -380,6 +380,13 @@ public struct APIClient: Sendable {
         try await get(baseURL.appendingPathComponent("api/v1/me/follows"), as: FollowList.self)
     }
 
+    /// Scelta degli interessi (OnboardingDialog.tsx): luoghi e categorie insieme al segno "vista", in una richiesta
+    /// sola. Liste vuote = Salta (solo il segno). 400 = una chiave non esiste, 409 `cap` = oltre 50 luoghi.
+    public func onboarding(places: [FollowItem], categories: [String]) async throws {
+        let body: [String: Any] = ["places": places.map { ["kind": $0.kind, "key": $0.key] }, "categories": categories]
+        _ = try await send(post: "api/v1/me/onboarding", json: body)
+    }
+
     /// Luoghi da seguire (regioni, province, comuni): la stessa ricerca pubblica del sito, senza bearer.
     public func searchPlaces(q: String) async throws -> [PlaceOption] {
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/places/search"), resolvingAgainstBaseURL: false)!

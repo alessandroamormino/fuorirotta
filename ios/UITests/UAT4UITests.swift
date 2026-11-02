@@ -4,9 +4,7 @@ import XCTest
 @MainActor
 final class UAT4UITests: LocalTestCase {
     private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        // Lingua e spiegazione della posizione fissate: nessun dialogo di sistema in mezzo.
-        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES"]
+        let app = localApp()
         app.launch()
         return app
     }

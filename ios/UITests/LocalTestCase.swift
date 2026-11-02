@@ -16,12 +16,33 @@ class LocalTestCase: XCTestCase {
 }
 
 extension LocalTestCase {
+    /// L'app dei test: italiano, spiegazione della posizione gia' vista, tutorial e scelta degli interessi saltati (UAT7 B5),
+    /// cosi' nessuna schermata a tutto schermo copre la Home. `skipWelcome: false` lascia decidere all'app.
+    func localApp(skipWelcome: Bool = true) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(it)", "-AppleLocale", "it_IT", "-fr.locationExplained", "YES", "-fr.skipInterests", "YES"]
+        if skipWelcome { app.launchArguments += ["-fr.welcomeSeen", "YES"] }
+        return app
+    }
+
     /// Il primo bottone con quell'identificatore dentro la finestra visibile (tra la cima e la barra delle schede).
     /// Il carosello dell'eroe avanza da solo: le sue pagine fuori schermo sono nell'albero ma non si toccano.
     func onScreen(_ id: String, in app: XCUIApplication) -> XCUIElement? {
         let w = app.frame
         return app.buttons.matching(identifier: id).allElementsBoundByIndex.first {
             $0.frame.minY > 50 && $0.frame.maxY < w.height - 140 && $0.frame.minX >= 0 && $0.frame.maxX <= w.width
+        }
+    }
+
+    /// Allegato al risultato; con UAT_SHOT_DIR (passato come TEST_RUNNER_UAT_SHOT_DIR) anche il PNG su disco.
+    func shot(_ app: XCUIApplication, _ name: String) {
+        let s = app.screenshot()
+        let a = XCTAttachment(screenshot: s)
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
+        if let dir = ProcessInfo.processInfo.environment["UAT_SHOT_DIR"] {
+            try? s.pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
         }
     }
 

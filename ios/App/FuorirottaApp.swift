@@ -77,6 +77,7 @@ struct FuorirottaApp: App {
     @State private var config: AppConfig?
     // Aspetto scelto in Impostazioni: "Sistema" = nil (D-07), la scelta resta salvata.
     @AppStorage(Appearance.key) private var appearance = Appearance.system
+    @AppStorage(WelcomeView.seenKey) private var welcomeSeen = false
 
     init() {
         let info = Bundle.main
@@ -92,17 +93,33 @@ struct FuorirottaApp: App {
         _follows = State(initialValue: FollowsModel(api: client))
         _push = State(initialValue: pushModel)
         _session = State(initialValue: Session(api: client, saves: savesModel, push: pushModel))
+        #if DEBUG
+        // Test UI (LocalTestCase): "-fr.resetWelcome" riporta il tutorial al primo avvio. Per saltarlo basta
+        // "-fr.welcomeSeen YES" (dominio degli argomenti, vince su quello salvato); "-fr.skipInterests YES" salta gli interessi.
+        if CommandLine.arguments.contains("-fr.resetWelcome") { UserDefaults.standard.removeObject(forKey: WelcomeView.seenKey) }
+        #endif
     }
 
+    #if DEBUG
+    private static let skipInterests = UserDefaults.standard.bool(forKey: "fr.skipInterests")
+    #else
+    private static let skipInterests = false
+    #endif
+
     private enum Gate: Identifiable {
-        case updateRequired, location
+        case updateRequired, welcome, location, interests
         var id: Self { self }
     }
 
     // Solo un "update-required" (status del server) esplicito blocca (T-27-26): senza risposta o con una risposta malformata si prosegue.
+    // Poi, una alla volta: il tutorial (una volta per installazione), la spiegazione della posizione, gli interessi
+    // (una volta per account). Gli interessi aspettano che il foglio di accesso sia chiuso: due presentazioni insieme no.
     private var gate: Gate? {
         if config?.status == .updateRequired { return .updateRequired }
-        return location.explained ? nil : .location
+        if !welcomeSeen { return .welcome }
+        if !location.explained { return .location }
+        if follows.onboarded == false, !session.presentSignIn, !Self.skipInterests { return .interests }
+        return nil
     }
 
     var body: some Scene {
@@ -121,7 +138,9 @@ struct FuorirottaApp: App {
                 .fullScreenCover(item: .constant(gate)) { gate in
                     switch gate {
                     case .updateRequired: UpdateRequiredView()
+                    case .welcome: WelcomeView()
                     case .location: LocationExplanationView().environment(location)
+                    case .interests: InterestsView().environment(follows).environment(saves).environment(\.api, api)
                     }
                 }
                 .task { config = await api.config(version: version) }
