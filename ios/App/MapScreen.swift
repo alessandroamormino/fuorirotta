@@ -313,12 +313,15 @@ struct PinSheet: View {
     private var actions: some View {
         let saved = saves.isSaved(event.id)
         return HStack(spacing: Spacing.sm) {
-            tile(
-                "car.fill", travelTime.map(formatTravelTime) ?? String(localized: "Indicazioni"),
-                label: travelTime.map { String(localized: "Indicazioni, \(formatTravelTime(seconds: $0)) in auto") } ?? String(localized: "Indicazioni"),
-                fill: Color.accentToken, enabled: spot != nil
-            ) {
-                if let spot { openDirections(to: spot, name: event.locationName ?? event.title) }
+            let directions = travelTime.map(formatTravelTime) ?? String(localized: "Indicazioni")
+            if let spot {
+                DirectionsButton(spot: spot, name: event.locationName ?? event.title) {
+                    tileLabel("car.fill", directions, fill: Color.accentToken)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(travelTime.map { String(localized: "Indicazioni, \(formatTravelTime(seconds: $0)) in auto") } ?? String(localized: "Indicazioni"))
+            } else {
+                tile("car.fill", directions, label: String(localized: "Indicazioni"), fill: Color.accentToken, enabled: false) {}
             }
             // Senza indirizzo del sito il bottone resta, spento (il dettaglio non ha un calendario da richiamare).
             tile("safari", String(localized: "Sito"), label: String(localized: "Apri il sito dell'evento"), fill: nil, enabled: siteURL != nil) {
@@ -337,20 +340,22 @@ struct PinSheet: View {
     private func tile(
         _ symbol: String, _ title: String, label: String, fill: Color?, enabled: Bool, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Image(systemName: symbol).font(.title3).accessibilityHidden(true)
-                Text(verbatim: title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
-            }
-            .foregroundStyle(fill == nil ? Color.accentToken : Color.white)
-            .frame(maxWidth: .infinity, minHeight: 60)
-            .background(fill ?? Color.accentToken.opacity(0.16), in: RoundedRectangle(cornerRadius: Radius.media))
-            .contentShape(RoundedRectangle(cornerRadius: Radius.media))
-        }
+        Button(action: action) { tileLabel(symbol, title, fill: fill) }
         .buttonStyle(.plain)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
         .accessibilityLabel(label)
+    }
+
+    private func tileLabel(_ symbol: String, _ title: String, fill: Color?) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: symbol).font(.title3).accessibilityHidden(true)
+            Text(verbatim: title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(fill == nil ? Color.accentToken : Color.white)
+        .frame(maxWidth: .infinity, minHeight: 60)
+        .background(fill ?? Color.accentToken.opacity(0.16), in: RoundedRectangle(cornerRadius: Radius.media))
+        .contentShape(RoundedRectangle(cornerRadius: Radius.media))
     }
 
     /// Quattro colonne: etichetta grigia sopra, valore sotto (Quando / Dove / Categoria / Distanza). Mancano quelle senza dato.

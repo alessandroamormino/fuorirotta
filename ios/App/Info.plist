@@ -46,6 +46,11 @@
 	<string>$(GOOGLE_SERVER_CLIENT_ID)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>comgooglemaps</string>
+		<string>waze</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Usiamo la tua posizione solo per mostrarti gli eventi più vicini. Non la salviamo sui nostri server.</string>
 	<key>UILaunchScreen</key>

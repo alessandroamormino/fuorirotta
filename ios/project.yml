@@ -83,6 +83,8 @@ targets:
           - UIInterfaceOrientationPortrait
         CADisableMinimumFrameDurationOnPhone: true
         ITSAppUsesNonExemptEncryption: false
+        # A3 (UAT7): per offrire Google Maps e Waze nel menu "Indicazioni" solo se installate (canOpenURL).
+        LSApplicationQueriesSchemes: [comgooglemaps, waze]
         NSLocationWhenInUseUsageDescription: Usiamo la tua posizione solo per mostrarti gli eventi più vicini. Non la salviamo sui nostri server.
     postBuildScripts:
       - name: API locale (solo DebugLocal)
