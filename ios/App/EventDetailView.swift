@@ -73,7 +73,10 @@ struct EventLink<Content: View>: View {
 
     var body: some View {
         let route = EventRoute(event: event, slot: slot)
-        let link = NavigationLink(value: route) { content }
+        // contentShape: senza, l'area di tocco (e il riquadro per VoiceOver) del collegamento e' l'unione di tutto cio' che
+        // la scheda disegna, comprese le foto `scaledToFill` che escono dalla scheda (ritagliate solo alla vista):
+        // la foto di una scheda copriva il cuore e la scheda accanto (UAT 4). Cosi' e' il riquadro della scheda.
+        let link = NavigationLink(value: route) { content.contentShape(Rectangle()) }
             .buttonStyle(.plain)
             .navigationLinkIndicatorVisibility(.hidden)
         if let namespace {
