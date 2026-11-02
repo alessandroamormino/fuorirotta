@@ -2,10 +2,20 @@ import AuthenticationServices
 import FuorirottaCore
 import SwiftUI
 
+/// Le schermate che il Profilo spinge nella sua pila.
+enum ProfileRoute: Hashable { case stats, follows }
+
+/// Profilo (UAT7 B6, REF Omniphile): l'intestazione dell'account e cosa segue. Le statistiche hanno una schermata
+/// loro (icona grafico nella capsula in alto a destra, accanto all'ingranaggio); le Impostazioni restano nel foglio.
 struct ProfileView: View {
     @Environment(Session.self) private var session
-    @Environment(SavesModel.self) private var saves
+    @Environment(FollowsModel.self) private var follows
     @State private var showSettings = false
+
+    private var signedIn: Bool {
+        if case .signedIn = session.state { return true }
+        return false
+    }
 
     var body: some View {
         NavigationStack {
@@ -18,19 +28,25 @@ struct ProfileView: View {
                             .task { session.consumeExpiredNotice() }
                     }
                     accountCard
-                    StatsSection(items: saves.statItems)
+                    if signedIn { interests }
                 }
                 .padding(Spacing.md)
             }
             .navigationTitle("Profilo")
+            .navigationDestination(for: ProfileRoute.self) { route in
+                switch route {
+                case .stats: StatsView()
+                case .follows: FollowsView()
+                }
+            }
             .onAppear { session.clearError() }
-            // Account: le statistiche vengono dai salvati sincronizzati; Salvati puo' non essere mai stato aperto.
-            .task(id: session.state) { if case .signedIn = session.state, saves.statItems.isEmpty { await saves.reload() } }
             .sensoryFeedback(.success, trigger: session.successCount)
             .sensoryFeedback(.error, trigger: session.errorCount)
             .toolbar {
-                // Vetro di sistema attorno al pulsante: tondo in alto a destra (REF Omniphile).
-                ToolbarItem(placement: .topBarTrailing) {
+                // Due pulsanti nella stessa capsula di vetro in alto a destra (REF Omniphile): statistiche e Impostazioni.
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink(value: ProfileRoute.stats) { Image(systemName: "chart.bar") }
+                        .accessibilityLabel("Statistiche")
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                         .accessibilityLabel("Impostazioni")
                 }
@@ -65,6 +81,59 @@ struct ProfileView: View {
             }
             .accessibilityElement(children: .combine)
         }
+    }
+}
+
+/// B1/B6: cosa segue l'account, la gestione delle preferenze sta nel Profilo. Sotto il titolo, i nomi gia' seguiti.
+private extension ProfileView {
+    var interests: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("I tuoi interessi")
+                .font(.label.weight(.semibold))
+                .foregroundStyle(Color.mutedForeground)
+                .padding(.horizontal, Spacing.md)
+                .accessibilityAddTraits(.isHeader)
+            NavigationLink(value: ProfileRoute.follows) {
+                HStack(spacing: Spacing.md) {
+                    SettingsTile(symbol: "sparkles", color: .mutedForeground)
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text("Cosa segui").foregroundStyle(Color.foreground)
+                        Text(verbatim: followedSummary).font(.label).foregroundStyle(Color.mutedForeground).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.label).foregroundStyle(Color.mutedForeground).accessibilityHidden(true)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .card()
+        }
+    }
+
+    /// "Lombardia, Bergamo (BG), Sagre e feste" oppure, senza nulla, l'invito: categorie nella lingua dell'app.
+    var followedSummary: String {
+        let names = (follows.items ?? []).map { $0.isPlace ? $0.label : categoryLabel($0.key) }
+        return names.isEmpty ? String(localized: "Luoghi e categorie per «Per te»") : names.joined(separator: ", ")
+    }
+}
+
+/// Le statistiche dei salvati (MOB-07), in una schermata loro. Il contenuto non cambia: verra' rifatto con "Ci sono stato".
+struct StatsView: View {
+    @Environment(Session.self) private var session
+    @Environment(SavesModel.self) private var saves
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                StatsSection(items: saves.statItems)
+            }
+            .padding(Spacing.md)
+        }
+        .background(Color.background)
+        .navigationTitle("Statistiche")
+        // Account: le statistiche vengono dai salvati sincronizzati; Salvati puo' non essere mai stato aperto.
+        .task(id: session.state) { if case .signedIn = session.state, saves.statItems.isEmpty { await saves.reload() } }
     }
 }
 

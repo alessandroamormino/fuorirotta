@@ -1,7 +1,7 @@
 import XCTest
 
-/// Giro UAT 7, tranche B (seconda parte): il benvenuto del primo avvio (B5). Gli interessi chiedono un account, che nel
-/// simulatore non c'e': restano alle prove sul telefono.
+/// Giro UAT 7, tranche B (seconda parte): il benvenuto del primo avvio (B5) e le statistiche fuori dal Profilo (B6).
+/// Gli interessi e "Cosa segui" nel Profilo chiedono un account, che nel simulatore non c'e': restano alle prove sul telefono.
 @MainActor
 final class UAT7B2UITests: LocalTestCase {
     private let titles = ["Eventi vicino a te", "La mappa", "Salva col cuore", "Segui ciò che ti piace"]
@@ -51,5 +51,28 @@ final class UAT7B2UITests: LocalTestCase {
         skip.tap()
         XCTAssertTrue(skip.waitForNonExistence(timeout: 5), "Salta non chiude il tutorial")
         XCTAssertTrue(waitHittable(app.tabBars.buttons["Home"], timeout: 10))
+    }
+
+    /// B6: le statistiche non stanno piu' nel Profilo. Si aprono dall'icona grafico in alto a destra, accanto
+    /// all'ingranaggio (stessa capsula), in una schermata loro; Indietro torna al Profilo.
+    func testStatsHaveTheirOwnScreen() {
+        let app = localApp()
+        app.launch()
+        app.tabBars.buttons["Profilo"].tap()
+        let stats = app.buttons["Statistiche"], settings = app.buttons["Impostazioni"]
+        XCTAssertTrue(waitHittable(stats, timeout: 10), "nessun pulsante Statistiche nel Profilo")
+        XCTAssertTrue(settings.exists)
+        XCTAssertEqual(stats.frame.midY, settings.frame.midY, accuracy: 1, "Statistiche e Impostazioni non sono sulla stessa riga")
+        XCTAssertLessThan(stats.frame.maxX, settings.frame.minX + 1, "Statistiche deve stare a sinistra dell'ingranaggio")
+        // Le schede delle statistiche (o il loro stato vuoto) non sono nel Profilo.
+        let content = app.staticTexts.matching(NSPredicate(format: "label IN {'Ancora niente da mostrare', \"Attività dell'anno\"}")).firstMatch
+        XCTAssertFalse(content.exists, "le statistiche sono ancora nel Profilo")
+        shot(app, "profilo")
+        stats.tap()
+        XCTAssertTrue(app.navigationBars["Statistiche"].waitForExistence(timeout: 5), "la schermata Statistiche non si e' aperta")
+        XCTAssertTrue(content.waitForExistence(timeout: 10), "la schermata Statistiche e' vuota")
+        shot(app, "statistiche")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(waitHittable(stats), "Indietro non torna al Profilo")
     }
 }

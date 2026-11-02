@@ -1238,6 +1238,16 @@
         }
       }
     },
+    "I tuoi interessi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your interests"
+          }
+        }
+      }
+    },
     "I tuoi salvati compaiono nel calendario e si aggiornano da soli. Ogni evento ha un promemoria alle 18:00 del giorno prima, se il tuo calendario lo supporta." : {
       "localizations" : {
         "en" : {
@@ -1475,6 +1485,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Places"
+          }
+        }
+      }
+    },
+    "Luoghi e categorie per «Per te»" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Places and categories for “For you”"
           }
         }
       }
@@ -2742,6 +2762,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Standard"
+          }
+        }
+      }
+    },
+    "Statistiche" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Statistics"
           }
         }
       }

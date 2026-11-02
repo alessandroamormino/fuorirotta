@@ -58,10 +58,10 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
 }
 
 /// Le schermate che Impostazioni spinge nella sua pila.
-enum SettingsRoute: Hashable { case follows, sessions }
+enum SettingsRoute: Hashable { case sessions }
 
 /// Impostazioni (REF Omniphile): foglio a tutta altezza chiuso da una X tonda in alto a sinistra, gruppi in card.
-/// Le righe stavano nella pagina Profilo; il Profilo tiene l'intestazione utente e le statistiche.
+/// Le righe stavano nella pagina Profilo; il Profilo tiene l'intestazione utente e cosa segue, le statistiche hanno una schermata loro.
 struct SettingsView: View {
     @Environment(Session.self) private var session
     @Environment(SavesModel.self) private var saves
@@ -102,7 +102,6 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     if signedIn { accountGroup }
-                    if signedIn { followsGroup }
                     if signedIn { methodsGroup }
                     appearanceGroup
                     placeGroup
@@ -117,7 +116,6 @@ struct SettingsView: View {
             .navigationTitle("Impostazioni")
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
-                case .follows: FollowsView()
                 case .sessions: SessionsView()
                 }
             }
@@ -230,18 +228,6 @@ struct SettingsView: View {
             } message: {
                 Text("I tuoi salvati restano sull'account; su questo iPhone la lista torna vuota.")
             }
-        }
-    }
-
-    /// B1: "Cosa segui". La vista e' riusabile: con B6 si apre anche dal Profilo.
-    private var followsGroup: some View {
-        group("Per te") {
-            NavigationLink(value: SettingsRoute.follows) {
-                row("Cosa segui", symbol: "sparkles", color: .mutedForeground) {
-                    Image(systemName: "chevron.right").font(.label).foregroundStyle(Color.mutedForeground).accessibilityHidden(true)
-                }
-            }
-            .buttonStyle(.plain)
         }
     }
 

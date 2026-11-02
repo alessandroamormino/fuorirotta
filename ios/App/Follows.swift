@@ -118,7 +118,7 @@ func followSymbol(_ item: FollowItem) -> String {
 }
 
 /// "Cosa segui" (FollowManager.tsx): luoghi e categorie. Vista senza NavigationStack: chi la usa la spinge nella sua
-/// pila (oggi Impostazioni, con B6 il Profilo). Luoghi: ricerca di sistema in alto (/api/places/search), elimina a
+/// pila (il Profilo, UAT7 B6). Luoghi: ricerca di sistema in alto (/api/places/search), elimina a
 /// scorrimento o con Modifica. Categorie: righe con la spunta.
 struct FollowsView: View {
     @Environment(FollowsModel.self) private var follows
