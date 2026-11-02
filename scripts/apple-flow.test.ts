@@ -33,6 +33,14 @@
 //   V1  id token nativo (bundle ID) sullo stesso utente del web; un'altra audience e' rifiutata
 //   V2  come un'app: id token nativo con lo user agent dell'app, SENZA Origin e SENZA cookie ->
 //       200, set-auth-token firmato che vale come bearer, sessione etichettata 'App iPhone'
+//   A1  Fase 27: accesso nativo -> refresh token NULL (Better Auth lo scarta) -> POST /api/v1/me/apple-token
+//       con il solo bearer lo salva cifrato (client_id = bundle ID) -> delete-user con il solo bearer
+//       revoca col bundle ID dopo il rifiuto del Services ID e lascia zero righe
+//   A2  apple-token rifiuta senza toccare Apple ne' il token salvato: niente riga Apple, corpo errato,
+//       senza credenziali, codice rifiutato, sub diverso; due codici validi sostituiscono, mai duplicano
+//   A3  senza APPLE_APP_BUNDLE_ID: 404 e nessuna chiamata ad Apple
+//   G1  Fase 27, giro 2b: id token nativo di Google -> la foto (claim picture) si aggiorna a ogni accesso,
+//       come col redirect; indirizzo non di Google -> null; nome ed e-mail dell'utente non si toccano
 //
 // Gli helper (startApple, applePost, follow, cookieFrom, mintGoogleUser e il
 // registro dello stub) sono funzioni con nome: il piano 03 aggiunge qui le sue
@@ -81,6 +89,7 @@ type RevokeMode = 'ok' | 'refuse' | 'error' | 'throw'
 const revokeCalls: RevokeCall[] = [] // chiamate a /auth/revoke, in ordine
 let revokeMode: (clientId: string | null) => RevokeMode = () => 'ok'
 let appleKeys: object = { keys: [] } // risposta di GET /auth/keys (le chiavi pubbliche di prova)
+let googleKeys: object = { keys: [] } // risposta di GET /oauth2/v3/certs di Google
 const tokenForms: URLSearchParams[] = [] // corpo di ogni chiamata a /auth/token
 const stubErrors: string[] = [] // tutto cio' che lo stub non si aspettava: fa fallire il prossimo controllo
 let tokenCalls = 0
@@ -129,6 +138,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
     })
   }
   if (method === 'GET' && url === `${APPLE_ORIGIN}/auth/keys`) return json(appleKeys)
+  if (method === 'GET' && url === 'https://www.googleapis.com/oauth2/v3/certs') return json(googleKeys)
   if (method === 'POST' && url === `${APPLE_ORIGIN}/auth/revoke`) {
     revokeCalls.push({ clientId: form.get('client_id'), token: form.get('token'), hint: form.get('token_type_hint') })
     checkClientSecret(form.get('client_secret'), form.get('client_id'))
@@ -768,6 +778,169 @@ async function main(): Promise<void> {
     const { deviceLabel } = await import('../lib/userAgent')
     const appSession = await prisma.session.findFirst({ where: { userId: v2.userId, userAgent: APP_UA } })
     check('V2: la sessione nata dall\'app e\' \'App iPhone\' per deviceLabel', appSession !== null && deviceLabel(appSession.userAgent).label === 'App iPhone', String(appSession?.userAgent))
+
+    // A1: l'app vera da capo a fondo (Fase 27, MOB-05): accesso nativo, apple-token, eliminazione con il solo bearer
+    /** Accesso nativo come l'app: id token del bundle ID, niente Origin ne' cookie; restituisce utente e bearer. */
+    async function nativeAppUser(tag: string) {
+      const sub = `apple-flow-sub-${tag}`
+      const email = `${EMAIL_PREFIX}${tag}@fixture.invalid`
+      const nonce = `n-${tag}`
+      const idToken = await new SignJWT({ email, email_verified: 'true', nonce })
+        .setProtectedHeader({ alg: 'RS256', kid: KID })
+        .setIssuer(APPLE_ORIGIN)
+        .setAudience(BUNDLE_ID)
+        .setSubject(sub)
+        .setIssuedAt()
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 600)
+        .sign(rsa.privateKey)
+      const response = await handler(
+        new Request(`${BASE}/api/auth/sign-in/social`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': APP_UA },
+          body: JSON.stringify({ provider: 'apple', idToken: { token: idToken, nonce } }),
+        }),
+      )
+      const bearer = response.headers.get('set-auth-token') ?? ''
+      const row = await appleRow(sub)
+      if (response.status !== 200 || !bearer || !row) {
+        console.error(`FAIL: ${tag}: accesso nativo non riuscito (${response.status})`)
+        process.exit(1)
+      }
+      await seedSaved(row.userId)
+      return { sub, email, bearer, userId: row.userId, row }
+    }
+    const appleTokenRoute = await import('../app/api/v1/me/apple-token/route')
+    /** POST /api/v1/me/apple-token con il solo bearer (o con le intestazioni date), come l'app. */
+    const appleToken = (body: string, headers: Record<string, string>) =>
+      appleTokenRoute.POST(new Request(`${BASE}/api/v1/me/apple-token`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), ...headers }, body }))
+    const bearerOf = (bearer: string) => ({ authorization: `Bearer ${bearer}` })
+
+    const a1 = await nativeAppUser('a1')
+    check('A1: dopo l\'accesso nativo la riga Apple non ha refresh token (Better Auth lo scarta)', a1.row.refreshToken === null, String(a1.row.refreshToken))
+    appleCodes.set('a1-code', { sub: a1.sub, email: a1.email })
+    tokenForms.length = 0
+    const a1Reply = await appleToken(JSON.stringify({ authorizationCode: 'a1-code' }), bearerOf(a1.bearer))
+    const a1Body = (await a1Reply.json().catch(() => ({}))) as { stored?: boolean }
+    const a1Stored = await appleRow(a1.sub)
+    const a1Form = tokenForms[tokenForms.length - 1]
+    check('A1: apple-token con il solo bearer -> 200 {stored:true}', a1Reply.status === 200 && a1Body.stored === true, `${a1Reply.status} ${JSON.stringify(a1Body)}`)
+    check('A1: lo scambio usa il bundle ID e il codice dell\'app', a1Form?.get('client_id') === BUNDLE_ID && a1Form?.get('code') === 'a1-code', String(a1Form))
+    const a1Issued = issued[issued.length - 1]
+    check(
+      'A1: la riga Apple tiene il refresh token cifrato che si decifra in quello emesso da Apple',
+      !!a1Stored?.refreshToken && a1Stored.refreshToken !== a1Issued && (await decrypt(a1Stored.refreshToken)) === a1Issued,
+      String(a1Stored?.refreshToken ? 'cifrato ma diverso' : 'vuoto'),
+    )
+    revokeCalls.length = 0
+    revokeMode = (clientId) => (clientId === WEB_ID ? 'refuse' : 'ok')
+    let a1Delete = 0
+    try {
+      a1Delete = (await handler(new Request(`${BASE}/api/auth/delete-user`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': APP_UA, ...bearerOf(a1.bearer) }, body: '{}' }))).status
+    } finally {
+      revokeMode = () => 'ok'
+    }
+    const a1Last = revokeCalls[revokeCalls.length - 1]
+    check('A1: delete-user con il solo bearer -> 200 e revoca col bundle ID dopo il rifiuto del Services ID', a1Delete === 200 && a1Last?.clientId === BUNDLE_ID && a1Last.token === a1Issued, `${a1Delete} ${JSON.stringify(revokeCalls)}`)
+    check('A1: zero righe per l\'utente', (await rowsLeft(a1.userId)) === 0)
+
+    // A2: i rifiuti non chiamano Apple e non toccano il token salvato; due codici validi sostituiscono
+    const a2 = await nativeAppUser('a2')
+    appleCodes.set('a2-first', { sub: a2.sub, email: a2.email })
+    check('A2: preparazione: un primo apple-token valido', (await appleToken(JSON.stringify({ authorizationCode: 'a2-first' }), bearerOf(a2.bearer))).status === 200)
+    const a2Stored = async () => {
+      const row = await appleRow(a2.sub)
+      return row?.refreshToken ? await decrypt(row.refreshToken) : null
+    }
+    const a2Token = await a2Stored()
+    const g2 = await mintGoogleUser(`${EMAIL_PREFIX}a2g@fixture.invalid`, 'A2 Google', 'https://lh3.googleusercontent.com/a/a2g')
+    const g2Bearer = decodeURIComponent(g2.cookie.slice(g2.cookie.indexOf('=') + 1))
+    const callsBefore = tokenCalls
+    const a2Refusals = {
+      senzaRigaApple: await appleToken(JSON.stringify({ authorizationCode: 'a2-first' }), bearerOf(g2Bearer)),
+      vuoto: await appleToken('{}', bearerOf(a2.bearer)),
+      nonStringa: await appleToken(JSON.stringify({ authorizationCode: 5 }), bearerOf(a2.bearer)),
+      lungo: await appleToken(JSON.stringify({ authorizationCode: 'x'.repeat(2049) }), bearerOf(a2.bearer)),
+      senzaCredenziali: await appleToken(JSON.stringify({ authorizationCode: 'a2-first' }), { origin: BASE }),
+    }
+    const notFound = (await a2Refusals.senzaRigaApple.json().catch(() => ({}))) as { error?: string }
+    check(
+      'A2: senza riga Apple 404 not-found; corpo vuoto, non stringa o oltre 2048 caratteri 400; senza credenziali 401; Apple mai chiamato',
+      a2Refusals.senzaRigaApple.status === 404 &&
+        notFound.error === 'not-found' &&
+        a2Refusals.vuoto.status === 400 &&
+        a2Refusals.nonStringa.status === 400 &&
+        a2Refusals.lungo.status === 400 &&
+        a2Refusals.senzaCredenziali.status === 401 &&
+        tokenCalls === callsBefore,
+      JSON.stringify(Object.fromEntries(Object.entries(a2Refusals).map(([k, v]) => [k, v.status]))) + ` chiamate=${tokenCalls - callsBefore}`,
+    )
+    const a2Unknown = await appleToken(JSON.stringify({ authorizationCode: 'a2-sconosciuto' }), bearerOf(a2.bearer))
+    check('A2: un codice che Apple rifiuta -> 502 {error:apple} e il token salvato non cambia', a2Unknown.status === 502 && ((await a2Unknown.json()) as { error?: string }).error === 'apple' && (await a2Stored()) === a2Token, String(a2Unknown.status))
+    appleCodes.set('a2-altro', { sub: 'apple-flow-sub-qualcun-altro', email: `${EMAIL_PREFIX}a2x@fixture.invalid` })
+    const mismatch = await appleToken(JSON.stringify({ authorizationCode: 'a2-altro' }), bearerOf(a2.bearer))
+    check('A2: un codice di un altro sub -> 409 {error:apple-mismatch} e il token salvato non cambia', mismatch.status === 409 && ((await mismatch.json()) as { error?: string }).error === 'apple-mismatch' && (await a2Stored()) === a2Token, String(mismatch.status))
+    appleCodes.set('a2-bis', { sub: a2.sub, email: a2.email })
+    const twice = [await appleToken(JSON.stringify({ authorizationCode: 'a2-bis' }), bearerOf(a2.bearer)), await appleToken(JSON.stringify({ authorizationCode: 'a2-bis' }), bearerOf(a2.bearer))]
+    check(
+      'A2: lo stesso codice due volte -> 200 e 200, una sola riga Apple, tiene il token piu\' recente',
+      twice.every((r) => r.status === 200) && (await prisma.account.count({ where: { userId: a2.userId, providerId: 'apple' } })) === 1 && (await a2Stored()) === issued[issued.length - 1],
+      twice.map((r) => r.status).join(','),
+    )
+    // Una seconda eliminazione con lo stesso bearer e' un 401 pulito, mai 5xx (idempotenza MOB-05)
+    const deleteWith = () => handler(new Request(`${BASE}/api/auth/delete-user`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': APP_UA, ...bearerOf(a2.bearer) }, body: '{}' }))
+    const firstDelete = (await deleteWith()).status
+    const secondDelete = (await deleteWith()).status
+    check('A2: delete-user con il bearer due volte -> 200 poi 401', firstDelete === 200 && secondDelete === 401, `${firstDelete},${secondDelete}`)
+    check('A2: zero righe per l\'utente', (await rowsLeft(a2.userId)) === 0)
+
+    // A3: senza APPLE_APP_BUNDLE_ID la rotta non esiste
+    const a3 = await nativeAppUser('a3')
+    appleCodes.set('a3-code', { sub: a3.sub, email: a3.email })
+    const a3Before = tokenCalls
+    const bundleEnv = process.env.APPLE_APP_BUNDLE_ID
+    let a3Reply: Response
+    try {
+      delete process.env.APPLE_APP_BUNDLE_ID
+      a3Reply = await appleToken(JSON.stringify({ authorizationCode: 'a3-code' }), bearerOf(a3.bearer))
+    } finally {
+      process.env.APPLE_APP_BUNDLE_ID = bundleEnv
+    }
+    check('A3: senza APPLE_APP_BUNDLE_ID -> 404 not-found e Apple mai chiamato', a3Reply.status === 404 && ((await a3Reply.json()) as { error?: string }).error === 'not-found' && tokenCalls === a3Before, String(a3Reply.status))
+
+    // G1: l'id token nativo di Google deve aggiornare la foto come fa il redirect (overrideUserInfoOnSignIn
+    // la libreria lo applica solo al callback OAuth, non al ramo idToken di sign-in/social).
+    googleKeys = { keys: [{ ...(await exportJWK(rsa.publicKey)), kid: KID, alg: 'RS256', use: 'sig' }] }
+    const g1 = await mintGoogleUser(`${EMAIL_PREFIX}g1@fixture.invalid`, 'Gi Uno', 'https://lh3.googleusercontent.com/a/vecchia')
+    await prisma.user.update({ where: { id: g1.user.id }, data: { image: null } })
+    const g1Sub = `apple-flow-g-${g1.user.id}`
+    const googleNative = async (picture: string | undefined, nonce: string) => {
+      const token = await new SignJWT({ email: g1.user.email, email_verified: true, name: 'Nome Di Google', nonce, ...(picture ? { picture } : {}) })
+        .setProtectedHeader({ alg: 'RS256', kid: KID })
+        .setIssuer('https://accounts.google.com')
+        .setAudience(GOOGLE_ID)
+        .setSubject(g1Sub)
+        .setIssuedAt()
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 600)
+        .sign(rsa.privateKey)
+      return handler(
+        new Request(`${BASE}/api/auth/sign-in/social`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-real-ip': nextIp(), 'user-agent': 'FuoriRotta/1.0.0 (iOS; iPhone)' },
+          body: JSON.stringify({ provider: 'google', idToken: { token, nonce } }),
+        }),
+      )
+    }
+    const g1Row = () => prisma.user.findUniqueOrThrow({ where: { id: g1.user.id } })
+    const g1Photo = 'https://lh3.googleusercontent.com/a/nuova'
+    const g1a = await googleNative(g1Photo, 'g1a')
+    const g1aRow = await g1Row()
+    check('G1: id token nativo con picture -> 200 e la foto dell\'utente (senza foto) diventa quella di Google', g1a.status === 200 && g1aRow.image === g1Photo, `${g1a.status} ${g1aRow.image}`)
+    check('G1: nome ed e-mail dell\'utente restano (il nome e\' suo, l\'e-mail e\' l\'identita)', g1aRow.name === 'Gi Uno' && g1aRow.email === g1.user.email, `${g1aRow.name} ${g1aRow.email}`)
+    const g1b = await googleNative('https://evil.example/foto.png', 'g1b')
+    check('G1: picture non di Google -> accesso 200 e foto null (D-20)', g1b.status === 200 && (await g1Row()).image === null, String((await g1Row()).image))
+    await googleNative(g1Photo, 'g1c')
+    const g1d = await googleNative(undefined, 'g1d')
+    check('G1: id token senza picture -> accesso 200 e foto null, come il redirect', g1d.status === 200 && (await g1Row()).image === null, String((await g1Row()).image))
   } finally {
     await cleanup()
     await prisma.$disconnect()

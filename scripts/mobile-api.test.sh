@@ -16,6 +16,7 @@
 #   M6  concorrenza: due PUT bearer in parallelo -> una riga; bearer e cookie vedono gli stessi follow
 #   M7  D-13: la sessione dell'app e' 'App iPhone' nell'elenco del web e si revoca da li'
 #   M8  D-10: POST /api/auth/sign-out con il solo bearer cancella la sessione
+#   M9  bearer-only delete-user: 200, poi 401, zero righe
 #   P1  tracer: PUT /me/devices col solo bearer -> una riga push_devices (token minuscolo, sessione dell'app); il secondo PUT la aggiorna
 #   P2  concorrenza: due PUT dello stesso token -> 200 e 200 e una riga
 #   P3  passaggio di proprieta' e scoping: la riga passa al secondo utente, il DELETE dell'altro non toglie nulla
@@ -24,7 +25,13 @@
 #   P6  D-10: revoca dal web, sign-out col bearer e cancellazione dell'account tolgono il dispositivo
 #   P7  l'export elenca pushDevices senza token
 #   W1  API-05: /.well-known/apple-app-site-association e assetlinks.json -> 200 JSON, nessun redirect, HEAD 200
+#   A1  UAT 2: i metodi di accesso dall'app: list-accounts e link-social accettano il solo bearer, un id token falso e' rifiutato senza collegare nulla
 #   C1  tracer: GET /api/v1/config?version= senza credenziali -> update-required / update-recommended / ok dalle soglie dell'ambiente
+#   V1  UAT 5: la foto negli eventi salvati: imageUrl additivo in /me/saved e /saved/resolve, null se manca o l'evento e' sparito, chiavi = contratto
+#   E1  UAT 7 B1: GET /api/events/<id> porta `comune` con le chiavi EVENT_COMUNE_KEYS del contratto (null senza comune)
+#   S1  UAT 7 B2: condivisione della lista e feed del calendario col solo bearer, nelle forme che l'app decodifica
+#   Z1  UAT 7 C3: GET /api/comuni/search porta le chiavi COMUNE_SEARCH_ITEM_KEYS del contratto, con le coordinate in numeri
+#   A7  UAT 7 B3: nome, sessioni (elenco, revoca di una e delle altre) ed esportazione col solo bearer, nelle forme dell'app
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -237,6 +244,7 @@ m2_matrix=(
   'PUT|/api/v1/me/devices|{"token":"{tok}","environment":"sandbox"}'
   'DELETE|/api/v1/me/devices|{"token":"{tok}"}'
   'GET|/api/v1/me/export|'
+  'POST|/api/v1/me/apple-token|{"authorizationCode":"m2-parita"}'
   'GET|/api/v1/me/sessions|'
   'DELETE|/api/v1/me/sessions/[id]|'
   'DELETE|/api/v1/me/sessions|'
@@ -510,6 +518,26 @@ code="$(bearer_call m8b GET /api/v1/me/follows 198.51.100.209 "${m8_cookie}")"
 [[ "${code}" == "401" ]] || fail "M8: lo stesso bearer dopo il sign-out: atteso 401, ottenuto ${code}"
 echo "ok  M8: POST /api/auth/sign-out con il solo bearer (niente Cookie, niente Origin) -> 200, riga auth_session cancellata, il bearer da' 401"
 
+# --- M9: MOB-05, eliminare l'account dall'app con il solo bearer (niente Cookie, niente Origin) -------------
+m9_tok="fe$(printf '0b%.0s' {1..31})"
+mint_app_user m9 "${app_ua}"
+code="$(bearer_call m9s PUT /api/v1/me/follows 198.51.100.219 "${m9_cookie}" '{"kind":"region","key":"lombardia"}')"
+[[ "${code}" == "200" ]] || fail "M9: preparazione follow: atteso 200, ottenuto ${code}"
+code="$(bearer_call m9d PUT /api/v1/me/devices 198.51.100.219 "${m9_cookie}" "{\"token\":\"${m9_tok}\",\"environment\":\"sandbox\"}")"
+[[ "${code}" == "200" ]] || fail "M9: preparazione dispositivo: atteso 200, ottenuto ${code}"
+[[ "$(follow_rows "${m9_user}" region lombardia)" == "1" && "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '${m9_tok}'")" == "1" ]] || fail "M9: preparazione: attese una riga di follow e una di dispositivo"
+code="$(bearer_call m9a POST /api/auth/delete-user 198.51.100.219 "${m9_cookie}" '{}')"
+[[ "${code}" == "200" ]] || fail "M9: delete-user con il solo bearer: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/m9a.b"))"
+for m9_q in "auth_user WHERE id" "auth_session WHERE user_id" "user_follows WHERE user_id"; do
+  [[ "$(psql_dev "SELECT count(*) FROM ${m9_q} = '${m9_user}'")" == "0" ]] || fail "M9: dopo la cancellazione restano righe in ${m9_q%% *}"
+done
+[[ "$(psql_dev "SELECT count(*) FROM push_devices WHERE device_token = '${m9_tok}'")" == "0" ]] || fail "M9: dopo la cancellazione resta il dispositivo in push_devices"
+code="$(bearer_call m9b GET /api/v1/me/follows 198.51.100.219 "${m9_cookie}")"
+[[ "${code}" == "401" ]] || fail "M9: il bearer dopo la cancellazione: atteso 401, ottenuto ${code}"
+code="$(bearer_call m9c POST /api/auth/delete-user 198.51.100.219 "${m9_cookie}" '{}')"
+[[ "${code}" == "401" ]] || fail "M9: seconda cancellazione con lo stesso bearer: atteso 401 (mai 5xx), ottenuto ${code}"
+echo "ok  M9: POST /api/auth/delete-user con il solo bearer (niente Cookie, niente Origin) -> 200, zero righe in auth_user, auth_session, user_follows e push_devices, il bearer da' 401 e una seconda cancellazione e' un 401 pulito"
+
 # --- P1 (tracer): l'app registra il suo token con il solo bearer e compare una riga legata alla sessione ---
 p1_tok_upper="FE$(printf '0A%.0s' {1..31})"
 p1_tok="$(tr 'A-F' 'a-f' <<<"${p1_tok_upper}")"
@@ -664,6 +692,24 @@ code="$(call p7b GET /api/v1/me/export 198.51.100.218 -H "Cookie: fuorirotta.ses
 [[ "$(grep -ci "${p7_tok}" "${tmp_dir}/p7b.b" || true)" == "0" ]] || fail "P7: il token del dispositivo non deve comparire nell'export"
 echo "ok  P7: l'export ha pushDevices con un oggetto {appVersion, createdAt, environment, lastSeenAt} e il token non compare da nessuna parte"
 
+# --- A1: UAT 2, collegare un secondo metodo dall'app: sessione bearer obbligatoria, id token verificato dal server -----
+# AUTH-07: nessun collegamento implicito. Qui si prova cio' che si puo' senza un provider vero: la sessione bearer e'
+# riconosciuta (l'errore e' quello dell'id token, non della sessione), senza bearer e' 401 UNAUTHORIZED, e un id token
+# falso non lascia nessuna riga in piu'.
+mint_app_user a1 "${app_ua}"
+a1_rows_before="$(psql_dev "SELECT count(*) FROM auth_account WHERE user_id = '${a1_user}'")"
+code="$(bearer_call a1a GET /api/auth/list-accounts 198.51.100.231 "${a1_cookie}")"
+[[ "${code}" == "200" ]] || fail "A1: list-accounts col solo bearer: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/a1a.b"))"
+[[ "$(json_get "${tmp_dir}/a1a.b" 'Array.isArray(j) && j.every((r) => typeof r.id === "string" && typeof r.providerId === "string" && !("accessToken" in r) && !("idToken" in r) && !("refreshToken" in r))')" == "true" ]] || fail "A1: list-accounts deve essere un elenco di righe senza token, corpo '$(cat "${tmp_dir}/a1a.b")'"
+for a1_provider in google apple; do
+  code="$(bearer_call a1b POST /api/auth/link-social 198.51.100.231 "${a1_cookie}" "{\"provider\":\"${a1_provider}\",\"idToken\":{\"token\":\"x.y.z\",\"nonce\":\"n\"}}")"
+  [[ "${code}" == "401" && "$(json_get "${tmp_dir}/a1b.b" 'j.code')" != "UNAUTHORIZED" ]] || [[ "${a1_provider}" == "apple" && "${code}" == "404" ]] || fail "A1: link-social ${a1_provider} con id token falso e bearer: atteso 401 (non UNAUTHORIZED), ottenuto ${code} '$(cat "${tmp_dir}/a1b.b")'"
+done
+code="$(call a1c POST /api/auth/link-social 198.51.100.231 -H 'Content-Type: application/json' --data '{"provider":"google","idToken":{"token":"x.y.z","nonce":"n"}}')"
+[[ "${code}" == "401" && "$(json_get "${tmp_dir}/a1c.b" 'j.code')" == "UNAUTHORIZED" ]] || fail "A1: link-social senza bearer: atteso 401 UNAUTHORIZED, ottenuto ${code} '$(cat "${tmp_dir}/a1c.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM auth_account WHERE user_id = '${a1_user}'")" == "${a1_rows_before}" ]] || fail "A1: un id token falso non deve aggiungere righe auth_account"
+echo "ok  A1: list-accounts col solo bearer -> 200 senza token; link-social con id token falso -> 401 dell'id token (la sessione bearer e' riconosciuta), senza bearer -> 401 UNAUTHORIZED, nessuna riga auth_account in piu'"
+
 # --- C1 (tracer): la politica di versione, pubblica, su HTTP vero ------------------------------------
 # Nessun cookie, nessun bearer, nessun Origin: e' quello che manda un'app appena installata.
 c1_get() { # <nome> <versione|-> -> codice
@@ -698,3 +744,114 @@ curl -sS -o "${tmp_dir}/w1a.b" --max-time 120 "http://127.0.0.1:${port}/.well-kn
 curl -sS -o "${tmp_dir}/w1b.b" --max-time 120 "http://127.0.0.1:${port}/.well-known/assetlinks.json"
 [[ "$(cat "${tmp_dir}/w1b.b")" == "[]" ]] || fail "W1: assetlinks.json atteso [], ottenuto $(cat "${tmp_dir}/w1b.b")"
 echo "ok  W1: apple-app-site-association (appID TEAMID1234.it.fuorirotta.app.test) e assetlinks.json ([]) -> 200 application/json, 0 redirect, nessun Location, HEAD 200"
+
+# --- V1: UAT 5, la foto negli eventi salvati (aggiunta compatibile) ---------------------------------------------
+# Ogni voce di GET /api/v1/me/saved e di POST /api/v1/saved/resolve ha `imageUrl`: events.image_url dell'evento vivo,
+# null senza foto o se l'evento non esiste piu'. Le chiavi della voce sono ESATTAMENTE quelle di lib/api-contract.ts.
+v1_keys="$(bash scripts/dev-db.sh npx tsx -e "import('./lib/api-contract.ts').then((mod) => { const m = mod.default ?? mod; console.log(JSON.stringify({ list: [...m.SAVED_LIST_ITEM_KEYS].sort(), resolve: [...m.SAVED_RESOLVE_ITEM_KEYS].sort() })) })" | tail -n 1)"
+[[ "${v1_keys}" == \{* ]] || fail "V1: non riesco a leggere le chiavi dei salvati da lib/api-contract.ts (ottenuto '${v1_keys}')"
+v1_img='https://example.invalid/foto-v1.jpg'
+mint_app_user v1 "${app_ua}"
+v1_ev="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, image_url)
+  VALUES ('__mobile_api__', 'v1-foto', 'Prova foto salvati', now() + interval '3 days', now() + interval '4 days', 'Piazza di prova', 'Altro', '${v1_img}')
+  RETURNING id" | head -n 1)"
+v1_bare="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
+  VALUES ('__mobile_api__', 'v1-senza', 'Prova senza foto', now() + interval '3 days', now() + interval '4 days', 'Piazza di prova', 'Altro')
+  RETURNING id" | head -n 1)"
+[[ "${v1_ev}" =~ ^[0-9]+$ && "${v1_bare}" =~ ^[0-9]+$ ]] || fail "V1: eventi di prova non inseriti ('${v1_ev}' '${v1_bare}')"
+psql_dev "INSERT INTO saved_events (user_id, event_id, title, date_start, canonical_category, source, source_id)
+  VALUES ('${v1_user}', NULL, 'Sparito', now() + interval '2 days', 'Altro', '__mobile_api__', 'v1-gone')" >/dev/null
+for id in "${v1_ev}" "${v1_bare}"; do
+  code="$(bearer_call v1p PUT "/api/v1/me/saved/${id}" 198.51.100.240 "${v1_cookie}")"
+  [[ "${code}" == "200" ]] || fail "V1: PUT salvato ${id}: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/v1p.b"))"
+done
+code="$(bearer_call v1l GET /api/v1/me/saved 198.51.100.240 "${v1_cookie}")"
+[[ "${code}" == "200" ]] || fail "V1: GET /me/saved: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/v1l.b" "j.items.length === 3 && j.items.every((i) => Object.keys(i).sort().join() === ${v1_keys}.list.join())")" == "true" ]] \
+  || fail "V1: le voci di /me/saved devono avere esattamente le chiavi del contratto ${v1_keys}: $(cat "${tmp_dir}/v1l.b")"
+[[ "$(json_get "${tmp_dir}/v1l.b" "j.items.map((i) => i.eventId === ${v1_ev} ? i.imageUrl : i.eventId === ${v1_bare} ? 'bare:' + i.imageUrl : 'gone:' + i.imageUrl).sort().join('|')")" == "bare:null|gone:null|${v1_img}" ]] \
+  || fail "V1: imageUrl in /me/saved: attesi la foto, null senza foto e null per l'evento sparito: $(cat "${tmp_dir}/v1l.b")"
+code="$(call v1r POST /api/v1/saved/resolve 198.51.100.240 -H 'Content-Type: application/json' --data "{\"ids\":[${v1_ev},${v1_bare},999999999]}")"
+[[ "${code}" == "200" ]] || fail "V1: POST /saved/resolve: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/v1r.b"))"
+[[ "$(json_get "${tmp_dir}/v1r.b" "j.items.length === 3 && j.items.every((i) => Object.keys(i).sort().join() === ${v1_keys}.resolve.join())")" == "true" ]] \
+  || fail "V1: le voci di /saved/resolve devono avere esattamente le chiavi del contratto ${v1_keys}: $(cat "${tmp_dir}/v1r.b")"
+[[ "$(json_get "${tmp_dir}/v1r.b" "j.items.map((i) => i.imageUrl).join('|')")" == "${v1_img}||" ]] \
+  || fail "V1: imageUrl in /saved/resolve: attesi foto, null, null (in ordine di richiesta): $(cat "${tmp_dir}/v1r.b")"
+echo "ok  V1: /me/saved e /saved/resolve: imageUrl = events.image_url dell'evento vivo, null senza foto o con l'evento sparito; chiavi di ogni voce = SAVED_*_ITEM_KEYS del contratto"
+
+# --- E1: UAT 7 B1, il comune nel dettaglio evento (aggiunta compatibile) ---------------------------------------
+# L'app segue comune e provincia dal dettaglio con le chiavi del sito: GET /api/events/<id> porta `comune` con
+# ESATTAMENTE le chiavi EVENT_COMUNE_KEYS di lib/api-contract.ts, e null per un evento senza comune.
+e1_keys="$(bash scripts/dev-db.sh npx tsx -e "import('./lib/api-contract.ts').then((mod) => { const m = mod.default ?? mod; console.log(JSON.stringify([...m.EVENT_COMUNE_KEYS].sort())) })" | tail -n 1)"
+[[ "${e1_keys}" == \[* ]] || fail "E1: non riesco a leggere EVENT_COMUNE_KEYS da lib/api-contract.ts (ottenuto '${e1_keys}')"
+e1_with="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, canonical_category, comune_id)
+  VALUES ('__mobile_api__', 'e1-comune', 'Prova comune', now() + interval '3 days', 'Altro', (SELECT id FROM comuni WHERE name = 'Vigolzone' LIMIT 1))
+  RETURNING id" | head -n 1)"
+e1_bare="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, canonical_category)
+  VALUES ('__mobile_api__', 'e1-senza', 'Prova senza comune', now() + interval '3 days', 'Altro')
+  RETURNING id" | head -n 1)"
+[[ "${e1_with}" =~ ^[0-9]+$ && "${e1_bare}" =~ ^[0-9]+$ ]] || fail "E1: eventi di prova non inseriti ('${e1_with}' '${e1_bare}')"
+code="$(call e1a GET "/api/events/${e1_with}" 198.51.100.241)"
+[[ "${code}" == "200" ]] || fail "E1: GET /api/events/${e1_with}: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/e1a.b" "JSON.stringify(Object.keys(j.comune).sort()) === JSON.stringify(${e1_keys}) && /^\\d{6}$/.test(j.comune.istatCode) && /^[A-Z]{2}$/.test(j.comune.provinceCode)")" == "true" ]] \
+  || fail "E1: comune deve avere esattamente le chiavi ${e1_keys} (ISTAT a 6 cifre, sigla a 2 lettere): $(cat "${tmp_dir}/e1a.b")"
+code="$(call e1b GET "/api/events/${e1_bare}" 198.51.100.241)"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/e1b.b" 'j.comune === null')" == "true" ]] || fail "E1: senza comune atteso comune null: $(cat "${tmp_dir}/e1b.b")"
+echo "ok  E1: GET /api/events/<id> -> comune con le chiavi EVENT_COMUNE_KEYS del contratto (ISTAT e sigla), null senza comune"
+
+# --- Z1: UAT 7 C3, un comune qualsiasi come centro della Home e della Ricerca (aggiunta compatibile) ------------
+# L'app usa il comune scelto come centro (lat/lng + radius): ogni risultato ha ESATTAMENTE le chiavi
+# COMUNE_SEARCH_ITEM_KEYS di lib/api-contract.ts, e Milano ha latitudine e longitudine numeriche.
+z1_keys="$(bash scripts/dev-db.sh npx tsx -e "import('./lib/api-contract.ts').then((mod) => { const m = mod.default ?? mod; console.log(JSON.stringify([...m.COMUNE_SEARCH_ITEM_KEYS].sort())) })" | tail -n 1)"
+[[ "${z1_keys}" == \[* ]] || fail "Z1: non riesco a leggere COMUNE_SEARCH_ITEM_KEYS da lib/api-contract.ts (ottenuto '${z1_keys}')"
+code="$(call z1a GET "/api/comuni/search?q=Milano" 198.51.100.243)"
+[[ "${code}" == "200" ]] || fail "Z1: GET /api/comuni/search?q=Milano: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/z1a.b" "j.results.length > 0 && j.results.every((r) => JSON.stringify(Object.keys(r).sort()) === JSON.stringify(${z1_keys})) && j.results.some((r) => r.name === 'Milano' && typeof r.latitude === 'number' && typeof r.longitude === 'number')")" == "true" ]] \
+  || fail "Z1: ogni risultato deve avere esattamente le chiavi ${z1_keys}, Milano con le coordinate in numeri: $(cat "${tmp_dir}/z1a.b")"
+echo "ok  Z1: GET /api/comuni/search -> chiavi COMUNE_SEARCH_ITEM_KEYS del contratto, coordinate del comune in numeri"
+
+# --- S1: UAT 7 B2, condividi la lista e iscriviti nel calendario dall'app ---------------------------------------
+# Le forme che decodifica FuorirottaCore (Sharing.swift): GET share {link:null|{path,showName}, upcoming}, POST e rotate
+# {path:/l/..., showName}, PATCH {showName}, DELETE; calendar-feed e rotate {path:/cal/....ics}. Solo bearer.
+mint_app_user s1 "${app_ua}"
+code="$(bearer_call s1a GET /api/v1/me/share 198.51.100.242 "${s1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1a.b" 'j.link === null && typeof j.upcoming === "number"')" == "true" ]] || fail "S1: GET share senza link: atteso {link:null, upcoming:n}, ottenuto ${code} $(cat "${tmp_dir}/s1a.b")"
+code="$(bearer_call s1b POST /api/v1/me/share 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1b.b" '/^\/l\/[A-Za-z0-9_-]+$/.test(j.path) && j.showName === false')" == "true" ]] || fail "S1: POST share: atteso {path:/l/..., showName:false}, ottenuto ${code} $(cat "${tmp_dir}/s1b.b")"
+s1_first="$(json_get "${tmp_dir}/s1b.b" 'j.path')"
+code="$(bearer_call s1c PATCH /api/v1/me/share 198.51.100.242 "${s1_cookie}" '{"showName":true}')"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/s1c.b")" == '{"showName":true}' ]] || fail "S1: PATCH share: atteso {showName:true}, ottenuto ${code} $(cat "${tmp_dir}/s1c.b")"
+code="$(bearer_call s1d POST /api/v1/me/share/rotate 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1d.b" "j.path.startsWith('/l/') && j.path !== '${s1_first}' && j.showName === true")" == "true" ]] || fail "S1: rotate share: atteso un path /l/ nuovo col nome acceso, ottenuto ${code} $(cat "${tmp_dir}/s1d.b")"
+code="$(bearer_call s1e GET /api/v1/me/share 198.51.100.242 "${s1_cookie}")"
+[[ "$(json_get "${tmp_dir}/s1e.b" "j.link.path === '$(json_get "${tmp_dir}/s1d.b" 'j.path')' && j.link.showName === true")" == "true" ]] || fail "S1: GET share dopo rotate: $(cat "${tmp_dir}/s1e.b")"
+code="$(bearer_call s1f DELETE /api/v1/me/share 198.51.100.242 "${s1_cookie}")"
+[[ "${code}" == "200" ]] || fail "S1: DELETE share: atteso 200, ottenuto ${code}"
+code="$(bearer_call s1g POST /api/v1/me/share/rotate 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "404" ]] || fail "S1: rotate senza link: atteso 404 (l'app dice 'Il link non era piu' attivo'), ottenuto ${code}"
+code="$(bearer_call s1h POST /api/v1/me/calendar-feed 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1h.b" '/^\/cal\/[A-Za-z0-9_-]+\.ics$/.test(j.path)')" == "true" ]] || fail "S1: calendar-feed: atteso {path:/cal/....ics}, ottenuto ${code} $(cat "${tmp_dir}/s1h.b")"
+code="$(bearer_call s1i POST /api/v1/me/calendar-feed/rotate 198.51.100.242 "${s1_cookie}" '{}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/s1i.b" "j.path.startsWith('/cal/') && j.path !== '$(json_get "${tmp_dir}/s1h.b" 'j.path')'")" == "true" ]] || fail "S1: calendar-feed/rotate: atteso un path /cal/ nuovo, ottenuto ${code} $(cat "${tmp_dir}/s1i.b")"
+echo "ok  S1: share (GET/POST/PATCH/rotate/DELETE, rotate senza link 404) e calendar-feed (POST, rotate) col solo bearer, nelle forme di Sharing.swift"
+
+# --- A7: UAT 7 B3, nome, sessioni ed esportazione dall'app ----------------------------------------------------
+# Le forme che decodifica FuorirottaCore (Account.swift): PATCH profile {name}, GET sessions {sessions:[{id, device, kind,
+# lastActive ISO, current}]}, DELETE sessions/<id> {revoked:1}, DELETE sessions {revoked:n}, export con Content-Disposition.
+mint_app_user a7 "${app_ua}"
+code="$(bearer_call a7a PATCH /api/v1/me/profile 198.51.100.243 "${a7_cookie}" '{"name":"  Nome  Nuovo "}')"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/a7a.b")" == '{"name":"Nome  Nuovo"}' ]] || fail "A7: PATCH profile: atteso {name} normalizzato, ottenuto ${code} $(cat "${tmp_dir}/a7a.b")"
+read -r a7_other _ _ <<<"$(helper session "${a7_user}" 0 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15' | tail -n 1)"
+helper session "${a7_user}" 0 >/dev/null
+code="$(bearer_call a7b GET /api/v1/me/sessions 198.51.100.243 "${a7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/a7b.b" 'j.sessions.length === 3 && j.sessions[0].current === true && j.sessions[0].device === "App iPhone" && j.sessions.every((s) => typeof s.id === "string" && typeof s.device === "string" && ["phone","tablet","desktop"].includes(s.kind) && !isNaN(Date.parse(s.lastActive)) && typeof s.current === "boolean")')" == "true" ]] \
+  || fail "A7: GET sessions: attese 3 righe {id, device, kind, lastActive, current}, la corrente per prima ('App iPhone'): $(cat "${tmp_dir}/a7b.b")"
+code="$(bearer_call a7c DELETE "/api/v1/me/sessions/${a7_other}" 198.51.100.243 "${a7_cookie}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/a7c.b")" == '{"revoked":1}' ]] || fail "A7: DELETE sessions/<id>: atteso {revoked:1}, ottenuto ${code} $(cat "${tmp_dir}/a7c.b")"
+code="$(bearer_call a7d DELETE /api/v1/me/sessions 198.51.100.243 "${a7_cookie}")"
+[[ "${code}" == "200" && "$(cat "${tmp_dir}/a7d.b")" == '{"revoked":1}' ]] || fail "A7: DELETE sessions: atteso {revoked:1} (resta solo questa), ottenuto ${code} $(cat "${tmp_dir}/a7d.b")"
+code="$(bearer_call a7e GET /api/v1/me/export 198.51.100.243 "${a7_cookie}")"
+a7_cd="$(grep -i '^content-disposition:' "${tmp_dir}/a7e.h" | head -n 1 | tr -d '\r')"
+[[ "${code}" == "200" && "${a7_cd}" =~ filename=\"fuorirotta-dati-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json\" && "$(json_get "${tmp_dir}/a7e.b" 'j.format === 1 && j.profile.name === "Nome  Nuovo"')" == "true" ]] \
+  || fail "A7: GET export: atteso 200 con filename fuorirotta-dati-<giorno>.json e il nome nuovo, ottenuto ${code} '${a7_cd}'"
+echo "ok  A7: profile (nome normalizzato), sessions (righe, revoca di una e di tutte le altre) ed export (Content-Disposition) col solo bearer, nelle forme di Account.swift"

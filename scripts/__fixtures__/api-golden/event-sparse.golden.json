@@ -18,6 +18,9 @@
     "$.category": [
       "string"
     ],
+    "$.comune": [
+      "null"
+    ],
     "$.comuneId": [
       "null"
     ],

@@ -45,6 +45,8 @@ export interface ResolvedItem {
   /** canonicalEventId ?? id della riga viva, null se la riga non esiste piu'. */
   eventId: number | null
   live: Snap | null
+  /** Foto dell'evento vivo (events.image_url, composta come sulla pagina evento); null se manca o se la riga non esiste piu'. */
+  imageUrl: string | null
   /** Altre date future della stessa serie (SAVE-06), vuoto se la sorgente non ha serie o la riga non esiste. */
   siblings: Sibling[]
 }

@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
 				aliases: true,
 				provinceName: true,
 				regionName: true,
+				// UAT7 C3: l'app usa il comune scelto come centro (lat/lng/radius, mai il filtro per comune).
+				latitude: true,
+				longitude: true,
 			},
 		});
 
@@ -63,6 +66,9 @@ export async function GET(request: NextRequest) {
 				name: r.name,
 				provinceName: r.provinceName,
 				regionName: r.regionName,
+				// Decimal -> numero; null per i comuni senza punto (lo schema lo ammette).
+				latitude: r.latitude === null ? null : Number(r.latitude),
+				longitude: r.longitude === null ? null : Number(r.longitude),
 			})),
 		});
 	} catch (error) {

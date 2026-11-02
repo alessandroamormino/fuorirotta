@@ -1,0 +1,138 @@
+name: Fuorirotta
+options:
+  # Italiano e' la lingua di sviluppo (UAT3): senza, i componenti di sistema (Accedi con Apple) usano l'inglese.
+  developmentLanguage: it
+  deploymentTarget:
+    iOS: "26.0"
+configs:
+  Debug: debug
+  DebugLocal: debug
+  Release: release
+settings:
+  base:
+    DEVELOPMENT_TEAM: 9A8MJ2Z4WB
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: "6.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    API_BASE_URL: https://fuori-rotta.it
+    # Catalogo delle stringhe: l'italiano e' la sorgente, l'inglese e' completo (gate S7).
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+  configs:
+    Debug:
+      APNS_ENVIRONMENT: sandbox
+      APS_ENTITLEMENT: development
+    DebugLocal:
+      APNS_ENVIRONMENT: sandbox
+      APS_ENTITLEMENT: development
+    Release:
+      APNS_ENVIRONMENT: production
+      APS_ENTITLEMENT: production
+packages:
+  FuorirottaCore:
+    path: Packages/FuorirottaCore
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: 10.1.0
+targets:
+  Fuorirotta:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: FuorirottaCore
+      - package: GoogleSignIn
+        product: GoogleSignIn
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: it.fuorirotta.app
+        # Identificatori pubblici (nessun segreto per un client iOS). Il server verifica contro il client web.
+        GOOGLE_IOS_CLIENT_ID: 800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0.apps.googleusercontent.com
+        GOOGLE_REVERSED_CLIENT_ID: com.googleusercontent.apps.800963967220-mcv0ot4nu3aofhdmpi12u5md62m72qt0
+        GOOGLE_SERVER_CLIENT_ID: 800963967220-99bo0jrhvpfelk69r7apgce7tka1l73c.apps.googleusercontent.com
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+    entitlements:
+      path: App/Fuorirotta.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
+        com.apple.developer.associated-domains: ["applinks:fuori-rotta.it"]
+        aps-environment: $(APS_ENTITLEMENT)
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: it
+        CFBundleLocalizations: [it, en]
+        CFBundleDisplayName: Fuorirotta
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        FRAPIBaseURL: $(API_BASE_URL)
+        FRApnsEnvironment: $(APNS_ENVIRONMENT)
+        GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
+        GIDServerClientID: $(GOOGLE_SERVER_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        CADisableMinimumFrameDurationOnPhone: true
+        ITSAppUsesNonExemptEncryption: false
+        # A3 (UAT7): per offrire Google Maps e Waze nel menu "Indicazioni" solo se installate (canOpenURL).
+        LSApplicationQueriesSchemes: [comgooglemaps, waze]
+        NSLocationWhenInUseUsageDescription: Usiamo la tua posizione solo per mostrarti gli eventi più vicini. Non la salviamo sui nostri server.
+    postBuildScripts:
+      - name: API locale (solo DebugLocal)
+        basedOnDependencyAnalysis: false
+        script: |
+          # D-10: la base URL locale esiste solo nella configurazione DebugLocal, mai a runtime.
+          if [ "$CONFIGURATION" = "DebugLocal" ]; then
+            PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+            HOST=$(scutil --get LocalHostName)
+            /usr/libexec/PlistBuddy -c "Set :FRAPIBaseURL http://$HOST.local:3000" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Serve per collegarsi al server di sviluppo sul Mac.'" "$PLIST" 2>/dev/null || true
+          fi
+  FuorirottaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: Fuorirotta
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: it.fuorirotta.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Fuorirotta
+      configs:
+        # A1: solo qui i test sanno di girare contro il server locale; altrove LocalTestCase li ferma prima di partire.
+        DebugLocal:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) LOCAL_API
+schemes:
+  Fuorirotta:
+    build:
+      targets:
+        Fuorirotta: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+    # A1 (UAT7): niente test UI sullo schema di produzione. Salvano e tolgono eventi: su fuori-rotta.it
+    # sporcherebbero un account vero. Vivono solo in "Fuorirotta Locale" (gate S8).
+  Fuorirotta Locale:
+    build:
+      targets:
+        Fuorirotta: all
+    run:
+      config: DebugLocal
+    test:
+      config: DebugLocal
+      targets:
+        - FuorirottaUITests

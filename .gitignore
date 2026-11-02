@@ -54,3 +54,13 @@ AGENTS.md
 
 # Client Prisma generato (prisma generate, anche in postinstall)
 /lib/generated/
+ios/build/
+ios/Packages/FuorirottaCore/.build/
+xcuserdata/
+*.xcuserstate
+.agent/
+.agents/
+
+# App Store Connect / firma iOS: mai nel repo (D-09)
+*.p8
+*.mobileprovision

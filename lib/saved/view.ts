@@ -23,6 +23,8 @@ export interface SavedItemData {
   snap: Snap | null
   /** Istantanea costruita ora dal server dalla riga viva. */
   live: Snap | null
+  /** Foto dell'evento vivo, null se manca o se la riga non esiste piu'. Solo la lista dell'account la riempie. */
+  imageUrl?: string | null
   /** Altre date future della stessa serie, dal server (SAVE-06). */
   siblings: Sibling[]
 }

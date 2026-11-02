@@ -1,0 +1,27 @@
+{
+  "items": [
+    {
+      "ref": 2704,
+      "eventId": 2704,
+      "live": {
+        "title": "SOCAFEST 2026",
+        "dateStart": "2026-10-29T00:00:00.000Z",
+        "dateEnd": "2026-11-01T23:59:59.999Z",
+        "place": "PALAZZAGO",
+        "category": "Sagre e feste",
+        "source": "opendata_lombardia",
+        "sourceId": "24535",
+        "sourceUrl": "https://www.procedimenti.servizirl.it/sagre/public/programma/24535"
+      },
+      "imageUrl": "https://www.example.test/foto/socafest.jpg",
+      "siblings": []
+    },
+    {
+      "ref": 99999,
+      "eventId": null,
+      "live": null,
+      "imageUrl": null,
+      "siblings": []
+    }
+  ]
+}
