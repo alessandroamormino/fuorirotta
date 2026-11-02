@@ -282,7 +282,7 @@ struct EventDetailView: View {
                     Button {
                         openDirections(to: spot, name: event.locationName ?? event.title)
                     } label: {
-                        Label("Indicazioni", systemImage: "arrow.triangle.turn.up.right.diamond").frame(maxWidth: link == nil ? .infinity : nil)
+                        Label("Indicazioni", systemImage: "arrow.triangle.turn.up.right.diamond").lineLimit(1).frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                 }
