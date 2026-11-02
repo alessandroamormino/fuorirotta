@@ -113,6 +113,38 @@ public func formatLongDay(_ day: String, locale: Locale = .italian) -> String {
     return monthFirst(locale) ? "\(weekday), \(month) \(p[2])" : "\(weekday) \(p[2]) \(month)"
 }
 
+/// "Sabato 31 ottobre 2026" ("Saturday, October 31, 2026"): l'intestazione di un giorno nella timeline dei Salvati.
+public func formatTimelineDay(_ day: String, locale: Locale = .italian) -> String {
+    let p = day.split(separator: "-").compactMap { Int($0) }
+    guard p.count == 3, (1...12).contains(p[1]),
+          let noon = Rome.calendar.date(from: DateComponents(year: p[0], month: p[1], day: p[2], hour: 12))
+    else { return day }
+    let n = names(locale)
+    let weekday = capitalizedFirst(n.weekdaySymbols[Rome.calendar.component(.weekday, from: noon) - 1])
+    let month = n.monthSymbols[p[1] - 1]
+    return monthFirst(locale) ? "\(weekday), \(month) \(p[2]), \(p[0])" : "\(weekday) \(p[2]) \(month) \(p[0])"
+}
+
+/// La piastrina del giorno: il numero ("31") e il giorno della settimana abbreviato ("Sab"). Un giorno illeggibile torna com'e'.
+public func timelineDayTile(_ day: String, locale: Locale = .italian) -> (number: String, weekday: String) {
+    let p = day.split(separator: "-").compactMap { Int($0) }
+    guard p.count == 3, (1...12).contains(p[1]),
+          let noon = Rome.calendar.date(from: DateComponents(year: p[0], month: p[1], day: p[2], hour: 12))
+    else { return (day, "") }
+    let weekday = names(locale).shortWeekdaySymbols[Rome.calendar.component(.weekday, from: noon) - 1]
+    return ("\(p[2])", capitalizedFirst(weekday))
+}
+
+/// "2026-10-31" piu' `n` giorni, "YYYY-MM-DD" (calendario di Roma); nil se il giorno e' illeggibile.
+public func dayString(_ day: String, plusDays n: Int) -> String? {
+    let p = day.split(separator: "-").compactMap { Int($0) }
+    guard p.count == 3, (1...12).contains(p[1]),
+          let noon = Rome.calendar.date(from: DateComponents(year: p[0], month: p[1], day: p[2], hour: 12)),
+          let moved = Rome.calendar.date(byAdding: .day, value: n, to: noon)
+    else { return nil }
+    return ymd(moved, in: Rome.calendar)
+}
+
 /// "21:00" (Roma), oppure nil per gli eventi senza orario: la fonte li salva a mezzanotte di Roma o a mezzanotte UTC.
 public func eventTime(_ dateStart: String) -> String? {
     guard let date = parseISO(dateStart) else { return nil }
