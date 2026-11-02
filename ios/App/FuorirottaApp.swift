@@ -132,7 +132,6 @@ struct FuorirottaApp: App {
                     if GIDSignIn.sharedInstance.handle(url) { return }
                     Task { await router.open(url, api: api) }
                 }
-                .sheet(isPresented: Bindable(session).presentSignIn) { SignInSheet() }
                 .sheet(item: Bindable(router).safari) { SafariView(url: $0.url).ignoresSafeArea() }
         }
     }
@@ -186,6 +185,10 @@ struct RootView: View {
         .sensoryFeedback(.success, trigger: saves.successCount)
         .sensoryFeedback(.warning, trigger: saves.warningCount)
         .sensoryFeedback(.error, trigger: saves.errorCount)
+        // Qui e non nella scena: il contenuto di un foglio eredita l'ambiente della vista a cui e' attaccato, e i
+        // `.environment(...)` della scena stanno SOTTO il foglio. Attaccato alla scena, SignInSheet non trovava la
+        // Session e l'app si chiudeva (UAT 4, crash EnvironmentValues.subscript).
+        .sheet(isPresented: Bindable(session).presentSignIn) { SignInSheet() }
     }
 }
 

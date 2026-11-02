@@ -97,6 +97,18 @@ targets:
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$PLIST" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Serve per collegarsi al server di sviluppo sul Mac.'" "$PLIST" 2>/dev/null || true
           fi
+  FuorirottaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: Fuorirotta
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: it.fuorirotta.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Fuorirotta
 schemes:
   Fuorirotta:
     build:
@@ -106,9 +118,17 @@ schemes:
       config: Debug
     archive:
       config: Release
+    test:
+      config: Debug
+      targets:
+        - FuorirottaUITests
   Fuorirotta Locale:
     build:
       targets:
         Fuorirotta: all
     run:
       config: DebugLocal
+    test:
+      config: DebugLocal
+      targets:
+        - FuorirottaUITests
