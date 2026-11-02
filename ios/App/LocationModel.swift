@@ -3,7 +3,7 @@ import MapKit
 import Observation
 import SwiftUI
 
-/// Un luogo di partenza per Home. Le coordinate dei capoluoghi vengono dalla tabella `comuni` (Lombardia, DB locale):
+/// Un luogo di partenza per Home: un capoluogo lombardo o un comune qualsiasi cercato (UAT7 C3). Le coordinate dei capoluoghi vengono dalla tabella `comuni` (Lombardia, DB locale):
 /// `select name, latitude, longitude from comuni where region_name='Lombardia' and name in (...)`.
 struct Place: Codable, Hashable {
     let name: String
@@ -29,13 +29,16 @@ struct Place: Codable, Hashable {
 }
 
 /// Dove si trova l'utente. Solo "quando l'app e' in uso", precisione ridotta (basta il chilometro).
-/// Su disco vanno solo il NOME del luogo scelto e due flag: la coordinata del telefono resta in memoria (T-27-25).
+/// Su disco vanno solo il luogo SCELTO (nome e centro del comune, dati pubblici) e due flag: la coordinata del telefono
+/// resta in memoria (T-27-25).
 @MainActor @Observable
 final class LocationModel {
     private enum Key {
         static let explained = "fr.locationExplained"
         static let useDevice = "fr.useDeviceLocation"
+        /// Prima di C3: solo il nome di un capoluogo. Si legge ancora, si scrive `chosenPlace`.
         static let place = "fr.place"
+        static let chosenPlace = "fr.chosenPlace"
     }
 
     /// Il luogo con cui si interroga il server: telefono (se attivo e noto), poi quello scelto, poi Milano.
@@ -48,7 +51,7 @@ final class LocationModel {
     private(set) var explained: Bool
 
     private var wantsDevice: Bool
-    private var chosen: String?
+    private var chosen: Place?
     private var coordinate: CLLocationCoordinate2D?  // solo memoria
     private var deviceName: String?
     private let manager = CLLocationManager()
@@ -58,7 +61,8 @@ final class LocationModel {
     init() {
         explained = defaults.bool(forKey: Key.explained)
         wantsDevice = defaults.bool(forKey: Key.useDevice)
-        chosen = defaults.string(forKey: Key.place)
+        chosen = defaults.data(forKey: Key.chosenPlace).flatMap { try? JSONDecoder().decode(Place.self, from: $0) }
+            ?? defaults.string(forKey: Key.place).flatMap { name in Place.curated.first { $0.name == name } }
         // Precisa sul telefono (nome del comune, distanze, tempo di percorrenza); al server va arrotondata (coarseCoordinate).
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         bridge.onChange = { [weak self] in self?.authorizationChanged() }
@@ -101,20 +105,21 @@ final class LocationModel {
     func select(_ place: Place) {
         markExplained()
         wantsDevice = false
-        chosen = place.name
+        chosen = place
         defaults.set(false, forKey: Key.useDevice)
-        defaults.set(place.name, forKey: Key.place)
+        defaults.set(try? JSONEncoder().encode(place), forKey: Key.chosenPlace)
+        defaults.removeObject(forKey: Key.place)
         refresh()
     }
 
-    /// La riga con il segno di spunta nel foglio: il telefono, oppure un capoluogo (Milano di default).
-    var selectedCurated: String? { isUsingDevice ? nil : (chosen ?? Place.milano.name) }
+    /// Il luogo con la spunta nel foglio: nil = il telefono; altrimenti quello scelto (Milano di default).
+    var selectedPlace: Place? { isUsingDevice ? nil : (chosen ?? .milano) }
 
     private func refresh() {
         if wantsDevice, !denied, let coordinate {
             place = Place(name: deviceName ?? String(localized: "La tua posizione"), latitude: coordinate.latitude, longitude: coordinate.longitude)
         } else {
-            place = Place.curated.first { $0.name == chosen } ?? .milano
+            place = chosen ?? .milano
         }
     }
 

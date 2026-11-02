@@ -30,6 +30,7 @@
 #   V1  UAT 5: la foto negli eventi salvati: imageUrl additivo in /me/saved e /saved/resolve, null se manca o l'evento e' sparito, chiavi = contratto
 #   E1  UAT 7 B1: GET /api/events/<id> porta `comune` con le chiavi EVENT_COMUNE_KEYS del contratto (null senza comune)
 #   S1  UAT 7 B2: condivisione della lista e feed del calendario col solo bearer, nelle forme che l'app decodifica
+#   Z1  UAT 7 C3: GET /api/comuni/search porta le chiavi COMUNE_SEARCH_ITEM_KEYS del contratto, con le coordinate in numeri
 #   A7  UAT 7 B3: nome, sessioni (elenco, revoca di una e delle altre) ed esportazione col solo bearer, nelle forme dell'app
 set -euo pipefail
 
@@ -797,6 +798,17 @@ code="$(call e1a GET "/api/events/${e1_with}" 198.51.100.241)"
 code="$(call e1b GET "/api/events/${e1_bare}" 198.51.100.241)"
 [[ "${code}" == "200" && "$(json_get "${tmp_dir}/e1b.b" 'j.comune === null')" == "true" ]] || fail "E1: senza comune atteso comune null: $(cat "${tmp_dir}/e1b.b")"
 echo "ok  E1: GET /api/events/<id> -> comune con le chiavi EVENT_COMUNE_KEYS del contratto (ISTAT e sigla), null senza comune"
+
+# --- Z1: UAT 7 C3, un comune qualsiasi come centro della Home e della Ricerca (aggiunta compatibile) ------------
+# L'app usa il comune scelto come centro (lat/lng + radius): ogni risultato ha ESATTAMENTE le chiavi
+# COMUNE_SEARCH_ITEM_KEYS di lib/api-contract.ts, e Milano ha latitudine e longitudine numeriche.
+z1_keys="$(bash scripts/dev-db.sh npx tsx -e "import('./lib/api-contract.ts').then((mod) => { const m = mod.default ?? mod; console.log(JSON.stringify([...m.COMUNE_SEARCH_ITEM_KEYS].sort())) })" | tail -n 1)"
+[[ "${z1_keys}" == \[* ]] || fail "Z1: non riesco a leggere COMUNE_SEARCH_ITEM_KEYS da lib/api-contract.ts (ottenuto '${z1_keys}')"
+code="$(call z1a GET "/api/comuni/search?q=Milano" 198.51.100.243)"
+[[ "${code}" == "200" ]] || fail "Z1: GET /api/comuni/search?q=Milano: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/z1a.b" "j.results.length > 0 && j.results.every((r) => JSON.stringify(Object.keys(r).sort()) === JSON.stringify(${z1_keys})) && j.results.some((r) => r.name === 'Milano' && typeof r.latitude === 'number' && typeof r.longitude === 'number')")" == "true" ]] \
+  || fail "Z1: ogni risultato deve avere esattamente le chiavi ${z1_keys}, Milano con le coordinate in numeri: $(cat "${tmp_dir}/z1a.b")"
+echo "ok  Z1: GET /api/comuni/search -> chiavi COMUNE_SEARCH_ITEM_KEYS del contratto, coordinate del comune in numeri"
 
 # --- S1: UAT 7 B2, condividi la lista e iscriviti nel calendario dall'app ---------------------------------------
 # Le forme che decodifica FuorirottaCore (Sharing.swift): GET share {link:null|{path,showName}, upcoming}, POST e rotate

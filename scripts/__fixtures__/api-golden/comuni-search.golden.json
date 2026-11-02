@@ -18,6 +18,12 @@
     "$.results[].istatCode": [
       "string"
     ],
+    "$.results[].latitude": [
+      "number"
+    ],
+    "$.results[].longitude": [
+      "number"
+    ],
     "$.results[].name": [
       "string"
     ],

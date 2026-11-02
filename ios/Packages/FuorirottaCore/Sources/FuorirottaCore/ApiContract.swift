@@ -17,4 +17,5 @@ public enum ApiContract {
     public static let accountCap = 500
     public static let placeCap = 50
     public static let eventComuneKeys = ["istatCode", "name", "provinceCode", "provinceName"]
+    public static let comuneSearchItemKeys = ["id", "istatCode", "name", "provinceName", "regionName", "latitude", "longitude"]
 }

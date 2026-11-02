@@ -38,6 +38,23 @@ public struct PlaceOption: Decodable, Hashable, Sendable, Identifiable {
 
 struct PlaceResults: Decodable { let results: [PlaceOption] }
 
+/// Un risultato di GET /api/comuni/search (UAT7 C3), la ricerca del campo "Dove" del sito: un comune da usare come
+/// centro della Home e della Ricerca. Chiavi = ApiContract.comuneSearchItemKeys. Le coordinate mancano (null) per i
+/// pochi comuni senza un punto: quelli non si offrono.
+public struct ComuneOption: Decodable, Hashable, Sendable, Identifiable {
+    public let id: Int
+    public let istatCode: String
+    public let name: String
+    public let provinceName: String
+    public let regionName: String
+    public let latitude: Double?
+    public let longitude: Double?
+
+    enum CodingKeys: String, CodingKey, CaseIterable { case id, istatCode, name, provinceName, regionName, latitude, longitude }
+}
+
+struct ComuneResults: Decodable { let results: [ComuneOption] }
+
 /// Lo stesso ordine di sortFollows (lib/follows/keys.ts): regioni, province, comuni (alfabetico italiano), poi le
 /// categorie nell'ordine della tassonomia. Serve a inserire una voce nuova al suo posto senza rileggere la lista.
 public func sortFollows(_ list: [FollowItem]) -> [FollowItem] {

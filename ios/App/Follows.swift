@@ -193,13 +193,17 @@ struct FollowsView: View {
     }
 }
 
-/// La ricerca dei luoghi di PlacePicker.tsx: /api/places/search (pubblica, copre anche province e regioni), 200 ms di
-/// pausa dopo l'ultima lettera, la richiesta precedente si annulla col task. La usano "Cosa segui" e la scelta degli interessi.
+/// La ricerca dei luoghi: 200 ms di pausa dopo l'ultima lettera, la richiesta precedente si annulla col task. Senza
+/// argomenti e' quella di PlacePicker.tsx (/api/places/search, anche province e regioni) per "Cosa segui" e gli interessi;
+/// la zona della Home e della Ricerca la usa con /api/comuni/search, come il campo "Dove" del sito (UAT7 C3).
 @MainActor @Observable
-final class PlaceSearch {
+final class PlaceSearch<Option: Sendable> {
     var query = ""
-    private(set) var results: [PlaceOption]?
+    private(set) var results: [Option]?
     private(set) var failed = false
+    private let fetch: @Sendable (APIClient, String) async throws -> [Option]
+
+    init(fetch: @escaping @Sendable (APIClient, String) async throws -> [Option]) { self.fetch = fetch }
 
     var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
     var active: Bool { trimmed.count >= 2 }
@@ -212,7 +216,7 @@ final class PlaceSearch {
         try? await Task.sleep(for: .milliseconds(200))
         guard !Task.isCancelled else { return }
         do {
-            let found = try await api.searchPlaces(q: trimmed)
+            let found = try await fetch(api, trimmed)
             guard !Task.isCancelled else { return }
             results = found
         } catch {
@@ -222,10 +226,14 @@ final class PlaceSearch {
     }
 }
 
+extension PlaceSearch where Option == PlaceOption {
+    convenience init() { self.init { try await $0.searchPlaces(q: $1) } }
+}
+
 /// Le righe dei risultati: "Già seguito" su quelli che ci sono gia', il tetto dei 50 luoghi al posto della lista.
 /// Il tocco passa la voce a `pick` e svuota la ricerca.
 struct PlaceSearchRows: View {
-    let search: PlaceSearch
+    let search: PlaceSearch<PlaceOption>
     let capReached: Bool
     let isFollowed: (FollowItem) -> Bool
     let pick: (FollowItem) -> Void

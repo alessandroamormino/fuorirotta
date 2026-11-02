@@ -536,6 +536,16 @@
         }
       }
     },
+    "Cerca un comune" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search for a town"
+          }
+        }
+      }
+    },
     "Cerca un comune, una provincia o una regione qui sopra per aggiungerlo." : {
       "localizations" : {
         "en" : {
@@ -1606,6 +1616,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Music and shows"
+          }
+        }
+      }
+    },
+    "Nessun comune trovato per «%@»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No town found for “%@”."
           }
         }
       }

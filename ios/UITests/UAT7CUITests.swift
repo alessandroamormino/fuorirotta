@@ -53,4 +53,52 @@ final class UAT7CUITests: LocalTestCase {
         Thread.sleep(forTimeInterval: 2)
         shot(app, "mappa-evento")
     }
+
+    /// Sceglie la zona dal foglio "Scegli la zona": cercando (`query`) oppure dalla lista dei capoluoghi.
+    private func pickZone(_ name: String, query: String? = nil, in app: XCUIApplication) {
+        app.tabBars.buttons["Home"].tap()
+        let change = app.buttons["Cambia posizione"]
+        XCTAssertTrue(change.waitForExistence(timeout: 20))
+        change.tap()
+        XCTAssertTrue(app.navigationBars["Scegli la zona"].waitForExistence(timeout: 5))
+        if let query {
+            let field = app.searchFields.firstMatch
+            XCTAssertTrue(field.waitForExistence(timeout: 5), "nessun campo per cercare un comune")
+            field.tap()
+            field.typeText(query)
+        }
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "\(name) non e' nel foglio della zona")
+        if query != nil { shot(app, "zona-ricerca") }
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Scegli la zona"].waitForNonExistence(timeout: 5))
+    }
+
+    /// C3: un comune qualsiasi (fuori dai capoluoghi lombardi) diventa la zona della Home e il "Dove" dei filtri di Cerca.
+    func testAnyComuneBecomesTheZone() {
+        let app = launch()
+        pickZone("Firenze", query: "Firen", in: app)
+        defer { pickZone("Milano", in: app) }  // il simulatore torna alla zona di partenza degli altri test
+        XCTAssertTrue(app.staticTexts["Entro 50 km da Firenze"].waitForExistence(timeout: 20), "la Home non e' passata a Firenze")
+        shot(app, "zona-home")
+        // Cerca > Filtri > Dove: la zona e' la stessa.
+        app.tabBars.buttons.element(boundBy: app.tabBars.buttons.count - 1).tap()
+        let filters = app.buttons["Filtri"]
+        XCTAssertTrue(filters.waitForExistence(timeout: 10))
+        filters.tap()
+        let near = app.buttons["Vicino a Firenze"]
+        XCTAssertTrue(near.waitForExistence(timeout: 5), "il Dove dei filtri non e' Firenze")
+        near.tap()
+        shot(app, "zona-filtri")
+        // Il foglio della zona si apre anche da qui, con il comune scelto in cima e la spunta.
+        app.buttons["Cambia zona o usa la mia posizione"].tap()
+        let chosen = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Firenze'")).firstMatch
+        XCTAssertTrue(chosen.waitForExistence(timeout: 5))
+        XCTAssertTrue(chosen.isSelected, "il comune scelto non ha la spunta")
+        // Chiude i due fogli (zona, filtri) per la pulizia in Home.
+        app.swipeDown(velocity: .fast)
+        XCTAssertTrue(app.navigationBars["Scegli la zona"].waitForNonExistence(timeout: 5))
+        app.swipeDown(velocity: .fast)
+        XCTAssertTrue(app.navigationBars["Filtri"].waitForNonExistence(timeout: 5))
+    }
 }

@@ -74,6 +74,13 @@ export const SAVED_RESOLVE_ITEM_KEYS = ['ref', 'eventId', 'live', 'imageUrl', 's
 // sito. Aggiunta compatibile; le chiavi sono queste, il gate (check:mobile-api, E1) le confronta con la risposta vera.
 export const EVENT_COMUNE_KEYS = ['istatCode', 'name', 'provinceCode', 'provinceName'] as const
 
+// Zona della Home e "Dove" della Ricerca (Fase 27, UAT7 C3). L'app cerca un comune qualsiasi con GET /api/comuni/search
+// (la stessa del campo Dove del sito) e lo usa come CENTRO: lat/lng arrotondati a 2 decimali + radius su /api/events,
+// mai il filtro per comune (e' il ramo che puo' avviare uno scraping). Per questo ogni risultato porta anche `latitude` e
+// `longitude` del comune (numeri, null se il comune non ha un punto: l'app non lo offre). Aggiunta compatibile; le chiavi
+// sono queste, il gate (check:mobile-api, Z1) le confronta con la risposta vera.
+export const COMUNE_SEARCH_ITEM_KEYS = ['id', 'istatCode', 'name', 'provinceName', 'regionName', 'latitude', 'longitude'] as const
+
 // Politica di versione (Fase 26, API-04). GET /api/v1/config[?version=1.4.0] e' pubblica: niente
 // sessione, niente database. Per l'app: `update-required` = schermata bloccante "Aggiorna";
 // `update-recommended` = avviso che si puo' chiudere; `ok` o nessun `status` (versione mancante o

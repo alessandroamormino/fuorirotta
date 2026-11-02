@@ -163,6 +163,19 @@ extension MeTests {
             #expect(followTargets(for: Event(id: 2, title: "x", dateStart: "2026-11-07T00:00:00.000Z", category: "Hacker")).isEmpty)
         }
 
+        /// C3: la zona da un comune qualsiasi. Rotta pubblica (niente bearer), chiavi del contratto, i comuni senza punto
+        /// non si offrono.
+        @Test func comuneSearchForTheZone() async throws {
+            #expect(ComuneOption.CodingKeys.allCases.map(\.rawValue) == ApiContract.comuneSearchItemKeys)
+            MeStub.reset([.init(body: #"{"results":[{"id":1,"istatCode":"022213","name":"Vigo di Fassa","provinceName":"Trento","regionName":"Trentino-Alto Adige","latitude":46.4186,"longitude":11.6744},{"id":2,"istatCode":"999999","name":"Vigo Senza Punto","provinceName":"X","regionName":"Y","latitude":null,"longitude":null}]}"#)])
+            let found = try await MeStub.client().searchComuni(q: "vigo")
+            #expect(found.map(\.name) == ["Vigo di Fassa"])
+            #expect(found.first?.latitude == 46.4186)
+            let sent = try #require(MeStub.requests.first)
+            #expect(sent.method == "GET" && sent.url.path == "/api/comuni/search" && sent.url.query == "q=vigo")
+            #expect(sent.headers["Authorization"] == nil)
+        }
+
         @Test func eventDetailDecodesComuneWithTheContractKeys() throws {
             #expect(EventComune.CodingKeys.allCases.map(\.rawValue) == ApiContract.eventComuneKeys)
             let json = #"{"id":7,"title":"T","dateStart":"2026-11-07T00:00:00.000Z","dateEnd":null,"imageUrl":null,"locationName":null,"address":null,"canonicalCategory":"Altro","category":"Altro","latitude":null,"longitude":null,"resolvedLatitude":null,"resolvedLongitude":null,"sourceUrl":null,"description":null,"comune":{"istatCode":"021008","name":"Bolzano","provinceCode":"BZ","provinceName":"Bolzano/Bozen"}}"#

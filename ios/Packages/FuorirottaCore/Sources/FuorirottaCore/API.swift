@@ -396,6 +396,14 @@ public struct APIClient: Sendable {
         return try await get(comps.url!, as: PlaceResults.self).results
     }
 
+    /// Comuni per la zona (UAT7 C3): la stessa ricerca pubblica del campo "Dove" del sito, senza bearer. Il comune scelto
+    /// parte poi solo come lat/lng arrotondati di `events` (mai il filtro per comune, che puo' avviare uno scraping).
+    public func searchComuni(q: String) async throws -> [ComuneOption] {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("api/comuni/search"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "q", value: q)]
+        return try await get(comps.url!, as: ComuneResults.self).results.filter { $0.latitude != nil && $0.longitude != nil }
+    }
+
     /// Politica di versione (pubblica, niente bearer). nil se il server non risponde o risponde male:
     /// l'app prosegue (fail open, T-27-26). Solo un "update-required" esplicito blocca.
     public func config(version: String) async -> AppConfig? {

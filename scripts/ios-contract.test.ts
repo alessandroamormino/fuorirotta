@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  APNS_ENVIRONMENTS, APNS_TOKEN_RE, APP_USER_AGENT_RE, DEVICE_CAP, EVENT_COMUNE_KEYS, FEATURES, PLAN, SAVED_LIST_ITEM_KEYS,
+  APNS_ENVIRONMENTS, APNS_TOKEN_RE, APP_USER_AGENT_RE, COMUNE_SEARCH_ITEM_KEYS, DEVICE_CAP, EVENT_COMUNE_KEYS, FEATURES, PLAN, SAVED_LIST_ITEM_KEYS,
   SAVED_RESOLVE_ITEM_KEYS, UNIVERSAL_LINK_PATHS,
 } from '../lib/api-contract'
 import { PLACE_CAP } from '../lib/follows/keys'
@@ -69,6 +69,7 @@ const expected: Record<string, Value> = {
   savedResolveItemKeys: [...SAVED_RESOLVE_ITEM_KEYS],
   placeCap: PLACE_CAP,
   eventComuneKeys: [...EVENT_COMUNE_KEYS],
+  comuneSearchItemKeys: [...COMUNE_SEARCH_ITEM_KEYS],
 }
 
 const swift = read('ios/Packages/FuorirottaCore/Sources/FuorirottaCore/ApiContract.swift')
