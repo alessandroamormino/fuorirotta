@@ -10,7 +10,8 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  APNS_ENVIRONMENTS, APNS_TOKEN_RE, APP_USER_AGENT_RE, DEVICE_CAP, FEATURES, PLAN, UNIVERSAL_LINK_PATHS,
+  APNS_ENVIRONMENTS, APNS_TOKEN_RE, APP_USER_AGENT_RE, DEVICE_CAP, FEATURES, PLAN, SAVED_LIST_ITEM_KEYS, SAVED_RESOLVE_ITEM_KEYS,
+  UNIVERSAL_LINK_PATHS,
 } from '../lib/api-contract'
 import { CANONICAL_CATEGORIES } from '../lib/categories/taxonomy'
 import { ACCOUNT_CAP, GUEST_CAP } from '../lib/saved/snapshot'
@@ -63,6 +64,8 @@ const expected: Record<string, Value> = {
   categories: [...CANONICAL_CATEGORIES],
   guestCap: GUEST_CAP,
   accountCap: ACCOUNT_CAP,
+  savedListItemKeys: [...SAVED_LIST_ITEM_KEYS],
+  savedResolveItemKeys: [...SAVED_RESOLVE_ITEM_KEYS],
 }
 
 const swift = read('ios/Packages/FuorirottaCore/Sources/FuorirottaCore/ApiContract.swift')

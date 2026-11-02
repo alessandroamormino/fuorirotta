@@ -42,13 +42,14 @@ export async function resolveIds(ids: number[]): Promise<ResolvedItem[]> {
   return ids.map((ref) => {
     const row = rows.get(ref)
     const canonical = row && rows.get(row.canonicalEventId ?? row.id)
-    if (!canonical) return { ref, eventId: null, live: null, siblings: [] }
+    if (!canonical) return { ref, eventId: null, live: null, imageUrl: null, siblings: [] }
     // composeEvent copia la riga canonica ({ ...canonical }): `comune` resta.
     const composed = composeEvent(canonical, members.get(canonical.id) ?? [])
     return {
       ref,
       eventId: canonical.id,
       live: snapFromEvent({ ...composed, comune: canonical.comune }),
+      imageUrl: composed.imageUrl ?? null,
       siblings: siblings.get(siblingKey(canonical.source, canonical.sourceId)) ?? [],
     }
   })
@@ -146,6 +147,7 @@ export async function listAccountItems(userId: string): Promise<SavedItemData[]>
         sourceUrl: r.sourceUrl,
       },
       live: hit?.live ?? null,
+      imageUrl: hit?.imageUrl ?? null,
       siblings: hit?.siblings ?? [],
     }
   })

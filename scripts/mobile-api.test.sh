@@ -27,6 +27,7 @@
 #   W1  API-05: /.well-known/apple-app-site-association e assetlinks.json -> 200 JSON, nessun redirect, HEAD 200
 #   A1  UAT 2: i metodi di accesso dall'app: list-accounts e link-social accettano il solo bearer, un id token falso e' rifiutato senza collegare nulla
 #   C1  tracer: GET /api/v1/config?version= senza credenziali -> update-required / update-recommended / ok dalle soglie dell'ambiente
+#   V1  UAT 5: la foto negli eventi salvati: imageUrl additivo in /me/saved e /saved/resolve, null se manca o l'evento e' sparito, chiavi = contratto
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -739,3 +740,37 @@ curl -sS -o "${tmp_dir}/w1a.b" --max-time 120 "http://127.0.0.1:${port}/.well-kn
 curl -sS -o "${tmp_dir}/w1b.b" --max-time 120 "http://127.0.0.1:${port}/.well-known/assetlinks.json"
 [[ "$(cat "${tmp_dir}/w1b.b")" == "[]" ]] || fail "W1: assetlinks.json atteso [], ottenuto $(cat "${tmp_dir}/w1b.b")"
 echo "ok  W1: apple-app-site-association (appID TEAMID1234.it.fuorirotta.app.test) e assetlinks.json ([]) -> 200 application/json, 0 redirect, nessun Location, HEAD 200"
+
+# --- V1: UAT 5, la foto negli eventi salvati (aggiunta compatibile) ---------------------------------------------
+# Ogni voce di GET /api/v1/me/saved e di POST /api/v1/saved/resolve ha `imageUrl`: events.image_url dell'evento vivo,
+# null senza foto o se l'evento non esiste piu'. Le chiavi della voce sono ESATTAMENTE quelle di lib/api-contract.ts.
+v1_keys="$(bash scripts/dev-db.sh npx tsx -e "import('./lib/api-contract.ts').then((mod) => { const m = mod.default ?? mod; console.log(JSON.stringify({ list: [...m.SAVED_LIST_ITEM_KEYS].sort(), resolve: [...m.SAVED_RESOLVE_ITEM_KEYS].sort() })) })" | tail -n 1)"
+[[ "${v1_keys}" == \{* ]] || fail "V1: non riesco a leggere le chiavi dei salvati da lib/api-contract.ts (ottenuto '${v1_keys}')"
+v1_img='https://example.invalid/foto-v1.jpg'
+mint_app_user v1 "${app_ua}"
+v1_ev="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category, image_url)
+  VALUES ('__mobile_api__', 'v1-foto', 'Prova foto salvati', now() + interval '3 days', now() + interval '4 days', 'Piazza di prova', 'Altro', '${v1_img}')
+  RETURNING id" | head -n 1)"
+v1_bare="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
+  VALUES ('__mobile_api__', 'v1-senza', 'Prova senza foto', now() + interval '3 days', now() + interval '4 days', 'Piazza di prova', 'Altro')
+  RETURNING id" | head -n 1)"
+[[ "${v1_ev}" =~ ^[0-9]+$ && "${v1_bare}" =~ ^[0-9]+$ ]] || fail "V1: eventi di prova non inseriti ('${v1_ev}' '${v1_bare}')"
+psql_dev "INSERT INTO saved_events (user_id, event_id, title, date_start, canonical_category, source, source_id)
+  VALUES ('${v1_user}', NULL, 'Sparito', now() + interval '2 days', 'Altro', '__mobile_api__', 'v1-gone')" >/dev/null
+for id in "${v1_ev}" "${v1_bare}"; do
+  code="$(bearer_call v1p PUT "/api/v1/me/saved/${id}" 198.51.100.240 "${v1_cookie}")"
+  [[ "${code}" == "200" ]] || fail "V1: PUT salvato ${id}: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/v1p.b"))"
+done
+code="$(bearer_call v1l GET /api/v1/me/saved 198.51.100.240 "${v1_cookie}")"
+[[ "${code}" == "200" ]] || fail "V1: GET /me/saved: atteso 200, ottenuto ${code}"
+[[ "$(json_get "${tmp_dir}/v1l.b" "j.items.length === 3 && j.items.every((i) => Object.keys(i).sort().join() === ${v1_keys}.list.join())")" == "true" ]] \
+  || fail "V1: le voci di /me/saved devono avere esattamente le chiavi del contratto ${v1_keys}: $(cat "${tmp_dir}/v1l.b")"
+[[ "$(json_get "${tmp_dir}/v1l.b" "j.items.map((i) => i.eventId === ${v1_ev} ? i.imageUrl : i.eventId === ${v1_bare} ? 'bare:' + i.imageUrl : 'gone:' + i.imageUrl).sort().join('|')")" == "bare:null|gone:null|${v1_img}" ]] \
+  || fail "V1: imageUrl in /me/saved: attesi la foto, null senza foto e null per l'evento sparito: $(cat "${tmp_dir}/v1l.b")"
+code="$(call v1r POST /api/v1/saved/resolve 198.51.100.240 -H 'Content-Type: application/json' --data "{\"ids\":[${v1_ev},${v1_bare},999999999]}")"
+[[ "${code}" == "200" ]] || fail "V1: POST /saved/resolve: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/v1r.b"))"
+[[ "$(json_get "${tmp_dir}/v1r.b" "j.items.length === 3 && j.items.every((i) => Object.keys(i).sort().join() === ${v1_keys}.resolve.join())")" == "true" ]] \
+  || fail "V1: le voci di /saved/resolve devono avere esattamente le chiavi del contratto ${v1_keys}: $(cat "${tmp_dir}/v1r.b")"
+[[ "$(json_get "${tmp_dir}/v1r.b" "j.items.map((i) => i.imageUrl).join('|')")" == "${v1_img}||" ]] \
+  || fail "V1: imageUrl in /saved/resolve: attesi foto, null, null (in ordine di richiesta): $(cat "${tmp_dir}/v1r.b")"
+echo "ok  V1: /me/saved e /saved/resolve: imageUrl = events.image_url dell'evento vivo, null senza foto o con l'evento sparito; chiavi di ogni voce = SAVED_*_ITEM_KEYS del contratto"

@@ -60,6 +60,14 @@ export const APNS_TOKEN_RE = /^[0-9a-fA-F]{64,200}$/
 export const DEVICE_CAP = 10
 export type DeviceRegistration = { token: string; environment: ApnsEnvironment; appVersion?: string }
 
+// Salvati (Fase 27, UAT 5). GET /api/v1/me/saved e POST /api/v1/saved/resolve ({ids}, pubblica) rispondono
+// {items: [...]}. Ogni voce ha anche `imageUrl`: la foto dell'evento vivo (events.image_url, composta come sulla pagina
+// evento), `null` se l'evento non ha foto o la riga non esiste piu' (`eventId` null). Fa parte della voce, NON di
+// `snap`/`live` (l'istantanea resta senza immagine, per scelta). Aggiunta compatibile: i client che non la
+// conoscono la ignorano. Le chiavi di una voce sono quelle elencate sotto: il gate le confronta con le risposte vere.
+export const SAVED_LIST_ITEM_KEYS = ['ref', 'eventId', 'savedAt', 'snap', 'live', 'imageUrl', 'siblings'] as const
+export const SAVED_RESOLVE_ITEM_KEYS = ['ref', 'eventId', 'live', 'imageUrl', 'siblings'] as const
+
 // Politica di versione (Fase 26, API-04). GET /api/v1/config[?version=1.4.0] e' pubblica: niente
 // sessione, niente database. Per l'app: `update-required` = schermata bloccante "Aggiorna";
 // `update-recommended` = avviso che si puo' chiudere; `ok` o nessun `status` (versione mancante o
