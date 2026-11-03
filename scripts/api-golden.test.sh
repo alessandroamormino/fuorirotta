@@ -24,6 +24,7 @@
 #   G12 places-search     GET /api/places/search?q=berg
 #   G13 me-state-signed   GET /api/v1/me/state da loggato (con plan e features)
 #   G14 me-state-anon     GET /api/v1/me/state da anonimo, byte per byte
+#   G15 events-lean       GET /api/events?search=<M>&limit=100&mapEvents=0 (stessa pagina, mapEvents vuoto)
 #
 # <M> e' un marcatore unico nei titoli delle fixture (sorgente riservata '__golden__'):
 # il DB locale ha ~9,6k eventi veri, con search=<M> in lista ci sono solo le fixture.
@@ -174,6 +175,21 @@ record_or_compare() {
 # --- G1 (tracer): la busta della lista ------------------------------------------------------------
 record_or_compare events-search "GET /api/events?search=<M>&limit=100" "/api/events?search=${marker}&limit=100"
 
+# --- G15: la pagina "magra" (mapEvents=0) ha gli stessi eventi e lo stesso total, mapEvents vuoto ---
+record_or_compare events-lean "GET /api/events?search=<M>&limit=100&mapEvents=0" \
+  "/api/events?search=${marker}&limit=100&mapEvents=0"
+node -e '
+  const fs = require("fs");
+  const full = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const lean = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const ids = (b) => b.events.map((e) => e.id).join(",");
+  if (lean.mapEvents.length !== 0) { console.log("mapEvents non vuoto: " + lean.mapEvents.length); process.exit(1); }
+  if (lean.total !== full.total) { console.log("total diverso: " + lean.total + " vs " + full.total); process.exit(1); }
+  if (ids(lean) !== ids(full)) { console.log("eventi o ordine diversi: " + ids(lean) + " vs " + ids(full)); process.exit(1); }
+  if (full.mapEvents.length === 0) { console.log("il corpo pieno ha mapEvents vuoto: confronto privo di senso"); process.exit(1); }
+' "${tmp_dir}/events-search.b" "${tmp_dir}/events-lean.b" || fail "G15: la pagina magra diverge dalla piena"
+echo "ok  G15: mapEvents=0 -> stessi eventi (stesso ordine) e stesso total, mapEvents vuoto"
+
 # --- G2/G3: gli altri percorsi di codice della lista --------------------------------------------
 record_or_compare events-radius "GET /api/events?search=<M>&lat=<lat>&lng=<lng>&radius=50&limit=100" \
   "/api/events?search=${marker}&lat=${full_lat}&lng=${full_lng}&radius=50&limit=100"
@@ -189,6 +205,7 @@ record_or_compare event-member "GET /api/events/<id membro> (307 verso la canoni
 
 # --- G9-G12: il catalogo (sui dati locali veri, quindi solo la forma) ----------------------------
 record_or_compare clusters "GET /api/events/clusters" "/api/events/clusters"
+
 record_or_compare categories "GET /api/categories" "/api/categories"
 record_or_compare comuni-search "GET /api/comuni/search?q=vigo" "/api/comuni/search?q=vigo"
 record_or_compare places-search "GET /api/places/search?q=berg" "/api/places/search?q=berg"
