@@ -613,31 +613,7 @@ struct MapScreen: View {
             .contentShape(Rectangle())
     }
 
-    private var chips: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Spacing.sm) {
-                chip(String(localized: "Tutte"), value: nil)
-                ForEach(ApiContract.categories, id: \.self) { chip(categoryLabel($0), value: $0) }
-            }
-            .padding(.horizontal, Spacing.md)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private func chip(_ title: String, value: String?) -> some View {
-        let selected = filter == value
-        return Button { filter = value } label: {
-            Text(verbatim: title)
-                .font(.label.weight(.semibold))
-                .foregroundStyle(selected ? Color.white : Color.foreground)
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
-                .frame(minHeight: 44)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(selected ? .regular.tint(Color.accentToken).interactive() : .regular.interactive(), in: .capsule)
-        .accessibilityLabel(selected ? Text("\(title), selezionato") : Text(verbatim: title))
-    }
+    private var chips: some View { CategoryChips(selection: $filter) }
 
     /// Vuoto (nessun pin nella vista) e guasto (nessun dato, nemmeno in cache).
     @ViewBuilder private var overlayMessage: some View {

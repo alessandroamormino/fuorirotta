@@ -135,8 +135,8 @@ struct HomeView: View {
                     }
                     .padding(.top, Spacing.xl)
                     .padding(.bottom, Spacing.xl)
-                    // Ultima: una lista senza fine non puo' avere niente sotto.
-                    if model.phase == .loaded { AllEventsSection(model: allEvents) }
+                    // Ultima: una lista senza fine non puo' avere niente sotto. L'intestazione fissata sono le CategoryChips.
+                    if model.phase == .loaded { AllEventsSection(model: allEvents, topInset: topInset) }
                 }
             }
             // L'eroe sale fino al bordo alto, sotto la status bar (REF Omniphile): niente barra di navigazione.
@@ -150,6 +150,7 @@ struct HomeView: View {
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
         .sensoryFeedback(.selection, trigger: followCount)
+        .sensoryFeedback(.selection, trigger: allEvents.category)
         .onChange(of: follows.revision) {
             guard signedIn, let api else { return }
             Task { await model.reloadFeed(api: api) }

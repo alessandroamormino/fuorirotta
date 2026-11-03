@@ -466,6 +466,16 @@
         }
       }
     },
+    "Carica altri" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load more"
+          }
+        }
+      }
+    },
     "Caricamento" : {
       "localizations" : {
         "en" : {
@@ -1248,6 +1258,16 @@
         }
       }
     },
+    "Hai visto tutto" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have seen it all"
+          }
+        }
+      }
+    },
     "Home" : {
       "localizations" : {
         "en" : {
@@ -1636,6 +1656,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No events"
+          }
+        }
+      }
+    },
+    "Nessun evento in questa categoria" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events in this category"
           }
         }
       }
