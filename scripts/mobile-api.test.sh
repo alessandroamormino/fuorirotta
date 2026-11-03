@@ -32,6 +32,7 @@
 #   S1  UAT 7 B2: condivisione della lista e feed del calendario col solo bearer, nelle forme che l'app decodifica
 #   Z1  UAT 7 C3: GET /api/comuni/search porta le chiavi COMUNE_SEARCH_ITEM_KEYS del contratto, con le coordinate in numeri
 #   A7  UAT 7 B3: nome, sessioni (elenco, revoca di una e delle altre) ed esportazione col solo bearer, nelle forme dell'app
+#   VL1 Fase 27.1: GET /me/visited col solo bearer -> voci con ESATTAMENTE le chiavi VISITED_LIST_ITEM_KEYS, visitDay YYYY-MM-DD, eventId null se l'evento e' sparito
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
@@ -233,6 +234,7 @@ m2_matrix=(
   'DELETE|/api/v1/me/saved/gone/[ref]|'
   'PUT|/api/v1/me/visited/[eventId]|'
   'DELETE|/api/v1/me/visited/[eventId]|'
+  'GET|/api/v1/me/visited|'
   'GET|/api/v1/me/share|'
   'PATCH|/api/v1/me/share|{"showName":true}'
   'POST|/api/v1/me/share/rotate|'
@@ -857,3 +859,28 @@ a7_cd="$(grep -i '^content-disposition:' "${tmp_dir}/a7e.h" | head -n 1 | tr -d 
 [[ "${code}" == "200" && "${a7_cd}" =~ filename=\"fuorirotta-dati-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json\" && "$(json_get "${tmp_dir}/a7e.b" 'j.format === 1 && j.profile.name === "Nome  Nuovo"')" == "true" ]] \
   || fail "A7: GET export: atteso 200 con filename fuorirotta-dati-<giorno>.json e il nome nuovo, ottenuto ${code} '${a7_cd}'"
 echo "ok  A7: profile (nome normalizzato), sessions (righe, revoca di una e di tutte le altre) ed export (Content-Disposition) col solo bearer, nelle forme di Account.swift"
+
+# --- VL1: Fase 27.1, la lista dei visitati col solo bearer ------------------------------------------------------
+# Una riga su un evento vivo gia' iniziato e una di sola istantanea (evento purgato). Le chiavi di ogni voce sono
+# ESATTAMENTE quelle di lib/api-contract.ts; visitDay e' "YYYY-MM-DD"; eventId e' null per la riga sparita.
+vl1_keys="$(bash scripts/dev-db.sh npx tsx -e "import('./lib/api-contract.ts').then((mod) => { const m = mod.default ?? mod; console.log(JSON.stringify([...m.VISITED_LIST_ITEM_KEYS].sort())) })" | tail -n 1)"
+[[ "${vl1_keys}" == \[* ]] || fail "VL1: non riesco a leggere le chiavi dei visitati da lib/api-contract.ts (ottenuto '${vl1_keys}')"
+mint_app_user vl1 "${app_ua}"
+vl1_ev="$(psql_dev "INSERT INTO events (source, source_id, title, date_start, date_end, location_name, canonical_category)
+  VALUES ('__mobile_api__', 'vl1-vivo', 'Prova visitati', now() - interval '1 day', now() + interval '1 day', 'Piazza di prova', 'Altro')
+  RETURNING id" | head -n 1)"
+[[ "${vl1_ev}" =~ ^[0-9]+$ ]] || fail "VL1: evento di prova non inserito ('${vl1_ev}')"
+psql_dev "INSERT INTO visited_events (user_id, event_id, title, date_start, canonical_category, source, source_id, visit_day)
+  VALUES ('${vl1_user}', ${vl1_ev}, 'Prova visitati', now() - interval '1 day', 'Altro', '__mobile_api__', 'vl1-vivo', current_date),
+         ('${vl1_user}', NULL, 'Sparito', now() - interval '20 days', 'Altro', '__mobile_api__', 'vl1-gone', current_date - 20)" >/dev/null
+code="$(bearer_call vl1l GET /api/v1/me/visited 198.51.100.244 "${vl1_cookie}")"
+[[ "${code}" == "200" ]] || fail "VL1: GET /me/visited: atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/vl1l.b"))"
+no_store vl1l VL1
+[[ "$(json_get "${tmp_dir}/vl1l.b" "j.items.length === 2 && j.items.every((i) => JSON.stringify(Object.keys(i).sort()) === '${vl1_keys}')")" == "true" ]] \
+  || fail "VL1: le voci di /me/visited devono avere esattamente le chiavi del contratto ${vl1_keys}: $(cat "${tmp_dir}/vl1l.b")"
+[[ "$(json_get "${tmp_dir}/vl1l.b" 'j.items.every((i) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(i.visitDay) && !isNaN(Date.parse(i.visitedAt)))')" == "true" ]] \
+  || fail "VL1: visitDay deve essere YYYY-MM-DD e visitedAt una data ISO: $(cat "${tmp_dir}/vl1l.b")"
+[[ "$(json_get "${tmp_dir}/vl1l.b" "j.items.map((i) => i.snap.sourceId + ':' + i.eventId).sort().join('|')")" == "vl1-gone:null|vl1-vivo:${vl1_ev}" ]] \
+  || fail "VL1: eventId atteso ${vl1_ev} per l'evento vivo e null per la riga sparita: $(cat "${tmp_dir}/vl1l.b")"
+[[ "$(json_get "${tmp_dir}/vl1l.b" 'j.items[0].snap.sourceId')" == "vl1-vivo" ]] || fail "VL1: l'ordine deve essere per giorno di visita decrescente: $(cat "${tmp_dir}/vl1l.b")"
+echo "ok  VL1: GET /me/visited col solo bearer -> 200 private no-store, due voci con le chiavi VISITED_LIST_ITEM_KEYS, visitDay YYYY-MM-DD, eventId null per la riga sparita"

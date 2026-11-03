@@ -13,6 +13,7 @@ public enum ApiContract {
     public static let categories = ["Sagre e feste", "Musica e spettacolo", "Arte e cultura", "Fiere e mercati", "Sport e outdoor", "Food & Wine", "Altro"]
     public static let savedListItemKeys = ["ref", "eventId", "savedAt", "snap", "live", "imageUrl", "siblings"]
     public static let savedResolveItemKeys = ["ref", "eventId", "live", "imageUrl", "siblings"]
+    public static let visitedListItemKeys = ["ref", "eventId", "visitedAt", "visitDay", "snap", "imageUrl"]
     public static let guestCap = 100
     public static let accountCap = 500
     public static let placeCap = 50
