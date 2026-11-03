@@ -25,6 +25,7 @@
 #   G13 me-state-signed   GET /api/v1/me/state da loggato (con plan e features)
 #   G14 me-state-anon     GET /api/v1/me/state da anonimo, byte per byte
 #   G15 events-lean       GET /api/events?search=<M>&limit=100&mapEvents=0 (stessa pagina, mapEvents vuoto)
+#   G16 clusters-etag     GET /api/events/clusters con ETag; If-None-Match uguale -> 304 senza corpo
 #
 # <M> e' un marcatore unico nei titoli delle fixture (sorgente riservata '__golden__'):
 # il DB locale ha ~9,6k eventi veri, con search=<M> in lista ci sono solo le fixture.
@@ -206,6 +207,19 @@ record_or_compare event-member "GET /api/events/<id membro> (307 verso la canoni
 # --- G9-G12: il catalogo (sui dati locali veri, quindi solo la forma) ----------------------------
 record_or_compare clusters "GET /api/events/clusters" "/api/events/clusters"
 
+# --- G16: il file nazionale dei pin si rivalida con ETag/304 (serve una riga di cache) ----------
+cache_rows="$(psql_dev "SELECT count(*) FROM map_cluster_cache")"
+[[ "${cache_rows}" -ge 1 ]] || fail "G16: map_cluster_cache vuota nel DB locale (seed: updateClusterCache)"
+code="$(call clusters-etag "/api/events/clusters")"
+[[ "${code}" == "200" ]] || fail "G16: clusters: atteso 200, ottenuto ${code}"
+etag="$(grep -i '^etag:' "${tmp_dir}/clusters-etag.h" | head -n 1 | cut -d: -f2- | tr -d '\r' | sed 's/^ *//')"
+[[ "${etag}" =~ ^\"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z\"$ ]] || fail "G16: ETag assente o malformato: '${etag}'"
+code="$(call clusters-304 "/api/events/clusters" -H "If-None-Match: ${etag}")"
+[[ "${code}" == "304" ]] || fail "G16: If-None-Match uguale: atteso 304, ottenuto ${code}"
+[[ ! -s "${tmp_dir}/clusters-304.b" ]] || fail "G16: il 304 ha un corpo"
+code="$(call clusters-stale "/api/events/clusters" -H 'If-None-Match: "1999-01-01T00:00:00.000Z"')"
+[[ "${code}" == "200" ]] || fail "G16: If-None-Match diverso: atteso 200, ottenuto ${code}"
+echo "ok  G16: clusters ETag ${etag} -> 304 senza corpo; ETag diverso -> 200"
 record_or_compare categories "GET /api/categories" "/api/categories"
 record_or_compare comuni-search "GET /api/comuni/search?q=vigo" "/api/comuni/search?q=vigo"
 record_or_compare places-search "GET /api/places/search?q=berg" "/api/places/search?q=berg"
