@@ -63,7 +63,9 @@
     ".next-mobile-api-test/types/**/*.ts",
     ".next-mobile-api-test/dev/types/**/*.ts",
     ".next-api-golden-test/types/**/*.ts",
-    ".next-api-golden-test/dev/types/**/*.ts"
+    ".next-api-golden-test/dev/types/**/*.ts",
+    ".next-visited-flow-test/types/**/*.ts",
+    ".next-visited-flow-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
