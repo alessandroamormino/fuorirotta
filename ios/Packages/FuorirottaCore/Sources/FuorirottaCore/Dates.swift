@@ -181,3 +181,11 @@ public func eventDays(dateStart: String, dateEnd: String?) -> (startDay: String,
     let to = (h.hour == 23 && h.minute == 59) ? ymd(end, in: utc) : ymd(end, in: Rome.calendar)
     return (from, max(from, to))
 }
+
+/// Giorno di visita da salvare per "Ci sono stato" (D-02, D-05), o nil se l'evento non e' ancora iniziato.
+/// Copia fedele di lib/visited/rules.ts: la fixture Fixtures/stats.json (StatsParityTests) la tiene uguale.
+/// In corso oggi -> oggi; gia' finito -> il suo primo giorno; nessun limite in la' nel tempo.
+public func visitDayFor(dateStart: String, dateEnd: String?, today: String) -> String? {
+    guard let days = eventDays(dateStart: dateStart, dateEnd: dateEnd), days.startDay <= today else { return nil }
+    return today <= days.endDay ? today : days.startDay
+}

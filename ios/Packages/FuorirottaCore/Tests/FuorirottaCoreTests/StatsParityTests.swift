@@ -54,7 +54,17 @@ private struct StatsCase: Decodable {
     }
 }
 
-private struct StatsFixture: Decodable { let cases: [StatsCase] }
+private struct VisitDayCase: Decodable {
+    let dateStart: String
+    let dateEnd: String?
+    let today: String
+    let expect: String?
+}
+
+private struct StatsFixture: Decodable {
+    let cases: [StatsCase]
+    let visitDay: [VisitDayCase]
+}
 
 private func loadFixture() throws -> StatsFixture {
     let url = Bundle.module.url(forResource: "stats", withExtension: "json", subdirectory: "Fixtures")!
@@ -90,6 +100,17 @@ extension CategoryCount {
             #expect(matches(computeVisitedStats(visited, year: c.year), c.expect.visited), "visited: \(c.name)")
             #expect(statsTiles(visited: visited, saved: saved, year: nil) == c.expect.tilesAlways.tiles, "tiles Sempre: \(c.name)")
             #expect(statsTiles(visited: visited, saved: saved, year: c.year) == c.expect.tilesYear.tiles, "tiles anno: \(c.name)")
+        }
+    }
+
+    @Test func visitDayRuleEqualsTypeScript() throws {
+        let fixture = try loadFixture()
+        #expect(fixture.visitDay.count >= 12)
+        for c in fixture.visitDay {
+            #expect(
+                visitDayFor(dateStart: c.dateStart, dateEnd: c.dateEnd, today: c.today) == c.expect,
+                "\(c.dateStart) / \(c.dateEnd ?? "nil") oggi \(c.today): atteso \(c.expect ?? "nil")"
+            )
         }
     }
 }

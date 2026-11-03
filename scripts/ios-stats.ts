@@ -15,6 +15,8 @@ import {
   type Stats,
   type VisitedStatItem
 } from '../lib/stats/compute'
+import { eventDays } from '../lib/eventDays'
+import { visitDayFor } from '../lib/visited/rules'
 
 const FIXTURE = join(__dirname, '../ios/Packages/FuorirottaCore/Tests/FuorirottaCoreTests/Fixtures/stats.json')
 
@@ -88,6 +90,26 @@ const cases: Case[] = [
   }
 ]
 
+// Regola del giorno di visita (D-02, D-05): stessi casi per TS e Swift. Oggi e' sempre 2026-11-03.
+const TODAY = '2026-11-03'
+const visitDayCases: Array<{ dateStart: string; dateEnd: string | null }> = [
+  { dateStart: '2026-11-04T00:00:00.000Z', dateEnd: '2026-11-04T23:59:59.999Z' }, // inizia domani
+  { dateStart: '2026-11-05T00:00:00.000Z', dateEnd: null }, // fra due giorni, fine nulla
+  { dateStart: '2026-11-03T00:00:00.000Z', dateEnd: '2026-11-03T23:59:59.999Z' }, // un giorno, oggi
+  { dateStart: '2026-11-03T00:00:00.000Z', dateEnd: null }, // fine nulla, oggi
+  { dateStart: '2026-11-02T00:00:00.000Z', dateEnd: '2026-11-04T23:59:59.999Z' }, // in corso
+  { dateStart: '2026-11-03T00:00:00.000Z', dateEnd: '2026-11-06T23:59:59.999Z' }, // primo giorno, in corso
+  { dateStart: '2026-10-30T00:00:00.000Z', dateEnd: '2026-11-03T23:59:59.999Z' }, // ultimo giorno oggi
+  { dateStart: '2026-10-24T00:00:00.000Z', dateEnd: '2026-10-26T23:59:59.999Z' }, // finito -> primo giorno
+  { dateStart: '2026-10-01T00:00:00.000Z', dateEnd: null }, // finito, fine nulla
+  { dateStart: '2026-11-03T23:00:00.000Z', dateEnd: '2026-11-04T22:59:59.999Z' }, // formato Roma, domani
+  { dateStart: '2026-11-02T23:00:00.000Z', dateEnd: '2026-11-03T22:59:59.999Z' }, // formato Roma, oggi
+  { dateStart: '2026-10-23T23:00:00.000Z', dateEnd: '2026-10-24T22:59:59.999Z' }, // formato Roma, finito
+  { dateStart: '2023-08-10T00:00:00.000Z', dateEnd: '2023-08-12T23:59:59.999Z' }, // 3 anni fa: nessun limite (D-02)
+  { dateStart: '2019-12-09T00:00:00.000Z', dateEnd: '2029-12-31T23:59:59.999Z' } // lunghissimo, in corso
+]
+type VisitDayRule = (dateStart: string, dateEnd: string | null, today: string) => string | null
+
 type Tiles = ReturnType<typeof statsTiles>
 type Expect = { saved: Stats; visited: Stats; tilesAlways: Tiles; tilesYear: Tiles }
 
@@ -98,6 +120,7 @@ const stable = (s: Stats): Stats => ({
 })
 
 type Rule = {
+  visitDay: VisitDayRule
   saved: (items: StatItem[], year: number) => Stats
   visited: (items: VisitedStatItem[], year: number) => Stats
   tiles: (visited: VisitedStatItem[], saved: StatItem[], year: number | null) => Tiles
@@ -114,13 +137,19 @@ function serialise(rule: Rule): string {
     }
     return { name: c.name, year: c.year, saved: c.saved, visited, expect }
   })
-  return JSON.stringify({ generatedFrom: 'lib/stats/compute.ts', cases: out }, null, 2) + '\n'
+  const visitDay = visitDayCases.map((c) => ({ ...c, today: TODAY, expect: rule.visitDay(c.dateStart, c.dateEnd, TODAY) }))
+  return JSON.stringify({ generatedFrom: 'lib/stats/compute.ts e lib/visited/rules.ts', cases: out, visitDay }, null, 2) + '\n'
 }
 
-const real: Rule = { saved: (i, y) => computeStats(i, y), visited: computeVisitedStats, tiles: statsTiles }
+const real: Rule = { visitDay: visitDayFor, saved: (i, y) => computeStats(i, y), visited: computeVisitedStats, tiles: statsTiles }
 // Regola sbagliata apposta: il tetto dei giorni a 15 invece di 14.
 const wrong: Rule = { ...real, saved: (i, y) => computeStats(i, y, HEATMAP_MAX_SPREAD_DAYS + 1) }
 // Seconda regola sbagliata: Giorni fuori conta i visitati invece dei giorni distinti.
+// Terza regola sbagliata: un evento in corso segna il suo primo giorno invece di oggi.
+const wrongVisitDay: Rule = {
+  ...real,
+  visitDay: (s, e, t) => (visitDayFor(s, e, t) === null ? null : eventDays(s, e).startDay)
+}
 const wrongTiles: Rule = { ...real, tiles: (vis, sav, y) => ({ ...statsTiles(vis, sav, y), daysOut: vis.length }) }
 
 const expected = serialise(real)
@@ -148,6 +177,10 @@ if (serialise(wrong) === expected) {
 }
 if (serialise(wrongTiles) === expected) {
   console.error('FAIL: E2 una tessera calcolata male non viene rilevata')
+  process.exit(1)
+}
+if (serialise(wrongVisitDay) === expected) {
+  console.error('FAIL: E2 un giorno di visita sbagliato non viene rilevato')
   process.exit(1)
 }
 console.log('ok  E2: una regola diversa viene rilevata')
