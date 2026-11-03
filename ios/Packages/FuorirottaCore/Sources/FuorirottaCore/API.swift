@@ -130,18 +130,27 @@ public func pinDelta(existing: Set<Int>, incoming: [MapPin]) -> (add: [MapPin], 
 }
 
 /// /api/events/clusters: tutti i pin (GeoJSON) con l'istante di calcolo, usato anche come chiave di cache.
+/// Un file non ancora calcolato risponde `geojson: null`: e' "nessun dato" (set vuoto, `computedAt` vuoto), non un errore.
 public struct ClusterSet: Sendable {
     public let computedAt: String
     public let pins: [MapPin]
 
+    public init(computedAt: String, pins: [MapPin]) {
+        self.computedAt = computedAt
+        self.pins = pins
+    }
+
     init(_ env: ClusterEnvelope) {
-        computedAt = env.computedAt
-        pins = env.geojson.features.compactMap { f -> MapPin? in
+        computedAt = env.computedAt ?? ""
+        // Il file scrive "" per i campi mancanti (lib/clusterCache.ts): per l'app sono assenti, la categoria e' "Altro".
+        func present(_ s: String?) -> String? { s.flatMap { $0.isEmpty ? nil : $0 } }
+        pins = (env.geojson?.features ?? []).compactMap { f -> MapPin? in
             guard f.geometry.coordinates.count >= 2 else { return nil }
             let p = f.properties
             return MapPin(
-                id: p.id, title: p.title, category: p.category, imageUrl: p.imageUrl, dateStart: p.dateStart,
-                locationName: p.locationName, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
+                id: p.id, title: p.title, category: present(p.category) ?? "Altro", imageUrl: present(p.imageUrl),
+                dateStart: p.dateStart, locationName: present(p.locationName),
+                lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
             )
         }
     }
@@ -162,8 +171,8 @@ struct ClusterEnvelope: Decodable {
         let properties: Props
     }
     struct Collection: Decodable { let features: [Feature] }
-    let computedAt: String
-    let geojson: Collection
+    let computedAt: String?
+    let geojson: Collection?
 }
 
 /// Esito di GET /api/events/{id}: l'evento, oppure 404 (cancellato). Gli altri errori sono eccezioni.

@@ -454,9 +454,6 @@ private func asEvent(_ pin: FuorirottaCore.MapPin) -> Event {
 }
 
 struct MapScreen: View {
-    // Fonte della mappa: raggio attorno al luogo (27-SPIKE.md, "Map source: radius"). 50 km come da UI-SPEC.
-    private let radiusKm = 50
-
     private enum Phase { case loading, loaded, failed }
     private struct Group {
         let events: [Event]
@@ -473,8 +470,8 @@ struct MapScreen: View {
     @Environment(LocationModel.self) private var location
     @Environment(Router.self) private var router
 
-    /// Un evento aperto dalla mappa piccola del dettaglio (C2): la mappa si centra li' e carica i pin attorno a lui,
-    /// finche' non cambia il luogo della Home.
+    /// Un evento aperto dalla mappa piccola del dettaglio (C2): la mappa si centra li',
+    /// finche' non cambia il luogo della Home. I pin sono sempre quelli di tutta Italia.
     @State private var eventSpot: Place?
     private var origin: Place { eventSpot ?? location.place }
 
@@ -532,7 +529,7 @@ struct MapScreen: View {
                 ClusterListSheet(events: group.events)
             }
         }
-        .task(id: origin) { await load() }
+        .task { await load() }
         .onChange(of: location.place) {
             eventSpot = nil
             focus = MapFocus(id: focus.id + 1)
@@ -662,44 +659,19 @@ struct MapScreen: View {
 
     // MARK: dati
 
+    /// D-17: i pin di tutta Italia, una volta per vita della schermata. Cambiare luogo sposta solo la camera (`focus`).
     private func load() async {
         guard let api else { return }
-        let place = origin
         phase = .loading
         do {
-            let fresh = try await api.mapPins(lat: place.latitude, lng: place.longitude, radiusKm: radiusKm)
+            let set = try await api.clusters()
             guard !Task.isCancelled else { return }
-            pins = fresh
+            pins = set.pins
             offline = false
             phase = .loaded
-            if eventSpot == nil { Self.write(fresh, for: place) }  // la cache offline resta quella dei luoghi
         } catch {
             guard !Task.isCancelled else { return }
-            // Senza rete si mostrano gli ultimi pin di questo luogo; senza nemmeno quelli, un messaggio con "Riprova".
-            if let cached = Self.read(for: place) {
-                pins = cached
-                offline = true
-                phase = .loaded
-            } else {
-                phase = .failed
-            }
+            phase = .failed
         }
-    }
-
-    private static func url(for place: Place) -> URL {
-        let slug = place.name.lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
-        return URL.cachesDirectory.appending(path: "fuorirotta/map-\(slug).json")
-    }
-
-    private static func write(_ pins: [FuorirottaCore.MapPin], for place: Place) {
-        let target = url(for: place)
-        // ponytail: scrittura fallita = niente cache offline, nient'altro.
-        try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(pins) { try? data.write(to: target, options: .atomic) }
-    }
-
-    private static func read(for place: Place) -> [FuorirottaCore.MapPin]? {
-        guard let data = try? Data(contentsOf: url(for: place)) else { return nil }
-        return try? JSONDecoder().decode([FuorirottaCore.MapPin].self, from: data)
     }
 }

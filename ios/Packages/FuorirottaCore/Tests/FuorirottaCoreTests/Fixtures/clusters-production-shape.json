@@ -1,0 +1,45 @@
+{
+ "geojson": {
+  "type": "FeatureCollection",
+  "features": [
+   {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [11.255814, 43.769871] },
+    "properties": {
+     "id": 2001,
+     "title": "Festa dell'Unita",
+     "dateStart": "2026-11-08T00:00:00.000Z",
+     "locationName": "Parco delle Cascine",
+     "category": "Sagre e feste",
+     "imageUrl": "https://example.test/img/2001.jpg"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [14.268124, 40.851775] },
+    "properties": {
+     "id": 2002,
+     "title": "Senza foto ne' luogo",
+     "dateStart": "2026-11-09T00:00:00.000Z",
+     "locationName": "",
+     "category": "",
+     "imageUrl": ""
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [9.1] },
+    "properties": {
+     "id": 2003,
+     "title": "Una sola coordinata",
+     "dateStart": "2026-11-10T00:00:00.000Z",
+     "locationName": "",
+     "category": "",
+     "imageUrl": ""
+    }
+   }
+  ]
+ },
+ "eventCount": 3,
+ "computedAt": "2026-11-02T11:10:47.000Z"
+}

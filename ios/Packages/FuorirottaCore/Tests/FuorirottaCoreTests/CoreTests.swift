@@ -34,6 +34,26 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
         let env = try JSONDecoder().decode(ClusterEnvelope.self, from: Data(json.utf8))
         #expect(ClusterSet(env).pins.isEmpty)
     }
+
+    private func load() throws -> ClusterSet {
+        let url = Bundle.module.url(forResource: "clusters-production-shape", withExtension: "json", subdirectory: "Fixtures")!
+        return ClusterSet(try JSONDecoder().decode(ClusterEnvelope.self, from: Data(contentsOf: url)))
+    }
+
+    @Test func emptyStringsAreMissingAndSingleCoordinateIsSkipped() throws {
+        let set = try load()
+        #expect(set.pins.map(\.id) == [2001, 2002])
+        #expect(set.pins[0].category == "Sagre e feste" && set.pins[0].imageUrl != nil && set.pins[0].locationName == "Parco delle Cascine")
+        #expect(set.pins[1].category == "Altro")
+        #expect(set.pins[1].imageUrl == nil && set.pins[1].locationName == nil)
+        #expect(set.computedAt == "2026-11-02T11:10:47.000Z")
+    }
+
+    @Test func nullEnvelopeIsNoDataNotAnError() throws {
+        let json = #"{"geojson":null,"eventCount":0,"computedAt":null}"#
+        let set = ClusterSet(try JSONDecoder().decode(ClusterEnvelope.self, from: Data(json.utf8)))
+        #expect(set.pins.isEmpty && set.computedAt.isEmpty)
+    }
 }
 
 @Suite struct PinDeltaTests {
