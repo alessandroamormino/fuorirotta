@@ -15,6 +15,14 @@
 #   V7  DELETE A di un altro utente mentre u1 ha una riga su A -> 200 removed 0, la riga di u1 resta
 #   V8  499 righe: PUT A -> 200 (la 500a), PUT C -> 409 {error:'cap'}, PUT A di nuovo -> 200 (D-07)
 #   V9  D-04: DELETE visited non toglie il salvato, DELETE saved non toglie il visitato
+#   VS1 PUT /visited/saved/{ref}: riga salvata su un evento in corso -> 200, giorno di oggi; riga sparita (event_id NULL) finita 21 giorni fa -> 200, primo giorno
+#   VS2 salvato di un evento futuro -> 409 too-early; ref di un altro utente -> 404 e zero righe; 'abc' -> 404; senza Origin 403; senza cookie 401
+#   VS3 GET /visited/ids: l'id canonico una volta sola con righe su canonica e membro
+#   VS4 DELETE /visited/gone/{ref}: solo righe con event_id NULL e solo dell'utente della sessione; secondo giro removed 0
+#   VM1 merge [A, B] -> added 2, di nuovo -> added 0, due merge in parallelo di [C] -> una riga
+#   VM2 101 -> 400, non array -> 400, [] -> added 0, evento futuro saltato, visitDay del client tenuto solo dentro [primo giorno, min(ultimo giorno, oggi)]
+#   VM3 istantanea del client solo per righe sparite e validata; testo del client ignorato per l'evento vivo; NUL / date assurde -> 200 senza righe
+#   VM4 tetto 500: 499 righe + tre nuove -> added 1, overCap 2; senza Origin 403, senza cookie 401
 #
 # Righe di prova sotto il `source` dedicato '__visited_gate__': cancellate prima
 # e all'uscita, nessuna riga reale viene letta o toccata.
@@ -125,7 +133,9 @@ b_id="$(insert_event gate-b 'Visita B' "$(noon -1)" "$(noon 1)" NULL)"
 c_id="$(insert_event gate-c 'Visita C' "$(noon -1)" "$(noon 1)" NULL)"
 p_id="$(insert_event gate-p 'Visita P' "$(noon -12)" "$(noon -10)" NULL)"
 f_id="$(insert_event gate-f 'Visita F' "$(noon 2)" "$(noon 3)" NULL)"
-[[ -n "${a_id}" && -n "${m_id}" && -n "${b_id}" && -n "${c_id}" && -n "${p_id}" && -n "${f_id}" ]] || fail "fixture non create"
+q1_id="$(insert_event gate-q1 'Visita Q1' "$(noon -8)" "$(noon -6)" NULL)"
+q2_id="$(insert_event gate-q2 'Visita Q2' "$(noon -8)" "$(noon -6)" NULL)"
+[[ -n "${a_id}" && -n "${m_id}" && -n "${b_id}" && -n "${c_id}" && -n "${p_id}" && -n "${f_id}" && -n "${q1_id}" && -n "${q2_id}" ]] || fail "fixture non create"
 p_first_day="$(day_str -12)"
 rome_today="$(TZ=Europe/Rome date +%F)"
 echo "ok  fixture create: A=${a_id} M=${m_id} (membro di A) B=${b_id} C=${c_id} P=${p_id} (finito) F=${f_id} (futuro), oggi a Roma ${rome_today}"
@@ -282,4 +292,175 @@ code="$(call v9d2 DELETE "/api/v1/me/saved/${b_id}" -H "Origin: ${origin}" -H "$
 [[ "$(saved_rows "${u4_user}" "${b_id}")" == "0" && "$(visited_rows "${u4_user}" "${b_id}")" == "1" ]] || fail "V9: togliere il salvato non deve toccare il visitato"
 echo "ok  V9: DELETE visited lascia il salvato, DELETE saved lascia il visitato"
 
-echo "Riepilogo: V1-V9 verdi"
+# --- Aiuti per VS e VM ----------------------------------------------------------
+saved_row() { # <utente> <event_id|NULL> <source_id> <titolo> <inizio> <fine> -> id della riga salvata
+  psql_dev "INSERT INTO saved_events (user_id, event_id, title, date_start, date_end, canonical_category, source, source_id)
+            VALUES ('$1', $2, '$4', $5, $6, 'Sagre e feste', '${test_source}', '$3') RETURNING id" | head -n 1
+}
+visited_row() { # <utente> <event_id|NULL> <source_id> -> id della riga visitata
+  psql_dev "INSERT INTO visited_events (user_id, event_id, title, date_start, canonical_category, source, source_id, visit_day)
+            VALUES ('$1', $2, 'Prova', now() - interval '30 days', 'Sagre e feste', '${test_source}', '$3', current_date) RETURNING id" | head -n 1
+}
+put_saved() { call "$1" PUT "/api/v1/me/visited/saved/$2" -H "Origin: ${origin}" -H "$3"; }
+del_gone() { call "$1" DELETE "/api/v1/me/visited/gone/$2" -H "Origin: ${origin}" -H "$3"; }
+merge() { call "$1" POST /api/v1/me/visited/merge -H "Origin: ${origin}" -H "$2" -H 'Content-Type: application/json' --data "$3"; }
+visited_by_source() { # <utente> <source_id> -> numero di righe
+  psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '$1' AND source_id = '$2'"
+}
+day_of_source() { # <utente> <source_id> -> visit_day
+  psql_dev "SELECT to_char(visit_day, 'YYYY-MM-DD') FROM visited_events WHERE user_id = '$1' AND source_id = '$2'"
+}
+
+# --- VS1: marcare da una riga salvata, anche quando l'evento non c'e' piu' ---------
+mint_user u5
+sa_ref="$(saved_row "${u5_user}" "${a_id}" gate-a 'Visita A' "$(noon -1)" "$(noon 1)")"
+sg_ref="$(saved_row "${u5_user}" NULL gone-p 'Fantasma' "$(noon -21)" "$(noon -20)")"
+[[ "${sa_ref}" =~ ^[0-9]+$ && "${sg_ref}" =~ ^[0-9]+$ ]] || fail "VS1: righe salvate di prova non inserite"
+code="$(put_saved vs1a "${sa_ref}" "${u5_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vs1a.b" 'j.visitDay')" == "${rome_today}" ]] || fail "VS1: salvato su A in corso: atteso 200 visitDay ${rome_today}, ottenuto ${code} '$(cat "${tmp_dir}/vs1a.b")'"
+[[ "$(visited_rows "${u5_user}" "${a_id}")" == "1" && "$(visit_day_of "${u5_user}" "${a_id}")" == "${rome_today}" ]] || fail "VS1: attesa una riga visitata su A con visit_day di oggi"
+code="$(put_saved vs1b "${sg_ref}" "${u5_cookie}")"
+gone_first_day="$(day_str -21)"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vs1b.b" 'j.visitDay')" == "${gone_first_day}" ]] || fail "VS1: salvato sparito: atteso 200 visitDay ${gone_first_day}, ottenuto ${code} '$(cat "${tmp_dir}/vs1b.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '${u5_user}' AND event_id IS NULL AND source_id = 'gone-p'")" == "1" && "$(day_of_source "${u5_user}" gone-p)" == "${gone_first_day}" ]] || fail "VS1: attesa una riga con event_id NULL e visit_day ${gone_first_day}"
+code="$(put_saved vs1c "${sg_ref}" "${u5_cookie}")"
+[[ "${code}" == "200" && "$(visited_by_source "${u5_user}" gone-p)" == "1" ]] || fail "VS1: secondo PUT sulla stessa riga: atteso 200 e ancora una riga, ottenuto ${code}"
+echo "ok  VS1: salvato su A in corso -> 200, visit_day oggi; salvato sparito (event_id NULL) -> 200, visit_day = primo giorno (${gone_first_day}); ripetuto -> una riga"
+
+# --- VS2: futuro, altrui, malformato, senza Origin, senza sessione --------------
+sf_ref="$(saved_row "${u5_user}" "${f_id}" gate-f 'Visita F' "$(noon 2)" "$(noon 3)")"
+code="$(put_saved vs2a "${sf_ref}" "${u5_cookie}")"
+[[ "${code}" == "409" && "$(json_get "${tmp_dir}/vs2a.b" 'j.error')" == "too-early" ]] || fail "VS2: salvato di un evento futuro: atteso 409 too-early, ottenuto ${code} '$(cat "${tmp_dir}/vs2a.b")'"
+[[ "$(visited_by_source "${u5_user}" gate-f)" == "0" ]] || fail "VS2: un evento futuro ha scritto una riga"
+no_store vs2a VS2
+mint_user u6
+code="$(put_saved vs2b "${sa_ref}" "${u6_cookie}")"
+[[ "${code}" == "404" && "$(psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '${u6_user}'")" == "0" ]] || fail "VS2: ref di un altro utente: atteso 404 e zero righe, ottenuto ${code}"
+no_store vs2b VS2
+code="$(put_saved vs2c abc "${u5_cookie}")"
+[[ "${code}" == "404" ]] || fail "VS2: ref 'abc': atteso 404, ottenuto ${code}"
+code="$(call vs2d PUT "/api/v1/me/visited/saved/${sa_ref}" -H "${u5_cookie}")"
+[[ "${code}" == "403" ]] || fail "VS2: senza Origin: atteso 403, ottenuto ${code}"
+code="$(call vs2e PUT "/api/v1/me/visited/saved/${sa_ref}" -H "Origin: ${origin}")"
+[[ "${code}" == "401" ]] || fail "VS2: senza cookie: atteso 401, ottenuto ${code}"
+echo "ok  VS2: salvato futuro -> 409 too-early senza righe; ref altrui -> 404 e zero righe; 'abc' -> 404; senza Origin 403; senza cookie 401"
+
+# --- VS3: gli id canonici, una volta sola ------------------------------------------
+mint_user u7
+visited_row "${u7_user}" "${a_id}" gate-a >/dev/null
+visited_row "${u7_user}" "${m_id}" gate-m >/dev/null
+visited_row "${u7_user}" NULL gone-ids >/dev/null
+code="$(call vs3 GET /api/v1/me/visited/ids -H "${u7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vs3.b" 'JSON.stringify(j.ids)')" == "[${a_id}]" ]] || fail "VS3: ids: atteso [${a_id}] una volta sola (riga su A, riga sul membro M, una sparita), ottenuto ${code} '$(cat "${tmp_dir}/vs3.b")'"
+no_store vs3 VS3
+code="$(call vs3b GET /api/v1/me/visited/ids)"
+[[ "${code}" == "401" ]] || fail "VS3: ids senza cookie: atteso 401, ottenuto ${code}"
+echo "ok  VS3: ids con righe su canonica, membro e una sparita -> [${a_id}] una volta sola"
+
+# --- VS4: togliere una riga sparita ----------------------------------------------
+mint_user u8
+g_ref="$(visited_row "${u8_user}" NULL gone-del)"
+l_ref="$(visited_row "${u8_user}" "${a_id}" gate-a)"
+code="$(del_gone vs4a "${g_ref}" "${u8_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vs4a.b" 'j.removed')" == "1" ]] || fail "VS4: DELETE gone: atteso removed 1, ottenuto ${code} '$(cat "${tmp_dir}/vs4a.b")'"
+code="$(del_gone vs4b "${g_ref}" "${u8_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vs4b.b" 'j.removed')" == "0" ]] || fail "VS4: secondo DELETE gone: atteso removed 0, ottenuto ${code}"
+code="$(del_gone vs4c "${l_ref}" "${u8_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vs4c.b" 'j.removed')" == "0" && "$(visited_rows "${u8_user}" "${a_id}")" == "1" ]] || fail "VS4: DELETE gone su una riga con evento: atteso removed 0 e la riga resta, ottenuto ${code}"
+g2_ref="$(visited_row "${u8_user}" NULL gone-del2)"
+code="$(del_gone vs4d "${g2_ref}" "${u7_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vs4d.b" 'j.removed')" == "0" && "$(visited_by_source "${u8_user}" gone-del2)" == "1" ]] || fail "VS4: DELETE gone di un altro utente: atteso removed 0 e la riga resta, ottenuto ${code}"
+no_store vs4d VS4
+code="$(call vs4e DELETE "/api/v1/me/visited/gone/${g2_ref}" -H "${u8_cookie}")"
+[[ "${code}" == "403" ]] || fail "VS4: DELETE gone senza Origin: atteso 403, ottenuto ${code}"
+echo "ok  VS4: DELETE gone -> removed 1, poi 0; riga con evento e riga altrui restano (removed 0); senza Origin 403"
+
+# --- VM1: l'unione e' idempotente e sicura in parallelo --------------------------
+t1="$(node -e 'console.log(new Date(Date.now() - 3600e3).toISOString())')"
+mint_user u9
+code="$(merge vm1a "${u9_cookie}" "{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1}\"},{\"id\":${b_id},\"savedAt\":\"${t1}\"}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vm1a.b" 'j.added')" == "2" ]] || fail "VM1: merge [A, B]: atteso added 2, ottenuto ${code} '$(cat "${tmp_dir}/vm1a.b")'"
+no_store vm1a VM1
+[[ "$(psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '${u9_user}' AND visited_at < now() - interval '30 minutes'")" == "2" ]] || fail "VM1: visited_at deve essere l'istante mandato dal dispositivo (un'ora fa)"
+code="$(merge vm1b "${u9_cookie}" "{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1}\"},{\"id\":${b_id},\"savedAt\":\"${t1}\"}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vm1b.b" 'j.added')" == "0" ]] || fail "VM1: stesso corpo di nuovo: atteso added 0, ottenuto ${code} '$(cat "${tmp_dir}/vm1b.b")'"
+body_c="{\"items\":[{\"id\":${c_id},\"savedAt\":\"${t1}\"}]}"
+merge vm1p1 "${u9_cookie}" "${body_c}" >"${tmp_dir}/vm1p1.code" &
+pid1=$!
+merge vm1p2 "${u9_cookie}" "${body_c}" >"${tmp_dir}/vm1p2.code" &
+pid2=$!
+wait "${pid1}" "${pid2}"
+[[ "$(cat "${tmp_dir}/vm1p1.code")" == "200" && "$(cat "${tmp_dir}/vm1p2.code")" == "200" ]] || fail "VM1: due merge in parallelo: attesi 200 e 200"
+[[ "$(visited_rows "${u9_user}" "${c_id}")" == "1" ]] || fail "VM1: due merge in parallelo di [C] devono lasciare una riga"
+echo "ok  VM1: [A, B] -> added 2 con visited_at del dispositivo; di nuovo -> added 0; due merge in parallelo di [C] -> una riga"
+
+# --- VM2: confini della richiesta, evento futuro, visitDay del client -------------
+mint_user u10
+many() { node -e 'console.log(JSON.stringify({items: Array.from({length: Number(process.argv[1])}, (_, i) => ({id: 900000000 + i, savedAt: new Date().toISOString()}))}))' "$1"; }
+code="$(merge vm2a "${u10_cookie}" "$(many 101)")"
+[[ "${code}" == "400" ]] || fail "VM2: 101 elementi: atteso 400, ottenuto ${code}"
+no_store vm2a VM2
+for bad in '{"items":{}}' '{"items":"x"}' '{}' 'non json'; do
+  code="$(merge vm2b "${u10_cookie}" "${bad}")"
+  [[ "${code}" == "400" ]] || fail "VM2: corpo '${bad}': atteso 400, ottenuto ${code}"
+done
+code="$(merge vm2c "${u10_cookie}" '{"items":[]}')"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vm2c.b" 'j.added')" == "0" ]] || fail "VM2: lista vuota: atteso added 0, ottenuto ${code}"
+p_keep="$(day_str -11)"
+y_keep="$(day_str -1)"
+item() { echo "{\"id\":$1,\"savedAt\":\"${t1}\",\"visitDay\":\"$2\"}"; }
+code="$(merge vm2d "${u10_cookie}" "{\"items\":[$(item "${f_id}" "$(day_str 2)"),$(item "${p_id}" "${p_keep}"),$(item "${q1_id}" "$(day_str -9)"),$(item "${q2_id}" "$(day_str -5)"),$(item "${a_id}" "$(day_str 1)"),$(item "${b_id}" banana),$(item "${c_id}" "${y_keep}")]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vm2d.b" 'j.added')" == "6" ]] || fail "VM2: 7 elementi di cui uno futuro: atteso added 6, ottenuto ${code} '$(cat "${tmp_dir}/vm2d.b")'"
+[[ "$(visited_by_source "${u10_user}" gate-f)" == "0" ]] || fail "VM2: l'evento futuro non deve entrare"
+[[ "$(day_of_source "${u10_user}" gate-p)" == "${p_keep}" ]] || fail "VM2: visitDay valido del client (${p_keep}) deve restare, ottenuto '$(day_of_source "${u10_user}" gate-p)'"
+[[ "$(day_of_source "${u10_user}" gate-c)" == "${y_keep}" ]] || fail "VM2: visitDay di ieri su un evento in corso deve restare, ottenuto '$(day_of_source "${u10_user}" gate-c)'"
+[[ "$(day_of_source "${u10_user}" gate-q1)" == "$(day_str -8)" ]] || fail "VM2: visitDay prima del primo giorno: atteso il primo giorno $(day_str -8), ottenuto '$(day_of_source "${u10_user}" gate-q1)'"
+[[ "$(day_of_source "${u10_user}" gate-q2)" == "$(day_str -8)" ]] || fail "VM2: visitDay dopo l'ultimo giorno: atteso il primo giorno $(day_str -8), ottenuto '$(day_of_source "${u10_user}" gate-q2)'"
+[[ "$(day_of_source "${u10_user}" gate-a)" == "${rome_today}" && "$(day_of_source "${u10_user}" gate-b)" == "${rome_today}" ]] || fail "VM2: visitDay futuro o non valido su un evento in corso: atteso oggi ${rome_today}"
+echo "ok  VM2: 101 -> 400, non array / vuoto / non JSON -> 400, [] -> added 0; futuro saltato; visitDay del client tenuto solo dentro [primo giorno, min(ultimo, oggi)]"
+
+# --- VM3: il testo del client conta solo per le righe sparite, e validato -----------
+mint_user u11
+snap_json() { # <sourceId> <titolo> <giorni-fa inizio> <giorni-fa fine> [categoria] [sourceUrl] -> istantanea JSON
+  node -e '
+    const [sid, title, s, e, cat, url] = process.argv.slice(1)
+    // Mezzogiorno UTC: lo stesso giorno a Roma in ogni stagione, come noon().
+    const d = (n) => { const x = new Date(); x.setUTCHours(12, 0, 0, 0); return new Date(x.getTime() - Number(n) * 86400000).toISOString() }
+    console.log(JSON.stringify({ title: title.replace("@NUL", "\u0000"), dateStart: d(s), dateEnd: d(e), place: null, category: cat || "Sagre e feste", source: process.argv[7], sourceId: sid, sourceUrl: url || null }))
+  ' "$1" "$2" "$3" "$4" "${5:-}" "${6:-}" "${test_source}"
+}
+gone_try() { # <nome> <sourceId> <titolo> <inizio> <fine> [categoria] [sourceUrl] -> codice HTTP del merge di un id sconosciuto
+  merge "$1" "${u11_cookie}" "{\"items\":[{\"id\":999999998,\"savedAt\":\"${t1}\",\"snap\":$(snap_json "$2" "$3" "$4" "$5" "${6:-}" "${7:-}")}]}"
+}
+code="$(gone_try vm3a gone-ok Fantasma 21 20)"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vm3a.b" 'j.added')" == "1" ]] || fail "VM3: istantanea valida: atteso added 1, ottenuto ${code} '$(cat "${tmp_dir}/vm3a.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '${u11_user}' AND event_id IS NULL AND source_id = 'gone-ok'")" == "1" ]] || fail "VM3: la riga sparita deve avere event_id NULL"
+[[ "$(day_of_source "${u11_user}" gone-ok)" == "$(day_str -21)" ]] || fail "VM3: visit_day della riga sparita = primo giorno dell'istantanea"
+gone_try vm3b gone-js Cattivo 21 20 "Sagre e feste" "javascript:alert(1)" >/dev/null
+gone_try vm3c gone-cat Cattivo 21 20 Hacker >/dev/null
+gone_try vm3d gate-a EVIL 21 20 >/dev/null
+[[ "$(visited_by_source "${u11_user}" gone-js)" == "0" && "$(visited_by_source "${u11_user}" gone-cat)" == "0" ]] || fail "VM3: sourceUrl javascript: o categoria Hacker hanno scritto una riga"
+[[ "$(psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '${u11_user}' AND title = 'EVIL'")" == "0" ]] || fail "VM3: testo del browser per un evento che esiste ancora sotto un altro id"
+code="$(merge vm3e "${u11_cookie}" "{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1}\",\"snap\":$(snap_json gate-a EVIL 21 20)}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vm3e.b" 'j.added')" == "1" ]] || fail "VM3: A con testo del client: atteso added 1, ottenuto ${code}"
+[[ "$(psql_dev "SELECT title FROM visited_events WHERE user_id = '${u11_user}' AND event_id = ${a_id}")" == "Visita A" ]] || fail "VM3: il titolo della riga su A deve essere quello del server ('Visita A')"
+code="$(gone_try vm3f gone-nul 'Con@NUL' 21 20)"
+[[ "${code}" == "200" && "$(visited_by_source "${u11_user}" gone-nul)" == "0" ]] || fail "VM3: NUL nel titolo: atteso 200 senza righe, ottenuto ${code}"
+code="$(merge vm3g "${u11_cookie}" "{\"items\":[{\"id\":999999998,\"savedAt\":\"9999-01-01T00:00:00.000Z\",\"snap\":$(snap_json gone-year 'Anno' 21 20)},{\"id\":999999997,\"savedAt\":\"${t1}\",\"snap\":{\"title\":\"Anno 2100\",\"dateStart\":\"2100-06-01T00:00:00.000Z\",\"dateEnd\":null,\"place\":null,\"category\":\"Altro\",\"source\":\"${test_source}\",\"sourceId\":\"gone-2100\",\"sourceUrl\":null}}]}")"
+[[ "${code}" == "200" && "$(visited_by_source "${u11_user}" gone-year)" == "0" && "$(visited_by_source "${u11_user}" gone-2100)" == "0" ]] || fail "VM3: savedAt assurdo o evento del 2100: atteso 200 senza righe, ottenuto ${code} '$(cat "${tmp_dir}/vm3g.b")'"
+echo "ok  VM3: sparito valido -> event_id NULL; javascript:, Hacker, evento vivo sotto altro id -> nessuna riga; A ignora 'EVIL'; NUL, savedAt 9999 e 2100 -> 200 senza righe"
+
+# --- VM4: tetto di 500 e guardie -----------------------------------------------------
+mint_user u12
+psql_dev "INSERT INTO visited_events (user_id, title, date_start, canonical_category, source, source_id, visit_day)
+          SELECT '${u12_user}', 'Tetto ' || n, now() - interval '30 days', 'Altro', '${test_source}', 'cap-' || n, current_date FROM generate_series(1, 499) AS n" >/dev/null
+code="$(merge vm4a "${u12_cookie}" "{\"items\":[{\"id\":${a_id},\"savedAt\":\"${t1}\"},{\"id\":${b_id},\"savedAt\":\"${t1}\"},{\"id\":${c_id},\"savedAt\":\"${t1}\"}]}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/vm4a.b" 'j.added + ":" + j.overCap')" == "1:2" ]] || fail "VM4: 499 righe + 3: atteso added 1 overCap 2, ottenuto ${code} '$(cat "${tmp_dir}/vm4a.b")'"
+[[ "$(psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '${u12_user}'")" == "500" ]] || fail "VM4: devono restare 500 righe"
+code="$(call vm4b POST /api/v1/me/visited/merge -H "${u12_cookie}" -H 'Content-Type: application/json' --data '{"items":[]}')"
+[[ "${code}" == "403" ]] || fail "VM4: merge senza Origin: atteso 403, ottenuto ${code}"
+code="$(call vm4c POST /api/v1/me/visited/merge -H "Origin: ${origin}" -H 'Content-Type: application/json' --data '{"items":[]}')"
+[[ "${code}" == "401" ]] || fail "VM4: merge senza cookie: atteso 401, ottenuto ${code}"
+echo "ok  VM4: 499 righe + 3 nuove -> added 1, overCap 2, 500 righe; senza Origin 403; senza cookie 401"
+
+echo "Riepilogo: V1-V9, VS1-VS4, VM1-VM4 verdi"
