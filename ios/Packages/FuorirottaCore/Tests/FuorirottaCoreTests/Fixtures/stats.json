@@ -1,0 +1,556 @@
+{
+  "generatedFrom": "lib/stats/compute.ts",
+  "cases": [
+    {
+      "name": "vuoto",
+      "year": 2026,
+      "saved": [],
+      "expect": {
+        "saved": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        }
+      }
+    },
+    {
+      "name": "un giorno, formato UTC",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-10-15T00:00:00.000Z",
+          "dateEnd": "2026-10-15T23:59:59.999Z",
+          "category": "Sagre e feste"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-10-15": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "un giorno, formato Roma",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-10-14T22:00:00.000Z",
+          "dateEnd": "2026-10-15T21:59:59.999Z",
+          "category": "Sagre e feste"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-10-15": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "fine nulla",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-10-04T00:00:00.000Z",
+          "dateEnd": null,
+          "category": "Arte e cultura"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-10-04": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Arte e cultura",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "14 giorni: tutti accesi",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-06-01T00:00:00.000Z",
+          "dateEnd": "2026-06-14T23:59:59.999Z",
+          "category": "Fiere e mercati"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-06-01": 1,
+            "2026-06-02": 1,
+            "2026-06-03": 1,
+            "2026-06-04": 1,
+            "2026-06-05": 1,
+            "2026-06-06": 1,
+            "2026-06-07": 1,
+            "2026-06-08": 1,
+            "2026-06-09": 1,
+            "2026-06-10": 1,
+            "2026-06-11": 1,
+            "2026-06-12": 1,
+            "2026-06-13": 1,
+            "2026-06-14": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Fiere e mercati",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "15 giorni: solo il primo",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-06-01T00:00:00.000Z",
+          "dateEnd": "2026-06-15T23:59:59.999Z",
+          "category": "Fiere e mercati"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-06-01": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Fiere e mercati",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "a cavallo di fine mese",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-07-30T00:00:00.000Z",
+          "dateEnd": "2026-08-02T23:59:59.999Z",
+          "category": "Musica e spettacolo"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-07-30": 1,
+            "2026-07-31": 1,
+            "2026-08-01": 1,
+            "2026-08-02": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Musica e spettacolo",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "a cavallo di fine anno, anno 2026",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-12-30T00:00:00.000Z",
+          "dateEnd": "2027-01-02T23:59:59.999Z",
+          "category": "Sport e outdoor"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-12-30": 1,
+            "2026-12-31": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ],
+          "perCategory": [
+            [
+              "Sport e outdoor",
+              1
+            ]
+          ],
+          "years": [
+            2026,
+            2027
+          ]
+        }
+      }
+    },
+    {
+      "name": "a cavallo di fine anno, anno 2027",
+      "year": 2027,
+      "saved": [
+        {
+          "dateStart": "2026-12-30T00:00:00.000Z",
+          "dateEnd": "2027-01-02T23:59:59.999Z",
+          "category": "Sport e outdoor"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2027-01-01": 1,
+            "2027-01-02": 1
+          },
+          "perMonth": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sport e outdoor",
+              1
+            ]
+          ],
+          "years": [
+            2026,
+            2027
+          ]
+        }
+      }
+    },
+    {
+      "name": "categoria sconosciuta e nulla vanno in Altro",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-05-01T00:00:00.000Z",
+          "dateEnd": "2026-05-01T23:59:59.999Z",
+          "category": "Inventata"
+        },
+        {
+          "dateStart": "2026-05-02T00:00:00.000Z",
+          "dateEnd": "2026-05-02T23:59:59.999Z",
+          "category": null
+        },
+        {
+          "dateStart": "2026-05-03T00:00:00.000Z",
+          "dateEnd": "2026-05-03T23:59:59.999Z",
+          "category": "Altro"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-05-01": 1,
+            "2026-05-02": 1,
+            "2026-05-03": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Altro",
+              3
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "pari conteggio: ordine della tassonomia",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-04-01T00:00:00.000Z",
+          "dateEnd": "2026-04-01T23:59:59.999Z",
+          "category": "Food & Wine"
+        },
+        {
+          "dateStart": "2026-04-02T00:00:00.000Z",
+          "dateEnd": "2026-04-02T23:59:59.999Z",
+          "category": "Sagre e feste"
+        },
+        {
+          "dateStart": "2026-04-03T00:00:00.000Z",
+          "dateEnd": "2026-04-03T23:59:59.999Z",
+          "category": "Musica e spettacolo"
+        },
+        {
+          "dateStart": "2026-04-04T00:00:00.000Z",
+          "dateEnd": "2026-04-04T23:59:59.999Z",
+          "category": "Musica e spettacolo"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-04-01": 1,
+            "2026-04-02": 1,
+            "2026-04-03": 1,
+            "2026-04-04": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Musica e spettacolo",
+              2
+            ],
+            [
+              "Sagre e feste",
+              1
+            ],
+            [
+              "Food & Wine",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        }
+      }
+    },
+    {
+      "name": "piu eventi nello stesso giorno e in anni diversi",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-03-01T00:00:00.000Z",
+          "dateEnd": "2026-03-02T23:59:59.999Z",
+          "category": "Sagre e feste"
+        },
+        {
+          "dateStart": "2026-03-02T00:00:00.000Z",
+          "dateEnd": "2026-03-02T23:59:59.999Z",
+          "category": "Arte e cultura"
+        },
+        {
+          "dateStart": "2025-03-02T00:00:00.000Z",
+          "dateEnd": "2025-03-02T23:59:59.999Z",
+          "category": "Arte e cultura"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-03-01": 1,
+            "2026-03-02": 2
+          },
+          "perMonth": [
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ],
+            [
+              "Arte e cultura",
+              1
+            ]
+          ],
+          "years": [
+            2025,
+            2026
+          ]
+        }
+      }
+    }
+  ]
+}
