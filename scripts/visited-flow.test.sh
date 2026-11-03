@@ -10,6 +10,11 @@
 #   V2  evento di tre giorni finito 10 giorni fa -> PUT 200 e visit_day = il suo primo giorno (D-05)
 #   V3  evento che inizia fra due giorni -> 409 {error:'too-early'} e zero righe (D-02)
 #   V4  secondo PUT su V1 -> 200, una riga, visit_day invariato; due PUT in parallelo su un evento fresco -> una riga
+#   V5  riga su A e riga a mano sul membro M: DELETE A -> removed 2, zero righe su A e M; di nuovo -> removed 0
+#   V6  PUT senza Origin -> 403, senza cookie -> 401, id 'abc' / 1234567890 / 999999999 -> 404, sempre private, no-store
+#   V7  DELETE A di un altro utente mentre u1 ha una riga su A -> 200 removed 0, la riga di u1 resta
+#   V8  499 righe: PUT A -> 200 (la 500a), PUT C -> 409 {error:'cap'}, PUT A di nuovo -> 200 (D-07)
+#   V9  D-04: DELETE visited non toglie il salvato, DELETE saved non toglie il visitato
 #
 # Righe di prova sotto il `source` dedicato '__visited_gate__': cancellate prima
 # e all'uscita, nessuna riga reale viene letta o toccata.
@@ -203,4 +208,78 @@ wait "${pid1}" "${pid2}"
 [[ "$(visited_rows "${u1_user}" "${b_id}")" == "1" ]] || fail "V4: due PUT in parallelo su B devono lasciare una riga"
 echo "ok  V4: secondo PUT -> 200, una riga, visit_day invariato; due PUT in parallelo su B -> una riga"
 
-echo "Riepilogo: V1-V4 verdi"
+# --- V5: si toglie tutto il gruppo, e togliere due volte non e' un errore ------
+psql_dev "INSERT INTO visited_events (user_id, event_id, title, date_start, canonical_category, source, source_id, visit_day)
+          SELECT '${u1_user}', id, title, date_start, canonical_category, source, source_id, current_date FROM events WHERE id = ${m_id}" >/dev/null
+code="$(del v5 "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/v5.b" 'j.removed')" == "2" ]] || fail "V5: DELETE A: atteso 200 removed 2, ottenuto ${code} '$(cat "${tmp_dir}/v5.b")'"
+[[ "$(visited_rows "${u1_user}" "${a_id}")" == "0" && "$(visited_rows "${u1_user}" "${m_id}")" == "0" ]] || fail "V5: dopo DELETE A devono sparire le righe su A e su M"
+code="$(del v5b "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/v5b.b" 'j.removed')" == "0" ]] || fail "V5: secondo DELETE A: atteso 200 removed 0, ottenuto ${code} '$(cat "${tmp_dir}/v5b.b")'"
+echo "ok  V5: riga su A + riga su M -> DELETE A removed 2, zero righe su A e M; di nuovo -> 200 removed 0"
+
+# --- V6: Origin, sessione e id sono controllati prima di ogni query -------------
+no_store() { # <nome-file> <sezione>
+  local cc
+  cc="$(grep -i '^cache-control:' "${tmp_dir}/$1.h" | head -n 1 | cut -d: -f2- | sed 's/^ *//' | tr -d '\r')"
+  [[ "${cc}" == "private, no-store" ]] || fail "$2: cache-control atteso 'private, no-store' su $1, ottenuto '${cc}'"
+}
+code="$(call v6a PUT "/api/v1/me/visited/${a_id}" -H "${u1_cookie}")"
+[[ "${code}" == "403" ]] || fail "V6: PUT senza Origin: atteso 403, ottenuto ${code}"
+no_store v6a V6
+code="$(call v6b PUT "/api/v1/me/visited/${a_id}" -H "Origin: ${origin}")"
+[[ "${code}" == "401" ]] || fail "V6: PUT senza cookie: atteso 401, ottenuto ${code}"
+no_store v6b V6
+for bad in abc 1234567890 999999999; do
+  code="$(put v6c "${bad}" "${u1_cookie}")"
+  [[ "${code}" == "404" ]] || fail "V6: PUT /api/v1/me/visited/${bad}: atteso 404, ottenuto ${code}"
+  no_store v6c V6
+  code="$(del v6d "${bad}" "${u1_cookie}")"
+  [[ "${code}" == "200" || "${code}" == "404" ]] || fail "V6: DELETE /api/v1/me/visited/${bad}: atteso 200 o 404, ottenuto ${code}"
+  no_store v6d V6
+done
+[[ "$(visited_rows "${u1_user}" "${a_id}")" == "0" ]] || fail "V6: una richiesta rifiutata ha scritto una riga"
+echo "ok  V6: PUT senza Origin -> 403, senza cookie -> 401, id abc / 1234567890 / sconosciuto -> 404, sempre private, no-store"
+
+# --- V7: la cancellazione e' sempre dell'utente della sessione ------------------
+mint_user u2
+code="$(put v7p "${a_id}" "${u1_cookie}")"
+[[ "${code}" == "200" && "$(visited_rows "${u1_user}" "${a_id}")" == "1" ]] || fail "V7: u1 deve avere una riga su A (PUT ${code})"
+code="$(del v7 "${a_id}" "${u2_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/v7.b" 'j.removed')" == "0" ]] || fail "V7: DELETE A di u2: atteso 200 removed 0, ottenuto ${code} '$(cat "${tmp_dir}/v7.b")'"
+no_store v7 V7
+[[ "$(visited_rows "${u1_user}" "${a_id}")" == "1" ]] || fail "V7: il DELETE di un altro utente ha tolto la riga di u1"
+echo "ok  V7: DELETE A dell'utente 2 -> 200 removed 0, la riga dell'utente 1 resta"
+
+# --- V8: tetto di 500 sull'account ----------------------------------------------
+mint_user u3
+psql_dev "INSERT INTO visited_events (user_id, title, date_start, canonical_category, source, source_id, visit_day)
+          SELECT '${u3_user}', 'Tetto ' || n, now() - interval '30 days', 'Altro', '${test_source}', 'cap-' || n, current_date FROM generate_series(1, 499) AS n" >/dev/null
+code="$(put v8a "${a_id}" "${u3_cookie}")"
+[[ "${code}" == "200" ]] || fail "V8: la 500a riga: atteso 200, ottenuto ${code} '$(cat "${tmp_dir}/v8a.b")'"
+code="$(put v8b "${c_id}" "${u3_cookie}")"
+[[ "${code}" == "409" && "$(json_get "${tmp_dir}/v8b.b" 'j.error')" == "cap" ]] || fail "V8: la 501a: atteso 409 cap, ottenuto ${code} '$(cat "${tmp_dir}/v8b.b")'"
+no_store v8b V8
+[[ "$(psql_dev "SELECT count(*) FROM visited_events WHERE user_id = '${u3_user}'")" == "500" ]] || fail "V8: dopo il 409 devono restare 500 righe"
+code="$(put v8c "${a_id}" "${u3_cookie}")"
+[[ "${code}" == "200" ]] || fail "V8: A gia' segnato al tetto: atteso 200, ottenuto ${code}"
+echo "ok  V8: 499 righe + A -> 200, C -> 409 cap con 500 righe, A di nuovo -> 200"
+
+# --- V9: D-04, le due liste non si toccano --------------------------------------
+mint_user u4
+saved_rows() { psql_dev "SELECT count(*) FROM saved_events WHERE user_id = '$1' AND event_id = $2"; }
+code="$(call v9s PUT "/api/v1/me/saved/${b_id}" -H "Origin: ${origin}" -H "${u4_cookie}")"
+[[ "${code}" == "200" ]] || fail "V9: PUT saved B: atteso 200, ottenuto ${code}"
+code="$(put v9v "${b_id}" "${u4_cookie}")"
+[[ "${code}" == "200" ]] || fail "V9: PUT visited B: atteso 200, ottenuto ${code}"
+code="$(del v9d1 "${b_id}" "${u4_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/v9d1.b" 'j.removed')" == "1" ]] || fail "V9: DELETE visited B: atteso 200 removed 1, ottenuto ${code}"
+[[ "$(saved_rows "${u4_user}" "${b_id}")" == "1" && "$(visited_rows "${u4_user}" "${b_id}")" == "0" ]] || fail "V9: togliere il visitato non deve toccare il salvato"
+code="$(put v9v2 "${b_id}" "${u4_cookie}")"
+[[ "${code}" == "200" ]] || fail "V9: PUT visited B di nuovo: atteso 200, ottenuto ${code}"
+code="$(call v9d2 DELETE "/api/v1/me/saved/${b_id}" -H "Origin: ${origin}" -H "${u4_cookie}")"
+[[ "${code}" == "200" ]] || fail "V9: DELETE saved B: atteso 200, ottenuto ${code}"
+[[ "$(saved_rows "${u4_user}" "${b_id}")" == "0" && "$(visited_rows "${u4_user}" "${b_id}")" == "1" ]] || fail "V9: togliere il salvato non deve toccare il visitato"
+echo "ok  V9: DELETE visited lascia il salvato, DELETE saved lascia il visitato"
+
+echo "Riepilogo: V1-V9 verdi"

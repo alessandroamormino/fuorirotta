@@ -231,6 +231,8 @@ m2_matrix=(
   'POST|/api/v1/me/saved/merge|{"items":[]}'
   'DELETE|/api/v1/me/saved/[eventId]|'
   'DELETE|/api/v1/me/saved/gone/[ref]|'
+  'PUT|/api/v1/me/visited/[eventId]|'
+  'DELETE|/api/v1/me/visited/[eventId]|'
   'GET|/api/v1/me/share|'
   'PATCH|/api/v1/me/share|{"showName":true}'
   'POST|/api/v1/me/share/rotate|'

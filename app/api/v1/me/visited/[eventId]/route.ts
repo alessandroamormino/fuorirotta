@@ -1,7 +1,7 @@
 import { assertSameOrigin, noStoreJson, requireUser } from '@/lib/account'
 import { todayInRome } from '@/lib/dateWindow'
 import { prisma } from '@/lib/prisma'
-import { snapshotForEvent } from '@/lib/saved/resolve'
+import { clusterIds, snapshotForEvent } from '@/lib/saved/resolve'
 import { ACCOUNT_CAP } from '@/lib/saved/snapshot'
 import { visitDayFor } from '@/lib/visited/rules'
 
@@ -73,4 +73,17 @@ export async function PUT(req: Request, { params }: Params): Promise<Response> {
     skipDuplicates: true,
   })
   return noStoreJson({ visited: true, visitDay })
+}
+
+export async function DELETE(req: Request, { params }: Params): Promise<Response> {
+  const g = await guard(req, params)
+  if (g instanceof Response) return g
+  const { ctx, id } = g
+  // Si toglie tutto il gruppo: una riga sul membro e una sulla canonica sono una visita sola.
+  // D-04: questo handler tocca solo i visitati, mai la lista dei salvati.
+  const row = await prisma.event.findUnique({ where: { id }, select: { canonicalEventId: true } })
+  const ids = row ? await clusterIds(row.canonicalEventId ?? id) : [id]
+  const { count } = await prisma.visitedEvent.deleteMany({ where: { userId: ctx.user.id, eventId: { in: ids } } })
+  // 200 anche con zero righe: il secondo tocco di un doppio tocco non e' un errore.
+  return noStoreJson({ removed: count })
 }
