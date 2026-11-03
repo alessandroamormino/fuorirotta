@@ -156,6 +156,14 @@ public struct ClusterSet: Sendable {
     }
 }
 
+/// Esito di GET /api/events/clusters.
+public enum ClusterFetch: Sendable {
+    case fresh(ClusterSet, etag: String?)
+    case notModified
+    /// Risposta valida ma senza dati (`geojson: null`): non e' un errore.
+    case empty
+}
+
 struct ClusterEnvelope: Decodable {
     struct Feature: Decodable {
         struct Geometry: Decodable { let coordinates: [Double] }
@@ -315,8 +323,22 @@ public struct APIClient: Sendable {
     }
 
     /// Tutti i pin (circa 9.000, 2,6 MB senza compressione). Le feature senza due coordinate si saltano.
-    public func clusters() async throws -> ClusterSet {
-        ClusterSet(try await get(baseURL.appendingPathComponent("api/events/clusters"), as: ClusterEnvelope.self))
+    /// `ifNoneMatch` e' l'ETag della copia che l'app ha su disco: il server risponde 304 e il file non si scarica.
+    /// La cache di URLSession e' spenta: la copia buona e' quella su disco, non una che decide il sistema.
+    public func clusters(ifNoneMatch: String?) async throws -> ClusterFetch {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/events/clusters"))
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        if let ifNoneMatch { request.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match") }
+        let data: Data
+        let http: HTTPURLResponse
+        do {
+            (data, http) = try await perform(request)
+        } catch APIError.http(status: 304, _) {
+            return .notModified
+        }
+        guard let env = try? JSONDecoder().decode(ClusterEnvelope.self, from: data) else { throw APIError.decoding }
+        guard env.geojson != nil else { return .empty }
+        return .fresh(ClusterSet(env), etag: http.value(forHTTPHeaderField: "ETag"))
     }
 
     /// Un evento con tutti i campi. Un membro fuso risponde 307 verso l'id canonico: URLSession lo segue da solo.

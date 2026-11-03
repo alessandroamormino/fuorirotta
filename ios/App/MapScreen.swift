@@ -29,6 +29,9 @@ struct MapFocus: Equatable {
 /// (mai removeAll + add: SwiftUI chiama updateUIView a ogni cambio di stato).
 struct EventMapView: UIViewRepresentable {
     let pins: [FuorirottaCore.MapPin]
+    /// Cambia solo quando `pins` cambia davvero: SwiftUI chiama updateUIView a ogni cambio di stato, e con ~9.000 pin
+    /// ricalcolare la differenza ogni volta costerebbe a vuoto.
+    let revision: Int
     let center: CLLocationCoordinate2D
     let focus: MapFocus
     let showsUser: Bool
@@ -82,7 +85,7 @@ struct EventMapView: UIViewRepresentable {
             // Raggio di 50 km attorno al punto (UI-SPEC "Mappa"); attorno a un evento, la regione chiesta.
             map.setRegion(MKCoordinateRegion(center: target, latitudinalMeters: focus.meters, longitudinalMeters: focus.meters), animated: true)
         }
-        c.apply(pins, to: map)
+        c.apply(pins, revision: revision, to: map)
     }
 
     @MainActor
@@ -96,13 +99,16 @@ struct EventMapView: UIViewRepresentable {
         var focus: MapFocus
         var tilted = false
         private var shown: [Int: PinAnnotation] = [:]
+        private var appliedRevision = -1
 
         init(_ parent: EventMapView) {
             self.parent = parent
             focus = parent.focus
         }
 
-        func apply(_ pins: [FuorirottaCore.MapPin], to map: MKMapView) {
+        func apply(_ pins: [FuorirottaCore.MapPin], revision: Int, to map: MKMapView) {
+            guard revision != appliedRevision else { return }
+            appliedRevision = revision
             let delta = pinDelta(existing: Set(shown.keys), incoming: pins)
             if !delta.remove.isEmpty {
                 map.removeAnnotations(delta.remove.compactMap { shown.removeValue(forKey: $0) })
@@ -112,7 +118,7 @@ struct EventMapView: UIViewRepresentable {
                 for a in fresh { shown[a.id] = a }
                 map.addAnnotations(fresh)
             }
-            if !delta.add.isEmpty || !delta.remove.isEmpty { reportVisible(map) }
+            reportVisible(map)
         }
 
         /// Quanti pin stanno nella vista (per il messaggio di zona vuota). Fuori dall'aggiornamento della vista.
@@ -476,6 +482,11 @@ struct MapScreen: View {
     private var origin: Place { eventSpot ?? location.place }
 
     @State private var pins: [FuorirottaCore.MapPin] = []
+    /// `pins` dopo il filtro, calcolato solo quando cambiano i pin o il filtro (non a ogni disegno della vista).
+    @State private var shownPins: [FuorirottaCore.MapPin] = []
+    @State private var pinsRevision = 0
+    /// ETag della copia che abbiamo: serve a chiedere al server "e' cambiato qualcosa?" senza riscaricare 2,6 MB.
+    @State private var etag: String?
     @State private var phase = Phase.loading
     @State private var offline = false
     @State private var filter: String?  // nil = Tutte
@@ -489,9 +500,9 @@ struct MapScreen: View {
         if case .pin(let pin) = sheet { pin.id } else { nil }
     }
 
-    private var shownPins: [FuorirottaCore.MapPin] {
-        guard let filter else { return pins }
-        return pins.filter { ($0.category ?? "Altro") == filter }
+    private func refreshShown() {
+        shownPins = filter.map { f in pins.filter { ($0.category ?? "Altro") == f } } ?? pins
+        pinsRevision += 1
     }
 
     var body: some View {
@@ -499,6 +510,7 @@ struct MapScreen: View {
             ZStack {
                 EventMapView(
                     pins: shownPins,
+                    revision: pinsRevision,
                     center: CLLocationCoordinate2D(latitude: origin.latitude, longitude: origin.longitude),
                     focus: focus,
                     showsUser: location.authorised,
@@ -508,7 +520,8 @@ struct MapScreen: View {
                     onSelect: { id in sheet = pins.first { $0.id == id }.map(MapSheet.pin) },
                     onDeselect: { if case .pin = sheet { sheet = nil } },
                     onCluster: { ids in
-                        let members = pins.filter { ids.contains($0.id) }.sorted { $0.dateStart < $1.dateStart }.map(asEvent)
+                        let wanted = Set(ids)
+                        let members = pins.filter { wanted.contains($0.id) }.sorted { $0.dateStart < $1.dateStart }.map(asEvent)
                         sheet = .group(Group(events: members))
                     },
                     onVisibleCount: { if visibleCount != $0 { visibleCount = $0 } }
@@ -537,7 +550,10 @@ struct MapScreen: View {
         // La scheda puo' nascere proprio adesso (prima visita): anche onAppear.
         .onAppear(perform: showRequestedEvent)
         .onChange(of: router.mapEvent) { showRequestedEvent() }
-        .onChange(of: filter) { sheet = nil }
+        .onChange(of: filter) {
+            sheet = nil
+            refreshShown()
+        }
         .sensoryFeedback(.selection, trigger: filter)
     }
 
@@ -660,18 +676,55 @@ struct MapScreen: View {
     // MARK: dati
 
     /// D-17: i pin di tutta Italia, una volta per vita della schermata. Cambiare luogo sposta solo la camera (`focus`).
+    /// Prima la copia su disco (subito), poi una domanda al server con il suo ETag: 304 = non cambia nulla.
     private func load() async {
-        guard let api else { return }
-        phase = .loading
-        do {
-            let set = try await api.clusters()
+        guard let api, !(phase == .loaded && !offline) else { return }
+        if pins.isEmpty, let disk = await Task.detached(operation: { Self.readDisk() }).value {
             guard !Task.isCancelled else { return }
-            pins = set.pins
+            pins = disk.pins
+            etag = disk.etag
+            refreshShown()
+            phase = .loaded
+        } else if pins.isEmpty {
+            phase = .loading
+        }
+        do {
+            let fetch = try await api.clusters(ifNoneMatch: etag)
+            guard !Task.isCancelled else { return }
+            switch fetch {
+            case .fresh(let set, let newEtag):
+                pins = set.pins
+                etag = newEtag
+                refreshShown()
+                Task.detached { Self.writeDisk(DiskCopy(computedAt: set.computedAt, etag: newEtag, pins: set.pins)) }
+            case .notModified, .empty:
+                break  // ponytail: .empty (file non ancora calcolato) lascia la copia che c'e'; senza copia la mappa e' vuota.
+            }
             offline = false
             phase = .loaded
         } catch {
             guard !Task.isCancelled else { return }
-            phase = .failed
+            // Senza rete resta la copia su disco con l'avviso; senza nemmeno quella, un messaggio con "Riprova".
+            if pins.isEmpty { phase = .failed } else { offline = true }
         }
+    }
+
+    private struct DiskCopy: Codable, Sendable {
+        let computedAt: String
+        let etag: String?
+        let pins: [FuorirottaCore.MapPin]
+    }
+
+    nonisolated private static let diskURL = URL.cachesDirectory.appending(path: "fuorirotta/map-italia.json")
+
+    nonisolated private static func writeDisk(_ copy: DiskCopy) {
+        // ponytail: scrittura fallita = niente cache offline, nient'altro.
+        try? FileManager.default.createDirectory(at: diskURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(copy) { try? data.write(to: diskURL, options: .atomic) }
+    }
+
+    nonisolated private static func readDisk() -> DiskCopy? {
+        guard let data = try? Data(contentsOf: diskURL) else { return nil }
+        return try? JSONDecoder().decode(DiskCopy.self, from: data)
     }
 }

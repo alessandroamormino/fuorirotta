@@ -18,7 +18,7 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
     }
 }
 
-@Suite struct ClustersTests {
+@Suite(.serialized) struct ClustersTests {
     @Test func decodesSample() throws {
         let url = Bundle.module.url(forResource: "clusters-sample", withExtension: "json", subdirectory: "Fixtures")!
         let env = try JSONDecoder().decode(ClusterEnvelope.self, from: Data(contentsOf: url))
@@ -53,6 +53,37 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
         let json = #"{"geojson":null,"eventCount":0,"computedAt":null}"#
         let set = ClusterSet(try JSONDecoder().decode(ClusterEnvelope.self, from: Data(json.utf8)))
         #expect(set.pins.isEmpty && set.computedAt.isEmpty)
+    }
+
+    private let etag = "\"2026-11-02T11:10:47.000Z\""
+    private let body = #"{"geojson":{"features":[{"geometry":{"coordinates":[9.1,45.4]},"properties":{"id":1,"title":"t","dateStart":"2026-11-01T00:00:00.000Z"}}]},"eventCount":1,"computedAt":"2026-11-02T11:10:47.000Z"}"#
+
+    private func client() -> APIClient {
+        APIClient(
+            baseURL: URL(string: "https://example.test")!, appVersion: "1.0.0",
+            session: APIClient.makeSession(appVersion: "1.0.0", protocolClasses: [ClusterStub.self]))
+    }
+
+    @Test func firstLoadSendsNoValidatorAndKeepsTheEtag() async throws {
+        ClusterStub.reset([.init(headers: ["ETag": etag], body: body)])
+        let fetch = try await client().clusters(ifNoneMatch: nil)
+        let sent = try #require(ClusterStub.requests.first)
+        #expect(sent.value(forHTTPHeaderField: "If-None-Match") == nil)
+        #expect(sent.cachePolicy == .reloadIgnoringLocalCacheData)
+        guard case .fresh(let set, let tag) = fetch else { Issue.record("expected .fresh"); return }
+        #expect(set.pins.map(\.id) == [1] && tag == etag)
+    }
+
+    @Test func notModifiedIsNotAnError() async throws {
+        ClusterStub.reset([.init(status: 304, headers: ["ETag": etag], body: "")])
+        let fetch = try await client().clusters(ifNoneMatch: etag)
+        #expect(ClusterStub.requests.first?.value(forHTTPHeaderField: "If-None-Match") == etag)
+        guard case .notModified = fetch else { Issue.record("expected .notModified"); return }
+    }
+
+    @Test func nullGeojsonIsEmpty() async throws {
+        ClusterStub.reset([.init(body: #"{"geojson":null,"eventCount":0,"computedAt":null}"#)])
+        guard case .empty = try await client().clusters(ifNoneMatch: nil) else { Issue.record("expected .empty"); return }
     }
 }
 
@@ -152,4 +183,32 @@ struct LiveAPITests {
         #expect(!page.events.isEmpty)
         #expect(page.total >= page.events.count)
     }
+}
+
+// Stub proprio (le suite girano in parallelo): risponde con stato, intestazioni e corpo scelti e ricorda le richieste.
+final class ClusterStub: URLProtocol, @unchecked Sendable {
+    struct Reply { var status = 200; var headers: [String: String] = [:]; var body = "{}" }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var replies: [Reply] = []
+    nonisolated(unsafe) private static var sent: [URLRequest] = []
+
+    static func reset(_ r: [Reply]) { lock.withLock { replies = r; sent = [] } }
+    static var requests: [URLRequest] { lock.withLock { sent } }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let reply: Reply = Self.lock.withLock {
+            Self.sent.append(request)
+            return Self.replies.isEmpty ? Reply() : Self.replies.removeFirst()
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: nil, headerFields: reply.headers)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(reply.body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
