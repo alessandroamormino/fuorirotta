@@ -20,6 +20,7 @@ import FollowButton from "@/components/follow/FollowButton";
 import { comuneChip } from "@/lib/follows/keys";
 import Button from "@/components/ui/Button";
 import type { Sibling } from "@/lib/saved/series";
+import { snapFromEvent } from "@/lib/saved/snapshot";
 import AddToCalendar from "@/components/calendar/AddToCalendar";
 import MiniEventCard, { type MiniEventCardData } from "@/components/map/MiniEventCard";
 import { eventStatus, formatEventRange, isEventOver, romeCalendarDate } from "@/lib/eventStatus";
@@ -194,6 +195,12 @@ function OtherDates({ siblings, title }: { siblings: Sibling[]; title: string })
 			)}
 		</>
 	);
+}
+
+// Date in ISO e testo dell'evento per il segno dell'ospite: snapFromEvent li normalizza (a runtime le date arrivano gia' stringhe).
+function visitedProps(event: Event) {
+	const snap = snapFromEvent(event);
+	return { dateStart: snap.dateStart, dateEnd: snap.dateEnd, snap };
 }
 
 export default function EventDetailClient({ initialEvent, canonicalUrl, eventOver, siblings, visitable }: EventDetailClientProps) {
@@ -603,7 +610,7 @@ export default function EventDetailClient({ initialEvent, canonicalUrl, eventOve
 									</h1>
 									<div className="flex flex-none items-center gap-2">
 										{/* D-04: due bottoni indipendenti; il cuore resta all'estremo destro, dov'era. */}
-										{visitable && <VisitedButton eventId={event.id} title={event.title} />}
+										{visitable && <VisitedButton eventId={event.id} title={event.title} {...visitedProps(event)} />}
 										<SaveHeart presentation="pill" eventId={event.id} title={event.title} />
 									</div>
 								</div>

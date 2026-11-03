@@ -3,8 +3,10 @@
 import { useEffect } from "react";
 import { Check } from "lucide-react";
 import { useIsVisited, toggleVisited, loadVisitedIds } from "@/lib/visited/store";
-import { useSavedMode } from "@/lib/saved/store";
+import { savedAuth, useSavedMode } from "@/lib/saved/store";
+import type { Snap } from "@/lib/saved/snapshot";
 import { notify } from "@/components/account/NoticeHost";
+import { requestSignIn } from "@/components/account/UserStateProvider";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
 
 /**
@@ -20,13 +22,18 @@ interface VisitedButtonProps {
 	eventId: number;
 	/** Titolo grezzo: si decodifica qui. */
 	title: string;
+	/** Date come arrivano dal server (ISO): servono all'ospite per il giorno di visita. */
+	dateStart: string;
+	dateEnd: string | null;
+	/** Testo dell'evento per la lista del dispositivo (null = l'evento non lo ammette: il segno resta senza). */
+	snap: Snap | null;
 	className?: string;
 }
 
 const FOCUS_RING =
 	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
-export default function VisitedButton({ eventId, title, className }: VisitedButtonProps) {
+export default function VisitedButton({ eventId, title, dateStart, dateEnd, snap, className }: VisitedButtonProps) {
 	const visited = useIsVisited(eventId);
 	const mode = useSavedMode();
 
@@ -40,9 +47,18 @@ export default function VisitedButton({ eventId, title, className }: VisitedButt
 			type="button"
 			onClick={() => {
 				const wasVisited = visited;
-				void toggleVisited(eventId).then((result) => {
+				void toggleVisited(eventId, { dateStart, dateEnd, snap }).then((result) => {
 					if (result === "cap") {
-						notify("Hai raggiunto il limite di 500 eventi visitati. Rimuovine qualcuno per aggiungerne altri.");
+						if (savedAuth().signedIn) {
+							notify("Hai raggiunto il limite di 500 eventi visitati. Rimuovine qualcuno per aggiungerne altri.");
+						} else {
+							// Come il tetto dei salvati: l'azione di accesso solo con l'accesso acceso sia nella build sia sul server.
+							const canSignIn = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && savedAuth().enabled !== false;
+							notify(
+								"Hai raggiunto il limite di 100 eventi visitati senza account. Accedi per segnarne fino a 500.",
+								canSignIn ? { label: "Accedi", onClick: requestSignIn } : undefined
+							);
+						}
 					} else if (result === "error") {
 						notify(wasVisited ? "Rimozione non riuscita. Riprova tra poco." : "Salvataggio non riuscito. Riprova tra poco.");
 					}

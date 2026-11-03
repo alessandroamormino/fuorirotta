@@ -12,18 +12,85 @@
  * modulo tocca i salvati, ne' viceversa.
  */
 import { useSyncExternalStore } from 'react'
+import { todayInRome } from '../dateWindow'
 import { savedAuth, useSavedMode } from '../saved/store'
+import { GUEST_CAP, validateSnap, type Snap } from '../saved/snapshot'
+import { parseVisitedDevice, visitDayFor, type VisitedDeviceEntry } from './rules'
 
 export type VisitedToggleResult = 'visited' | 'removed' | 'busy' | 'cap' | 'error'
 
+// Ospite (D-07): la lista sta nel localStorage di questo browser e non va mai sul server prima dell'accesso.
+const KEY = 'fuorirotta:visited'
+// Copia in memoria: e' la lista quando lo storage lancia (navigazione privata, storage disattivato).
+let cache: VisitedDeviceEntry[] = []
+let loaded = false
+// Vero dopo una scrittura fallita: da li' in poi la verita' e' la memoria.
+let memoryOnly = false
+
+// Rilegge SEMPRE lo storage corrente: due schede non si sovrascrivono. Voci malformate
+// si scartano una per una (parseVisitedDevice) e si riscrive la lista pulita.
+function readStorage(): VisitedDeviceEntry[] {
+  if (memoryOnly) return cache
+  try {
+    const raw = window.localStorage.getItem(KEY)
+    const list = parseVisitedDevice(raw)
+    if (raw !== null && JSON.stringify(list) !== raw) window.localStorage.setItem(KEY, JSON.stringify(list))
+    return list
+  } catch {
+    return cache
+  }
+}
+
+function commit(next: VisitedDeviceEntry[]): void {
+  cache = next
+  loaded = true
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(next))
+  } catch {
+    memoryOnly = true
+  }
+  notifyAll()
+}
+
+// Lettura pigra, alla prima richiesta sul client, mai all'import del modulo.
+function getList(): VisitedDeviceEntry[] {
+  if (!loaded) {
+    cache = readStorage()
+    loaded = true
+  }
+  return cache
+}
+
+function onStorage(e: StorageEvent): void {
+  if (e.key !== null && e.key !== KEY) return
+  cache = readStorage()
+  loaded = true
+  notifyAll()
+}
+
 const listeners = new Set<() => void>()
 function subscribe(cb: () => void): () => void {
+  if (listeners.size === 0) window.addEventListener('storage', onStorage)
   listeners.add(cb)
   return () => {
     listeners.delete(cb)
+    if (listeners.size === 0) window.removeEventListener('storage', onStorage)
   }
 }
-const notifyAll = () => listeners.forEach((l) => l())
+function notifyAll(): void {
+  listeners.forEach((l) => l())
+}
+
+/** La lista dell'ospite, per l'unione dopo l'accesso. */
+export function readVisitedDevice(): VisitedDeviceEntry[] {
+  return readStorage()
+}
+
+/** Toglie dalla lista del dispositivo solo gli id mandati e accettati dal server. */
+export function clearVisitedDevice(ids: number[]): void {
+  const sent = new Set(ids)
+  commit(readStorage().filter((e) => !sent.has(e.id)))
+}
 
 // Modo account: gli id canonici stanno SOLO in memoria (come i salvati, AUTH-09).
 let accountIds: Set<number> | null = null
@@ -63,7 +130,7 @@ export function useIsVisited(eventId: number): boolean {
   useSavedMode()
   return useSyncExternalStore(
     subscribe,
-    () => (savedAuth().signedIn ? accountIds?.has(eventId) === true : false),
+    () => (savedAuth().signedIn ? accountIds?.has(eventId) === true : getList().some((e) => e.id === eventId)),
     () => false
   )
 }
@@ -103,12 +170,37 @@ async function toggleAccount(eventId: number): Promise<VisitedToggleResult> {
   }
 }
 
-/** Segna o toglie "Ci sono stato". Il server decide se l'evento e' iniziato (D-02): qui si prova e basta. */
-export async function toggleVisited(eventId: number): Promise<VisitedToggleResult> {
+/** Cio' che serve a segnare un evento sul dispositivo (l'ospite): date per il giorno di visita, testo per l'istantanea. */
+export interface VisitedEntryInput {
+  dateStart: string
+  dateEnd: string | null
+  snap: Snap | null
+}
+
+function toggleGuest(eventId: number, entry: VisitedEntryInput): VisitedToggleResult {
+  const list = getList()
+  if (list.some((e) => e.id === eventId)) {
+    commit(list.filter((e) => e.id !== eventId))
+    return 'removed'
+  }
+  if (list.length >= GUEST_CAP) return 'cap'
+  // Il giorno lo ricalcola comunque il server all'unione; qui serve a tenerlo vicino al segno (D-05).
+  const visitDay = visitDayFor(entry.dateStart, entry.dateEnd, todayInRome())
+  if (visitDay === null) return 'error'
+  const snap = entry.snap === null ? null : validateSnap(entry.snap)
+  commit([...list, { id: eventId, savedAt: new Date().toISOString(), visitDay, ...(snap ? { snap } : {}) }])
+  return 'visited'
+}
+
+/**
+ * Segna o toglie "Ci sono stato". Con l'accesso scrive il server, che decide se l'evento
+ * e' iniziato (D-02); senza, la lista resta in questo browser (D-07).
+ */
+export async function toggleVisited(eventId: number, entry: VisitedEntryInput): Promise<VisitedToggleResult> {
   if (pending.has(eventId)) return 'busy'
   pending.add(eventId)
   try {
-    return await toggleAccount(eventId)
+    return savedAuth().signedIn ? await toggleAccount(eventId) : toggleGuest(eventId, entry)
   } finally {
     pending.delete(eventId)
   }

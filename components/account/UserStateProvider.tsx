@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SignInDialog from "./SignIn";
 import SavedSync from "../saved/SavedSync";
+import VisitedSync from "../visited/VisitedSync";
 import FollowSync from "../follow/FollowSync";
 import { clearFollowIntent } from "@/lib/follows/intent";
 
@@ -112,6 +113,8 @@ export function UserStateProvider({ children }: { children: ReactNode }) {
 			{children}
 			<SignInDialog open={open} onOpenChange={onOpenChange} returnFocusTo={returnFocusTo} />
 			<SavedSync />
+			{/* Dopo SavedSync: legge lo stato dell'accesso che quello scrive nello stesso giro di effetti. */}
+			<VisitedSync />
 			<FollowSync />
 		</UserStateContext.Provider>
 	);
