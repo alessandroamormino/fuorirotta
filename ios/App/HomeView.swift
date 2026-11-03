@@ -102,6 +102,7 @@ struct HomeView: View {
     @State private var followCount = 0  // contatore per .sensoryFeedback(.selection)
     @State private var dismissedRecommended = UserDefaults.standard.string(forKey: "fr.dismissedRecommended")
     @State private var model = HomeModel()
+    @State private var allEvents = AllEventsModel()
     @State private var current: Int?
     @State private var heroVisible = true
     @State private var scrollBusy = false
@@ -113,7 +114,8 @@ struct HomeView: View {
     var body: some View {
         EventStack(path: Bindable(router).homePath) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                // Pigro: la lista nazionale e' infinita. Le intestazioni fissate sono quelle di "Tutti gli eventi".
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     heroSection
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         if model.offline {
@@ -133,13 +135,15 @@ struct HomeView: View {
                     }
                     .padding(.top, Spacing.xl)
                     .padding(.bottom, Spacing.xl)
+                    // Ultima: una lista senza fine non puo' avere niente sotto.
+                    if model.phase == .loaded { AllEventsSection(model: allEvents) }
                 }
             }
             // L'eroe sale fino al bordo alto, sotto la status bar (REF Omniphile): niente barra di navigazione.
             .ignoresSafeArea(edges: .top)
             .toolbar(.hidden, for: .navigationBar)
             .background(Color.background)
-            .refreshable { await load() }
+            .refreshable { await refresh() }
         }
         .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -165,6 +169,13 @@ struct HomeView: View {
     private func load() async {
         guard let api else { return }
         await model.load(api: api, place: location.place, signedIn: signedIn)
+    }
+
+    /// Il pull-to-refresh aggiorna anche la lista nazionale.
+    private func refresh() async {
+        async let all: Void = allEvents.restart(api: api)
+        await load()
+        await all
     }
 
     // MARK: Eroe e intestazione

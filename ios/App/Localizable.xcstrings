@@ -2946,6 +2946,16 @@
         }
       }
     },
+    "Tutti gli eventi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All events"
+          }
+        }
+      }
+    },
     "Usa la mia posizione" : {
       "localizations" : {
         "en" : {
