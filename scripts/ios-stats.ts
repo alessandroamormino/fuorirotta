@@ -6,7 +6,15 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { HEATMAP_MAX_SPREAD_DAYS, computeStats, type StatItem, type Stats } from '../lib/stats/compute'
+import {
+  HEATMAP_MAX_SPREAD_DAYS,
+  computeStats,
+  computeVisitedStats,
+  statsTiles,
+  type StatItem,
+  type Stats,
+  type VisitedStatItem
+} from '../lib/stats/compute'
 
 const FIXTURE = join(__dirname, '../ios/Packages/FuorirottaCore/Tests/FuorirottaCoreTests/Fixtures/stats.json')
 
@@ -22,7 +30,8 @@ const rome = (startUtc: string, endUtc: string, category: string | null): StatIt
   category
 })
 
-type Case = { name: string; year: number; saved: StatItem[] }
+type Case = { name: string; year: number; saved: StatItem[]; visited?: VisitedStatItem[] }
+const v = (visitDay: string, category: string | null): VisitedStatItem => ({ visitDay, category })
 
 const cases: Case[] = [
   { name: 'vuoto', year: 2026, saved: [] },
@@ -57,10 +66,30 @@ const cases: Case[] = [
       utc('2026-03-02', '2026-03-02', 'Arte e cultura'),
       utc('2025-03-02', '2025-03-02', 'Arte e cultura')
     ]
+  },
+  // D-05, D-09, D-11: visitati con il loro giorno di visita.
+  {
+    name: 'visitati: due nello stesso giorno, categoria nulla, anno prima',
+    year: 2026,
+    saved: [utc('2026-03-01', '2026-03-01', 'Sagre e feste'), utc('2025-12-30', '2026-01-01', 'Arte e cultura'), utc('2025-05-05', '2025-05-05', 'Altro')],
+    visited: [v('2026-03-01', 'Musica e spettacolo'), v('2026-03-01', 'Altro'), v('2026-07-14', null), v('2025-12-31', 'Sagre e feste')]
+  },
+  {
+    name: 'visitati: pari conteggio e categoria sconosciuta',
+    year: 2026,
+    saved: [],
+    visited: [v('2026-01-31', 'Food & Wine'), v('2026-02-01', 'Sagre e feste'), v('2026-02-02', 'Inventata'), v('2026-02-02', 'Sport e outdoor')]
+  },
+  {
+    name: 'visitati senza salvati, anno senza visite',
+    year: 2024,
+    saved: [],
+    visited: [v('2026-06-06', 'Arte e cultura')]
   }
 ]
 
-type Expect = { saved: Stats }
+type Tiles = ReturnType<typeof statsTiles>
+type Expect = { saved: Stats; visited: Stats; tilesAlways: Tiles; tilesYear: Tiles }
 
 // perCategory come coppie [nome, conteggio] e days con le chiavi ordinate: l'ordine e' parte del contratto.
 const stable = (s: Stats): Stats => ({
@@ -68,19 +97,31 @@ const stable = (s: Stats): Stats => ({
   days: Object.fromEntries(Object.entries(s.days).sort(([a], [b]) => (a < b ? -1 : 1)))
 })
 
-type Rule = { saved: (items: StatItem[], year: number) => Stats }
+type Rule = {
+  saved: (items: StatItem[], year: number) => Stats
+  visited: (items: VisitedStatItem[], year: number) => Stats
+  tiles: (visited: VisitedStatItem[], saved: StatItem[], year: number | null) => Tiles
+}
 
 function serialise(rule: Rule): string {
   const out = cases.map((c) => {
-    const expect: Expect = { saved: stable(rule.saved(c.saved, c.year)) }
-    return { name: c.name, year: c.year, saved: c.saved, expect }
+    const visited = c.visited ?? []
+    const expect: Expect = {
+      saved: stable(rule.saved(c.saved, c.year)),
+      visited: stable(rule.visited(visited, c.year)),
+      tilesAlways: rule.tiles(visited, c.saved, null),
+      tilesYear: rule.tiles(visited, c.saved, c.year)
+    }
+    return { name: c.name, year: c.year, saved: c.saved, visited, expect }
   })
   return JSON.stringify({ generatedFrom: 'lib/stats/compute.ts', cases: out }, null, 2) + '\n'
 }
 
-const real: Rule = { saved: (i, y) => computeStats(i, y) }
+const real: Rule = { saved: (i, y) => computeStats(i, y), visited: computeVisitedStats, tiles: statsTiles }
 // Regola sbagliata apposta: il tetto dei giorni a 15 invece di 14.
-const wrong: Rule = { saved: (i, y) => computeStats(i, y, HEATMAP_MAX_SPREAD_DAYS + 1) }
+const wrong: Rule = { ...real, saved: (i, y) => computeStats(i, y, HEATMAP_MAX_SPREAD_DAYS + 1) }
+// Seconda regola sbagliata: Giorni fuori conta i visitati invece dei giorni distinti.
+const wrongTiles: Rule = { ...real, tiles: (vis, sav, y) => ({ ...statsTiles(vis, sav, y), daysOut: vis.length }) }
 
 const expected = serialise(real)
 if (process.argv.includes('--write')) {
@@ -103,6 +144,10 @@ console.log(`ok  E1: fixture allineata (${cases.length} casi)`)
 
 if (serialise(wrong) === expected) {
   console.error('FAIL: E2 una regola diversa non viene rilevata')
+  process.exit(1)
+}
+if (serialise(wrongTiles) === expected) {
+  console.error('FAIL: E2 una tessera calcolata male non viene rilevata')
   process.exit(1)
 }
 console.log('ok  E2: una regola diversa viene rilevata')
