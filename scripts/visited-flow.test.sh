@@ -27,6 +27,8 @@
 #   R2  stesso con una fine in formato UTC (T23:59:59.999Z) e una in formato Roma (mezzanotte di Roma): entrambe trovate nel giorno giusto
 #   R3  un secondo utente con un salvato finito ieri compare a parte; l'hook non scrive nulla
 #
+#   W1  pagina /eventi/{id}: iniziato ieri -> bottone "Ci sono stato: Gate..." non premuto nell'HTML del server; inizia domani -> nessun bottone (D-02, D-08); poi PUT e ids come le chiamate del bottone
+#
 # Righe di prova sotto il `source` dedicato '__visited_gate__': cancellate prima
 # e all'uscita, nessuna riga reale viene letta o toccata.
 set -euo pipefail
@@ -509,4 +511,26 @@ echo "${out}" > "${tmp_dir}/r3.b"
 [[ "$(psql_dev "SELECT (SELECT count(*) FROM saved_events) || ':' || (SELECT count(*) FROM visited_events)")" == "${rows_before}" ]] || fail "R3: savedEndedOn ha scritto o tolto righe"
 echo "ok  R3: due utenti compaiono ciascuno con le proprie righe; saved_events e visited_events invariati dopo la chiamata"
 
-echo "Riepilogo: V1-V9, VS1-VS4, VM1-VM4, R1-R3 verdi"
+# --- W1: la pagina dell'evento sul sito (D-02, D-08) -----------------------------------
+# Il server rende la pagina e decide se il bottone c'e': iniziato = c'e', non premuto, col nome
+# "Ci sono stato: {titolo}"; non iniziato = non c'e' proprio. Lo stato premuto lo porta il client.
+w_started="$(insert_event gate-w-started 'Gate partito ieri' "$(noon -1)" "$(noon 1)" NULL)"
+w_future="$(insert_event gate-w-future 'Gate parte domani' "$(noon 1)" "$(noon 2)" NULL)"
+[[ -n "${w_started}" && -n "${w_future}" ]] || fail "W1: fixture non create"
+code="$(call w1a GET "/eventi/${w_started}")"
+[[ "${code}" == "200" ]] || fail "W1: GET pagina dell'evento iniziato: atteso 200, ottenuto ${code}"
+grep -q 'aria-label="Ci sono stato: Gate partito ieri"' "${tmp_dir}/w1a.b" || fail "W1: la pagina dell'evento iniziato deve contenere il bottone 'Ci sono stato: Gate partito ieri'"
+grep -o '<button[^>]*aria-label="Ci sono stato: Gate partito ieri"[^>]*>' "${tmp_dir}/w1a.b" | grep -q 'aria-pressed="false"' || fail "W1: il bottone nell'HTML del server deve essere non premuto (aria-pressed=\"false\")"
+code="$(call w1b GET "/eventi/${w_future}")"
+[[ "${code}" == "200" ]] || fail "W1: GET pagina dell'evento che inizia domani: atteso 200, ottenuto ${code}"
+if grep -q 'Ci sono stato' "${tmp_dir}/w1b.b"; then fail "W1: la pagina di un evento non ancora iniziato non deve contenere 'Ci sono stato' (D-02)"; fi
+mint_user u15
+code="$(put w1c "${w_started}" "${u15_cookie}")"
+[[ "${code}" == "200" ]] || fail "W1: PUT sull'evento iniziato (la chiamata del bottone): atteso 200, ottenuto ${code} ($(cat "${tmp_dir}/w1c.b"))"
+code="$(call w1d GET /api/v1/me/visited/ids -H "${u15_cookie}")"
+[[ "${code}" == "200" && "$(json_get "${tmp_dir}/w1d.b" "j.ids.includes(${w_started})")" == "true" ]] || fail "W1: GET ids deve elencare ${w_started}, ottenuto ${code} '$(cat "${tmp_dir}/w1d.b")'"
+code="$(put w1e "${w_future}" "${u15_cookie}")"
+[[ "${code}" == "409" ]] || fail "W1: PUT sull'evento che inizia domani: atteso 409, ottenuto ${code}"
+echo "ok  W1: pagina dell'evento iniziato -> bottone 'Ci sono stato: Gate partito ieri' non premuto; pagina dell'evento di domani -> nessun bottone; PUT 200 e ids lo elenca; PUT sul futuro 409"
+
+echo "Riepilogo: V1-V9, VS1-VS4, VM1-VM4, R1-R3, W1 verdi"

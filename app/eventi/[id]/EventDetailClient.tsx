@@ -15,6 +15,7 @@ import StatusBadge from "@/components/StatusBadge";
 import CategoryPlaceholder from "@/components/CategoryPlaceholder";
 import ShareButton from "@/components/ShareButton";
 import SaveHeart from "@/components/saved/SaveHeart";
+import VisitedButton from "@/components/visited/VisitedButton";
 import FollowButton from "@/components/follow/FollowButton";
 import { comuneChip } from "@/lib/follows/keys";
 import Button from "@/components/ui/Button";
@@ -59,6 +60,11 @@ interface EventDetailClientProps {
 	eventOver?: boolean;
 	/** Altre date non ancora finite della stessa serie (SAVE-06), scelte dal server. */
 	siblings?: Sibling[];
+	/**
+	 * "Ci sono stato" (D-02, D-08): vero solo dal primo giorno dell'evento (Roma). Lo decide il
+	 * server, una volta, come eventOver: l'orologio del browser darebbe un albero diverso.
+	 */
+	visitable?: boolean;
 }
 
 /**
@@ -190,7 +196,7 @@ function OtherDates({ siblings, title }: { siblings: Sibling[]; title: string })
 	);
 }
 
-export default function EventDetailClient({ initialEvent, canonicalUrl, eventOver, siblings }: EventDetailClientProps) {
+export default function EventDetailClient({ initialEvent, canonicalUrl, eventOver, siblings, visitable }: EventDetailClientProps) {
 	const params = useParams();
 	const router = useRouter();
 	const [event, setEvent] = useState<Event | null>(initialEvent ?? null);
@@ -595,7 +601,11 @@ export default function EventDetailClient({ initialEvent, canonicalUrl, eventOve
 									>
 										{decodeHtmlEntities(event.title)}
 									</h1>
-									<SaveHeart presentation="pill" eventId={event.id} title={event.title} className="flex-none" />
+									<div className="flex flex-none items-center gap-2">
+										{/* D-04: due bottoni indipendenti; il cuore resta all'estremo destro, dov'era. */}
+										{visitable && <VisitedButton eventId={event.id} title={event.title} />}
+										<SaveHeart presentation="pill" eventId={event.id} title={event.title} />
+									</div>
 								</div>
 
 								{/* Lista raggruppata (D-14): un contenitore, righe separate da
