@@ -23,6 +23,9 @@
 #   VM2 101 -> 400, non array -> 400, [] -> added 0, evento futuro saltato, visitDay del client tenuto solo dentro [primo giorno, min(ultimo giorno, oggi)]
 #   VM3 istantanea del client solo per righe sparite e validata; testo del client ignorato per l'evento vivo; NUL / date assurde -> 200 senza righe
 #   VM4 tetto 500: 499 righe + tre nuove -> added 1, overCap 2; senza Origin 403, senza cookie 401
+#   R1  savedEndedOn(ieri): solo il salvato finito ieri e non visitato (non quello visitato, ne' finito l'altroieri, ne' in corso)
+#   R2  stesso con una fine in formato UTC (T23:59:59.999Z) e una in formato Roma (mezzanotte di Roma): entrambe trovate nel giorno giusto
+#   R3  un secondo utente con un salvato finito ieri compare a parte; l'hook non scrive nulla
 #
 # Righe di prova sotto il `source` dedicato '__visited_gate__': cancellate prima
 # e all'uscita, nessuna riga reale viene letta o toccata.
@@ -463,4 +466,47 @@ code="$(call vm4c POST /api/v1/me/visited/merge -H "Origin: ${origin}" -H 'Conte
 [[ "${code}" == "401" ]] || fail "VM4: merge senza cookie: atteso 401, ottenuto ${code}"
 echo "ok  VM4: 499 righe + 3 nuove -> added 1, overCap 2, 500 righe; senza Origin 403; senza cookie 401"
 
-echo "Riepilogo: V1-V9, VS1-VS4, VM1-VM4 verdi"
+# --- R1-R3: l'aggancio della Fase 28 ("Ci sei stato?") -------------------------------
+# I giorni sono quelli di Roma, calcolati qui e passati come testo: il gate non dipende dall'ora a cui gira.
+rome_day() { node -e 'const d = new Date(process.argv[1] + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + Number(process.argv[2])); console.log(d.toISOString().slice(0, 10))' "${rome_today}" "$1"; }
+r_yest="$(rome_day -1)"; r_2="$(rome_day -2)"; r_3="$(rome_day -3)"; r_4="$(rome_day -4)"; r_tom="$(rome_day 1)"
+noon_of() { echo "'$1T12:00:00'::timestamp"; }
+ended_on() { # <giorno> -> JSON delle righe di savedEndedOn, filtrate dopo sugli utenti di prova
+  bash scripts/dev-db.sh npx tsx -e "import('./lib/visited/reminder.ts').then(async (mod) => { const m = mod.default ?? mod; console.log(JSON.stringify(await m.savedEndedOn('$1'))) }).finally(() => process.exit(0))" | tail -n 1
+}
+mint_user u13
+mint_user u14
+saved_row "${u13_user}" NULL r-a 'Finito ieri' "$(noon_of "${r_3}")" "$(noon_of "${r_yest}")" >/dev/null
+saved_row "${u13_user}" NULL r-b 'Finito ieri, visitato' "$(noon_of "${r_3}")" "$(noon_of "${r_yest}")" >/dev/null
+visited_row "${u13_user}" NULL r-b >/dev/null
+saved_row "${u13_user}" NULL r-c 'Finito l altroieri' "$(noon_of "${r_4}")" "$(noon_of "${r_2}")" >/dev/null
+saved_row "${u13_user}" NULL r-d 'In corso' "$(noon_of "${r_yest}")" "$(noon_of "${r_tom}")" >/dev/null
+out="$(ended_on "${r_yest}")"
+echo "${out}" > "${tmp_dir}/r1.b"
+[[ "$(json_get "${tmp_dir}/r1.b" "j.filter((r) => r.userId === '${u13_user}').map((r) => r.sourceId).join()")" == "r-a" ]] || fail "R1: savedEndedOn(${r_yest}) per l'utente di prova: atteso solo r-a, ottenuto '${out}'"
+[[ "$(json_get "${tmp_dir}/r1.b" "Object.keys(j.find((r) => r.sourceId === 'r-a')).sort().join()")" == "savedRef,source,sourceId,title,userId" ]] || fail "R1: le righe devono avere userId, savedRef, title, source, sourceId: '${out}'"
+echo "ok  R1: savedEndedOn(ieri) -> solo il salvato finito ieri e non visitato (non il visitato, non l'altroieri, non quello in corso)"
+
+# --- R2: i due formati di data della fine --------------------------------------------
+saved_row "${u13_user}" NULL r-utc 'Fine formato UTC' "'${r_yest}T00:00:00'::timestamp" "'${r_yest}T23:59:59.999'::timestamp" >/dev/null
+rome_midnight() { echo "((('$1'::date)::timestamp AT TIME ZONE 'Europe/Rome') AT TIME ZONE 'UTC')"; }
+saved_row "${u13_user}" NULL r-rome 'Fine formato Roma' "$(rome_midnight "${r_yest}")" "$(rome_midnight "${rome_today}") - interval '1 millisecond'" >/dev/null
+out="$(ended_on "${r_yest}")"
+echo "${out}" > "${tmp_dir}/r2.b"
+[[ "$(json_get "${tmp_dir}/r2.b" "j.filter((r) => r.userId === '${u13_user}').map((r) => r.sourceId).sort().join()")" == "r-a,r-rome,r-utc" ]] || fail "R2: savedEndedOn(${r_yest}): attesi r-a, r-rome, r-utc, ottenuto '${out}'"
+out="$(ended_on "${rome_today}")"
+echo "${out}" > "${tmp_dir}/r2b.b"
+[[ "$(json_get "${tmp_dir}/r2b.b" "j.filter((r) => r.userId === '${u13_user}').length")" == "0" ]] || fail "R2: savedEndedOn(oggi): nessuno dei salvati di prova finisce oggi, ottenuto '${out}'"
+echo "ok  R2: fine in formato UTC (23:59:59.999Z) e in formato Roma (mezzanotte di Roma) trovate nel loro giorno, non in quello dopo"
+
+# --- R3: piu' utenti, nessuna scrittura -----------------------------------------------
+saved_row "${u14_user}" NULL r-a2 'Finito ieri, altro utente' "$(noon_of "${r_3}")" "$(noon_of "${r_yest}")" >/dev/null
+rows_before="$(psql_dev "SELECT (SELECT count(*) FROM saved_events) || ':' || (SELECT count(*) FROM visited_events)")"
+out="$(ended_on "${r_yest}")"
+echo "${out}" > "${tmp_dir}/r3.b"
+[[ "$(json_get "${tmp_dir}/r3.b" "j.filter((r) => r.userId === '${u14_user}').map((r) => r.sourceId).join()")" == "r-a2" ]] || fail "R3: il secondo utente deve comparire con r-a2, ottenuto '${out}'"
+[[ "$(json_get "${tmp_dir}/r3.b" "j.filter((r) => r.userId === '${u13_user}').length")" == "3" ]] || fail "R3: il primo utente conserva le sue 3 righe (r-a, r-utc, r-rome), ottenuto '${out}'"
+[[ "$(psql_dev "SELECT (SELECT count(*) FROM saved_events) || ':' || (SELECT count(*) FROM visited_events)")" == "${rows_before}" ]] || fail "R3: savedEndedOn ha scritto o tolto righe"
+echo "ok  R3: due utenti compaiono ciascuno con le proprie righe; saved_events e visited_events invariati dopo la chiamata"
+
+echo "Riepilogo: V1-V9, VS1-VS4, VM1-VM4, R1-R3 verdi"
