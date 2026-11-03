@@ -37,26 +37,33 @@ final class Router {
         tab = .map
     }
 
-    /// Link universali (T-27-29): solo https://fuori-rotta.it/eventi/<cifre> e /l/<token>. L'id si verifica con
-    /// l'API, la pagina della lista si mostra in Safari: niente viene eseguito o salvato. Altro: ignorato.
-    func open(_ url: URL, api: APIClient?) async {
-        guard url.scheme == "https", url.host(percentEncoded: false) == "fuori-rotta.it" else { return }
-        let parts = url.pathComponents.filter { $0 != "/" }
-        guard parts.count == 2 else { return }
-        switch parts[0] {
-        case "eventi":
-            guard let id = Int(parts[1]), parts[1].allSatisfy(\.isASCII), let api else { return }
-            guard case .found(let event)? = try? await api.event(id: id) else { return }
+    /// Link universali (T-27-29): le regole sono in `parseUniversalLink`. L'id si verifica con l'API, la pagina della
+    /// lista si mostra in Safari: niente viene eseguito o salvato. Altro: ignorato.
+    func open(_ url: URL, api: APIClient?) async -> LinkOutcome {
+        switch parseUniversalLink(url) {
+        case .event(let id)?:
+            // Solo un 404 dice "non esiste piu'": un errore di rete o di lettura non deve mai dirlo.
+            guard let api, let lookup = try? await api.event(id: id) else { return .ignored }
             tab = .home
-            homePath.append(EventRoute(event: event, slot: "link"))
-        case "l":
-            guard parts[1].allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else { return }
+            switch lookup {
+            case .found(let event):
+                homePath.append(EventRoute(event: event, slot: "link"))
+                return .opened
+            case .gone:
+                homePath = NavigationPath()
+                return .gone
+            }
+        case .list?:
             safari = SafariTarget(url: url)
-        default:
-            return
+            return .opened
+        case nil:
+            return .ignored
         }
     }
 }
+
+/// Com'e' andata l'apertura di un link universale.
+enum LinkOutcome { case opened, gone, ignored }
 
 /// SFSafariViewController non rientra nell'app: il link universale che mostra resta nel foglio.
 struct SafariView: UIViewControllerRepresentable {
@@ -161,7 +168,9 @@ struct FuorirottaApp: App {
                 // Il ritorno di Google resta il primo; il resto sono i link di fuori-rotta.it.
                 .onOpenURL { url in
                     if GIDSignIn.sharedInstance.handle(url) { return }
-                    Task { await router.open(url, api: api) }
+                    Task {
+                        if await router.open(url, api: api) == .gone { saves.show(String(localized: "Evento non più disponibile")) }
+                    }
                 }
                 .sheet(item: Bindable(router).safari) { SafariView(url: $0.url).ignoresSafeArea() }
         }
