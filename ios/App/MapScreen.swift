@@ -266,6 +266,12 @@ struct PinSheet: View {
     @Environment(LocationModel.self) private var location
     @State private var event: Event
     @State private var detent = PresentationDetent.height(compactHeight)
+    @State private var descriptionExpanded = false
+
+    // ponytail: la soglia conta i caratteri, non le righe disegnate: un testo corto con molti a capo puo' mostrare
+    // piu' di 3 righe senza sfumatura, e uno di 141 caratteri che sta in 3 righe sfuma lo stesso. Le due costanti sono le manopole.
+    private static let previewCharacters = 140
+    private static let previewLines = 3
 
     init(pin: FuorirottaCore.MapPin, onClose: @escaping () -> Void) {
         _event = State(initialValue: asEvent(pin))
@@ -302,6 +308,7 @@ struct PinSheet: View {
                 photo
                 titleBlock
                 infoRow
+                descriptionPreview
             }
             .padding(.horizontal, Spacing.md)
             .padding(.top, Spacing.lg)
@@ -351,6 +358,29 @@ struct PinSheet: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// L'inizio della descrizione (arriva con `fetch()`, il pin non la porta): oltre 140 caratteri tre righe con "..." e
+    /// sfumatura in fondo, un tocco la mostra intera, un altro la ripiega. Stesso HTML-in-testo del dettaglio (T-27.1-44).
+    @ViewBuilder private var descriptionPreview: some View {
+        if let html = event.description, !html.isEmpty {
+            let text = htmlToAttributed(html)
+            let long = text.characters.count > Self.previewCharacters
+            let folded = long && !descriptionExpanded
+            Text(text)
+                .font(.body)
+                .foregroundStyle(Color.foreground)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(folded ? Self.previewLines : nil)
+                .mask(
+                    LinearGradient(
+                        stops: [.init(color: .black, location: 0), .init(color: .black, location: folded ? 0.6 : 1),
+                                .init(color: folded ? .clear : .black, location: 1)],
+                        startPoint: .top, endPoint: .bottom))
+                .contentShape(Rectangle())
+                .onTapGesture { if long { descriptionExpanded.toggle() } }
+                .accessibilityAddTraits(long ? .isButton : [])
+        }
     }
 
     private func circleIcon(_ symbol: String) -> some View {
