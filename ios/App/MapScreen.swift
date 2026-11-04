@@ -252,23 +252,20 @@ struct EventMapView: UIViewRepresentable {
     }
 }
 
-/// Il foglio che si apre toccando un pin, come la scheda luogo di Mappe: in basso (380 pt, la mappa resta toccabile)
-/// titolo, tre azioni, quattro informazioni e la foto; tirato su (`.large`) diventa il dettaglio dell'evento, con
-/// le stesse viste di EventDetailView. Fondo di vetro di sistema.
+/// Il foglio che si apre toccando un pin, come la scheda luogo di Mappe: in basso (420 pt, la mappa resta toccabile)
+/// foto, titolo, Quando / Dove / Categoria / Distanza e l'inizio della descrizione; tirato su (`.large`) diventa il
+/// dettaglio dell'evento, con i suoi pulsanti. Fondo di vetro di sistema.
 struct PinSheet: View {
-    static let compactHeight: CGFloat = 380
+    static let compactHeight: CGFloat = 420
     static let compact = PresentationDetent.height(compactHeight)
 
     let onClose: () -> Void
 
     @Environment(\.api) private var api
-    @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(LocationModel.self) private var location
-    @Environment(SavesModel.self) private var saves
     @State private var event: Event
     @State private var detent = PresentationDetent.height(compactHeight)
-    @State private var travelTime: TimeInterval?
 
     init(pin: FuorirottaCore.MapPin, onClose: @escaping () -> Void) {
         _event = State(initialValue: asEvent(pin))
@@ -280,12 +277,6 @@ struct PinSheet: View {
     private var spot: CLLocationCoordinate2D? {
         guard let lat = event.resolvedLatitude ?? event.latitude, let lng = event.resolvedLongitude ?? event.longitude else { return nil }
         return CLLocationCoordinate2D(latitude: lat, longitude: lng)
-    }
-
-    /// T-27-28: solo http e https.
-    private var siteURL: URL? {
-        guard let raw = event.sourceUrl, raw.lowercased().hasPrefix("http://") || raw.lowercased().hasPrefix("https://") else { return nil }
-        return URL(string: raw)
     }
 
     var body: some View {
@@ -301,7 +292,6 @@ struct PinSheet: View {
         // La mappa dietro resta toccabile finche' il foglio e' basso: un altro pin cambia il contenuto.
         .presentationBackgroundInteraction(.enabled(upThrough: Self.compact))
         .task(id: event.id) { await fetch() }
-        .task(id: event.id) { await loadTravelTime() }
     }
 
     // MARK: scheda bassa
@@ -309,16 +299,9 @@ struct PinSheet: View {
     private var card: some View {
         ScrollView {
             VStack(spacing: Spacing.md) {
-                header
-                actions
+                photo
+                titleBlock
                 infoRow
-                if event.imageUrl != nil {
-                    RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 440, height: 260))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: Radius.card))
-                        .accessibilityHidden(true)
-                }
             }
             .padding(.horizontal, Spacing.md)
             .padding(.top, Spacing.lg)
@@ -326,36 +309,48 @@ struct PinSheet: View {
         }
     }
 
-    /// Condividi a sinistra, chiudi a destra (due cerchi di vetro), titolo e categoria al centro.
-    private var header: some View {
-        HStack(alignment: .top, spacing: Spacing.sm) {
-            GlassEffectContainer(spacing: Spacing.sm) {
-                ShareLink(item: URL(string: "https://fuori-rotta.it/eventi/\(event.id)")!) {
-                    circleIcon("square.and.arrow.up")
-                }
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Condividi evento")
-            }
-            VStack(spacing: 2) {
-                Text(verbatim: event.title)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.foreground)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-                    .accessibilityAddTraits(.isHeader)
-                if let category {
-                    Text(verbatim: categoryLabel(category))
-                        .font(.subheadline)
-                        .foregroundStyle(Color.foregroundSecondary)
-                }
-            }
+    /// La foto (o il segnaposto della categoria) con condividi a sinistra e chiudi a destra, due cerchi di vetro sul bordo alto.
+    private var photo: some View {
+        RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 440, height: 280))
             .frame(maxWidth: .infinity)
-            GlassEffectContainer(spacing: Spacing.sm) {
-                Button(action: onClose) { circleIcon("xmark") }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Chiudi")
+            .frame(height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.card))
+            .accessibilityHidden(true)
+            .overlay(alignment: .top) {
+                HStack(alignment: .top) {
+                    GlassEffectContainer(spacing: Spacing.sm) {
+                        ShareLink(item: URL(string: "https://fuori-rotta.it/eventi/\(event.id)")!) {
+                            circleIcon("square.and.arrow.up")
+                        }
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .accessibilityLabel("Condividi evento")
+                    }
+                    Spacer()
+                    GlassEffectContainer(spacing: Spacing.sm) {
+                        Button(action: onClose) { circleIcon("xmark") }
+                            .glassEffect(.regular.interactive(), in: .circle)
+                            .accessibilityLabel("Chiudi")
+                    }
+                }
+                .padding(Spacing.sm)
+            }
+    }
+
+    private var titleBlock: some View {
+        VStack(spacing: 2) {
+            Text(verbatim: event.title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.foreground)
+                .multilineTextAlignment(.center)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                .accessibilityAddTraits(.isHeader)
+            if let category {
+                Text(verbatim: categoryLabel(category))
+                    .font(.subheadline)
+                    .foregroundStyle(Color.foregroundSecondary)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
     private func circleIcon(_ symbol: String) -> some View {
@@ -364,55 +359,6 @@ struct PinSheet: View {
             .foregroundStyle(Color.primary)
             .frame(width: 44, height: 44)
             .contentShape(Circle())
-    }
-
-    /// Tre bottoni uguali, alti, icona sopra e testo sotto: Indicazioni (pieno, col tempo in auto), Sito, Salva.
-    private var actions: some View {
-        let saved = saves.isSaved(event.id)
-        return HStack(spacing: Spacing.sm) {
-            let directions = travelTime.map(formatTravelTime) ?? String(localized: "Indicazioni")
-            if let spot {
-                DirectionsButton(spot: spot, name: event.locationName ?? event.title) {
-                    tileLabel("car.fill", directions, fill: Color.accentToken)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(travelTime.map { String(localized: "Indicazioni, \(formatTravelTime(seconds: $0)) in auto") } ?? String(localized: "Indicazioni"))
-            } else {
-                tile("car.fill", directions, label: String(localized: "Indicazioni"), fill: Color.accentToken, enabled: false) {}
-            }
-            // Senza indirizzo del sito il bottone resta, spento (il dettaglio non ha un calendario da richiamare).
-            tile("safari", String(localized: "Sito"), label: String(localized: "Apri il sito dell'evento"), fill: nil, enabled: siteURL != nil) {
-                if let siteURL { openURL(siteURL) }
-            }
-            tile(
-                saved ? "heart.fill" : "heart", saved ? String(localized: "Salvato") : String(localized: "Salva"),
-                label: saved ? String(localized: "Rimuovi dai salvati") : String(localized: "Salva evento"), fill: saved ? Color.heart : nil, enabled: true
-            ) {
-                Task { await saves.toggle(event) }
-            }
-            .sensoryFeedback(.impact(flexibility: .soft), trigger: saved)
-        }
-    }
-
-    private func tile(
-        _ symbol: String, _ title: String, label: String, fill: Color?, enabled: Bool, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) { tileLabel(symbol, title, fill: fill) }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
-        .accessibilityLabel(label)
-    }
-
-    private func tileLabel(_ symbol: String, _ title: String, fill: Color?) -> some View {
-        VStack(spacing: 2) {
-            Image(systemName: symbol).font(.title3).accessibilityHidden(true)
-            Text(verbatim: title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .foregroundStyle(fill == nil ? Color.accentToken : Color.white)
-        .frame(maxWidth: .infinity, minHeight: 60)
-        .background(fill ?? Color.accentToken.opacity(0.16), in: RoundedRectangle(cornerRadius: Radius.media))
-        .contentShape(RoundedRectangle(cornerRadius: Radius.media))
     }
 
     /// Quattro colonne: etichetta grigia sopra, valore sotto (Quando / Dove / Categoria / Distanza). Mancano quelle senza dato.
@@ -473,17 +419,6 @@ struct PinSheet: View {
     private func fetch() async {
         guard let api, case .found(let fresh)? = try? await api.event(id: event.id) else { return }
         event = fresh
-    }
-
-    /// Tempo in auto dalla posizione del telefono, di sistema. Senza posizione o senza risposta resta "Indicazioni".
-    private func loadTravelTime() async {
-        travelTime = nil
-        guard let here = location.userCoordinate, let spot else { return }
-        let request = MKDirections.Request()
-        request.source = MKMapItem(location: CLLocation(latitude: here.latitude, longitude: here.longitude), address: nil)
-        request.destination = MKMapItem(location: CLLocation(latitude: spot.latitude, longitude: spot.longitude), address: nil)
-        request.transportType = .automobile
-        travelTime = try? await MKDirections(request: request).calculateETA().expectedTravelTime
     }
 }
 
