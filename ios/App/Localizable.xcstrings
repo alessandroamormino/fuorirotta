@@ -3056,26 +3056,6 @@
         }
       }
     },
-    "Vista 3D" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "3D view"
-          }
-        }
-      }
-    },
-    "Vista piana" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flat view"
-          }
-        }
-      }
-    },
     "Vuoi eliminare definitivamente il tuo account? L'operazione non si può annullare." : {
       "localizations" : {
         "en" : {

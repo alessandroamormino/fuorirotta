@@ -48,8 +48,6 @@ struct EventMapView: UIViewRepresentable {
     let focus: MapFocus
     let showsUser: Bool
     let mapType: MKMapType
-    /// Vista inclinata (tasto 3D): pitch della camera di sistema.
-    let tilted: Bool
     /// Il pin della scheda aperta: resta selezionato (animazione e titolo di sistema) finche' la scheda non si chiude.
     let selectedID: Int?
     let onSelect: (Int) -> Void
@@ -63,6 +61,8 @@ struct EventMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
+        // Sempre piana (giro telefono F2): niente tasto 3D e niente inclinazione con due dita.
+        map.isPitchEnabled = false
         map.delegate = context.coordinator
         map.showsUserLocation = showsUser
         map.pointOfInterestFilter = .excludingAll
@@ -79,13 +79,6 @@ struct EventMapView: UIViewRepresentable {
         c.parent = self
         if map.showsUserLocation != showsUser { map.showsUserLocation = showsUser }
         if map.mapType != mapType { map.mapType = mapType }
-        if tilted != c.tilted {
-            c.tilted = tilted
-            if let camera = map.camera.copy() as? MKMapCamera {
-                camera.pitch = tilted ? 60 : 0
-                map.setCamera(camera, animated: true)
-            }
-        }
         // Scheda chiusa: il pin torna normale. Selezionarlo lo fa la mappa stessa, col tocco.
         if selectedID == nil { for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: true) } }
         if focus != c.focus {
@@ -109,7 +102,6 @@ struct EventMapView: UIViewRepresentable {
 
         var parent: EventMapView
         var focus: MapFocus
-        var tilted = false
         private var shown: [String: (annotation: any MKAnnotation, ids: [Int])] = [:]
         private var appliedRevision = -1
         private var debounce: Task<Void, Never>?
@@ -133,8 +125,6 @@ struct EventMapView: UIViewRepresentable {
         }
 
         /// Mette sulla mappa i gruppi della vista (Core) e toglie/aggiunge solo la differenza.
-        // ponytail: con la camera 3D (pitch 60) `visibleMapRect` arriva all'orizzonte, quindi la griglia e' piu' grossa
-        // della scala a schermo vicino a te; accettato.
         private func refresh(_ map: MKMapView) {
             guard map.bounds.width > 0 else { return }
             let rect = map.visibleMapRect.intersection(.world)
@@ -506,7 +496,6 @@ struct MapScreen: View {
     @State private var filter: Set<String> = []  // vuoto = Tutte
     @State private var sheet: MapSheet?
     @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
-    @State private var tilted = false
     @State private var focus = MapFocus()
     @State private var visibleCount: Int?
 
@@ -529,7 +518,6 @@ struct MapScreen: View {
                     focus: focus,
                     showsUser: location.authorised,
                     mapType: mapStyle.mapType,
-                    tilted: tilted,
                     selectedID: selectedPinID,
                     onSelect: { id in sheet = pins.first { $0.id == id }.map(MapSheet.pin) },
                     onDeselect: { if case .pin = sheet { sheet = nil } },
@@ -601,18 +589,10 @@ struct MapScreen: View {
         }
     }
 
-    /// Colonna di vetro a destra, come Mappe: filtro categorie, 3D, stile della mappa, posizione.
+    /// Colonna di vetro a destra, come Mappe: filtro categorie, stile della mappa, posizione.
     private var mapControls: some View {
         VStack(spacing: 0) {
             CategoryFilter(selection: $filter)
-            Button { tilted.toggle() } label: {
-                Text(verbatim: tilted ? "2D" : "3D")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel(tilted ? "Vista piana" : "Vista 3D")
             Menu {
                 Picker("Stile della mappa", selection: $mapStyle) {
                     ForEach(MapStyleChoice.allCases) { Text($0.title).tag($0) }
