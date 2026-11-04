@@ -33,7 +33,7 @@ private final class AllEventsStub: URLProtocol, @unchecked Sendable {
 
     @Test func requestCarriesOnlyTheFourParameters() async throws {
         AllEventsStub.reset()
-        _ = try await client().allEvents(category: nil, limit: 30, offset: 60)
+        _ = try await client().allEvents(categories: [], limit: 30, offset: 60)
         let url = try #require(AllEventsStub.lastURL)
         let names = Set(URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!.map(\.name))
         #expect(names == ["limit", "offset", "mapEvents"])
@@ -44,11 +44,21 @@ private final class AllEventsStub: URLProtocol, @unchecked Sendable {
 
     @Test func foodAndWineTravelsWhole() async throws {
         AllEventsStub.reset()
-        _ = try await client().allEvents(category: "Food & Wine", limit: 30, offset: 0)
+        _ = try await client().allEvents(categories: ["Food & Wine"], limit: 30, offset: 0)
         let url = try #require(AllEventsStub.lastURL)
         #expect(url.query!.contains("Food%20%26%20Wine"))
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
         #expect(items.first { $0.name == "category" }?.value == "Food & Wine")
+        #expect(Set(items.map(\.name)) == ["limit", "offset", "category", "mapEvents"])
+    }
+
+    @Test func twoCategoriesTravelAsTwoParameters() async throws {
+        AllEventsStub.reset()
+        _ = try await client().allEvents(categories: ["Sagre e feste", "Food & Wine"], limit: 30, offset: 0)
+        let url = try #require(AllEventsStub.lastURL)
+        #expect(url.query!.contains("category=Sagre%20e%20feste&category=Food%20%26%20Wine"))
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+        #expect(items.filter { $0.name == "category" }.map(\.value) == ["Sagre e feste", "Food & Wine"])
         #expect(Set(items.map(\.name)) == ["limit", "offset", "category", "mapEvents"])
     }
 

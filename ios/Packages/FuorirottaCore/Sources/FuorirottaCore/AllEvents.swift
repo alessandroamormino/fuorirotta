@@ -6,8 +6,9 @@ extension Event: SavedTimelineItem {}
 
 extension APIClient {
     /// Una pagina della lista nazionale. Solo limit, offset, category e mapEvents=0 (niente pin: la lista non li usa).
+    /// `categories` viaggia ripetuto, un parametro per nome (lato server 27.1-14: l'unione); vuoto = tutte.
     /// Mai coordinate, luogo o comuneId (T-27-25): comuneId e' l'unico ramo che puo' avviare uno scraping.
-    public func allEvents(category: String?, limit: Int, offset: Int) async throws -> EventsPage {
+    public func allEvents(categories: [String], limit: Int, offset: Int) async throws -> EventsPage {
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/events"), resolvingAgainstBaseURL: false)!
         // Il valore si codifica a mano: URLComponents lascia "&" e "+" com'e', e "Food & Wine" si spezzerebbe.
         var allowed = CharacterSet.urlQueryAllowed
@@ -16,7 +17,7 @@ extension APIClient {
             URLQueryItem(name: name, value: value.addingPercentEncoding(withAllowedCharacters: allowed))
         }
         var items = [item("limit", String(limit)), item("offset", String(offset))]
-        if let category { items.append(item("category", category)) }
+        items += categories.map { item("category", $0) }
         items.append(item("mapEvents", "0"))
         comps.percentEncodedQueryItems = items
         return try await get(comps.url!, as: EventsPage.self)

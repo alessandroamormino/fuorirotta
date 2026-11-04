@@ -18,8 +18,8 @@ final class AllEventsModel {
     private(set) var offline = false
     /// Almeno una risposta (o un errore) per questa generazione: distingue "vuoto" da "non ancora caricato".
     private(set) var didLoad = false
-    /// nil = Tutte.
-    private(set) var category: String?
+    /// Vuoto = Tutte.
+    private(set) var categories: Set<String> = []
     /// Cambia a ogni ripartenza: una risposta di una generazione vecchia si butta (cambio categoria, pull-to-refresh).
     private var epoch = 0
 
@@ -38,10 +38,11 @@ final class AllEventsModel {
         await loadPage(api: api, replacing: true)
     }
 
-    /// Un altro chip: la lista riparte vuota per quella categoria e le risposte della precedente si buttano.
-    func select(_ category: String?, api: APIClient?) async {
-        guard category != self.category else { return }
-        self.category = category
+    /// Un'altra scelta di categorie: la lista riparte vuota e le risposte della precedente si buttano.
+    /// Sincrona: il menu resta aperto e il tocco dopo legge subito l'insieme aggiornato.
+    func select(_ categories: Set<String>, api: APIClient?) {
+        guard categories != self.categories else { return }
+        self.categories = categories
         epoch += 1
         events = []
         timeline = []
@@ -50,7 +51,7 @@ final class AllEventsModel {
         failed = false
         didLoad = false
         guard let api else { return }
-        await loadPage(api: api)
+        Task { await loadPage(api: api) }
     }
 
     /// "Carica altri" / "Riprova": la pagina che manca, a mano.
@@ -70,18 +71,18 @@ final class AllEventsModel {
         failed = false
         let offset = replacing ? 0 : events.count
         do {
-            let page = try await api.allEvents(category: category, limit: Self.pageSize, offset: offset)
+            let page = try await api.allEvents(categories: categories.sorted(), limit: Self.pageSize, offset: offset)
             guard mine == epoch else { return }
             commit(replacing ? page.events : appendingNew(page.events, to: events), total: page.total)
             offline = false
-            if offset == 0, category == nil { Self.write(Cached(events: page.events, total: page.total)) }
+            if offset == 0, categories.isEmpty { Self.write(Cached(events: page.events, total: page.total)) }
         } catch {
             guard mine == epoch else { return }
             if Task.isCancelled {
                 // Niente da dire: l'attivita' e' stata annullata, non e' un guasto.
             } else if replacing, !events.isEmpty {
                 // Un aggiornamento che fallisce lascia la lista com'e'.
-            } else if offset == 0, category == nil, let cached = Self.read() {
+            } else if offset == 0, categories.isEmpty, let cached = Self.read() {
                 commit(cached.events, total: cached.total)
                 offline = true
             } else {
@@ -150,20 +151,47 @@ struct CategoryChips: View {
     }
 }
 
+/// Il filtro per categoria di mappa e "Tutti gli eventi": un pulsante che apre un menu a scelta multipla.
+/// Insieme vuoto = Tutte. L'unica vibrazione di selezione del filtro, per entrambe le schermate.
+struct CategoryFilter: View {
+    @Binding var selection: Set<String>
+
+    private var active: Bool { !selection.isEmpty }
+
+    var body: some View {
+        Menu {
+            Toggle("Tutte", isOn: Binding(get: { selection.isEmpty }, set: { if $0 { selection = [] } }))
+            Divider()
+            ForEach(ApiContract.categories, id: \.self) { name in
+                Toggle(isOn: Binding(
+                    get: { selection.contains(name) },
+                    set: { if $0 { selection.insert(name) } else { selection.remove(name) } })
+                ) { Text(verbatim: categoryLabel(name)) }
+            }
+        } label: {
+            Image(systemName: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                .font(.title3)
+                .foregroundStyle(active ? Color.accentToken : Color.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .menuActionDismissBehavior(.disabled)
+        .sensoryFeedback(.selection, trigger: selection)
+        .accessibilityLabel(Text("Categorie"))
+        .accessibilityValue(active
+            ? Text(verbatim: ApiContract.categories.filter(selection.contains).map(categoryLabel).joined(separator: ", "))
+            : Text("Tutte"))
+    }
+}
+
 struct AllEventsSection: View {
     let model: AllEventsModel
-    /// Home ignora la safe area in alto: le chip fissate devono stare sotto la status bar (A4, da provare sul telefono).
+    /// Home ignora la safe area in alto: l'intestazione fissata deve stare sotto la status bar (A4, da provare sul telefono).
     let topInset: CGFloat
     @Environment(\.api) private var api
 
     var body: some View {
         let today = romeToday()
-        Text("Tutti gli eventi")
-            .font(.heading)
-            .foregroundStyle(Color.foreground)
-            .accessibilityAddTraits(.isHeader)
-            .padding(.horizontal, Spacing.md)
-            .padding(.bottom, Spacing.sm)
         Section {
             if model.offline {
                 Label("Sei offline. Mostriamo gli ultimi dati salvati.", systemImage: "wifi.slash")
@@ -201,13 +229,19 @@ struct AllEventsSection: View {
             footer
             Color.clear.frame(height: 0).task { await model.start(api: api) }
         } header: {
-            CategoryChips(selection: Binding(
-                get: { model.category },
-                set: { new in Task { await model.select(new, api: api) } }))
-                .padding(.top, topInset)
-                .padding(.bottom, Spacing.xs)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.background)
+            HStack {
+                Text("Tutti gli eventi")
+                    .font(.heading)
+                    .foregroundStyle(Color.foreground)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                CategoryFilter(selection: Binding(get: { model.categories }, set: { model.select($0, api: api) }))
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.top, topInset)
+            .padding(.bottom, Spacing.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.background)
         }
     }
 
