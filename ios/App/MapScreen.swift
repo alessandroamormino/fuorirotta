@@ -16,6 +16,17 @@ final class PinAnnotation: NSObject, MKAnnotation {
     }
 }
 
+/// Un gruppo di 2+ eventi della griglia (Core): la bolla col numero. Un evento solo e' un PinAnnotation.
+final class GroupAnnotation: NSObject, MKAnnotation {
+    let group: PinGroup
+    let coordinate: CLLocationCoordinate2D
+
+    init(_ group: PinGroup) {
+        self.group = group
+        coordinate = CLLocationCoordinate2D(latitude: group.lat, longitude: group.lng)
+    }
+}
+
 /// Chiede alla mappa di spostarsi: cambia `id` a ogni richiesta (cambio luogo, pulsante di ricentratura).
 struct MapFocus: Equatable {
     var id = 0
@@ -25,8 +36,9 @@ struct MapFocus: Equatable {
     var meters: CLLocationDistance = 100_000
 }
 
-/// MKMapView vera: il clustering e' nativo. Le annotazioni si aggiungono UNA volta e si aggiornano per differenza di id
-/// (mai removeAll + add: SwiftUI chiama updateUIView a ogni cambio di stato).
+/// MKMapView vera, senza clustering nativo: i ~9.000 pin restano in memoria e sulla mappa vanno solo i gruppi a griglia
+/// della vista (Core, `gridClusters`), al massimo qualche centinaio. Si ricalcolano una volta a gesto finito e si
+/// applicano per differenza di id (mai removeAll + add: SwiftUI chiama updateUIView a ogni cambio di stato).
 struct EventMapView: UIViewRepresentable {
     let pins: [FuorirottaCore.MapPin]
     /// Cambia solo quando `pins` cambia davvero: SwiftUI chiama updateUIView a ogni cambio di stato, e con ~9.000 pin
@@ -85,7 +97,7 @@ struct EventMapView: UIViewRepresentable {
             // Raggio di 50 km attorno al punto (UI-SPEC "Mappa"); attorno a un evento, la regione chiesta.
             map.setRegion(MKCoordinateRegion(center: target, latitudinalMeters: focus.meters, longitudinalMeters: focus.meters), animated: true)
         }
-        c.apply(pins, revision: revision, to: map)
+        c.apply(revision: revision, to: map)
     }
 
     @MainActor
@@ -98,55 +110,83 @@ struct EventMapView: UIViewRepresentable {
         var parent: EventMapView
         var focus: MapFocus
         var tilted = false
-        private var shown: [Int: PinAnnotation] = [:]
+        private var shown: [String: (annotation: any MKAnnotation, ids: [Int])] = [:]
         private var appliedRevision = -1
+        private var debounce: Task<Void, Never>?
 
         init(_ parent: EventMapView) {
             self.parent = parent
             focus = parent.focus
         }
 
-        func apply(_ pins: [FuorirottaCore.MapPin], revision: Int, to map: MKMapView) {
+        func apply(revision: Int, to map: MKMapView) {
             guard revision != appliedRevision else { return }
+            guard map.bounds.width > 0 else {
+                // Non ancora impaginata: il primo disegno non aspetta un cambio di regione, riprova al giro dopo.
+                DispatchQueue.main.async { [weak self, weak map] in
+                    if let self, let map { self.apply(revision: self.parent.revision, to: map) }
+                }
+                return
+            }
             appliedRevision = revision
-            let delta = pinDelta(existing: Set(shown.keys), incoming: pins)
-            if !delta.remove.isEmpty {
-                map.removeAnnotations(delta.remove.compactMap { shown.removeValue(forKey: $0) })
-            }
-            if !delta.add.isEmpty {
-                let fresh = delta.add.map(PinAnnotation.init)
-                for a in fresh { shown[a.id] = a }
-                map.addAnnotations(fresh)
-            }
-            reportVisible(map)
+            refresh(map)
         }
 
-        /// Quanti pin stanno nella vista (per il messaggio di zona vuota). Fuori dall'aggiornamento della vista.
-        private func reportVisible(_ map: MKMapView) {
-            let count = map.annotations(in: map.visibleMapRect).filter { $0 is PinAnnotation }.count
+        /// Mette sulla mappa i gruppi della vista (Core) e toglie/aggiunge solo la differenza.
+        // ponytail: con la camera 3D (pitch 60) `visibleMapRect` arriva all'orizzonte, quindi la griglia e' piu' grossa
+        // della scala a schermo vicino a te; accettato.
+        private func refresh(_ map: MKMapView) {
+            guard map.bounds.width > 0 else { return }
+            let rect = map.visibleMapRect.intersection(.world)
+            let nw = MKMapPoint(x: rect.minX, y: rect.minY).coordinate
+            let se = MKMapPoint(x: rect.maxX, y: rect.maxY).coordinate
+            let groups = gridClusters(
+                parent.pins, minLat: se.latitude, maxLat: nw.latitude, minLng: nw.longitude, maxLng: se.longitude,
+                widthPoints: map.bounds.width)
+            let delta = groupDelta(shown: shown.mapValues(\.ids), incoming: groups)
+            let gone = delta.remove.compactMap { shown.removeValue(forKey: $0)?.annotation }
+            if !gone.isEmpty { map.removeAnnotations(gone) }
+            let fresh = delta.add.map { g -> (String, any MKAnnotation) in
+                (g.id, g.pins.count == 1 ? PinAnnotation(g.pins[0]) : GroupAnnotation(g))
+            }
+            for (g, (id, a)) in zip(delta.add, fresh) { shown[id] = (a, g.pins.map(\.id)) }
+            if !fresh.isEmpty { map.addAnnotations(fresh.map(\.1)) }
+            // Quanti eventi stanno nella vista (messaggio di zona vuota): i gruppi con il centro dentro, poche centinaia di controlli.
+            let count = groups.filter { rect.contains(MKMapPoint(CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng))) }
+                .reduce(0) { $0 + $1.pins.count }
             let report = parent.onVisibleCount
             DispatchQueue.main.async { report(count) }
         }
 
-        func mapView(_ map: MKMapView, regionDidChangeAnimated animated: Bool) { reportVisible(map) }
+        /// Niente calcoli mentre il dito muove la mappa: si aspetta ~150 ms dopo la fine del gesto.
+        func mapView(_ map: MKMapView, regionDidChangeAnimated animated: Bool) {
+            debounce?.cancel()
+            debounce = Task { @MainActor [weak self, weak map] in
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled, let self, let map else { return }
+                self.refresh(map)
+            }
+        }
 
         func mapView(_ map: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
-            if let cluster = annotation as? MKClusterAnnotation {
-                let v = map.dequeueReusableAnnotationView(withIdentifier: "cluster", for: cluster) as! MKMarkerAnnotationView
+            if let group = annotation as? GroupAnnotation {
+                let v = map.dequeueReusableAnnotationView(withIdentifier: "cluster", for: group) as! MKMarkerAnnotationView
                 // Mai accent sulla mappa: bolla "foreground" con testo invertito.
                 v.markerTintColor = UIColor(Color.foreground)
                 v.glyphTintColor = UIColor(Color.background)
-                v.glyphText = String(cluster.memberAnnotations.count)
+                v.glyphText = String(group.group.pins.count)
+                v.displayPriority = .required
                 v.canShowCallout = false
                 return v
             }
             guard let pin = annotation as? PinAnnotation else { return nil } // posizione utente: pallino di sistema
             let v = map.dequeueReusableAnnotationView(withIdentifier: "pin", for: pin) as! MKMarkerAnnotationView
             let visual = categoryVisual(pin.category)
-            v.clusteringIdentifier = "event"
             v.markerTintColor = UIColor(visual.color)
             v.glyphImage = UIImage(systemName: visual.symbol)
-            v.displayPriority = .defaultLow
+            // ponytail: .required = nessun evento nascosto dalle collisioni (stesso insieme del sito); due pin a pochi metri
+            // ai due lati del bordo di una cella possono sovrapporsi finche' non si zooma.
+            v.displayPriority = .required
             v.canShowCallout = false
             // Selezionato: ingrandimento e titolo sotto il pin, quelli di sistema (come Mappe).
             v.titleVisibility = .adaptive

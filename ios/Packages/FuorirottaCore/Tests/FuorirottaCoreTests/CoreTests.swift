@@ -87,20 +87,90 @@ private func rome(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -
     }
 }
 
-@Suite struct PinDeltaTests {
-    private func pin(_ id: Int, lat: Double? = 45.0) -> MapPin {
+private struct SplitMix64: RandomNumberGenerator {
+    var state: UInt64
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}
+
+@Suite struct GridClustersTests {
+    private func pin(_ id: Int, _ lat: Double?, _ lng: Double?) -> MapPin {
         MapPin(id: id, title: "t", category: nil, imageUrl: nil, dateStart: "2026-11-01T00:00:00.000Z",
-               locationName: nil, lat: lat, lng: lat == nil ? nil : 9.0)
+               locationName: nil, lat: lat, lng: lng)
     }
 
-    @Test func samePinsChangeNothing() {
-        let d = pinDelta(existing: [1, 2, 3], incoming: [pin(3), pin(1), pin(2)])
-        #expect(d.add.isEmpty && d.remove.isEmpty)
+    /// 9.000 pin come quelli di produzione: quattro citta', un fondo uniforme e 150 sullo stesso centro di comune.
+    private func italy() -> [MapPin] {
+        var rng = SplitMix64(state: 27)
+        var pins: [MapPin] = []
+        func add(_ lat: Double, _ lng: Double, spread: Double) {
+            pins.append(pin(pins.count, lat + Double.random(in: -spread...spread, using: &rng),
+                            lng + Double.random(in: -spread...spread, using: &rng)))
+        }
+        for (lat, lng) in [(45.4642, 9.19), (41.9, 12.5), (43.77, 11.25), (40.85, 14.27)] {
+            for _ in 0..<1_250 { add(lat, lng, spread: 0.3) }
+        }
+        for _ in 0..<3_850 {
+            pins.append(pin(pins.count, Double.random(in: 37...46.5, using: &rng), Double.random(in: 7...18, using: &rng)))
+        }
+        for _ in 0..<150 { add(45.6983, 9.6773, spread: 0) }
+        return pins
     }
 
-    @Test func onlyTheDifferenceMoves() {
-        let d = pinDelta(existing: [1, 2], incoming: [pin(2), pin(3), pin(4, lat: nil)])
-        #expect(d.add.map(\.id) == [3] && d.remove == [1])
+    private func check(_ groups: [PinGroup], atMost: Int) {
+        #expect(groups.count <= atMost)
+        #expect(groups.reduce(0) { $0 + $1.pins.count } == 9_000)
+        #expect(Set(groups.flatMap { $0.pins.map(\.id) }).count == 9_000)
+    }
+
+    @Test func italyAndTheWorldStayBounded() {
+        let pins = italy()
+        check(gridClusters(pins, minLat: 36, maxLat: 47.2, minLng: 6.5, maxLng: 18.6, widthPoints: 390), atMost: 200)
+        check(gridClusters(pins, minLat: -85, maxLat: 85, minLng: -180, maxLng: 180, widthPoints: 390), atMost: 200)
+    }
+
+    @Test func farApartPinsStaySingle() {
+        let g = gridClusters([pin(1, 45.42, 9.19), pin(2, 45.465, 9.19), pin(3, 45.51, 9.19)],
+                             minLat: 45.40, maxLat: 45.53, minLng: 9.13, maxLng: 9.257, widthPoints: 390)
+        #expect(Set(g.map(\.id)) == ["p1", "p2", "p3"])
+    }
+
+    @Test func samePlaceAtMaxZoomIsOneGroup() {
+        let pins = (0..<150).map { pin($0, 45.6983, 9.6773) }
+        let g = gridClusters(pins, minLat: 45.6970, maxLat: 45.6996, minLng: 9.6755, maxLng: 9.6791, widthPoints: 390)
+        #expect(g.count == 1 && g[0].pins.count == 150 && !g[0].id.hasPrefix("p"))
+    }
+
+    @Test func panningDoesNotReshuffleGroups() {
+        let pins = italy()
+        let a = gridClusters(pins, minLat: 45.0, maxLat: 45.9, minLng: 8.7, maxLng: 9.7, widthPoints: 390)
+        let b = gridClusters(pins, minLat: 45.0, maxLat: 45.9, minLng: 8.8, maxLng: 9.8, widthPoints: 390)
+        let members = { (g: [PinGroup]) in Dictionary(uniqueKeysWithValues: g.map { ($0.id, $0.pins.map(\.id)) }) }
+        let (ma, mb) = (members(a), members(b))
+        #expect(!ma.isEmpty)
+        for (id, ids) in ma { if let other = mb[id] { #expect(other == ids) } }
+    }
+
+    @Test func pinsWithoutCoordinatesAreInNoGroup() {
+        let g = gridClusters([pin(1, nil, nil), pin(2, 45, nil), pin(3, 45, 9)],
+                             minLat: 44, maxLat: 46, minLng: 8, maxLng: 10, widthPoints: 390)
+        #expect(g.flatMap { $0.pins.map(\.id) } == [3])
+    }
+
+    @Test func deltaMovesOnlyTheDifference() {
+        let a = PinGroup(id: "7/1/2", pins: [pin(1, 45, 9), pin(2, 45, 9)], lat: 45, lng: 9)
+        let same = groupDelta(shown: ["7/1/2": [1, 2]], incoming: [a])
+        #expect(same.add.isEmpty && same.remove.isEmpty)
+        // stesso id, altri eventi (cambio di filtro): si toglie e si rimette
+        let changed = groupDelta(shown: ["7/1/2": [1, 2, 3]], incoming: [a])
+        #expect(changed.add.map(\.id) == ["7/1/2"] && changed.remove == ["7/1/2"])
+        let moved = groupDelta(shown: ["p9": [9], "p3": [3], "7/1/2": [1, 2]], incoming: [a, PinGroup(id: "p4", pins: [pin(4, 45, 9)], lat: 45, lng: 9)])
+        #expect(moved.add.map(\.id) == ["p4"] && moved.remove == ["p3", "p9"])
     }
 }
 

@@ -121,14 +121,6 @@ public struct EventsPage: Codable, Sendable {
     public let total: Int
 }
 
-/// Differenza tra i pin gia' sulla mappa e quelli in arrivo: la mappa aggiunge e toglie solo questa, mai tutto.
-/// I pin senza coordinate non si possono mostrare e vengono ignorati.
-public func pinDelta(existing: Set<Int>, incoming: [MapPin]) -> (add: [MapPin], remove: [Int]) {
-    let shown = incoming.filter { $0.lat != nil && $0.lng != nil }
-    let ids = Set(shown.map(\.id))
-    return (shown.filter { !existing.contains($0.id) }, existing.filter { !ids.contains($0) }.sorted())
-}
-
 /// /api/events/clusters: tutti i pin (GeoJSON) con l'istante di calcolo, usato anche come chiave di cache.
 /// Un file non ancora calcolato risponde `geojson: null`: e' "nessun dato" (set vuoto, `computedAt` vuoto), non un errore.
 public struct ClusterSet: Sendable {
