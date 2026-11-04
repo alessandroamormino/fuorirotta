@@ -27,6 +27,8 @@
 #   G15 events-lean       GET /api/events?search=<M>&limit=100&mapEvents=0 (stessa pagina, mapEvents vuoto)
 #   G16 clusters-etag     GET /api/events/clusters con ETag; If-None-Match uguale -> 304 senza corpo
 #
+#   G17 events-multicat   GET /api/events?search=<M>&limit=100&mapEvents=0 con category ripetuto (unione delle due)
+#
 # <M> e' un marcatore unico nei titoli delle fixture (sorgente riservata '__golden__'):
 # il DB locale ha ~9,6k eventi veri, con search=<M> in lista ci sono solo le fixture.
 # MAI il parametro del filtro per comune su /api/events: e' l'unico ramo che puo'
@@ -196,6 +198,23 @@ record_or_compare events-radius "GET /api/events?search=<M>&lat=<lat>&lng=<lng>&
   "/api/events?search=${marker}&lat=${full_lat}&lng=${full_lng}&radius=50&limit=100"
 record_or_compare events-filter "GET /api/events?search=<M>&category=Sagre e feste&dateFrom=<oggi>&dateTo=<data+1>" \
   "/api/events?search=${marker}&category=Sagre%20e%20feste&dateFrom=${today}&dateTo=${next_day}"
+
+# --- G17: category ripetuto = unione delle due categorie, total sommato ---------------------------
+q17="search=${marker}&limit=100&mapEvents=0"
+for c in "g17-a:category=Sagre%20e%20feste" "g17-b:category=Altro" "g17-ab:category=Sagre%20e%20feste&category=Altro"; do
+  code="$(call "${c%%:*}" "/api/events?${q17}&${c#*:}")"
+  [[ "${code}" == "200" ]] || fail "G17: ${c%%:*} ha risposto ${code}"
+done
+node -e '
+  const fs = require("fs");
+  const [a, b, ab] = process.argv.slice(1).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
+  if (a.total < 1 || b.total < 1) { console.log("una categoria singola e vuota: " + a.total + ", " + b.total); process.exit(1); }
+  if (ab.total !== a.total + b.total) { console.log("total " + ab.total + " != " + a.total + " + " + b.total); process.exit(1); }
+  const ids = (x) => x.events.map((e) => e.id).sort((p, q) => p - q).join(",");
+  const union = [...a.events, ...b.events].map((e) => e.id).sort((p, q) => p - q).join(",");
+  if (ids(ab) !== union) { console.log("ids diversi: " + ids(ab) + " vs " + union); process.exit(1); }
+' "${tmp_dir}/g17-a.b" "${tmp_dir}/g17-b.b" "${tmp_dir}/g17-ab.b" || fail "G17: l'unione delle due categorie non torna"
+echo "ok  G17: category ripetuto -> unione delle due categorie, total sommato"
 
 # --- G4-G8: il dettaglio, le due facce delle colonne nullable, gli errori, il 307 ---------------
 record_or_compare event-full "GET /api/events/<id> (tutte le colonne valorizzate)" "/api/events/${F_FULL}"

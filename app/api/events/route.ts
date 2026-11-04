@@ -168,7 +168,11 @@ export async function GET(request: NextRequest) {
 
 		// Parametri query
 		const search = searchParams.get("search") || "";
-		const category = searchParams.get("category") || "";
+		// Piu' categorie = lo stesso parametro ripetuto (27.1-14). Dedup e tetto a 10
+		// (le categorie sono 7): limita l'OR della query (T-27.1-40).
+		const categories = [
+			...new Set(searchParams.getAll("category").filter((c) => c && c !== "all")),
+		].slice(0, 10);
 		const dateFrom = searchParams.get("dateFrom");
 		const dateTo = searchParams.get("dateTo");
 		const lat = searchParams.get("lat");
@@ -357,8 +361,14 @@ export async function GET(request: NextRequest) {
 		// grezza. Un nome canonico non compare mai nella colonna raw, quindi
 		// filtrare su where.category restituirebbe sempre zero righe. Additivo
 		// alla restrizione canonicalEventId:null sopra (D-13), non la sostituisce.
-		if (category && category !== "all") {
-			where.canonicalCategory = { equals: category, mode: "insensitive" };
+		// Piu' categorie = lo stesso parametro ripetuto, additivo, per il filtro a
+		// multiselezione dell'app (27.1-14).
+		if (categories.length > 0) {
+			andGroups.push({
+				OR: categories.map((c) => ({
+					canonicalCategory: { equals: c, mode: "insensitive" as const },
+				})),
+			});
 		}
 
 		// Identita' esatta del comune (D-01): un evento agganciato a comuneId ma
