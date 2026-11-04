@@ -10,11 +10,13 @@ import ProfileCard from "@/components/account/ProfileCard";
 import FollowManager from "@/components/follow/FollowManager";
 import SessionsList from "@/components/account/SessionsList";
 import SignInMethods from "@/components/account/SignInMethods";
+import StatsSection, { type Periodo, type Vista } from "@/components/account/StatsSection";
 import { DeleteAccountSection, ExportButton, SignOutButton } from "@/components/account/AccountActions";
 import { activityLabel, listUserSessions } from "@/lib/account";
 import { todayInRome } from "@/lib/dateWindow";
 import { isAppleRelayEmail } from "@/lib/displayName";
 import { googleProfileImage } from "@/lib/profileImage";
+import { computeStats, computeVisitedStats, defaultStatsYear, statsTiles } from "@/lib/stats/compute";
 
 // Dinamica per costruzione: legge la sessione, quindi non puo' mai finire in
 // una cache condivisa. Nessun'altra pagina importa il codice di questa (D-06).
@@ -27,7 +29,9 @@ export const metadata: Metadata = {
 
 const SECTION_TITLE = "mb-4 text-lg font-medium leading-[1.2] text-foreground";
 
-export default async function AccountPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function AccountPage({ searchParams }: { searchParams: SearchParams }) {
 	// Interruttore spento: la pagina non esiste (D-16).
 	if (!authEnabled()) notFound();
 	const session = await getAuth()!.api.getSession({ headers: await headers() });
@@ -48,6 +52,30 @@ export default async function AccountPage() {
 		(row) => row.providerId,
 	);
 	const linked = { apple: providers.includes("apple"), google: providers.includes("google") };
+
+	// Statistiche (27.1, D-12): query whitelisted, qualunque altro valore torna al default (T-27.1-26).
+	const q = await searchParams;
+	const pick = (key: string) => (typeof q[key] === "string" ? (q[key] as string) : "");
+	const vista: Vista = pick("vista") === "salvati" ? "salvati" : "visitati";
+	const periodo: Periodo = pick("periodo") === "anno" ? "anno" : "sempre";
+	// Solo le righe dell'utente della sessione (T-27.1-25).
+	const [visitedRows, savedRows] = await Promise.all([
+		prisma.visitedEvent.findMany({ where: { userId: user.id }, select: { visitDay: true, category: true } }),
+		prisma.savedEvent.findMany({ where: { userId: user.id }, select: { dateStart: true, dateEnd: true, category: true } }),
+	]);
+	const visited = visitedRows.map((r) => ({ visitDay: r.visitDay.toISOString().slice(0, 10), category: r.category }));
+	const saved = savedRows.map((r) => ({
+		dateStart: r.dateStart.toISOString(),
+		dateEnd: r.dateEnd ? r.dateEnd.toISOString() : null,
+		category: r.category,
+	}));
+	const currentYear = Number(today.slice(0, 4));
+	const years = (vista === "visitati" ? computeVisitedStats(visited, 0) : computeStats(saved, 0)).years;
+	const asked = /^\d{4}$/.test(pick("anno")) ? Number(pick("anno")) : null;
+	const year = asked !== null && years.includes(asked) ? asked : defaultStatsYear(years, currentYear);
+	const stats = vista === "visitati" ? computeVisitedStats(visited, year ?? currentYear) : computeStats(saved, year ?? currentYear);
+	const tilesYear = year ?? currentYear;
+	const tiles = statsTiles(visited, saved, periodo === "anno" ? tilesYear : null);
 
 	return (
 		<>
@@ -102,6 +130,13 @@ export default async function AccountPage() {
 						<Card className="p-6">
 							<FollowManager />
 						</Card>
+					</section>
+
+					<section id="account-statistiche" aria-labelledby="account-statistiche-titolo" className="scroll-mt-24">
+						<h2 id="account-statistiche-titolo" className={SECTION_TITLE}>
+							Statistiche
+						</h2>
+						<StatsSection tiles={tiles} stats={stats} year={year} tilesYear={tilesYear} vista={vista} periodo={periodo} />
 					</section>
 
 					{/* Le fasi successive inseriscono qui le proprie sezioni, fra "Cosa segui" ed "Esci":

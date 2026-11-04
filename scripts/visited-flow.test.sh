@@ -27,6 +27,7 @@
 #   R2  stesso con una fine in formato UTC (T23:59:59.999Z) e una in formato Roma (mezzanotte di Roma): entrambe trovate nel giorno giusto
 #   R3  un secondo utente con un salvato finito ieri compare a parte; l'hook non scrive nulla
 #
+#   A1  /account: tre visitati su due giorni e un salvato -> tessere 2 / 3 / 1, Visitati attivo; vista=salvati; query spazzatura -> 200
 #   W1  pagina /eventi/{id}: iniziato ieri -> bottone "Ci sono stato: Gate..." non premuto nell'HTML del server; inizia domani -> nessun bottone (D-02, D-08); poi PUT e ids come le chiamate del bottone
 #
 # Righe di prova sotto il `source` dedicato '__visited_gate__': cancellate prima
@@ -533,4 +534,30 @@ code="$(put w1e "${w_future}" "${u15_cookie}")"
 [[ "${code}" == "409" ]] || fail "W1: PUT sull'evento che inizia domani: atteso 409, ottenuto ${code}"
 echo "ok  W1: pagina dell'evento iniziato -> bottone 'Ci sono stato: Gate partito ieri' non premuto; pagina dell'evento di domani -> nessun bottone; PUT 200 e ids lo elenca; PUT sul futuro 409"
 
-echo "Riepilogo: V1-V9, VS1-VS4, VM1-VM4, R1-R3, W1 verdi"
+# --- A1: le statistiche di /account (27.1-08, D-09..D-12) -------------------------------
+# Tre visitati su due giorni (1 e 2 gennaio dell'anno di Roma) e un salvato: le tessere dicono 2 / 3 / 1.
+mint_user u16
+a_year="${rome_today:0:4}"
+for n in 1 2 3; do
+  day="${a_year}-01-0$(( n > 2 ? 2 : n ))"
+  psql_dev "INSERT INTO visited_events (user_id, title, date_start, canonical_category, source, source_id, visit_day)
+            VALUES ('${u16_user}', 'Stat ${n}', now() - interval '30 days', 'Sagre e feste', '${test_source}', 'stat-${n}', '${day}')" >/dev/null
+done
+saved_row "${u16_user}" NULL stat-s 'Salvato stat' "'${a_year}-03-10T12:00:00'::timestamp" "'${a_year}-03-10T12:00:00'::timestamp" >/dev/null
+code="$(call a1a GET /account -H "${u16_cookie}")"
+[[ "${code}" == "200" ]] || fail "A1: GET /account: atteso 200, ottenuto ${code}"
+grep -q 'Giorni fuori' "${tmp_dir}/a1a.b" || fail "A1: /account deve contenere 'Giorni fuori'"
+for pair in 'giorni-fuori:2' 'visitati:3' 'salvati:1'; do
+  grep -qE "data-tile=\"${pair%%:*}\"[^>]*>${pair##*:}<" "${tmp_dir}/a1a.b" || fail "A1: tessera ${pair%%:*} attesa ${pair##*:}"
+done
+grep -qE '<a[^>]*aria-current[^>]*>Visitati</a>' "${tmp_dir}/a1a.b" || fail "A1: 'Visitati' deve avere aria-current"
+code="$(call a1b GET '/account?vista=salvati' -H "${u16_cookie}")"
+[[ "${code}" == "200" ]] && grep -q 'Salvati per mese' "${tmp_dir}/a1b.b" || fail "A1: ?vista=salvati: atteso 200 con 'Salvati per mese', ottenuto ${code}"
+grep -qE '<a[^>]*aria-current[^>]*>Salvati</a>' "${tmp_dir}/a1b.b" || fail "A1: con ?vista=salvati 'Salvati' deve avere aria-current"
+for bad in 'anno=abc&vista=x&periodo=y' 'anno=1900' 'anno[]=2026&vista[]=a' 'periodo=anno&anno=99999'; do
+  code="$(call a1c GET "/account?${bad}" -H "${u16_cookie}")"
+  [[ "${code}" == "200" ]] || fail "A1: /account?${bad}: atteso 200, ottenuto ${code}"
+done
+echo "ok  A1: /account con 3 visitati su 2 giorni e 1 salvato -> tessere 2 / 3 / 1, Visitati attivo; ?vista=salvati -> Salvati per mese; query spazzatura -> 200"
+
+echo "Riepilogo: V1-V9, VS1-VS4, VM1-VM4, R1-R3, W1, A1 verdi"
