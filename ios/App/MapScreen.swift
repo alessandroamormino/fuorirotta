@@ -538,7 +538,7 @@ struct MapScreen: View {
     @State private var etag: String?
     @State private var phase = Phase.loading
     @State private var offline = false
-    @State private var filter: String?  // nil = Tutte
+    @State private var filter: Set<String> = []  // vuoto = Tutte
     @State private var sheet: MapSheet?
     @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
     @State private var tilted = false
@@ -550,7 +550,7 @@ struct MapScreen: View {
     }
 
     private func refreshShown() {
-        shownPins = filter.map { f in pins.filter { ($0.category ?? "Altro") == f } } ?? pins
+        shownPins = filter.isEmpty ? pins : pins.filter { filter.contains($0.category ?? "Altro") }
         pinsRevision += 1
     }
 
@@ -603,15 +603,13 @@ struct MapScreen: View {
             sheet = nil
             refreshShown()
         }
-        .sensoryFeedback(.selection, trigger: filter)
     }
 
-    // MARK: vetro: chip, ricentra, avvisi
+    // MARK: vetro: filtro, ricentra, avvisi
 
     private var chrome: some View {
         GlassEffectContainer(spacing: Spacing.sm) {
             VStack(spacing: Spacing.sm) {
-                chips
                 if phase == .loading {
                     ProgressView()
                         .padding(Spacing.md)
@@ -638,9 +636,10 @@ struct MapScreen: View {
         }
     }
 
-    /// Colonna di vetro a destra, come Mappe: 3D, stile della mappa, posizione.
+    /// Colonna di vetro a destra, come Mappe: filtro categorie, 3D, stile della mappa, posizione.
     private var mapControls: some View {
         VStack(spacing: 0) {
+            CategoryFilter(selection: $filter)
             Button { tilted.toggle() } label: {
                 Text(verbatim: tilted ? "2D" : "3D")
                     .font(.footnote.weight(.semibold))
@@ -674,8 +673,6 @@ struct MapScreen: View {
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
     }
-
-    private var chips: some View { CategoryChips(selection: $filter) }
 
     /// Vuoto (nessun pin nella vista) e guasto (nessun dato, nemmeno in cache).
     @ViewBuilder private var overlayMessage: some View {
@@ -714,8 +711,8 @@ struct MapScreen: View {
             id: event.id, title: event.title, category: event.canonicalCategory ?? event.category, imageUrl: event.imageUrl,
             dateStart: event.dateStart, locationName: event.locationName, lat: lat, lng: lng)
         // Un filtro di categoria che lo nasconderebbe si toglie; la scheda dopo, o il cambio di filtro la chiuderebbe.
-        if let filter, filter != (pin.category ?? "Altro") {
-            self.filter = nil
+        if !filter.isEmpty, !filter.contains(pin.category ?? "Altro") {
+            filter = []
             Task { sheet = .pin(pin) }
         } else {
             sheet = .pin(pin)

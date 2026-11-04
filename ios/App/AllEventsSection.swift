@@ -120,37 +120,6 @@ final class AllEventsModel {
     }
 }
 
-/// La riga di chip della mappa e di "Tutti gli eventi": "Tutte" (nil) e le sette categorie.
-struct CategoryChips: View {
-    @Binding var selection: String?
-
-    var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Spacing.sm) {
-                chip(String(localized: "Tutte"), value: nil)
-                ForEach(ApiContract.categories, id: \.self) { chip(categoryLabel($0), value: $0) }
-            }
-            .padding(.horizontal, Spacing.md)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private func chip(_ title: String, value: String?) -> some View {
-        let selected = selection == value
-        return Button { selection = value } label: {
-            Text(verbatim: title)
-                .font(.label.weight(.semibold))
-                .foregroundStyle(selected ? Color.white : Color.foreground)
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
-                .frame(minHeight: 44)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(selected ? .regular.tint(Color.accentToken).interactive() : .regular.interactive(), in: .capsule)
-        .accessibilityLabel(selected ? Text("\(title), selezionato") : Text(verbatim: title))
-    }
-}
-
 /// Il filtro per categoria di mappa e "Tutti gli eventi": un pulsante che apre un menu a scelta multipla.
 /// Insieme vuoto = Tutte. L'unica vibrazione di selezione del filtro, per entrambe le schermate.
 struct CategoryFilter: View {
