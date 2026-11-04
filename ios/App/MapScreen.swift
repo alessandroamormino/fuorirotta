@@ -144,7 +144,13 @@ struct EventMapView: UIViewRepresentable {
                 parent.pins, minLat: se.latitude, maxLat: nw.latitude, minLng: nw.longitude, maxLng: se.longitude,
                 widthPoints: map.bounds.width)
             let delta = groupDelta(shown: shown.mapValues(\.ids), incoming: groups)
-            let gone = delta.remove.compactMap { shown.removeValue(forKey: $0)?.annotation }
+            // La scheda aperta sopravvive a pan e zoom: il pin selezionato non si toglie (lo toglie un giro dopo la chiusura).
+            // ponytail: finche' la scheda e' aperta quel pin puo' stare accanto a un gruppo che lo conta ancora.
+            let selected = map.selectedAnnotations
+            let gone = delta.remove.compactMap { id -> (any MKAnnotation)? in
+                guard let a = shown[id]?.annotation, !selected.contains(where: { $0 === a }) else { return nil }
+                return shown.removeValue(forKey: id)?.annotation
+            }
             if !gone.isEmpty { map.removeAnnotations(gone) }
             let fresh = delta.add.map { g -> (String, any MKAnnotation) in
                 (g.id, g.pins.count == 1 ? PinAnnotation(g.pins[0]) : GroupAnnotation(g))
@@ -177,6 +183,7 @@ struct EventMapView: UIViewRepresentable {
                 v.glyphText = String(group.group.pins.count)
                 v.displayPriority = .required
                 v.canShowCallout = false
+                v.accessibilityLabel = String(localized: "\(group.group.pins.count) eventi")
                 return v
             }
             guard let pin = annotation as? PinAnnotation else { return nil } // posizione utente: pallino di sistema
@@ -195,14 +202,15 @@ struct EventMapView: UIViewRepresentable {
         }
 
         func mapView(_ map: MKMapView, didSelect view: MKAnnotationView) {
-            if let cluster = view.annotation as? MKClusterAnnotation {
-                map.deselectAnnotation(cluster, animated: false)
-                let members = cluster.memberAnnotations.compactMap { $0 as? PinAnnotation }
-                if cannotSplit(members, in: map) {
-                    parent.onCluster(members.map(\.id))
+            if let group = view.annotation as? GroupAnnotation {
+                map.deselectAnnotation(group, animated: false)
+                let spots = group.group.pins.map { CLLocationCoordinate2D(latitude: $0.lat ?? 0, longitude: $0.lng ?? 0) }
+                if cannotSplit(spots, in: map) {
+                    parent.onCluster(group.group.pins.map(\.id))
                 } else {
                     // ponytail: l'animazione e' quella di sistema di MapKit, non una molla nostra.
-                    map.showAnnotations(cluster.memberAnnotations, animated: true)
+                    map.setVisibleMapRect(
+                        Self.bounds(of: spots), edgePadding: UIEdgeInsets(top: 120, left: 60, bottom: 120, right: 60), animated: true)
                 }
             } else if let pin = view.annotation as? PinAnnotation {
                 liftAboveSheet(pin, in: map)
@@ -230,15 +238,16 @@ struct EventMapView: UIViewRepresentable {
 
         /// Gli eventi geocodificati sullo stesso centro di comune non si separano mai con lo zoom: restano un gruppo
         /// a ogni livello. Un tocco su un gruppo cosi' (o a zoom massimo) apre l'elenco invece di non fare nulla.
-        private func cannotSplit(_ members: [PinAnnotation], in map: MKMapView) -> Bool {
+        private func cannotSplit(_ spots: [CLLocationCoordinate2D], in map: MKMapView) -> Bool {
             if map.camera.centerCoordinateDistance <= Self.maxZoomDistance { return true }
-            guard let first = members.first else { return false }
-            let points = members.map { MKMapPoint($0.coordinate) }
-            let rect = points.dropFirst().reduce(MKMapRect(origin: points[0], size: MKMapSize(width: 0, height: 0))) {
-                $0.union(MKMapRect(origin: $1, size: MKMapSize(width: 0, height: 0)))
-            }
-            let meters = hypot(rect.width, rect.height) / MKMapPointsPerMeterAtLatitude(first.coordinate.latitude)
+            guard let first = spots.first else { return false }
+            let rect = Self.bounds(of: spots)
+            let meters = hypot(rect.width, rect.height) / MKMapPointsPerMeterAtLatitude(first.latitude)
             return meters <= Self.samePlaceMeters
+        }
+
+        private static func bounds(of spots: [CLLocationCoordinate2D]) -> MKMapRect {
+            spots.reduce(MKMapRect.null) { $0.union(MKMapRect(origin: MKMapPoint($1), size: MKMapSize(width: 0, height: 0))) }
         }
     }
 }
