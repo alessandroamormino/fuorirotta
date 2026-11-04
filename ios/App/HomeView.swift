@@ -393,8 +393,7 @@ struct HomeView: View {
             if signedIn { forYouSection }
             railSection(
                 String(localized: "Vicino a te"), events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
-                count: model.nearbyTotal, subtitle: String(localized: "Entro 50 km da \(location.place.name)"),
-                list: .nearby(location.place))
+                count: model.nearbyTotal, list: .nearby(location.place))
             if !signedIn { inviteCard }
         }
     }
@@ -413,7 +412,7 @@ struct HomeView: View {
             } else {
                 railSection(
                     String(localized: "Per te"), events: page.items, style: .wide, icon: "sparkles", count: page.total,
-                    subtitle: String(localized: "Scelti da quello che segui"), list: .forYou)
+                    list: .forYou)
             }
         } else if model.forYouFailed {
             VStack(alignment: .leading, spacing: Spacing.md) {
@@ -489,31 +488,26 @@ struct HomeView: View {
     private enum RailStyle { case poster, wide }
 
     /// Titolo in grassetto con il chevron (REF Omniphile) e "Vedi tutto": apre l'elenco della stessa fonte, fino a 100.
-    /// Con `icon`, `count` e `subtitle` l'intestazione e' quella delle file larghe ("Per te"); senza, quella delle locandine.
+    /// Con `icon` e `count` l'intestazione e' quella delle file larghe ("Per te"): icona, titolo e numero di eventi.
     private func railSection(
-        _ title: String, events: [Event], style: RailStyle, icon: String? = nil, iconColor: Color = .accentToken, count: Int? = nil, subtitle: String? = nil,
+        _ title: String, events: [Event], style: RailStyle, icon: String? = nil, iconColor: Color = .accentToken, count: Int? = nil,
         list: EventListRoute.Source
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             NavigationLink(value: EventListRoute(title: title, source: list)) {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    HStack(spacing: Spacing.sm) {
-                        if let icon { SettingsTile(symbol: icon, color: iconColor) }
-                        Text(title).font(.heading).foregroundStyle(Color.foreground)
-                        Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
-                            .accessibilityHidden(true)
-                        if let count {
-                            Text(verbatim: count == 1 ? String(localized: "1 evento") : String(localized: "\(count) eventi"))
-                                .font(.label)
-                                .foregroundStyle(Color.mutedForeground)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Text("Vedi tutto").font(.label.weight(.semibold)).foregroundStyle(Color.accentToken).fixedSize()
+                HStack(spacing: Spacing.sm) {
+                    if let icon { SettingsTile(symbol: icon, color: iconColor) }
+                    Text(title).font(.heading).foregroundStyle(Color.foreground)
+                    Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
+                        .accessibilityHidden(true)
+                    if let count {
+                        Text(verbatim: count == 1 ? String(localized: "1 evento") : String(localized: "\(count) eventi"))
+                            .font(.label)
+                            .foregroundStyle(Color.mutedForeground)
+                            .lineLimit(1)
                     }
-                    if let subtitle {
-                        Text(subtitle).font(.label).foregroundStyle(Color.mutedForeground)
-                    }
+                    Spacer()
+                    Text("Vedi tutto").font(.label.weight(.semibold)).foregroundStyle(Color.accentToken).fixedSize()
                 }
                 .padding(.horizontal, Spacing.md)
                 .frame(minHeight: 44)
