@@ -190,7 +190,7 @@ struct HomeView: View {
     @ViewBuilder private var heroContent: some View {
         switch model.phase {
         case .loading:
-            RoundedRectangle(cornerRadius: Radius.card)
+            RoundedRectangle(cornerRadius: Radius.hero, style: .continuous)
                 .fill(Color.surface)
                 .frame(height: HeroCard.height)
                 .padding(.horizontal, Spacing.md)

@@ -109,7 +109,7 @@ struct HeroCard: View {
                 .padding(.trailing, Self.heartSlot)
             }
             .frame(height: Self.height)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.card))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.hero, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category.map(categoryLabel)].compactMap { $0 }.joined(separator: ", ")))
     }

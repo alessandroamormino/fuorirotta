@@ -46,6 +46,8 @@ enum Radius {
     static let card: CGFloat = 24
     // Locandine e schede larghe delle file di Home (REF Omniphile: angoli circa 16).
     static let media: CGFloat = 16
+    // Card "Questo weekend" in Home: un po' piu' stondata delle altre schede (feedback F3).
+    static let hero: CGFloat = 32
 }
 
 // Solo stili di testo di sistema: scalano con Dynamic Type. Il corpo usa `.body` com'e'.
