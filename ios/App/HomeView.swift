@@ -113,6 +113,7 @@ struct HomeView: View {
 
     var body: some View {
         EventStack(path: Bindable(router).homePath) {
+            ScrollViewReader { proxy in
             ScrollView {
                 // Pigro: la lista nazionale e' infinita. Le intestazioni fissate sono quelle di "Tutti gli eventi".
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -136,14 +137,20 @@ struct HomeView: View {
                     .padding(.top, Spacing.xl)
                     .padding(.bottom, Spacing.xl)
                     // Ultima: una lista senza fine non puo' avere niente sotto. L'intestazione fissata e' il titolo della sezione col filtro per categoria.
-                    if model.phase == .loaded { AllEventsSection(model: allEvents, topInset: topInset) }
+                    if model.phase == .loaded {
+                        Color.clear.frame(height: 0).id(Self.allEventsTop)
+                        AllEventsSection(model: allEvents, topInset: topInset)
+                    }
                 }
             }
+            // Un altro filtro: si riparte dall'inizio della lista, col titolo fissato in alto (giro telefono F5).
+            .onChange(of: allEvents.categories) { proxy.scrollTo(Self.allEventsTop, anchor: .top) }
             // L'eroe sale fino al bordo alto, sotto la status bar (REF Omniphile): niente barra di navigazione.
             .ignoresSafeArea(edges: .top)
             .toolbar(.hidden, for: .navigationBar)
             .background(Color.background)
             .refreshable { await refresh() }
+            }
         }
         .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -155,6 +162,8 @@ struct HomeView: View {
             Task { await model.reloadFeed(api: api) }
         }
     }
+
+    private static let allEventsTop = "all-events-top"
 
     private struct LoadKey: Equatable {
         let place: Place

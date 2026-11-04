@@ -26,9 +26,12 @@ final class AllEventsModel {
     var hasMore: Bool { events.count < total }
 
     /// Prima pagina, una volta sola: la vista pigra la richiama a ogni comparsa, qui non riparte nulla se c'e' gia' qualcosa.
+    /// La richiesta non e' legata alla vista: Home toglie e rimette la sezione quando si ricarica (posizione, accesso),
+    /// e una richiesta annullata a meta' lasciava la lista ferma sul caricamento (giro telefono F5).
     func start(api: APIClient?) async {
         guard let api, events.isEmpty, !loading, !failed else { return }
-        await loadPage(api: api)
+        loading = true
+        Task { await loadPage(api: api) }
     }
 
     /// Ricomincia da capo (pull-to-refresh): non svuota lo schermo finche' la prima pagina non e' arrivata.
@@ -79,7 +82,10 @@ final class AllEventsModel {
         } catch {
             guard mine == epoch else { return }
             if Task.isCancelled {
-                // Niente da dire: l'attivita' e' stata annullata, non e' un guasto.
+                // Annullata (la riga che la lancia e' uscita dallo schermo): non e' un guasto e nemmeno "vuoto".
+                // Niente didLoad, cosi' non compare "Nessun evento" e la prossima comparsa riparte (giro telefono F5).
+                loading = false
+                return
             } else if replacing, !events.isEmpty {
                 // Un aggiornamento che fallisce lascia la lista com'e'.
             } else if offset == 0, categories.isEmpty, let cached = Self.read() {
@@ -195,7 +201,12 @@ struct AllEventsSection: View {
                     Divider().padding(.leading, Spacing.md)
                 }
             }
-            footer
+            if model.events.isEmpty {
+                // Lista vuota (filtro appena cambiato): uno schermo d'altezza, cosi' il salto all'inizio della sezione non viene tagliato.
+                footer.containerRelativeFrame(.vertical, alignment: .top)
+            } else {
+                footer
+            }
             Color.clear.frame(height: 0).task { await model.start(api: api) }
         } header: {
             HStack {
