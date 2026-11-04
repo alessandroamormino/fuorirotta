@@ -56,7 +56,8 @@ export default function CookiePage() {
 			<h2 id="memoria-del-browser">Memoria del browser</h2>
 			<p>
 				Il sito salva alcune scelte nella memoria del tuo browser: il tema chiaro o scuro (localStorage),
-				l&apos;elenco degli eventi salvati senza account (localStorage), un segnale che ricorda se hai dei luoghi o
+				l&apos;elenco degli eventi salvati senza account (localStorage),
+				l&apos;elenco degli eventi visitati senza account (localStorage), un segnale che ricorda se hai dei luoghi o
 				delle categorie seguiti (localStorage) e, per la sola scheda aperta, i filtri di ricerca, gli avvisi
 				già mostrati e il luogo che stavi per seguire mentre accedi (sessionStorage).
 			</p>
@@ -66,6 +67,12 @@ export default function CookiePage() {
 				solo per leggerne i dati aggiornati: il server non li conserva. L&apos;elenco si svuota quando viene
 				aggiunto al tuo account, all&apos;accesso, e quando esci. Le altre scelte (tema, filtri, avvisi
 				mostrati) restano sul tuo dispositivo e non vengono mai inviate al nostro server.
+			</p>
+			<p>
+				L&apos;elenco degli eventi visitati senza account tiene, per ogni evento in cui hai toccato &quot;Ci sono
+				stato&quot;, una copia di titolo, date, comune, categoria e fonte, più il giorno della visita. Le voci
+				restano finché non le togli tu. Come per i salvati, l&apos;elenco si svuota quando viene aggiunto al
+				tuo account, all&apos;accesso. Non contiene mai la tua posizione.
 			</p>
 
 			<FactList
