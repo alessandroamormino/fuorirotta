@@ -180,34 +180,27 @@ struct HomeView: View {
 
     // MARK: Eroe e intestazione
 
-    private var onPhoto: Bool { model.phase == .loaded && !model.hero.isEmpty }
-
     private var heroSection: some View {
-        ZStack(alignment: .top) {
-            heroContent
-            if onPhoto {
-                // Sfumatura in alto: il bianco dell'intestazione regge su qualunque foto.
-                LinearGradient(colors: [Color.scrim.opacity(0.6), Color.scrim.opacity(0)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: topInset + 140)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .allowsHitTesting(false)
-            }
+        VStack(alignment: .leading, spacing: Spacing.md) {
             header
+            heroContent
         }
     }
 
     @ViewBuilder private var heroContent: some View {
         switch model.phase {
         case .loading:
-            Color.surface
-                .frame(height: HeroCard.height + topInset)
+            RoundedRectangle(cornerRadius: Radius.card)
+                .fill(Color.surface)
+                .frame(height: HeroCard.height)
+                .padding(.horizontal, Spacing.md)
                 .accessibilityHidden(true)
         case .failed:
-            Color.clear.frame(height: headerReserve)
+            EmptyView()
         case .loaded:
             if model.hero.isEmpty {
                 // Eroe vuoto: si nasconde, resta l'intestazione e la riga "Nessun evento questo weekend".
-                emptyWeekend.padding(.top, headerReserve)
+                emptyWeekend
             } else {
                 hero(model.hero)
             }
@@ -241,16 +234,14 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        let ink: Color = onPhoto ? .white : Color.foreground
-        let sub: Color = onPhoto ? .white.opacity(0.85) : Color.mutedForeground
-        return VStack(spacing: Spacing.sm) {
+        VStack(spacing: Spacing.sm) {
             HStack(alignment: .top, spacing: Spacing.md) {
                 Button { showPlaceSheet = true } label: {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("Questo weekend").font(.display).foregroundStyle(ink)
+                        Text("Questo weekend").font(.display).foregroundStyle(Color.foreground)
                         Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to, locale: .app) + " · " + location.place.name)
                             .font(.label)
-                            .foregroundStyle(sub)
+                            .foregroundStyle(Color.mutedForeground)
                     }
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -282,9 +273,6 @@ struct HomeView: View {
             .frame(width: 48, height: 44)
             .contentShape(Rectangle())
     }
-
-    /// Altezza riservata all'intestazione quando sotto non c'e' la foto.
-    private var headerReserve: CGFloat { topInset + 96 + (showsUpdateBanner ? 96 : 0) }
 
     private var emptyWeekend: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -326,11 +314,13 @@ struct HomeView: View {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 0) {
                     ForEach(picks) { event in
-                        HeroCard(event: event, topInset: topInset, zooming: motionOK && (current ?? picks[0].id) == event.id)
+                        HeroCard(event: event, zooming: motionOK && (current ?? picks[0].id) == event.id)
+                            .padding(.horizontal, Spacing.md)
                             .containerRelativeFrame(.horizontal)
                     }
                     if looping, let first = picks.first {
-                        HeroCard(event: first, topInset: topInset, slot: "hero-loop", zooming: motionOK && current == Self.loopID)
+                        HeroCard(event: first, slot: "hero-loop", zooming: motionOK && current == Self.loopID)
+                            .padding(.horizontal, Spacing.md)
                             .containerRelativeFrame(.horizontal)
                             .id(Self.loopID)
                             .accessibilityHidden(true)

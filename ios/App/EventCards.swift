@@ -27,9 +27,10 @@ func eventMeta(_ event: Event) -> String {
     return parts.joined(separator: " · ")
 }
 
-/// Eroe a tutta larghezza (REF Omniphile): la foto arriva fino al bordo alto, sotto la status bar (`topInset`).
+/// Eroe di Home: card stondata con foto, titolo e luogo, sotto l'intestazione "Questo weekend".
 struct HeroCard: View {
-    static let height: CGFloat = 360
+    // ponytail: 240 e' la manopola se la card deve essere piu' alta o piu' bassa.
+    static let height: CGFloat = 240
     // Misura di decodifica: lato lungo della card su un iPhone (la larghezza reale dipende dallo schermo).
     static let imageSize = CGSize(width: 440, height: height + 60)
     // Spazio per il cuore di vetro a destra del titolo.
@@ -40,7 +41,6 @@ struct HeroCard: View {
     static let zoomSeconds: Double = 4
 
     let event: Event
-    var topInset: CGFloat = 0
     /// Distingue la copia che chiude il giro del carosello: lo stesso evento non puo' avere due origini dello zoom.
     var slot = "hero"
     /// Vero per la slide attiva quando il movimento e' permesso (mai con "Riduci movimento" o VoiceOver).
@@ -53,7 +53,7 @@ struct HeroCard: View {
     var body: some View {
         EventLink(event: event, slot: slot) { card }
             // Sopra il collegamento: per VoiceOver il cuore e' un controllo a parte, e il suo tocco non apre l'evento.
-            // In basso a destra: in alto stanno i pulsanti dell'intestazione di Home.
+            // In basso a destra, accanto al titolo.
             .overlay(alignment: .bottomTrailing) {
                 HeartButton(event: event, style: .glass).padding(Spacing.md)
             }
@@ -108,8 +108,8 @@ struct HeroCard: View {
                 .padding(Spacing.md)
                 .padding(.trailing, Self.heartSlot)
             }
-            .frame(height: Self.height + topInset)
-            .clipped()
+            .frame(height: Self.height)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.card))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: [event.title, eventMeta(event), category.map(categoryLabel)].compactMap { $0 }.joined(separator: ", ")))
     }
