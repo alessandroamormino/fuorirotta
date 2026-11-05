@@ -7,6 +7,7 @@ final class UAT6UITests: LocalTestCase {
     func testSavedSummaryAndChipsScrollAwayWithTheList() {
         let app = localApp()
         app.launch()
+        app.tabBars.buttons["Eventi"].tap()  // F7: l'app si apre sulla Mappa
         let first = app.buttons.matching(identifier: "heart").firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 20))
         var saved = 0
@@ -22,12 +23,18 @@ final class UAT6UITests: LocalTestCase {
         defer {
             // Lo scorrimento riduce la barra delle schede: risalire la fa tornare intera.
             for _ in 0..<3 { app.swipeDown() }
-            app.tabBars.buttons["Home"].tap()
+            app.tabBars.buttons["Eventi"].tap()
             for _ in 0..<14 {
                 if let filled = onScreen("heart.fill", in: app) { tap(filled, in: app) } else { app.swipeDown(velocity: .slow) }
             }
         }
-        for _ in 0..<3 { app.swipeDown() }
+        // Lo scorrimento ha ridotto la barra (resta la scheda attiva) e in cima alla lista un altro swipeDown non la
+        // riapre: un tocco sulla scheda ridotta la riapre; se serve si scende un poco e si risale piano.
+        if !app.tabBars.buttons["Salvati"].exists { app.tabBars.buttons["Eventi"].tap() }
+        for _ in 0..<5 where !app.tabBars.buttons["Salvati"].waitForExistence(timeout: 1) {
+            app.swipeUp(velocity: .slow)
+            app.swipeDown(velocity: .slow)
+        }
         app.tabBars.buttons["Salvati"].tap()
         let chip = app.buttons["Prossimi"]
         XCTAssertTrue(chip.waitForExistence(timeout: 10))

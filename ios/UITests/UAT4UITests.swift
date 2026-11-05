@@ -34,8 +34,16 @@ final class UAT4UITests: LocalTestCase {
         for hero in heroes { XCTAssertEqual(hero.frame.width, w - 2 * 16, accuracy: 1, hero.label) }
         // Porta la fila "Vicino a te" in vista, poi la scorre di ~240 pt: compaiono schede con la foto.
         let rail = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'In corso'")).firstMatch
-        for _ in 0..<4 where !rail.exists || rail.frame.maxY > 800 { app.swipeUp() }
+        // Gesti lenti (senza lancio) e una pausa dopo ciascuno: uno swipe veloce lascia la pagina in corsa e la fila
+        // puo' finire sopra lo schermo prima del tocco (su un'installazione nuova succedeva).
         XCTAssertTrue(rail.waitForExistence(timeout: 20))
+        for _ in 0..<12 {
+            let f = rail.frame
+            if f.minY > 150 && f.minY < 600 { break }
+            if f.minY <= 150 { app.swipeDown(velocity: .slow) } else { app.swipeUp(velocity: .slow) }
+            Thread.sleep(forTimeInterval: 1)
+        }
+        XCTAssertTrue(rail.frame.minY > 150 && rail.frame.minY < 600, "la fila Vicino a te non e' in vista: \(rail.frame)")
         let y = rail.frame.midY
         let from = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 300, dy: y))
         let to = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 50, dy: y))
