@@ -15,6 +15,7 @@ extension Locale {
     static let app = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "it")
 }
 
+/// `home` e' la scheda Eventi (l'ex Home, F7): il nome del caso resta perche' i link universali spingono sulla sua pila.
 enum AppTab: Hashable { case home, map, saved, profile, search }
 
 /// Un indirizzo da mostrare in un Safari dentro l'app (foglio).
@@ -26,7 +27,8 @@ struct SafariTarget: Identifiable {
 /// Dove sta l'app: la scheda attiva, la pila di Home (i link universali spingono qui) e il foglio Safari.
 @MainActor @Observable
 final class Router {
-    var tab = AppTab.home
+    /// F7: l'app si apre sulla Mappa.
+    var tab = AppTab.map
     var homePath = NavigationPath()
     var safari: SafariTarget?
     /// L'evento da mostrare nella scheda Mappa (la mappa piccola del dettaglio, UAT7 C2): la mappa lo consuma.
@@ -198,8 +200,8 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: Bindable(router).tab) {
-            Tab("Home", systemImage: "house", value: AppTab.home) { HomeView() }
             Tab("Mappa", systemImage: "map", value: AppTab.map) { MapScreen() }
+            Tab("Eventi", systemImage: "rectangle.stack", value: AppTab.home) { HomeView() }
             Tab("Salvati", systemImage: "heart", value: AppTab.saved) { SavedView() }
             Tab(value: AppTab.profile) {
                 ProfileView()
@@ -213,7 +215,7 @@ struct RootView: View {
             }
             Tab(value: AppTab.search, role: .search) { SearchView() }
         }
-        // Home e Salvati (le liste che scorrono) fanno ridurre la barra; la mappa non e' uno ScrollView e non la muove.
+        // Eventi e Salvati (le liste che scorrono) fanno ridurre la barra; la Mappa, prima scheda, non e' uno ScrollView e non la muove.
         .tabBarMinimizeBehavior(.onScrollDown)
         .overlay(alignment: .bottom) {
             if let toast = saves.toast {

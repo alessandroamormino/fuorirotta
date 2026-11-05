@@ -1079,6 +1079,16 @@
         }
       }
     },
+    "Eventi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Events"
+          }
+        }
+      }
+    },
     "Eventi non disponibili" : {
       "localizations" : {
         "en" : {
@@ -1369,16 +1379,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "You have seen it all"
-          }
-        }
-      }
-    },
-    "Home" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Home"
           }
         }
       }
