@@ -52,6 +52,8 @@ struct HeroCard: View {
 
     var body: some View {
         EventLink(event: event, slot: slot) { card }
+            // I test UI trovano l'eroe da questo identificatore: altezza e raggio sono manopole del proprietario.
+            .accessibilityIdentifier("hero")
             // Sopra il collegamento: per VoiceOver il cuore e' un controllo a parte, e il suo tocco non apre l'evento.
             // In basso a destra, accanto al titolo.
             .overlay(alignment: .bottomTrailing) {
