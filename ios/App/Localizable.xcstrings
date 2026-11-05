@@ -1211,6 +1211,16 @@
         }
       }
     },
+    "Giorni fuori" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Days out"
+          }
+        }
+      }
+    },
     "Già seguito" : {
       "localizations" : {
         "en" : {
@@ -2206,6 +2216,16 @@
         }
       }
     },
+    "Periodo" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Period"
+          }
+        }
+      }
+    },
     "Più" : {
       "localizations" : {
         "en" : {
@@ -2816,6 +2836,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "You're offline. Showing the last saved data."
+          }
+        }
+      }
+    },
+    "Sempre" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All time"
           }
         }
       }

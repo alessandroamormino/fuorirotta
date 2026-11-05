@@ -27,14 +27,62 @@ private struct StatCard<Content: View>: View {
     }
 }
 
-/// Le tre schede di Profilo > Statistiche, o lo stato vuoto.
-struct StatsSection: View {
-    let items: [StatItem]
-    @State private var picked: Int?
+enum Period: Hashable { case always, year }
+
+/// Le tre tessere in cima (D-09): Giorni fuori a tutta larghezza, Visitati e Salvati sotto. "Sempre | <anno>" (D-11).
+struct StatsTilesView: View {
+    let tiles: StatsTiles
+    @Binding var period: Period
+    let year: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        if let year = resolvedYear {
-            let stats = computeStats(items, year: year)
+        VStack(spacing: Spacing.md) {
+            if let year {
+                Picker("Periodo", selection: $period) {
+                    Text("Sempre").tag(Period.always)
+                    Text(verbatim: String(year)).tag(Period.year)
+                }
+                .pickerStyle(.segmented)
+                .sensoryFeedback(.selection, trigger: period)
+            }
+            tile(String(localized: "Giorni fuori"), tiles.daysOut, Color.accentToken)
+            HStack(spacing: Spacing.md) {
+                tile(String(localized: "Visitati"), tiles.visited, Color.accentToken)
+                tile(String(localized: "Salvati"), tiles.saved, Color.heart)
+            }
+        }
+    }
+
+    private func tile(_ title: String, _ value: Int, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(verbatim: title).font(.label).foregroundStyle(Color.mutedForeground)
+            Text(verbatim: "\(value)")
+                .font(.display).monospacedDigit().foregroundStyle(color)
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : Motion.snappy, value: value)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: "\(title): \(value)"))
+    }
+}
+
+/// Le tessere e le tre schede di Profilo > Statistiche, o lo stato vuoto.
+struct StatsSection: View {
+    let visited: [VisitedStatItem]
+    let saved: [StatItem]
+    @State private var picked: Int?
+    @State private var period = Period.always
+
+    var body: some View {
+        let year = resolvedYear
+        StatsTilesView(
+            tiles: statsTiles(visited: visited, saved: saved, year: period == .year ? year : nil),
+            period: $period, year: year)
+        if let year {
+            let stats = computeStats(saved, year: year)
             if stats.years.count > 1 {
                 Picker("Anno", selection: Binding(get: { year }, set: { picked = $0 })) {
                     ForEach(stats.years, id: \.self) { Text(verbatim: String($0)).tag($0) }
@@ -55,9 +103,9 @@ struct StatsSection: View {
     }
 
     private var resolvedYear: Int? {
-        let years = computeStats(items, year: 0).years
+        let years = computeStats(saved, year: 0).years
         if let picked, years.contains(picked) { return picked }
-        return defaultStatsYear(items, now: .now)
+        return defaultStatsYear(saved, now: .now)
     }
 }
 

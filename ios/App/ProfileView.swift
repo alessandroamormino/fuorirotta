@@ -122,18 +122,23 @@ private extension ProfileView {
 struct StatsView: View {
     @Environment(Session.self) private var session
     @Environment(SavesModel.self) private var saves
+    @Environment(VisitedModel.self) private var visited
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.lg) {
-                StatsSection(items: saves.statItems)
+                StatsSection(visited: visited.statItems, saved: saves.statItems)
             }
             .padding(Spacing.md)
         }
         .background(Color.background)
         .navigationTitle("Statistiche")
         // Account: le statistiche vengono dai salvati sincronizzati; Salvati puo' non essere mai stato aperto.
-        .task(id: session.state) { if case .signedIn = session.state, saves.statItems.isEmpty { await saves.reload() } }
+        .task(id: session.state) {
+            guard case .signedIn = session.state else { return }
+            if saves.statItems.isEmpty { await saves.reload() }
+            if visited.statItems.isEmpty { await visited.reload() }
+        }
     }
 }
 
