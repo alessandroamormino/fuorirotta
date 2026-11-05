@@ -86,6 +86,13 @@ export default function PrivacyPage() {
 					dal nostro catalogo.
 				</li>
 				<li>
+					<strong>Eventi visitati</strong>: quando tocchi &quot;Ci sono stato&quot; su un evento conserviamo
+					quale evento, una copia di titolo, date, comune, categoria, fonte e link alla fonte, e il giorno
+					che viene contato nelle tue statistiche. Senza account l&apos;elenco resta solo nel tuo browser o
+					sul tuo iPhone e si aggiunge al tuo account quando accedi. Le statistiche si calcolano da questi
+					eventi e mai dalla tua posizione: non segniamo nulla in base a dove ti trovi.
+				</li>
+				<li>
 					<strong>Collegamento al calendario</strong>: se lo crei, è un collegamento segreto, generato a caso,
 					che mostra i tuoi eventi salvati a chiunque lo abbia. Non condividerlo.
 				</li>
@@ -143,7 +150,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Finalità",
-								"Fornirti l'account e le sue funzioni: accesso, elenco dei dispositivi, modifica del nome, eventi salvati, collegamento al calendario, link di condivisione della lista, luoghi e categorie seguiti, scarico ed eliminazione dei tuoi dati",
+								"Fornirti l'account e le sue funzioni: accesso, elenco dei dispositivi, modifica del nome, eventi salvati, eventi visitati e statistiche, collegamento al calendario, link di condivisione della lista, luoghi e categorie seguiti, scarico ed eliminazione dei tuoi dati",
 							],
 							["Base giuridica", "esecuzione del contratto, art. 6.1.b GDPR"],
 						],
@@ -262,7 +269,7 @@ export default function PrivacyPage() {
 						facts: [
 							[
 								"Quanto",
-								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni, gli eventi salvati, i luoghi e le categorie seguiti, il collegamento al calendario, il link di condivisione della lista e il collegamento con Google o con Apple. Se avevi collegato Apple, eliminando l'account o scollegando Apple revochiamo anche l'autorizzazione data a Fuorirotta nel tuo ID Apple; se Apple non risponde in quel momento, i tuoi dati vengono eliminati comunque. Il codice di accesso di Apple, che conserviamo cifrato, si cancella insieme all'account o quando scolleghi Apple.",
+								"Fino a quando non elimini l'account. L'eliminazione è immediata e totale: cancella i tuoi dati (compreso l'indirizzo della foto del profilo), le sessioni, gli eventi salvati, gli eventi visitati, i luoghi e le categorie seguiti, il collegamento al calendario, il link di condivisione della lista e il collegamento con Google o con Apple. Se avevi collegato Apple, eliminando l'account o scollegando Apple revochiamo anche l'autorizzazione data a Fuorirotta nel tuo ID Apple; se Apple non risponde in quel momento, i tuoi dati vengono eliminati comunque. Il codice di accesso di Apple, che conserviamo cifrato, si cancella insieme all'account o quando scolleghi Apple.",
 							],
 						],
 					},
@@ -272,6 +279,15 @@ export default function PrivacyPage() {
 							[
 								"Quanto",
 								"Fino a quando non li togli tu o non elimini l'account. Un evento salvato che è finito resta ancora 12 mesi dopo la sua fine, poi lo cancella il controllo giornaliero. Gli stessi 12 mesi valgono per l'elenco conservato nel browser.",
+							],
+						],
+					},
+					{
+						title: "Eventi visitati",
+						facts: [
+							[
+								"Quanto",
+								"Fino a quando non li togli tu o non elimini l'account.",
 							],
 						],
 					},

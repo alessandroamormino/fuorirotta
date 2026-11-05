@@ -56,7 +56,7 @@ final class UAT7CUITests: LocalTestCase {
 
     /// Sceglie la zona dal foglio "Scegli la zona": cercando (`query`) oppure dalla lista dei capoluoghi.
     private func pickZone(_ name: String, query: String? = nil, in app: XCUIApplication) {
-        app.tabBars.buttons["Home"].tap()
+        app.tabBars.buttons["Eventi"].tap()
         let change = app.buttons["Cambia posizione"]
         XCTAssertTrue(change.waitForExistence(timeout: 20))
         change.tap()
@@ -79,7 +79,9 @@ final class UAT7CUITests: LocalTestCase {
         let app = launch()
         pickZone("Firenze", query: "Firen", in: app)
         defer { pickZone("Milano", in: app) }  // il simulatore torna alla zona di partenza degli altri test
-        XCTAssertTrue(app.staticTexts["Entro 50 km da Firenze"].waitForExistence(timeout: 20), "la Home non e' passata a Firenze")
+        // La riga della data dell'intestazione ("<giorni> · Firenze") sta nell'etichetta del pulsante della zona.
+        let place = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS '· Firenze'")).firstMatch
+        XCTAssertTrue(place.waitForExistence(timeout: 20), "la Home non e' passata a Firenze")
         shot(app, "zona-home")
         // Cerca > Filtri > Dove: la zona e' la stessa.
         app.tabBars.buttons.element(boundBy: app.tabBars.buttons.count - 1).tap()

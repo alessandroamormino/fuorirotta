@@ -20,7 +20,7 @@ final class UAT7B2UITests: LocalTestCase {
         return app
     }
 
-    /// B5: il tutorial compare al primo avvio, si sfoglia con Avanti fino a Inizia (Salta sempre visibile), poi la Home.
+    /// B5: il tutorial compare al primo avvio, si sfoglia con Avanti fino a Inizia (Salta sempre visibile), poi la Mappa.
     /// Al secondo avvio, senza azzerare e senza saltare, non torna.
     func testWelcomeShowsOnFirstLaunchOnly() {
         let app = firstLaunch()
@@ -33,37 +33,42 @@ final class UAT7B2UITests: LocalTestCase {
             next.tap()
         }
         XCTAssertTrue(app.buttons["Salta"].waitForNonExistence(timeout: 5), "dopo Inizia il tutorial e' ancora aperto")
-        XCTAssertTrue(waitHittable(app.tabBars.buttons["Home"], timeout: 10), "dopo Inizia non c'e' la Home")
+        let map = app.tabBars.buttons["Mappa"]
+        XCTAssertTrue(waitHittable(map, timeout: 10), "dopo Inizia non c'e' la Mappa")
+        XCTAssertTrue(map.isSelected, "dopo Inizia l'app non si apre sulla Mappa")
         app.terminate()
 
         let again = localApp(skipWelcome: false)
         again.launch()
-        XCTAssertTrue(waitHittable(again.tabBars.buttons["Home"], timeout: 15), "al secondo avvio la Home non e' raggiungibile")
+        let againMap = again.tabBars.buttons["Mappa"]
+        XCTAssertTrue(waitHittable(againMap, timeout: 15), "al secondo avvio la Mappa non e' raggiungibile")
+        XCTAssertTrue(againMap.isSelected, "al secondo avvio l'app non si apre sulla Mappa")
         XCTAssertFalse(again.buttons["Avanti"].exists, "il tutorial e' tornato al secondo avvio")
         XCTAssertFalse(again.buttons["Salta"].exists, "il tutorial e' tornato al secondo avvio")
     }
 
-    /// B5: "Salta" dalla prima pagina chiude il tutorial e porta alla Home.
-    func testWelcomeSkipGoesHome() {
+    /// B5: "Salta" dalla prima pagina chiude il tutorial e porta alla Mappa.
+    func testWelcomeSkipOpensTheMap() {
         let app = firstLaunch()
         let skip = app.buttons["Salta"]
         XCTAssertTrue(waitHittable(skip, timeout: 15), "nessun tutorial al primo avvio")
         skip.tap()
         XCTAssertTrue(skip.waitForNonExistence(timeout: 5), "Salta non chiude il tutorial")
-        XCTAssertTrue(waitHittable(app.tabBars.buttons["Home"], timeout: 10))
+        let map = app.tabBars.buttons["Mappa"]
+        XCTAssertTrue(waitHittable(map, timeout: 10))
+        XCTAssertTrue(map.isSelected, "dopo Salta l'app non si apre sulla Mappa")
     }
 
-    /// B6: le statistiche non stanno piu' nel Profilo. Si aprono dall'icona grafico in alto a destra, accanto
-    /// all'ingranaggio (stessa capsula), in una schermata loro; Indietro torna al Profilo.
+    /// B6 e F6: le statistiche non stanno piu' nel Profilo. Si aprono dall'icona grafico (l'unica in alto), in una
+    /// schermata loro; Indietro torna al Profilo. Le impostazioni stanno nella pagina, niente ingranaggio.
     func testStatsHaveTheirOwnScreen() {
         let app = localApp()
         app.launch()
         app.tabBars.buttons["Profilo"].tap()
-        let stats = app.buttons["Statistiche"], settings = app.buttons["Impostazioni"]
+        let stats = app.buttons["Statistiche"]
         XCTAssertTrue(waitHittable(stats, timeout: 10), "nessun pulsante Statistiche nel Profilo")
-        XCTAssertTrue(settings.exists)
-        XCTAssertEqual(stats.frame.midY, settings.frame.midY, accuracy: 1, "Statistiche e Impostazioni non sono sulla stessa riga")
-        XCTAssertLessThan(stats.frame.maxX, settings.frame.minX + 1, "Statistiche deve stare a sinistra dell'ingranaggio")
+        XCTAssertFalse(app.buttons["Impostazioni"].exists, "nel Profilo c'e' ancora l'ingranaggio")
+        XCTAssertTrue(app.staticTexts["Aspetto"].waitForExistence(timeout: 5), "le impostazioni non sono nel Profilo")
         // Le schede delle statistiche (o il loro stato vuoto) non sono nel Profilo.
         let content = app.staticTexts.matching(NSPredicate(format: "label IN {'Ancora niente da mostrare', \"Attività dell'anno\"}")).firstMatch
         XCTAssertFalse(content.exists, "le statistiche sono ancora nel Profilo")

@@ -22,6 +22,16 @@
         }
       }
     },
+    "%@, %lld eventi visitati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, %lld events visited"
+          }
+        }
+      }
+    },
     "%@, 1 evento salvato" : {
       "localizations" : {
         "en" : {
@@ -32,12 +42,32 @@
         }
       }
     },
+    "%@, 1 evento visitato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, 1 event visited"
+          }
+        }
+      }
+    },
     "%@, nessun evento salvato" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@, no saved events"
+          }
+        }
+      }
+    },
+    "%@, nessun evento visitato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, no events visited"
           }
         }
       }
@@ -93,6 +123,17 @@
         }
       }
     },
+    "%lld eventi aggiunti ai visitati" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld events added to visited"
+          }
+        }
+      }
+    },
     "%lld questa settimana" : {
       "localizations" : {
         "en" : {
@@ -120,6 +161,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 event added to saved"
+          }
+        }
+      }
+    },
+    "1 evento aggiunto ai visitati" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 event added to visited"
           }
         }
       }
@@ -466,6 +518,16 @@
         }
       }
     },
+    "Carica altri" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load more"
+          }
+        }
+      }
+    },
     "Caricamento" : {
       "localizations" : {
         "en" : {
@@ -682,6 +744,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anyone with this link sees your list, which has no upcoming events right now. They don't see your email or any other account data."
+          }
+        }
+      }
+    },
+    "Ci sono stato" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I was there"
           }
         }
       }
@@ -1006,6 +1079,16 @@
         }
       }
     },
+    "Eventi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Events"
+          }
+        }
+      }
+    },
     "Eventi non disponibili" : {
       "localizations" : {
         "en" : {
@@ -1052,6 +1135,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Events near you"
+          }
+        }
+      }
+    },
+    "Eventi visitati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Events visited"
           }
         }
       }
@@ -1168,6 +1261,16 @@
         }
       }
     },
+    "Giorni fuori" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Days out"
+          }
+        }
+      }
+    },
     "Già seguito" : {
       "localizations" : {
         "en" : {
@@ -1218,6 +1321,17 @@
         }
       }
     },
+    "Hai raggiunto il limite di 100 eventi visitati senza account. Accedi per segnarne fino a 500." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have reached the limit of 100 visited events without an account. Sign in to mark up to 500."
+          }
+        }
+      }
+    },
     "Hai raggiunto il limite di 100 salvati senza account. Accedi per salvarne fino a 500." : {
       "localizations" : {
         "en" : {
@@ -1238,6 +1352,17 @@
         }
       }
     },
+    "Hai raggiunto il limite di 500 eventi visitati. Rimuovine qualcuno per aggiungerne altri." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have reached the limit of 500 visited events. Remove some to add more."
+          }
+        }
+      }
+    },
     "Hai raggiunto il limite di 500 salvati. Rimuovine qualcuno per aggiungerne altri." : {
       "localizations" : {
         "en" : {
@@ -1248,12 +1373,12 @@
         }
       }
     },
-    "Home" : {
+    "Hai visto tutto" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Home"
+            "value" : "You have seen it all"
           }
         }
       }
@@ -1338,6 +1463,16 @@
         }
       }
     },
+    "Il mese con più eventi visitati è %@: %lld." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The month with the most events visited is %@: %lld."
+          }
+        }
+      }
+    },
     "Impostazioni" : {
       "localizations" : {
         "en" : {
@@ -1415,6 +1550,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The category with the most saved events is %@: %lld."
+          }
+        }
+      }
+    },
+    "La categoria con più eventi visitati è %@: %lld." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The category with the most events visited is %@: %lld."
           }
         }
       }
@@ -1640,6 +1785,16 @@
         }
       }
     },
+    "Nessun evento in questa categoria" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events in this category"
+          }
+        }
+      }
+    },
     "Nessun evento in questa zona" : {
       "localizations" : {
         "en" : {
@@ -1696,6 +1851,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No saved events this year."
+          }
+        }
+      }
+    },
+    "Nessun evento visitato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No visited events"
+          }
+        }
+      }
+    },
+    "Nessun evento visitato in questo anno." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events visited this year."
           }
         }
       }
@@ -2111,6 +2286,16 @@
         }
       }
     },
+    "Periodo" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Period"
+          }
+        }
+      }
+    },
     "Più" : {
       "localizations" : {
         "en" : {
@@ -2263,12 +2448,12 @@
         }
       }
     },
-    "Questa e-mail è già registrata con un altro metodo. Entra con quello e collega questo da Impostazioni > Metodi di accesso." : {
+    "Questa e-mail è già registrata con un altro metodo. Entra con quello e collega questo da Profilo > Metodi di accesso." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This email is already registered with another method. Sign in with that one and link this one from Settings > Sign-in methods."
+            "value" : "This email is already registered with another method. Sign in with that one and link this one from Profile > Sign-in methods."
           }
         }
       }
@@ -2380,6 +2565,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Removed from saved"
+          }
+        }
+      }
+    },
+    "Rimosso dai visitati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removed from visited"
           }
         }
       }
@@ -2675,6 +2870,16 @@
         }
       }
     },
+    "Segna \"Ci sono stato\" su un evento: qui vedrai dove sei stato." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark \"I was there\" on an event: here you will see where you have been."
+          }
+        }
+      }
+    },
     "Segui" : {
       "localizations" : {
         "en" : {
@@ -2711,6 +2916,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "You're offline. Showing the last saved data."
+          }
+        }
+      }
+    },
+    "Sempre" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All time"
           }
         }
       }
@@ -2836,6 +3051,16 @@
         }
       }
     },
+    "Statistiche di" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Statistics of"
+          }
+        }
+      }
+    },
     "Stile della mappa" : {
       "localizations" : {
         "en" : {
@@ -2882,6 +3107,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Phone"
+          }
+        }
+      }
+    },
+    "Tocca \"Ci sono stato\" su un evento iniziato per ritrovarlo qui." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap \"I was there\" on an event that has started to find it here."
           }
         }
       }
@@ -2942,6 +3177,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "All"
+          }
+        }
+      }
+    },
+    "Tutti gli eventi" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All events"
           }
         }
       }
@@ -3016,22 +3261,32 @@
         }
       }
     },
-    "Vista 3D" : {
+    "Visitati" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "3D view"
+            "value" : "Visited"
           }
         }
       }
     },
-    "Vista piana" : {
+    "Visitati per categoria" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Flat view"
+            "value" : "Visited by category"
+          }
+        }
+      }
+    },
+    "Visitati per mese" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visited by month"
           }
         }
       }

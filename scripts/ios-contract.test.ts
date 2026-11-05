@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   APNS_ENVIRONMENTS, APNS_TOKEN_RE, APP_USER_AGENT_RE, COMUNE_SEARCH_ITEM_KEYS, DEVICE_CAP, EVENT_COMUNE_KEYS, FEATURES, PLAN, SAVED_LIST_ITEM_KEYS,
-  SAVED_RESOLVE_ITEM_KEYS, UNIVERSAL_LINK_PATHS,
+  SAVED_RESOLVE_ITEM_KEYS, UNIVERSAL_LINK_PATHS, VISITED_LIST_ITEM_KEYS,
 } from '../lib/api-contract'
 import { PLACE_CAP } from '../lib/follows/keys'
 import { CANONICAL_CATEGORIES } from '../lib/categories/taxonomy'
@@ -67,6 +67,7 @@ const expected: Record<string, Value> = {
   accountCap: ACCOUNT_CAP,
   savedListItemKeys: [...SAVED_LIST_ITEM_KEYS],
   savedResolveItemKeys: [...SAVED_RESOLVE_ITEM_KEYS],
+  visitedListItemKeys: [...VISITED_LIST_ITEM_KEYS],
   placeCap: PLACE_CAP,
   eventComuneKeys: [...EVENT_COMUNE_KEYS],
   comuneSearchItemKeys: [...COMUNE_SEARCH_ITEM_KEYS],

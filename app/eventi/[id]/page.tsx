@@ -8,6 +8,7 @@ import { serializeEvent } from "@/lib/serializeEvent";
 import { composeEvent } from "@/lib/dedup/compose";
 import { eventDays } from "@/lib/eventDays";
 import { isEventOver } from "@/lib/eventStatus";
+import { visitDayFor } from "@/lib/visited/rules";
 import { todayInRome, windowStartToday } from "@/lib/dateWindow";
 import { findSiblings, siblingKey } from "@/lib/saved/resolve";
 import { formatDayRange } from "@/lib/calendar/links";
@@ -245,6 +246,8 @@ export default async function EventDetailPage({
 				eventOver={composedEvent ? isEventOver(composedEvent.dateStart, composedEvent.dateEnd) : undefined}
 				canonicalUrl={isNaN(eventId) ? undefined : `${BASE_URL}/eventi/${eventId}`}
 				siblings={siblings}
+				// D-02, D-08: il bottone "Ci sono stato" c'e' solo dal primo giorno (Roma); lo decide il server.
+				visitable={composedEvent ? visitDayFor(composedEvent.dateStart, composedEvent.dateEnd, todayInRome()) !== null : false}
 			/>
 		</>
 	);

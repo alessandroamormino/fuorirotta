@@ -16,6 +16,8 @@ struct SavedRow: Identifiable, Equatable, Codable {
     let gone: Bool
     /// La foto dell'evento (https); nil senza foto, con l'evento sparito o offline senza una foto tenuta: vale il segnaposto di categoria.
     let imageUrl: String?
+    /// L'istantanea da cui nasce la riga (nil in una salvati.json di prima): serve a segnare "Ci sono stato" senza rete.
+    let snap: Snap?
 
     /// Vive dal resolver (live) con ripiego sull'istantanea salvata; senza nessuna delle due resta il segnaposto.
     init(entryID: Int, eventID: Int?, snap: Snap?, gone: Bool, prefix: String) {
@@ -29,7 +31,11 @@ struct SavedRow: Identifiable, Equatable, Codable {
         category = snap?.category ?? "Altro"
         self.gone = gone
         imageUrl = gone ? nil : snap?.imageUrl
+        self.snap = snap
     }
+
+    /// Chiave naturale dell'evento (fonte + NUL + id di fonte), la stessa di VisitedModel; nil senza istantanea.
+    var sourceKey: String? { snap.map { "\($0.source)\u{0}\($0.sourceId)" } }
 
     var days: (startDay: String, endDay: String)? { eventDays(dateStart: dateStart, dateEnd: dateEnd) }
 

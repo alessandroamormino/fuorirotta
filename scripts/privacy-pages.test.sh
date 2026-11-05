@@ -29,6 +29,10 @@
 #   P12 /privacy nomina Apple come fornitore, l'indirizzo privato (relay) e il token tenuto solo
 #       per revocare (25-06); P6 non vieta piu' Apple, esce con la fase 25
 #
+#   P13 /privacy nomina gli eventi visitati e la durata scelta dal titolare il 2026-11-04
+#       ("Fino a quando non li togli tu o non elimini l'account."); /cookie nomina l'elenco
+#       del browser; /account li elenca fra i dati dello scarico (27.1-08)
+#
 # Regola della TAB letterale: niente `\t` nei grep (BSD e GNU differiscono),
 # solo classi [[:space:]]. Dove un grep puo' legittimamente non trovare nulla
 # c'e' `|| true`.
@@ -179,3 +183,13 @@ has "${privacy}" "Apple" || fail "P12 ${privacy} non nomina Apple"
 has "${privacy}" "indirizzo privato" || fail "P12 ${privacy} non descrive l'indirizzo privato di Apple (relay)"
 has "${privacy}" "revocare" || fail "P12 ${privacy} non dice che il codice di Apple e' tenuto solo per revocare l'autorizzazione"
 echo "ok  P12 Apple: fornitore, indirizzo privato e token tenuto solo per revocare"
+
+# --- P13 -----------------------------------------------------------------
+# Needle senza apostrofi tipografici: nei file compare l'apostrofo ASCII dentro le stringhe JS.
+account="app/account/page.tsx"
+has "${privacy}" "Eventi visitati" || fail "P13 ${privacy} non ha la voce 'Eventi visitati'"
+has "${privacy}" "eventi visitati" || fail "P13 ${privacy} non nomina gli eventi visitati nelle finalita' o nella cancellazione"
+has "${privacy}" "Fino a quando non li togli tu o non elimini l'account." || fail "P13 ${privacy} non dice la durata scelta per gli eventi visitati"
+has "${cookie}" "eventi visitati senza account" || fail "P13 ${cookie} non nomina l'elenco degli eventi visitati senza account"
+has "${account}" "eventi visitati" || fail "P13 ${account} non elenca gli eventi visitati fra i dati dello scarico"
+echo "ok  P13 eventi visitati: informativa, durata scelta, elenco del browser e scarico dei dati"

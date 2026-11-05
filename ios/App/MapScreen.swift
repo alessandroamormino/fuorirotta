@@ -16,6 +16,17 @@ final class PinAnnotation: NSObject, MKAnnotation {
     }
 }
 
+/// Un gruppo di 2+ eventi della griglia (Core): la bolla col numero. Un evento solo e' un PinAnnotation.
+final class GroupAnnotation: NSObject, MKAnnotation {
+    let group: PinGroup
+    let coordinate: CLLocationCoordinate2D
+
+    init(_ group: PinGroup) {
+        self.group = group
+        coordinate = CLLocationCoordinate2D(latitude: group.lat, longitude: group.lng)
+    }
+}
+
 /// Chiede alla mappa di spostarsi: cambia `id` a ogni richiesta (cambio luogo, pulsante di ricentratura).
 struct MapFocus: Equatable {
     var id = 0
@@ -25,16 +36,18 @@ struct MapFocus: Equatable {
     var meters: CLLocationDistance = 100_000
 }
 
-/// MKMapView vera: il clustering e' nativo. Le annotazioni si aggiungono UNA volta e si aggiornano per differenza di id
-/// (mai removeAll + add: SwiftUI chiama updateUIView a ogni cambio di stato).
+/// MKMapView vera, senza clustering nativo: i ~9.000 pin restano in memoria e sulla mappa vanno solo i gruppi a griglia
+/// della vista (Core, `gridClusters`), al massimo qualche centinaio. Si ricalcolano una volta a gesto finito e si
+/// applicano per differenza di id (mai removeAll + add: SwiftUI chiama updateUIView a ogni cambio di stato).
 struct EventMapView: UIViewRepresentable {
     let pins: [FuorirottaCore.MapPin]
+    /// Cambia solo quando `pins` cambia davvero: SwiftUI chiama updateUIView a ogni cambio di stato, e con ~9.000 pin
+    /// ricalcolare la differenza ogni volta costerebbe a vuoto.
+    let revision: Int
     let center: CLLocationCoordinate2D
     let focus: MapFocus
     let showsUser: Bool
     let mapType: MKMapType
-    /// Vista inclinata (tasto 3D): pitch della camera di sistema.
-    let tilted: Bool
     /// Il pin della scheda aperta: resta selezionato (animazione e titolo di sistema) finche' la scheda non si chiude.
     let selectedID: Int?
     let onSelect: (Int) -> Void
@@ -48,7 +61,14 @@ struct EventMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
+        // Sempre piana (giro telefono F2): niente tasto 3D e niente inclinazione con due dita.
+        map.isPitchEnabled = false
         map.delegate = context.coordinator
+        context.coordinator.scheme = context.environment.colorScheme
+        // Il tema arriva alla mappa come tratto UIKit anche quando SwiftUI non richiama updateUIView: si ascolta qui.
+        map.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak coordinator = context.coordinator] (map: MKMapView, _) in
+            coordinator?.repaint(map, scheme: map.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
+        }
         map.showsUserLocation = showsUser
         map.pointOfInterestFilter = .excludingAll
         map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "pin")
@@ -62,15 +82,10 @@ struct EventMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         let c = context.coordinator
         c.parent = self
+        // Tema cambiato (Profilo > Aspetto): i pin gia' sulla mappa non si ricolorano da soli (giro telefono F6).
+        c.repaint(map, scheme: map.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
         if map.showsUserLocation != showsUser { map.showsUserLocation = showsUser }
         if map.mapType != mapType { map.mapType = mapType }
-        if tilted != c.tilted {
-            c.tilted = tilted
-            if let camera = map.camera.copy() as? MKMapCamera {
-                camera.pitch = tilted ? 60 : 0
-                map.setCamera(camera, animated: true)
-            }
-        }
         // Scheda chiusa: il pin torna normale. Selezionarlo lo fa la mappa stessa, col tocco.
         if selectedID == nil { for a in map.selectedAnnotations { map.deselectAnnotation(a, animated: true) } }
         if focus != c.focus {
@@ -82,7 +97,7 @@ struct EventMapView: UIViewRepresentable {
             // Raggio di 50 km attorno al punto (UI-SPEC "Mappa"); attorno a un evento, la regione chiesta.
             map.setRegion(MKCoordinateRegion(center: target, latitudinalMeters: focus.meters, longitudinalMeters: focus.meters), animated: true)
         }
-        c.apply(pins, to: map)
+        c.apply(revision: revision, to: map)
     }
 
     @MainActor
@@ -94,53 +109,113 @@ struct EventMapView: UIViewRepresentable {
 
         var parent: EventMapView
         var focus: MapFocus
-        var tilted = false
-        private var shown: [Int: PinAnnotation] = [:]
+        /// Il tema con cui si risolvono i colori dei pin: UIColor(Color) li fisserebbe a quello del momento.
+        var scheme: ColorScheme = .light
+        private var shown: [String: (annotation: any MKAnnotation, ids: [Int])] = [:]
+        private var appliedRevision = -1
+        private var debounce: Task<Void, Never>?
 
         init(_ parent: EventMapView) {
             self.parent = parent
             focus = parent.focus
         }
 
-        func apply(_ pins: [FuorirottaCore.MapPin], to map: MKMapView) {
-            let delta = pinDelta(existing: Set(shown.keys), incoming: pins)
-            if !delta.remove.isEmpty {
-                map.removeAnnotations(delta.remove.compactMap { shown.removeValue(forKey: $0) })
+        func apply(revision: Int, to map: MKMapView) {
+            guard revision != appliedRevision else { return }
+            guard map.bounds.width > 0 else {
+                // Non ancora impaginata: il primo disegno non aspetta un cambio di regione, riprova al giro dopo.
+                DispatchQueue.main.async { [weak self, weak map] in
+                    if let self, let map { self.apply(revision: self.parent.revision, to: map) }
+                }
+                return
             }
-            if !delta.add.isEmpty {
-                let fresh = delta.add.map(PinAnnotation.init)
-                for a in fresh { shown[a.id] = a }
-                map.addAnnotations(fresh)
-            }
-            if !delta.add.isEmpty || !delta.remove.isEmpty { reportVisible(map) }
+            appliedRevision = revision
+            refresh(map)
         }
 
-        /// Quanti pin stanno nella vista (per il messaggio di zona vuota). Fuori dall'aggiornamento della vista.
-        private func reportVisible(_ map: MKMapView) {
-            let count = map.annotations(in: map.visibleMapRect).filter { $0 is PinAnnotation }.count
+        /// Mette sulla mappa i gruppi della vista (Core) e toglie/aggiunge solo la differenza.
+        private func refresh(_ map: MKMapView) {
+            guard map.bounds.width > 0 else { return }
+            let rect = map.visibleMapRect.intersection(.world)
+            let nw = MKMapPoint(x: rect.minX, y: rect.minY).coordinate
+            let se = MKMapPoint(x: rect.maxX, y: rect.maxY).coordinate
+            let groups = gridClusters(
+                parent.pins, minLat: se.latitude, maxLat: nw.latitude, minLng: nw.longitude, maxLng: se.longitude,
+                widthPoints: map.bounds.width)
+            let delta = groupDelta(shown: shown.mapValues(\.ids), incoming: groups)
+            // La scheda aperta sopravvive a pan e zoom: il pin selezionato non si toglie (lo toglie un giro dopo la chiusura).
+            // ponytail: finche' la scheda e' aperta quel pin puo' stare accanto a un gruppo che lo conta ancora.
+            let selected = map.selectedAnnotations
+            let gone = delta.remove.compactMap { id -> (any MKAnnotation)? in
+                guard let a = shown[id]?.annotation, !selected.contains(where: { $0 === a }) else { return nil }
+                return shown.removeValue(forKey: id)?.annotation
+            }
+            if !gone.isEmpty { map.removeAnnotations(gone) }
+            let fresh = delta.add.map { g -> (String, any MKAnnotation) in
+                (g.id, g.pins.count == 1 ? PinAnnotation(g.pins[0]) : GroupAnnotation(g))
+            }
+            for (g, (id, a)) in zip(delta.add, fresh) { shown[id] = (a, g.pins.map(\.id)) }
+            if !fresh.isEmpty { map.addAnnotations(fresh.map(\.1)) }
+            // Quanti eventi stanno nella vista (messaggio di zona vuota): i gruppi con il centro dentro, poche centinaia di controlli.
+            let count = groups.filter { rect.contains(MKMapPoint(CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng))) }
+                .reduce(0) { $0 + $1.pins.count }
             let report = parent.onVisibleCount
             DispatchQueue.main.async { report(count) }
         }
 
-        func mapView(_ map: MKMapView, regionDidChangeAnimated animated: Bool) { reportVisible(map) }
+        /// Niente calcoli mentre il dito muove la mappa: si aspetta ~150 ms dopo la fine del gesto.
+        func mapView(_ map: MKMapView, regionDidChangeAnimated animated: Bool) {
+            debounce?.cancel()
+            debounce = Task { @MainActor [weak self, weak map] in
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled, let self, let map else { return }
+                self.refresh(map)
+            }
+        }
+
+        /// Tema cambiato: ricolora i pin e i gruppi gia' sulla mappa.
+        func repaint(_ map: MKMapView, scheme: ColorScheme) {
+            guard scheme != self.scheme else { return }
+            self.scheme = scheme
+            // Un marker gia' a schermo non si ridisegna cambiando solo il colore (lo fa solo al tocco): si tolgono e si
+            // rimettono gli stessi oggetti, e viewFor li ridipinge. Qualche centinaio al massimo, una volta per cambio tema.
+            let marks = map.annotations.filter { !($0 is MKUserLocation) }
+            map.removeAnnotations(marks)
+            map.addAnnotations(marks)
+        }
+
+        /// I colori di un pin o di un gruppo, risolti nel tema corrente.
+        func paint(_ v: MKMarkerAnnotationView, for annotation: any MKAnnotation) {
+            var env = EnvironmentValues()
+            env.colorScheme = scheme
+            func ui(_ color: Color) -> UIColor { UIColor(Color(color.resolve(in: env))) }
+            if annotation is GroupAnnotation {
+                // Mai accent sulla mappa: bolla "foreground" con testo invertito.
+                v.markerTintColor = ui(Color.foreground)
+                v.glyphTintColor = ui(Color.background)
+            } else if let pin = annotation as? PinAnnotation {
+                v.markerTintColor = ui(categoryVisual(pin.category).color)
+            }
+        }
 
         func mapView(_ map: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
-            if let cluster = annotation as? MKClusterAnnotation {
-                let v = map.dequeueReusableAnnotationView(withIdentifier: "cluster", for: cluster) as! MKMarkerAnnotationView
-                // Mai accent sulla mappa: bolla "foreground" con testo invertito.
-                v.markerTintColor = UIColor(Color.foreground)
-                v.glyphTintColor = UIColor(Color.background)
-                v.glyphText = String(cluster.memberAnnotations.count)
+            if let group = annotation as? GroupAnnotation {
+                let v = map.dequeueReusableAnnotationView(withIdentifier: "cluster", for: group) as! MKMarkerAnnotationView
+                paint(v, for: group)
+                v.glyphText = String(group.group.pins.count)
+                v.displayPriority = .required
                 v.canShowCallout = false
+                v.accessibilityLabel = String(localized: "\(group.group.pins.count) eventi")
                 return v
             }
             guard let pin = annotation as? PinAnnotation else { return nil } // posizione utente: pallino di sistema
             let v = map.dequeueReusableAnnotationView(withIdentifier: "pin", for: pin) as! MKMarkerAnnotationView
             let visual = categoryVisual(pin.category)
-            v.clusteringIdentifier = "event"
-            v.markerTintColor = UIColor(visual.color)
+            paint(v, for: pin)
             v.glyphImage = UIImage(systemName: visual.symbol)
-            v.displayPriority = .defaultLow
+            // ponytail: .required = nessun evento nascosto dalle collisioni (stesso insieme del sito); due pin a pochi metri
+            // ai due lati del bordo di una cella possono sovrapporsi finche' non si zooma.
+            v.displayPriority = .required
             v.canShowCallout = false
             // Selezionato: ingrandimento e titolo sotto il pin, quelli di sistema (come Mappe).
             v.titleVisibility = .adaptive
@@ -149,14 +224,15 @@ struct EventMapView: UIViewRepresentable {
         }
 
         func mapView(_ map: MKMapView, didSelect view: MKAnnotationView) {
-            if let cluster = view.annotation as? MKClusterAnnotation {
-                map.deselectAnnotation(cluster, animated: false)
-                let members = cluster.memberAnnotations.compactMap { $0 as? PinAnnotation }
-                if cannotSplit(members, in: map) {
-                    parent.onCluster(members.map(\.id))
+            if let group = view.annotation as? GroupAnnotation {
+                map.deselectAnnotation(group, animated: false)
+                let spots = group.group.pins.map { CLLocationCoordinate2D(latitude: $0.lat ?? 0, longitude: $0.lng ?? 0) }
+                if cannotSplit(spots, in: map) {
+                    parent.onCluster(group.group.pins.map(\.id))
                 } else {
                     // ponytail: l'animazione e' quella di sistema di MapKit, non una molla nostra.
-                    map.showAnnotations(cluster.memberAnnotations, animated: true)
+                    map.setVisibleMapRect(
+                        Self.bounds(of: spots), edgePadding: UIEdgeInsets(top: 120, left: 60, bottom: 120, right: 60), animated: true)
                 }
             } else if let pin = view.annotation as? PinAnnotation {
                 liftAboveSheet(pin, in: map)
@@ -184,36 +260,40 @@ struct EventMapView: UIViewRepresentable {
 
         /// Gli eventi geocodificati sullo stesso centro di comune non si separano mai con lo zoom: restano un gruppo
         /// a ogni livello. Un tocco su un gruppo cosi' (o a zoom massimo) apre l'elenco invece di non fare nulla.
-        private func cannotSplit(_ members: [PinAnnotation], in map: MKMapView) -> Bool {
+        private func cannotSplit(_ spots: [CLLocationCoordinate2D], in map: MKMapView) -> Bool {
             if map.camera.centerCoordinateDistance <= Self.maxZoomDistance { return true }
-            guard let first = members.first else { return false }
-            let points = members.map { MKMapPoint($0.coordinate) }
-            let rect = points.dropFirst().reduce(MKMapRect(origin: points[0], size: MKMapSize(width: 0, height: 0))) {
-                $0.union(MKMapRect(origin: $1, size: MKMapSize(width: 0, height: 0)))
-            }
-            let meters = hypot(rect.width, rect.height) / MKMapPointsPerMeterAtLatitude(first.coordinate.latitude)
+            guard let first = spots.first else { return false }
+            let rect = Self.bounds(of: spots)
+            let meters = hypot(rect.width, rect.height) / MKMapPointsPerMeterAtLatitude(first.latitude)
             return meters <= Self.samePlaceMeters
+        }
+
+        private static func bounds(of spots: [CLLocationCoordinate2D]) -> MKMapRect {
+            spots.reduce(MKMapRect.null) { $0.union(MKMapRect(origin: MKMapPoint($1), size: MKMapSize(width: 0, height: 0))) }
         }
     }
 }
 
-/// Il foglio che si apre toccando un pin, come la scheda luogo di Mappe: in basso (380 pt, la mappa resta toccabile)
-/// titolo, tre azioni, quattro informazioni e la foto; tirato su (`.large`) diventa il dettaglio dell'evento, con
-/// le stesse viste di EventDetailView. Fondo di vetro di sistema.
+/// Il foglio che si apre toccando un pin, come la scheda luogo di Mappe: in basso (420 pt, la mappa resta toccabile)
+/// foto, titolo, Quando / Dove / Categoria / Distanza e l'inizio della descrizione; tirato su (`.large`) diventa il
+/// dettaglio dell'evento, con i suoi pulsanti. Fondo di vetro di sistema.
 struct PinSheet: View {
-    static let compactHeight: CGFloat = 380
+    static let compactHeight: CGFloat = 420
     static let compact = PresentationDetent.height(compactHeight)
 
     let onClose: () -> Void
 
     @Environment(\.api) private var api
-    @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(LocationModel.self) private var location
-    @Environment(SavesModel.self) private var saves
     @State private var event: Event
     @State private var detent = PresentationDetent.height(compactHeight)
-    @State private var travelTime: TimeInterval?
+    @State private var descriptionExpanded = false
+
+    // ponytail: la soglia conta i caratteri, non le righe disegnate: un testo corto con molti a capo puo' mostrare
+    // piu' di 3 righe senza sfumatura, e uno di 141 caratteri che sta in 3 righe sfuma lo stesso. Le due costanti sono le manopole.
+    private static let previewCharacters = 140
+    private static let previewLines = 3
 
     init(pin: FuorirottaCore.MapPin, onClose: @escaping () -> Void) {
         _event = State(initialValue: asEvent(pin))
@@ -225,12 +305,6 @@ struct PinSheet: View {
     private var spot: CLLocationCoordinate2D? {
         guard let lat = event.resolvedLatitude ?? event.latitude, let lng = event.resolvedLongitude ?? event.longitude else { return nil }
         return CLLocationCoordinate2D(latitude: lat, longitude: lng)
-    }
-
-    /// T-27-28: solo http e https.
-    private var siteURL: URL? {
-        guard let raw = event.sourceUrl, raw.lowercased().hasPrefix("http://") || raw.lowercased().hasPrefix("https://") else { return nil }
-        return URL(string: raw)
     }
 
     var body: some View {
@@ -246,7 +320,6 @@ struct PinSheet: View {
         // La mappa dietro resta toccabile finche' il foglio e' basso: un altro pin cambia il contenuto.
         .presentationBackgroundInteraction(.enabled(upThrough: Self.compact))
         .task(id: event.id) { await fetch() }
-        .task(id: event.id) { await loadTravelTime() }
     }
 
     // MARK: scheda bassa
@@ -254,16 +327,10 @@ struct PinSheet: View {
     private var card: some View {
         ScrollView {
             VStack(spacing: Spacing.md) {
-                header
-                actions
+                photo
+                titleBlock
                 infoRow
-                if event.imageUrl != nil {
-                    RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 440, height: 260))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: Radius.card))
-                        .accessibilityHidden(true)
-                }
+                descriptionPreview
             }
             .padding(.horizontal, Spacing.md)
             .padding(.top, Spacing.lg)
@@ -271,35 +338,70 @@ struct PinSheet: View {
         }
     }
 
-    /// Condividi a sinistra, chiudi a destra (due cerchi di vetro), titolo e categoria al centro.
-    private var header: some View {
-        HStack(alignment: .top, spacing: Spacing.sm) {
-            GlassEffectContainer(spacing: Spacing.sm) {
-                ShareLink(item: URL(string: "https://fuori-rotta.it/eventi/\(event.id)")!) {
-                    circleIcon("square.and.arrow.up")
-                }
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Condividi evento")
-            }
-            VStack(spacing: 2) {
-                Text(verbatim: event.title)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.foreground)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-                    .accessibilityAddTraits(.isHeader)
-                if let category {
-                    Text(verbatim: categoryLabel(category))
-                        .font(.subheadline)
-                        .foregroundStyle(Color.foregroundSecondary)
-                }
-            }
+    /// La foto (o il segnaposto della categoria) con condividi a sinistra e chiudi a destra, due cerchi di vetro sul bordo alto.
+    private var photo: some View {
+        RemoteImage(url: event.imageUrl, category: category, size: CGSize(width: 440, height: 280))
             .frame(maxWidth: .infinity)
-            GlassEffectContainer(spacing: Spacing.sm) {
-                Button(action: onClose) { circleIcon("xmark") }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Chiudi")
+            .frame(height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.card))
+            .accessibilityHidden(true)
+            .overlay(alignment: .top) {
+                HStack(alignment: .top) {
+                    GlassEffectContainer(spacing: Spacing.sm) {
+                        ShareLink(item: URL(string: "https://fuori-rotta.it/eventi/\(event.id)")!) {
+                            circleIcon("square.and.arrow.up")
+                        }
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .accessibilityLabel("Condividi evento")
+                    }
+                    Spacer()
+                    GlassEffectContainer(spacing: Spacing.sm) {
+                        Button(action: onClose) { circleIcon("xmark") }
+                            .glassEffect(.regular.interactive(), in: .circle)
+                            .accessibilityLabel("Chiudi")
+                    }
+                }
+                .padding(Spacing.sm)
             }
+    }
+
+    private var titleBlock: some View {
+        VStack(spacing: 2) {
+            Text(verbatim: event.title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.foreground)
+                .multilineTextAlignment(.center)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                .accessibilityAddTraits(.isHeader)
+            if let category {
+                Text(verbatim: categoryLabel(category))
+                    .font(.subheadline)
+                    .foregroundStyle(Color.foregroundSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// L'inizio della descrizione (arriva con `fetch()`, il pin non la porta): oltre 140 caratteri tre righe con "..." e
+    /// sfumatura in fondo, un tocco la mostra intera, un altro la ripiega. Stesso HTML-in-testo del dettaglio (T-27.1-44).
+    @ViewBuilder private var descriptionPreview: some View {
+        if let html = event.description, !html.isEmpty {
+            let text = htmlToAttributed(html)
+            let long = text.characters.count > Self.previewCharacters
+            let folded = long && !descriptionExpanded
+            Text(text)
+                .font(.body)
+                .foregroundStyle(Color.foreground)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(folded ? Self.previewLines : nil)
+                .mask(
+                    LinearGradient(
+                        stops: [.init(color: .black, location: 0), .init(color: .black, location: folded ? 0.6 : 1),
+                                .init(color: folded ? .clear : .black, location: 1)],
+                        startPoint: .top, endPoint: .bottom))
+                .contentShape(Rectangle())
+                .onTapGesture { if long { descriptionExpanded.toggle() } }
+                .accessibilityAddTraits(long ? .isButton : [])
         }
     }
 
@@ -309,55 +411,6 @@ struct PinSheet: View {
             .foregroundStyle(Color.primary)
             .frame(width: 44, height: 44)
             .contentShape(Circle())
-    }
-
-    /// Tre bottoni uguali, alti, icona sopra e testo sotto: Indicazioni (pieno, col tempo in auto), Sito, Salva.
-    private var actions: some View {
-        let saved = saves.isSaved(event.id)
-        return HStack(spacing: Spacing.sm) {
-            let directions = travelTime.map(formatTravelTime) ?? String(localized: "Indicazioni")
-            if let spot {
-                DirectionsButton(spot: spot, name: event.locationName ?? event.title) {
-                    tileLabel("car.fill", directions, fill: Color.accentToken)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(travelTime.map { String(localized: "Indicazioni, \(formatTravelTime(seconds: $0)) in auto") } ?? String(localized: "Indicazioni"))
-            } else {
-                tile("car.fill", directions, label: String(localized: "Indicazioni"), fill: Color.accentToken, enabled: false) {}
-            }
-            // Senza indirizzo del sito il bottone resta, spento (il dettaglio non ha un calendario da richiamare).
-            tile("safari", String(localized: "Sito"), label: String(localized: "Apri il sito dell'evento"), fill: nil, enabled: siteURL != nil) {
-                if let siteURL { openURL(siteURL) }
-            }
-            tile(
-                saved ? "heart.fill" : "heart", saved ? String(localized: "Salvato") : String(localized: "Salva"),
-                label: saved ? String(localized: "Rimuovi dai salvati") : String(localized: "Salva evento"), fill: saved ? Color.heart : nil, enabled: true
-            ) {
-                Task { await saves.toggle(event) }
-            }
-            .sensoryFeedback(.impact(flexibility: .soft), trigger: saved)
-        }
-    }
-
-    private func tile(
-        _ symbol: String, _ title: String, label: String, fill: Color?, enabled: Bool, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) { tileLabel(symbol, title, fill: fill) }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
-        .accessibilityLabel(label)
-    }
-
-    private func tileLabel(_ symbol: String, _ title: String, fill: Color?) -> some View {
-        VStack(spacing: 2) {
-            Image(systemName: symbol).font(.title3).accessibilityHidden(true)
-            Text(verbatim: title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .foregroundStyle(fill == nil ? Color.accentToken : Color.white)
-        .frame(maxWidth: .infinity, minHeight: 60)
-        .background(fill ?? Color.accentToken.opacity(0.16), in: RoundedRectangle(cornerRadius: Radius.media))
-        .contentShape(RoundedRectangle(cornerRadius: Radius.media))
     }
 
     /// Quattro colonne: etichetta grigia sopra, valore sotto (Quando / Dove / Categoria / Distanza). Mancano quelle senza dato.
@@ -419,17 +472,6 @@ struct PinSheet: View {
         guard let api, case .found(let fresh)? = try? await api.event(id: event.id) else { return }
         event = fresh
     }
-
-    /// Tempo in auto dalla posizione del telefono, di sistema. Senza posizione o senza risposta resta "Indicazioni".
-    private func loadTravelTime() async {
-        travelTime = nil
-        guard let here = location.userCoordinate, let spot else { return }
-        let request = MKDirections.Request()
-        request.source = MKMapItem(location: CLLocation(latitude: here.latitude, longitude: here.longitude), address: nil)
-        request.destination = MKMapItem(location: CLLocation(latitude: spot.latitude, longitude: spot.longitude), address: nil)
-        request.transportType = .automobile
-        travelTime = try? await MKDirections(request: request).calculateETA().expectedTravelTime
-    }
 }
 
 /// Gruppo che non si puo' dividere: gli eventi in elenco, ciascuno apre il dettaglio.
@@ -454,9 +496,6 @@ private func asEvent(_ pin: FuorirottaCore.MapPin) -> Event {
 }
 
 struct MapScreen: View {
-    // Fonte della mappa: raggio attorno al luogo (27-SPIKE.md, "Map source: radius"). 50 km come da UI-SPEC.
-    private let radiusKm = 50
-
     private enum Phase { case loading, loaded, failed }
     private struct Group {
         let events: [Event]
@@ -473,18 +512,22 @@ struct MapScreen: View {
     @Environment(LocationModel.self) private var location
     @Environment(Router.self) private var router
 
-    /// Un evento aperto dalla mappa piccola del dettaglio (C2): la mappa si centra li' e carica i pin attorno a lui,
-    /// finche' non cambia il luogo della Home.
+    /// Un evento aperto dalla mappa piccola del dettaglio (C2): la mappa si centra li',
+    /// finche' non cambia il luogo della Home. I pin sono sempre quelli di tutta Italia.
     @State private var eventSpot: Place?
     private var origin: Place { eventSpot ?? location.place }
 
     @State private var pins: [FuorirottaCore.MapPin] = []
+    /// `pins` dopo il filtro, calcolato solo quando cambiano i pin o il filtro (non a ogni disegno della vista).
+    @State private var shownPins: [FuorirottaCore.MapPin] = []
+    @State private var pinsRevision = 0
+    /// ETag della copia che abbiamo: serve a chiedere al server "e' cambiato qualcosa?" senza riscaricare 2,6 MB.
+    @State private var etag: String?
     @State private var phase = Phase.loading
     @State private var offline = false
-    @State private var filter: String?  // nil = Tutte
+    @State private var filter: Set<String> = []  // vuoto = Tutte
     @State private var sheet: MapSheet?
     @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
-    @State private var tilted = false
     @State private var focus = MapFocus()
     @State private var visibleCount: Int?
 
@@ -492,9 +535,9 @@ struct MapScreen: View {
         if case .pin(let pin) = sheet { pin.id } else { nil }
     }
 
-    private var shownPins: [FuorirottaCore.MapPin] {
-        guard let filter else { return pins }
-        return pins.filter { ($0.category ?? "Altro") == filter }
+    private func refreshShown() {
+        shownPins = filter.isEmpty ? pins : pins.filter { filter.contains($0.category ?? "Altro") }
+        pinsRevision += 1
     }
 
     var body: some View {
@@ -502,16 +545,17 @@ struct MapScreen: View {
             ZStack {
                 EventMapView(
                     pins: shownPins,
+                    revision: pinsRevision,
                     center: CLLocationCoordinate2D(latitude: origin.latitude, longitude: origin.longitude),
                     focus: focus,
                     showsUser: location.authorised,
                     mapType: mapStyle.mapType,
-                    tilted: tilted,
                     selectedID: selectedPinID,
                     onSelect: { id in sheet = pins.first { $0.id == id }.map(MapSheet.pin) },
                     onDeselect: { if case .pin = sheet { sheet = nil } },
                     onCluster: { ids in
-                        let members = pins.filter { ids.contains($0.id) }.sorted { $0.dateStart < $1.dateStart }.map(asEvent)
+                        let wanted = Set(ids)
+                        let members = pins.filter { wanted.contains($0.id) }.sorted { $0.dateStart < $1.dateStart }.map(asEvent)
                         sheet = .group(Group(events: members))
                     },
                     onVisibleCount: { if visibleCount != $0 { visibleCount = $0 } }
@@ -532,7 +576,7 @@ struct MapScreen: View {
                 ClusterListSheet(events: group.events)
             }
         }
-        .task(id: origin) { await load() }
+        .task { await load() }
         .onChange(of: location.place) {
             eventSpot = nil
             focus = MapFocus(id: focus.id + 1)
@@ -540,16 +584,17 @@ struct MapScreen: View {
         // La scheda puo' nascere proprio adesso (prima visita): anche onAppear.
         .onAppear(perform: showRequestedEvent)
         .onChange(of: router.mapEvent) { showRequestedEvent() }
-        .onChange(of: filter) { sheet = nil }
-        .sensoryFeedback(.selection, trigger: filter)
+        .onChange(of: filter) {
+            sheet = nil
+            refreshShown()
+        }
     }
 
-    // MARK: vetro: chip, ricentra, avvisi
+    // MARK: vetro: filtro, ricentra, avvisi
 
     private var chrome: some View {
         GlassEffectContainer(spacing: Spacing.sm) {
             VStack(spacing: Spacing.sm) {
-                chips
                 if phase == .loading {
                     ProgressView()
                         .padding(Spacing.md)
@@ -576,17 +621,10 @@ struct MapScreen: View {
         }
     }
 
-    /// Colonna di vetro a destra, come Mappe: 3D, stile della mappa, posizione.
+    /// Colonna di vetro a destra, come Mappe: filtro categorie, stile della mappa, posizione.
     private var mapControls: some View {
         VStack(spacing: 0) {
-            Button { tilted.toggle() } label: {
-                Text(verbatim: tilted ? "2D" : "3D")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel(tilted ? "Vista piana" : "Vista 3D")
+            CategoryFilter(selection: $filter)
             Menu {
                 Picker("Stile della mappa", selection: $mapStyle) {
                     ForEach(MapStyleChoice.allCases) { Text($0.title).tag($0) }
@@ -611,32 +649,6 @@ struct MapScreen: View {
             .foregroundStyle(Color.primary)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
-    }
-
-    private var chips: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Spacing.sm) {
-                chip(String(localized: "Tutte"), value: nil)
-                ForEach(ApiContract.categories, id: \.self) { chip(categoryLabel($0), value: $0) }
-            }
-            .padding(.horizontal, Spacing.md)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private func chip(_ title: String, value: String?) -> some View {
-        let selected = filter == value
-        return Button { filter = value } label: {
-            Text(verbatim: title)
-                .font(.label.weight(.semibold))
-                .foregroundStyle(selected ? Color.white : Color.foreground)
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
-                .frame(minHeight: 44)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(selected ? .regular.tint(Color.accentToken).interactive() : .regular.interactive(), in: .capsule)
-        .accessibilityLabel(selected ? Text("\(title), selezionato") : Text(verbatim: title))
     }
 
     /// Vuoto (nessun pin nella vista) e guasto (nessun dato, nemmeno in cache).
@@ -676,8 +688,8 @@ struct MapScreen: View {
             id: event.id, title: event.title, category: event.canonicalCategory ?? event.category, imageUrl: event.imageUrl,
             dateStart: event.dateStart, locationName: event.locationName, lat: lat, lng: lng)
         // Un filtro di categoria che lo nasconderebbe si toglie; la scheda dopo, o il cambio di filtro la chiuderebbe.
-        if let filter, filter != (pin.category ?? "Altro") {
-            self.filter = nil
+        if !filter.isEmpty, !filter.contains(pin.category ?? "Altro") {
+            filter = []
             Task { sheet = .pin(pin) }
         } else {
             sheet = .pin(pin)
@@ -686,44 +698,56 @@ struct MapScreen: View {
 
     // MARK: dati
 
+    /// D-17: i pin di tutta Italia, una volta per vita della schermata. Cambiare luogo sposta solo la camera (`focus`).
+    /// Prima la copia su disco (subito), poi una domanda al server con il suo ETag: 304 = non cambia nulla.
     private func load() async {
-        guard let api else { return }
-        let place = origin
-        phase = .loading
-        do {
-            let fresh = try await api.mapPins(lat: place.latitude, lng: place.longitude, radiusKm: radiusKm)
+        guard let api, !(phase == .loaded && !offline) else { return }
+        if pins.isEmpty, let disk = await Task.detached(operation: { Self.readDisk() }).value {
             guard !Task.isCancelled else { return }
-            pins = fresh
+            pins = disk.pins
+            etag = disk.etag
+            refreshShown()
+            phase = .loaded
+        } else if pins.isEmpty {
+            phase = .loading
+        }
+        do {
+            let fetch = try await api.clusters(ifNoneMatch: etag)
+            guard !Task.isCancelled else { return }
+            switch fetch {
+            case .fresh(let set, let newEtag):
+                pins = set.pins
+                etag = newEtag
+                refreshShown()
+                Task.detached { Self.writeDisk(DiskCopy(computedAt: set.computedAt, etag: newEtag, pins: set.pins)) }
+            case .notModified, .empty:
+                break  // ponytail: .empty (file non ancora calcolato) lascia la copia che c'e'; senza copia la mappa e' vuota.
+            }
             offline = false
             phase = .loaded
-            if eventSpot == nil { Self.write(fresh, for: place) }  // la cache offline resta quella dei luoghi
         } catch {
             guard !Task.isCancelled else { return }
-            // Senza rete si mostrano gli ultimi pin di questo luogo; senza nemmeno quelli, un messaggio con "Riprova".
-            if let cached = Self.read(for: place) {
-                pins = cached
-                offline = true
-                phase = .loaded
-            } else {
-                phase = .failed
-            }
+            // Senza rete resta la copia su disco con l'avviso; senza nemmeno quella, un messaggio con "Riprova".
+            if pins.isEmpty { phase = .failed } else { offline = true }
         }
     }
 
-    private static func url(for place: Place) -> URL {
-        let slug = place.name.lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
-        return URL.cachesDirectory.appending(path: "fuorirotta/map-\(slug).json")
+    private struct DiskCopy: Codable, Sendable {
+        let computedAt: String
+        let etag: String?
+        let pins: [FuorirottaCore.MapPin]
     }
 
-    private static func write(_ pins: [FuorirottaCore.MapPin], for place: Place) {
-        let target = url(for: place)
+    nonisolated private static let diskURL = URL.cachesDirectory.appending(path: "fuorirotta/map-italia.json")
+
+    nonisolated private static func writeDisk(_ copy: DiskCopy) {
         // ponytail: scrittura fallita = niente cache offline, nient'altro.
-        try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(pins) { try? data.write(to: target, options: .atomic) }
+        try? FileManager.default.createDirectory(at: diskURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(copy) { try? data.write(to: diskURL, options: .atomic) }
     }
 
-    private static func read(for place: Place) -> [FuorirottaCore.MapPin]? {
-        guard let data = try? Data(contentsOf: url(for: place)) else { return nil }
-        return try? JSONDecoder().decode([FuorirottaCore.MapPin].self, from: data)
+    nonisolated private static func readDisk() -> DiskCopy? {
+        guard let data = try? Data(contentsOf: diskURL) else { return nil }
+        return try? JSONDecoder().decode(DiskCopy.self, from: data)
     }
 }

@@ -102,18 +102,20 @@ struct HomeView: View {
     @State private var followCount = 0  // contatore per .sensoryFeedback(.selection)
     @State private var dismissedRecommended = UserDefaults.standard.string(forKey: "fr.dismissedRecommended")
     @State private var model = HomeModel()
+    @State private var allEvents = AllEventsModel()
     @State private var current: Int?
     @State private var heroVisible = true
     @State private var scrollBusy = false
     @State private var scrollTouches = 0
     @State private var topInset: CGFloat = 0
     @State private var showPlaceSheet = false
-    @State private var showSettings = false
 
     var body: some View {
         EventStack(path: Bindable(router).homePath) {
+            ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                // Pigro: la lista nazionale e' infinita. Le intestazioni fissate sono quelle di "Tutti gli eventi".
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     heroSection
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         if model.offline {
@@ -133,16 +135,23 @@ struct HomeView: View {
                     }
                     .padding(.top, Spacing.xl)
                     .padding(.bottom, Spacing.xl)
+                    // Ultima: una lista senza fine non puo' avere niente sotto. L'intestazione fissata e' il titolo della sezione col filtro per categoria.
+                    if model.phase == .loaded {
+                        Color.clear.frame(height: 0).id(Self.allEventsTop)
+                        AllEventsSection(model: allEvents, topInset: topInset)
+                    }
                 }
             }
+            // Un altro filtro: si riparte dall'inizio della lista, col titolo fissato in alto (giro telefono F5).
+            .onChange(of: allEvents.categories) { proxy.scrollTo(Self.allEventsTop, anchor: .top) }
             // L'eroe sale fino al bordo alto, sotto la status bar (REF Omniphile): niente barra di navigazione.
             .ignoresSafeArea(edges: .top)
             .toolbar(.hidden, for: .navigationBar)
             .background(Color.background)
-            .refreshable { await load() }
+            .refreshable { await refresh() }
+            }
         }
         .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
-        .sheet(isPresented: $showSettings) { SettingsView() }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
         .sensoryFeedback(.selection, trigger: followCount)
@@ -151,6 +160,8 @@ struct HomeView: View {
             Task { await model.reloadFeed(api: api) }
         }
     }
+
+    private static let allEventsTop = "all-events-top"
 
     private struct LoadKey: Equatable {
         let place: Place
@@ -167,36 +178,36 @@ struct HomeView: View {
         await model.load(api: api, place: location.place, signedIn: signedIn)
     }
 
+    /// Il pull-to-refresh aggiorna anche la lista nazionale.
+    private func refresh() async {
+        async let all: Void = allEvents.restart(api: api)
+        await load()
+        await all
+    }
+
     // MARK: Eroe e intestazione
 
-    private var onPhoto: Bool { model.phase == .loaded && !model.hero.isEmpty }
-
     private var heroSection: some View {
-        ZStack(alignment: .top) {
-            heroContent
-            if onPhoto {
-                // Sfumatura in alto: il bianco dell'intestazione regge su qualunque foto.
-                LinearGradient(colors: [Color.scrim.opacity(0.6), Color.scrim.opacity(0)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: topInset + 140)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .allowsHitTesting(false)
-            }
+        VStack(alignment: .leading, spacing: Spacing.md) {
             header
+            heroContent
         }
     }
 
     @ViewBuilder private var heroContent: some View {
         switch model.phase {
         case .loading:
-            Color.surface
-                .frame(height: HeroCard.height + topInset)
+            RoundedRectangle(cornerRadius: Radius.hero, style: .continuous)
+                .fill(Color.surface)
+                .frame(height: HeroCard.height)
+                .padding(.horizontal, Spacing.md)
                 .accessibilityHidden(true)
         case .failed:
-            Color.clear.frame(height: headerReserve)
+            EmptyView()
         case .loaded:
             if model.hero.isEmpty {
                 // Eroe vuoto: si nasconde, resta l'intestazione e la riga "Nessun evento questo weekend".
-                emptyWeekend.padding(.top, headerReserve)
+                emptyWeekend
             } else {
                 hero(model.hero)
             }
@@ -230,30 +241,26 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        let ink: Color = onPhoto ? .white : Color.foreground
-        let sub: Color = onPhoto ? .white.opacity(0.85) : Color.mutedForeground
-        return VStack(spacing: Spacing.sm) {
+        VStack(spacing: Spacing.sm) {
             HStack(alignment: .top, spacing: Spacing.md) {
                 Button { showPlaceSheet = true } label: {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("Questo weekend").font(.display).foregroundStyle(ink)
+                        Text("Questo weekend").font(.display).foregroundStyle(Color.foreground)
                         Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to, locale: .app) + " · " + location.place.name)
                             .font(.label)
-                            .foregroundStyle(sub)
+                            .foregroundStyle(Color.mutedForeground)
                     }
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                // Capsula di vetro in alto a destra (REF Omniphile): zona | impostazioni, due azioni in un solo gruppo.
+                // Capsula di vetro in alto a destra (REF Omniphile): la zona, nel suo gruppo di vetro.
                 GlassEffectContainer {
                     HStack(spacing: 0) {
                         Button { showPlaceSheet = true } label: { capsuleIcon("location") }
                             .accessibilityLabel("Cambia posizione")
                             .accessibilityHint("Apre la scelta della zona")
-                        Button { showSettings = true } label: { capsuleIcon("gearshape") }
-                            .accessibilityLabel("Impostazioni")
                     }
                     .glassEffect(.regular.interactive(), in: .capsule)
                 }
@@ -271,9 +278,6 @@ struct HomeView: View {
             .frame(width: 48, height: 44)
             .contentShape(Rectangle())
     }
-
-    /// Altezza riservata all'intestazione quando sotto non c'e' la foto.
-    private var headerReserve: CGFloat { topInset + 96 + (showsUpdateBanner ? 96 : 0) }
 
     private var emptyWeekend: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -298,7 +302,7 @@ struct HomeView: View {
     /// L'avanzamento automatico gira solo se l'eroe si vede e nessuno lo sta usando.
     private var autoplay: Bool {
         motionOK && heroVisible && scenePhase == .active && router.tab == .home && router.homePath.isEmpty
-            && !showSettings && !showPlaceSheet && !scrollBusy
+            && !showPlaceSheet && !scrollBusy
     }
 
     private struct AutoKey: Hashable {
@@ -315,11 +319,13 @@ struct HomeView: View {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 0) {
                     ForEach(picks) { event in
-                        HeroCard(event: event, topInset: topInset, zooming: motionOK && (current ?? picks[0].id) == event.id)
+                        HeroCard(event: event, zooming: motionOK && (current ?? picks[0].id) == event.id)
+                            .padding(.horizontal, Spacing.md)
                             .containerRelativeFrame(.horizontal)
                     }
                     if looping, let first = picks.first {
-                        HeroCard(event: first, topInset: topInset, slot: "hero-loop", zooming: motionOK && current == Self.loopID)
+                        HeroCard(event: first, slot: "hero-loop", zooming: motionOK && current == Self.loopID)
+                            .padding(.horizontal, Spacing.md)
                             .containerRelativeFrame(.horizontal)
                             .id(Self.loopID)
                             .accessibilityHidden(true)
@@ -392,8 +398,7 @@ struct HomeView: View {
             if signedIn { forYouSection }
             railSection(
                 String(localized: "Vicino a te"), events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
-                count: model.nearbyTotal, subtitle: String(localized: "Entro 50 km da \(location.place.name)"),
-                list: .nearby(location.place))
+                count: model.nearbyTotal, list: .nearby(location.place))
             if !signedIn { inviteCard }
         }
     }
@@ -412,7 +417,7 @@ struct HomeView: View {
             } else {
                 railSection(
                     String(localized: "Per te"), events: page.items, style: .wide, icon: "sparkles", count: page.total,
-                    subtitle: String(localized: "Scelti da quello che segui"), list: .forYou)
+                    list: .forYou)
             }
         } else if model.forYouFailed {
             VStack(alignment: .leading, spacing: Spacing.md) {
@@ -488,31 +493,26 @@ struct HomeView: View {
     private enum RailStyle { case poster, wide }
 
     /// Titolo in grassetto con il chevron (REF Omniphile) e "Vedi tutto": apre l'elenco della stessa fonte, fino a 100.
-    /// Con `icon`, `count` e `subtitle` l'intestazione e' quella delle file larghe ("Per te"); senza, quella delle locandine.
+    /// Con `icon` e `count` l'intestazione e' quella delle file larghe ("Per te"): icona, titolo e numero di eventi.
     private func railSection(
-        _ title: String, events: [Event], style: RailStyle, icon: String? = nil, iconColor: Color = .accentToken, count: Int? = nil, subtitle: String? = nil,
+        _ title: String, events: [Event], style: RailStyle, icon: String? = nil, iconColor: Color = .accentToken, count: Int? = nil,
         list: EventListRoute.Source
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             NavigationLink(value: EventListRoute(title: title, source: list)) {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    HStack(spacing: Spacing.sm) {
-                        if let icon { SettingsTile(symbol: icon, color: iconColor) }
-                        Text(title).font(.heading).foregroundStyle(Color.foreground)
-                        Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
-                            .accessibilityHidden(true)
-                        if let count {
-                            Text(verbatim: count == 1 ? String(localized: "1 evento") : String(localized: "\(count) eventi"))
-                                .font(.label)
-                                .foregroundStyle(Color.mutedForeground)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Text("Vedi tutto").font(.label.weight(.semibold)).foregroundStyle(Color.accentToken).fixedSize()
+                HStack(spacing: Spacing.sm) {
+                    if let icon { SettingsTile(symbol: icon, color: iconColor) }
+                    Text(title).font(.heading).foregroundStyle(Color.foreground)
+                    Image(systemName: "chevron.right").font(.label.weight(.semibold)).foregroundStyle(Color.foreground)
+                        .accessibilityHidden(true)
+                    if let count {
+                        Text(verbatim: count == 1 ? String(localized: "1 evento") : String(localized: "\(count) eventi"))
+                            .font(.label)
+                            .foregroundStyle(Color.mutedForeground)
+                            .lineLimit(1)
                     }
-                    if let subtitle {
-                        Text(subtitle).font(.label).foregroundStyle(Color.mutedForeground)
-                    }
+                    Spacer()
+                    Text("Vedi tutto").font(.label.weight(.semibold)).foregroundStyle(Color.accentToken).fixedSize()
                 }
                 .padding(.horizontal, Spacing.md)
                 .frame(minHeight: 44)

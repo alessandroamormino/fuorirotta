@@ -6,6 +6,7 @@ final class UAT5UITests: LocalTestCase {
     private func launch() -> XCUIApplication {
         let app = localApp()
         app.launch()
+        app.tabBars.buttons["Eventi"].tap()  // F7: l'app si apre sulla Mappa
         return app
     }
 
@@ -47,7 +48,7 @@ final class UAT5UITests: LocalTestCase {
         tap(heart, in: app)
         defer {
             // Lascia la lista com'era: toglie il cuore dalla Home. Se l'eroe lo ha portato fuori schermo, si aspetta che torni.
-            app.tabBars.buttons["Home"].tap()
+            app.tabBars.buttons["Eventi"].tap()
             for _ in 0..<40 {
                 if let filled = onScreen("heart.fill", in: app) { tap(filled, in: app); break }
                 Thread.sleep(forTimeInterval: 0.5)

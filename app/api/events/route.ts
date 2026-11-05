@@ -168,7 +168,11 @@ export async function GET(request: NextRequest) {
 
 		// Parametri query
 		const search = searchParams.get("search") || "";
-		const category = searchParams.get("category") || "";
+		// Piu' categorie = lo stesso parametro ripetuto (27.1-14). Dedup e tetto a 10
+		// (le categorie sono 7): limita l'OR della query (T-27.1-40).
+		const categories = [
+			...new Set(searchParams.getAll("category").filter((c) => c && c !== "all")),
+		].slice(0, 10);
 		const dateFrom = searchParams.get("dateFrom");
 		const dateTo = searchParams.get("dateTo");
 		const lat = searchParams.get("lat");
@@ -186,6 +190,9 @@ export async function GET(request: NextRequest) {
 		const limit = clampInt(searchParams.get("limit"), 16, 1, 100);
 		const offset = clampInt(searchParams.get("offset"), 0, 0, 100_000);
 		const location = searchParams.get("location") || "";
+		// Pagina "magra" per la lista dell'app (Fase 27.1, D-15): stessa pagina e
+		// stesso total, ma senza la composizione di TUTTI gli eventi per la mappa.
+		const lean = searchParams.get("mapEvents") === "0";
 
 		// Identita' esatta del comune selezionata dall'autocomplete (D-01, D-07,
 		// T-09-05): comuneId accettato solo se intero positivo, altrimenti
@@ -354,8 +361,14 @@ export async function GET(request: NextRequest) {
 		// grezza. Un nome canonico non compare mai nella colonna raw, quindi
 		// filtrare su where.category restituirebbe sempre zero righe. Additivo
 		// alla restrizione canonicalEventId:null sopra (D-13), non la sostituisce.
-		if (category && category !== "all") {
-			where.canonicalCategory = { equals: category, mode: "insensitive" };
+		// Piu' categorie = lo stesso parametro ripetuto, additivo, per il filtro a
+		// multiselezione dell'app (27.1-14).
+		if (categories.length > 0) {
+			andGroups.push({
+				OR: categories.map((c) => ({
+					canonicalCategory: { equals: c, mode: "insensitive" as const },
+				})),
+			});
 		}
 
 		// Identita' esatta del comune (D-01): un evento agganciato a comuneId ma
@@ -497,9 +510,11 @@ export async function GET(request: NextRequest) {
 			// fuori. Riusare le righe intere e la stessa funzione factorizzata e'
 			// piu' semplice di una select parziale ad-hoc, e il costo in byte e'
 			// accettabile al volume attuale (~2.700 eventi).
-			const composedMapEvents = await withComposedFields(allMatchingEvents);
-
-			mapEvents = composedMapEvents.map(toMapEvent);
+			// Con mapEvents=0 la lista dell'app pagina 30 alla volta e ha un suo file
+			// per la mappa (RESEARCH Pitfall 5): niente composizione dell'intero set.
+			mapEvents = lean
+				? []
+				: (await withComposedFields(allMatchingEvents)).map(toMapEvent);
 		}
 
 		// ========== INDICATORE DI COPERTURA (D-06/D-07) ==========

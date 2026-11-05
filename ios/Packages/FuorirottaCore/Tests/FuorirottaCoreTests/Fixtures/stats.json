@@ -1,0 +1,1280 @@
+{
+  "generatedFrom": "lib/stats/compute.ts e lib/visited/rules.ts",
+  "cases": [
+    {
+      "name": "vuoto",
+      "year": 2026,
+      "saved": [],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 0
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 0
+        }
+      }
+    },
+    {
+      "name": "un giorno, formato UTC",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-10-15T00:00:00.000Z",
+          "dateEnd": "2026-10-15T23:59:59.999Z",
+          "category": "Sagre e feste"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-10-15": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "un giorno, formato Roma",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-10-14T22:00:00.000Z",
+          "dateEnd": "2026-10-15T21:59:59.999Z",
+          "category": "Sagre e feste"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-10-15": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "fine nulla",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-10-04T00:00:00.000Z",
+          "dateEnd": null,
+          "category": "Arte e cultura"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-10-04": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Arte e cultura",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "14 giorni: tutti accesi",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-06-01T00:00:00.000Z",
+          "dateEnd": "2026-06-14T23:59:59.999Z",
+          "category": "Fiere e mercati"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-06-01": 1,
+            "2026-06-02": 1,
+            "2026-06-03": 1,
+            "2026-06-04": 1,
+            "2026-06-05": 1,
+            "2026-06-06": 1,
+            "2026-06-07": 1,
+            "2026-06-08": 1,
+            "2026-06-09": 1,
+            "2026-06-10": 1,
+            "2026-06-11": 1,
+            "2026-06-12": 1,
+            "2026-06-13": 1,
+            "2026-06-14": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Fiere e mercati",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "15 giorni: solo il primo",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-06-01T00:00:00.000Z",
+          "dateEnd": "2026-06-15T23:59:59.999Z",
+          "category": "Fiere e mercati"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-06-01": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Fiere e mercati",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "a cavallo di fine mese",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-07-30T00:00:00.000Z",
+          "dateEnd": "2026-08-02T23:59:59.999Z",
+          "category": "Musica e spettacolo"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-07-30": 1,
+            "2026-07-31": 1,
+            "2026-08-01": 1,
+            "2026-08-02": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Musica e spettacolo",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "a cavallo di fine anno, anno 2026",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-12-30T00:00:00.000Z",
+          "dateEnd": "2027-01-02T23:59:59.999Z",
+          "category": "Sport e outdoor"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-12-30": 1,
+            "2026-12-31": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ],
+          "perCategory": [
+            [
+              "Sport e outdoor",
+              1
+            ]
+          ],
+          "years": [
+            2026,
+            2027
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "a cavallo di fine anno, anno 2027",
+      "year": 2027,
+      "saved": [
+        {
+          "dateStart": "2026-12-30T00:00:00.000Z",
+          "dateEnd": "2027-01-02T23:59:59.999Z",
+          "category": "Sport e outdoor"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2027-01-01": 1,
+            "2027-01-02": 1
+          },
+          "perMonth": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sport e outdoor",
+              1
+            ]
+          ],
+          "years": [
+            2026,
+            2027
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 1
+        }
+      }
+    },
+    {
+      "name": "categoria sconosciuta e nulla vanno in Altro",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-05-01T00:00:00.000Z",
+          "dateEnd": "2026-05-01T23:59:59.999Z",
+          "category": "Inventata"
+        },
+        {
+          "dateStart": "2026-05-02T00:00:00.000Z",
+          "dateEnd": "2026-05-02T23:59:59.999Z",
+          "category": null
+        },
+        {
+          "dateStart": "2026-05-03T00:00:00.000Z",
+          "dateEnd": "2026-05-03T23:59:59.999Z",
+          "category": "Altro"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-05-01": 1,
+            "2026-05-02": 1,
+            "2026-05-03": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Altro",
+              3
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 3
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 3
+        }
+      }
+    },
+    {
+      "name": "pari conteggio: ordine della tassonomia",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-04-01T00:00:00.000Z",
+          "dateEnd": "2026-04-01T23:59:59.999Z",
+          "category": "Food & Wine"
+        },
+        {
+          "dateStart": "2026-04-02T00:00:00.000Z",
+          "dateEnd": "2026-04-02T23:59:59.999Z",
+          "category": "Sagre e feste"
+        },
+        {
+          "dateStart": "2026-04-03T00:00:00.000Z",
+          "dateEnd": "2026-04-03T23:59:59.999Z",
+          "category": "Musica e spettacolo"
+        },
+        {
+          "dateStart": "2026-04-04T00:00:00.000Z",
+          "dateEnd": "2026-04-04T23:59:59.999Z",
+          "category": "Musica e spettacolo"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-04-01": 1,
+            "2026-04-02": 1,
+            "2026-04-03": 1,
+            "2026-04-04": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            0,
+            4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Musica e spettacolo",
+              2
+            ],
+            [
+              "Sagre e feste",
+              1
+            ],
+            [
+              "Food & Wine",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 4
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 4
+        }
+      }
+    },
+    {
+      "name": "piu eventi nello stesso giorno e in anni diversi",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-03-01T00:00:00.000Z",
+          "dateEnd": "2026-03-02T23:59:59.999Z",
+          "category": "Sagre e feste"
+        },
+        {
+          "dateStart": "2026-03-02T00:00:00.000Z",
+          "dateEnd": "2026-03-02T23:59:59.999Z",
+          "category": "Arte e cultura"
+        },
+        {
+          "dateStart": "2025-03-02T00:00:00.000Z",
+          "dateEnd": "2025-03-02T23:59:59.999Z",
+          "category": "Arte e cultura"
+        }
+      ],
+      "visited": [],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-03-01": 1,
+            "2026-03-02": 2
+          },
+          "perMonth": [
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ],
+            [
+              "Arte e cultura",
+              1
+            ]
+          ],
+          "years": [
+            2025,
+            2026
+          ]
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "tilesAlways": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 3
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 2
+        }
+      }
+    },
+    {
+      "name": "visitati: due nello stesso giorno, categoria nulla, anno prima",
+      "year": 2026,
+      "saved": [
+        {
+          "dateStart": "2026-03-01T00:00:00.000Z",
+          "dateEnd": "2026-03-01T23:59:59.999Z",
+          "category": "Sagre e feste"
+        },
+        {
+          "dateStart": "2025-12-30T00:00:00.000Z",
+          "dateEnd": "2026-01-01T23:59:59.999Z",
+          "category": "Arte e cultura"
+        },
+        {
+          "dateStart": "2025-05-05T00:00:00.000Z",
+          "dateEnd": "2025-05-05T23:59:59.999Z",
+          "category": "Altro"
+        }
+      ],
+      "visited": [
+        {
+          "visitDay": "2026-03-01",
+          "category": "Musica e spettacolo"
+        },
+        {
+          "visitDay": "2026-03-01",
+          "category": "Altro"
+        },
+        {
+          "visitDay": "2026-07-14",
+          "category": null
+        },
+        {
+          "visitDay": "2025-12-31",
+          "category": "Sagre e feste"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {
+            "2026-01-01": 1,
+            "2026-03-01": 1
+          },
+          "perMonth": [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ],
+            [
+              "Arte e cultura",
+              1
+            ]
+          ],
+          "years": [
+            2025,
+            2026
+          ]
+        },
+        "visited": {
+          "days": {
+            "2026-03-01": 2,
+            "2026-07-14": 1
+          },
+          "perMonth": [
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Altro",
+              2
+            ],
+            [
+              "Musica e spettacolo",
+              1
+            ]
+          ],
+          "years": [
+            2025,
+            2026
+          ]
+        },
+        "tilesAlways": {
+          "daysOut": 3,
+          "visited": 4,
+          "saved": 3
+        },
+        "tilesYear": {
+          "daysOut": 2,
+          "visited": 3,
+          "saved": 2
+        }
+      }
+    },
+    {
+      "name": "visitati: pari conteggio e categoria sconosciuta",
+      "year": 2026,
+      "saved": [],
+      "visited": [
+        {
+          "visitDay": "2026-01-31",
+          "category": "Food & Wine"
+        },
+        {
+          "visitDay": "2026-02-01",
+          "category": "Sagre e feste"
+        },
+        {
+          "visitDay": "2026-02-02",
+          "category": "Inventata"
+        },
+        {
+          "visitDay": "2026-02-02",
+          "category": "Sport e outdoor"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "visited": {
+          "days": {
+            "2026-01-31": 1,
+            "2026-02-01": 1,
+            "2026-02-02": 2
+          },
+          "perMonth": [
+            1,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [
+            [
+              "Sagre e feste",
+              1
+            ],
+            [
+              "Sport e outdoor",
+              1
+            ],
+            [
+              "Food & Wine",
+              1
+            ],
+            [
+              "Altro",
+              1
+            ]
+          ],
+          "years": [
+            2026
+          ]
+        },
+        "tilesAlways": {
+          "daysOut": 3,
+          "visited": 4,
+          "saved": 0
+        },
+        "tilesYear": {
+          "daysOut": 3,
+          "visited": 4,
+          "saved": 0
+        }
+      }
+    },
+    {
+      "name": "visitati senza salvati, anno senza visite",
+      "year": 2024,
+      "saved": [],
+      "visited": [
+        {
+          "visitDay": "2026-06-06",
+          "category": "Arte e cultura"
+        }
+      ],
+      "expect": {
+        "saved": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": []
+        },
+        "visited": {
+          "days": {},
+          "perMonth": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "perCategory": [],
+          "years": [
+            2026
+          ]
+        },
+        "tilesAlways": {
+          "daysOut": 1,
+          "visited": 1,
+          "saved": 0
+        },
+        "tilesYear": {
+          "daysOut": 0,
+          "visited": 0,
+          "saved": 0
+        }
+      }
+    }
+  ],
+  "visitDay": [
+    {
+      "dateStart": "2026-11-04T00:00:00.000Z",
+      "dateEnd": "2026-11-04T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": null
+    },
+    {
+      "dateStart": "2026-11-05T00:00:00.000Z",
+      "dateEnd": null,
+      "today": "2026-11-03",
+      "expect": null
+    },
+    {
+      "dateStart": "2026-11-03T00:00:00.000Z",
+      "dateEnd": "2026-11-03T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-11-03"
+    },
+    {
+      "dateStart": "2026-11-03T00:00:00.000Z",
+      "dateEnd": null,
+      "today": "2026-11-03",
+      "expect": "2026-11-03"
+    },
+    {
+      "dateStart": "2026-11-02T00:00:00.000Z",
+      "dateEnd": "2026-11-04T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-11-03"
+    },
+    {
+      "dateStart": "2026-11-03T00:00:00.000Z",
+      "dateEnd": "2026-11-06T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-11-03"
+    },
+    {
+      "dateStart": "2026-10-30T00:00:00.000Z",
+      "dateEnd": "2026-11-03T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-11-03"
+    },
+    {
+      "dateStart": "2026-10-24T00:00:00.000Z",
+      "dateEnd": "2026-10-26T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-10-24"
+    },
+    {
+      "dateStart": "2026-10-01T00:00:00.000Z",
+      "dateEnd": null,
+      "today": "2026-11-03",
+      "expect": "2026-10-01"
+    },
+    {
+      "dateStart": "2026-11-03T23:00:00.000Z",
+      "dateEnd": "2026-11-04T22:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": null
+    },
+    {
+      "dateStart": "2026-11-02T23:00:00.000Z",
+      "dateEnd": "2026-11-03T22:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-11-03"
+    },
+    {
+      "dateStart": "2026-10-23T23:00:00.000Z",
+      "dateEnd": "2026-10-24T22:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-10-24"
+    },
+    {
+      "dateStart": "2023-08-10T00:00:00.000Z",
+      "dateEnd": "2023-08-12T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2023-08-10"
+    },
+    {
+      "dateStart": "2019-12-09T00:00:00.000Z",
+      "dateEnd": "2029-12-31T23:59:59.999Z",
+      "today": "2026-11-03",
+      "expect": "2026-11-03"
+    }
+  ]
+}

@@ -164,3 +164,15 @@ export async function getClusterCache(): Promise<ClusterCacheData | null> {
     computedAt: cache.computedAt,
   };
 }
+
+/**
+ * Solo l'istante dell'ultimo calcolo: serve all'ETag di /api/events/clusters
+ * senza leggere la colonna geojson (~2 MB).
+ */
+export async function getClusterComputedAt(): Promise<Date | null> {
+  const row = await prisma.mapClusterCache.findUnique({
+    where: { id: 'default' },
+    select: { computedAt: true },
+  });
+  return row?.computedAt ?? null;
+}

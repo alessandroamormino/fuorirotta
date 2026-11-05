@@ -7,6 +7,7 @@ final class UAT7BUITests: LocalTestCase {
     private func launch() -> XCUIApplication {
         let app = localApp()
         app.launch()
+        app.tabBars.buttons["Eventi"].tap()  // F7: l'app si apre sulla Mappa
         return app
     }
 
@@ -15,9 +16,9 @@ final class UAT7BUITests: LocalTestCase {
     func testGuestFollowOpensSignIn() {
         let app = launch()
         XCTAssertTrue(app.buttons.matching(identifier: "heart").firstMatch.waitForExistence(timeout: 20))
-        let hero = app.buttons.allElementsBoundByIndex.first { $0.frame.height > 340 && abs($0.frame.minX) < 1 }
-        guard let hero else { return XCTFail("nessun eroe nella Home") }
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: hero.frame.midX, dy: hero.frame.midY)).tap()
+        XCTAssertTrue(app.buttons["hero"].firstMatch.waitForExistence(timeout: 20))
+        guard let hero = onScreen("hero", in: app) else { return XCTFail("nessun eroe nella Home") }
+        tap(hero, in: app)
         let follow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Segui'")).firstMatch
         XCTAssertTrue(follow.waitForExistence(timeout: 10), "nessuna riga Segui nel dettaglio")
         for _ in 0..<4 where !follow.isHittable { app.swipeUp() }

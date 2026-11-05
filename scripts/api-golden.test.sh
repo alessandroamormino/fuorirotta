@@ -24,6 +24,10 @@
 #   G12 places-search     GET /api/places/search?q=berg
 #   G13 me-state-signed   GET /api/v1/me/state da loggato (con plan e features)
 #   G14 me-state-anon     GET /api/v1/me/state da anonimo, byte per byte
+#   G15 events-lean       GET /api/events?search=<M>&limit=100&mapEvents=0 (stessa pagina, mapEvents vuoto)
+#   G16 clusters-etag     GET /api/events/clusters con ETag; If-None-Match uguale -> 304 senza corpo
+#
+#   G17 events-multicat   GET /api/events?search=<M>&limit=100&mapEvents=0 con category ripetuto (unione delle due)
 #
 # <M> e' un marcatore unico nei titoli delle fixture (sorgente riservata '__golden__'):
 # il DB locale ha ~9,6k eventi veri, con search=<M> in lista ci sono solo le fixture.
@@ -174,11 +178,43 @@ record_or_compare() {
 # --- G1 (tracer): la busta della lista ------------------------------------------------------------
 record_or_compare events-search "GET /api/events?search=<M>&limit=100" "/api/events?search=${marker}&limit=100"
 
+# --- G15: la pagina "magra" (mapEvents=0) ha gli stessi eventi e lo stesso total, mapEvents vuoto ---
+record_or_compare events-lean "GET /api/events?search=<M>&limit=100&mapEvents=0" \
+  "/api/events?search=${marker}&limit=100&mapEvents=0"
+node -e '
+  const fs = require("fs");
+  const full = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const lean = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const ids = (b) => b.events.map((e) => e.id).join(",");
+  if (lean.mapEvents.length !== 0) { console.log("mapEvents non vuoto: " + lean.mapEvents.length); process.exit(1); }
+  if (lean.total !== full.total) { console.log("total diverso: " + lean.total + " vs " + full.total); process.exit(1); }
+  if (ids(lean) !== ids(full)) { console.log("eventi o ordine diversi: " + ids(lean) + " vs " + ids(full)); process.exit(1); }
+  if (full.mapEvents.length === 0) { console.log("il corpo pieno ha mapEvents vuoto: confronto privo di senso"); process.exit(1); }
+' "${tmp_dir}/events-search.b" "${tmp_dir}/events-lean.b" || fail "G15: la pagina magra diverge dalla piena"
+echo "ok  G15: mapEvents=0 -> stessi eventi (stesso ordine) e stesso total, mapEvents vuoto"
+
 # --- G2/G3: gli altri percorsi di codice della lista --------------------------------------------
 record_or_compare events-radius "GET /api/events?search=<M>&lat=<lat>&lng=<lng>&radius=50&limit=100" \
   "/api/events?search=${marker}&lat=${full_lat}&lng=${full_lng}&radius=50&limit=100"
 record_or_compare events-filter "GET /api/events?search=<M>&category=Sagre e feste&dateFrom=<oggi>&dateTo=<data+1>" \
   "/api/events?search=${marker}&category=Sagre%20e%20feste&dateFrom=${today}&dateTo=${next_day}"
+
+# --- G17: category ripetuto = unione delle due categorie, total sommato ---------------------------
+q17="search=${marker}&limit=100&mapEvents=0"
+for c in "g17-a:category=Sagre%20e%20feste" "g17-b:category=Altro" "g17-ab:category=Sagre%20e%20feste&category=Altro"; do
+  code="$(call "${c%%:*}" "/api/events?${q17}&${c#*:}")"
+  [[ "${code}" == "200" ]] || fail "G17: ${c%%:*} ha risposto ${code}"
+done
+node -e '
+  const fs = require("fs");
+  const [a, b, ab] = process.argv.slice(1).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
+  if (a.total < 1 || b.total < 1) { console.log("una categoria singola e vuota: " + a.total + ", " + b.total); process.exit(1); }
+  if (ab.total !== a.total + b.total) { console.log("total " + ab.total + " != " + a.total + " + " + b.total); process.exit(1); }
+  const ids = (x) => x.events.map((e) => e.id).sort((p, q) => p - q).join(",");
+  const union = [...a.events, ...b.events].map((e) => e.id).sort((p, q) => p - q).join(",");
+  if (ids(ab) !== union) { console.log("ids diversi: " + ids(ab) + " vs " + union); process.exit(1); }
+' "${tmp_dir}/g17-a.b" "${tmp_dir}/g17-b.b" "${tmp_dir}/g17-ab.b" || fail "G17: l'unione delle due categorie non torna"
+echo "ok  G17: category ripetuto -> unione delle due categorie, total sommato"
 
 # --- G4-G8: il dettaglio, le due facce delle colonne nullable, gli errori, il 307 ---------------
 record_or_compare event-full "GET /api/events/<id> (tutte le colonne valorizzate)" "/api/events/${F_FULL}"
@@ -189,6 +225,20 @@ record_or_compare event-member "GET /api/events/<id membro> (307 verso la canoni
 
 # --- G9-G12: il catalogo (sui dati locali veri, quindi solo la forma) ----------------------------
 record_or_compare clusters "GET /api/events/clusters" "/api/events/clusters"
+
+# --- G16: il file nazionale dei pin si rivalida con ETag/304 (serve una riga di cache) ----------
+cache_rows="$(psql_dev "SELECT count(*) FROM map_cluster_cache")"
+[[ "${cache_rows}" -ge 1 ]] || fail "G16: map_cluster_cache vuota nel DB locale (seed: updateClusterCache)"
+code="$(call clusters-etag "/api/events/clusters")"
+[[ "${code}" == "200" ]] || fail "G16: clusters: atteso 200, ottenuto ${code}"
+etag="$(grep -i '^etag:' "${tmp_dir}/clusters-etag.h" | head -n 1 | cut -d: -f2- | tr -d '\r' | sed 's/^ *//')"
+[[ "${etag}" =~ ^\"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z\"$ ]] || fail "G16: ETag assente o malformato: '${etag}'"
+code="$(call clusters-304 "/api/events/clusters" -H "If-None-Match: ${etag}")"
+[[ "${code}" == "304" ]] || fail "G16: If-None-Match uguale: atteso 304, ottenuto ${code}"
+[[ ! -s "${tmp_dir}/clusters-304.b" ]] || fail "G16: il 304 ha un corpo"
+code="$(call clusters-stale "/api/events/clusters" -H 'If-None-Match: "1999-01-01T00:00:00.000Z"')"
+[[ "${code}" == "200" ]] || fail "G16: If-None-Match diverso: atteso 200, ottenuto ${code}"
+echo "ok  G16: clusters ETag ${etag} -> 304 senza corpo; ETag diverso -> 200"
 record_or_compare categories "GET /api/categories" "/api/categories"
 record_or_compare comuni-search "GET /api/comuni/search?q=vigo" "/api/comuni/search?q=vigo"
 record_or_compare places-search "GET /api/places/search?q=berg" "/api/places/search?q=berg"

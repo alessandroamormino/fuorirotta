@@ -6,6 +6,7 @@ final class UAT7UITests: LocalTestCase {
     private func launch() -> XCUIApplication {
         let app = localApp()
         app.launch()
+        app.tabBars.buttons["Eventi"].tap()  // F7: l'app si apre sulla Mappa
         return app
     }
 
@@ -14,12 +15,12 @@ final class UAT7UITests: LocalTestCase {
     @discardableResult
     private func openHeroDetail(_ app: XCUIApplication) -> String {
         XCTAssertTrue(app.buttons.matching(identifier: "heart").firstMatch.waitForExistence(timeout: 20))
-        let hero = app.buttons.allElementsBoundByIndex.first { $0.frame.height > 340 && abs($0.frame.minX) < 1 }
+        XCTAssertTrue(app.buttons["hero"].firstMatch.waitForExistence(timeout: 20))
+        let hero = onScreen("hero", in: app)
         XCTAssertNotNil(hero, "nessun eroe nella Home")
         guard let hero else { return "" }
-        let f = hero.frame
         let title = hero.label.components(separatedBy: ", ")[0]
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
+        tap(hero, in: app)
         return title
     }
 

@@ -70,3 +70,18 @@ public func savedSummary<Item>(_ days: [SavedDay<Item>], today: String) -> (tota
     }
     return (total, week)
 }
+
+/// Visitati: un blocco per giorno di VISITA (quello scelto al segno, mai il giorno dell'evento), dal piu' recente.
+/// Dentro un giorno: titolo. Ogni voce ha un giorno, quindi niente "In corso" e niente "senza data".
+public func visitedTimeline<Item: SavedTimelineItem>(
+    _ items: [(item: Item, visitDay: String)], locale: Locale = .italian
+) -> [SavedDay<Item>] {
+    let byDay = Dictionary(grouping: items, by: \.visitDay)
+    var lastMonth: String?
+    return byDay.keys.sorted(by: >).map { day in
+        let title = monthTitle(day: day, locale: locale)
+        let month = (title != nil && title != lastMonth) ? title : nil
+        if let title { lastMonth = title }
+        return SavedDay(id: "day-\(day)", day: day, isOngoing: false, month: month, items: byDay[day]!.map(\.item).sorted { $0.title < $1.title })
+    }
+}

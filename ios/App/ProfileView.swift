@@ -6,11 +6,10 @@ import SwiftUI
 enum ProfileRoute: Hashable { case stats, follows }
 
 /// Profilo (UAT7 B6, REF Omniphile): l'intestazione dell'account e cosa segue. Le statistiche hanno una schermata
-/// loro (icona grafico nella capsula in alto a destra, accanto all'ingranaggio); le Impostazioni restano nel foglio.
+/// loro (icona grafico in alto a destra); le Impostazioni stanno nella pagina, sotto l'account e gli interessi (F6, 27.1-18).
 struct ProfileView: View {
     @Environment(Session.self) private var session
     @Environment(FollowsModel.self) private var follows
-    @State private var showSettings = false
 
     private var signedIn: Bool {
         if case .signedIn = session.state { return true }
@@ -29,6 +28,7 @@ struct ProfileView: View {
                     }
                     accountCard
                     if signedIn { interests }
+                    SettingsView()
                 }
                 .padding(Spacing.md)
             }
@@ -39,19 +39,21 @@ struct ProfileView: View {
                 case .follows: FollowsView()
                 }
             }
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .sessions: SessionsView()
+                }
+            }
             .onAppear { session.clearError() }
             .sensoryFeedback(.success, trigger: session.successCount)
             .sensoryFeedback(.error, trigger: session.errorCount)
             .toolbar {
-                // Due pulsanti nella stessa capsula di vetro in alto a destra (REF Omniphile): statistiche e Impostazioni.
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                // In alto a destra solo le statistiche: le Impostazioni stanno nella pagina.
+                ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink(value: ProfileRoute.stats) { Image(systemName: "chart.bar") }
                         .accessibilityLabel("Statistiche")
-                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Impostazioni")
                 }
             }
-            .sheet(isPresented: $showSettings) { SettingsView() }
         }
     }
 
@@ -122,18 +124,23 @@ private extension ProfileView {
 struct StatsView: View {
     @Environment(Session.self) private var session
     @Environment(SavesModel.self) private var saves
+    @Environment(VisitedModel.self) private var visited
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.lg) {
-                StatsSection(items: saves.statItems)
+                StatsSection(visited: visited.statItems, saved: saves.statItems)
             }
             .padding(Spacing.md)
         }
         .background(Color.background)
         .navigationTitle("Statistiche")
         // Account: le statistiche vengono dai salvati sincronizzati; Salvati puo' non essere mai stato aperto.
-        .task(id: session.state) { if case .signedIn = session.state, saves.statItems.isEmpty { await saves.reload() } }
+        .task(id: session.state) {
+            guard case .signedIn = session.state else { return }
+            if saves.statItems.isEmpty { await saves.reload() }
+            if visited.statItems.isEmpty { await visited.reload() }
+        }
     }
 }
 

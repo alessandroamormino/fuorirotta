@@ -15,6 +15,7 @@ extension Locale {
     static let app = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "it")
 }
 
+/// `home` e' la scheda Eventi (l'ex Home, F7): il nome del caso resta perche' i link universali spingono sulla sua pila.
 enum AppTab: Hashable { case home, map, saved, profile, search }
 
 /// Un indirizzo da mostrare in un Safari dentro l'app (foglio).
@@ -26,7 +27,8 @@ struct SafariTarget: Identifiable {
 /// Dove sta l'app: la scheda attiva, la pila di Home (i link universali spingono qui) e il foglio Safari.
 @MainActor @Observable
 final class Router {
-    var tab = AppTab.home
+    /// F7: l'app si apre sulla Mappa.
+    var tab = AppTab.map
     var homePath = NavigationPath()
     var safari: SafariTarget?
     /// L'evento da mostrare nella scheda Mappa (la mappa piccola del dettaglio, UAT7 C2): la mappa lo consuma.
@@ -37,26 +39,33 @@ final class Router {
         tab = .map
     }
 
-    /// Link universali (T-27-29): solo https://fuori-rotta.it/eventi/<cifre> e /l/<token>. L'id si verifica con
-    /// l'API, la pagina della lista si mostra in Safari: niente viene eseguito o salvato. Altro: ignorato.
-    func open(_ url: URL, api: APIClient?) async {
-        guard url.scheme == "https", url.host(percentEncoded: false) == "fuori-rotta.it" else { return }
-        let parts = url.pathComponents.filter { $0 != "/" }
-        guard parts.count == 2 else { return }
-        switch parts[0] {
-        case "eventi":
-            guard let id = Int(parts[1]), parts[1].allSatisfy(\.isASCII), let api else { return }
-            guard case .found(let event)? = try? await api.event(id: id) else { return }
+    /// Link universali (T-27-29): le regole sono in `parseUniversalLink`. L'id si verifica con l'API, la pagina della
+    /// lista si mostra in Safari: niente viene eseguito o salvato. Altro: ignorato.
+    func open(_ url: URL, api: APIClient?) async -> LinkOutcome {
+        switch parseUniversalLink(url) {
+        case .event(let id)?:
+            // Solo un 404 dice "non esiste piu'": un errore di rete o di lettura non deve mai dirlo.
+            guard let api, let lookup = try? await api.event(id: id) else { return .ignored }
             tab = .home
-            homePath.append(EventRoute(event: event, slot: "link"))
-        case "l":
-            guard parts[1].allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else { return }
+            switch lookup {
+            case .found(let event):
+                homePath.append(EventRoute(event: event, slot: "link"))
+                return .opened
+            case .gone:
+                homePath = NavigationPath()
+                return .gone
+            }
+        case .list?:
             safari = SafariTarget(url: url)
-        default:
-            return
+            return .opened
+        case nil:
+            return .ignored
         }
     }
 }
+
+/// Com'e' andata l'apertura di un link universale.
+enum LinkOutcome { case opened, gone, ignored }
 
 /// SFSafariViewController non rientra nell'app: il link universale che mostra resta nel foglio.
 struct SafariView: UIViewControllerRepresentable {
@@ -78,6 +87,7 @@ struct FuorirottaApp: App {
     @State private var session: Session
     @State private var push: PushRegistration
     @State private var saves: SavesModel
+    @State private var visited: VisitedModel
     @State private var follows: FollowsModel
     @State private var location = LocationModel()
     @State private var router = Router()
@@ -97,11 +107,14 @@ struct FuorirottaApp: App {
         let pushModel = PushRegistration(api: client)
         AppDelegate.push = pushModel
         _saves = State(initialValue: savesModel)
+        // Un solo avviso per l'app: i segni passano dal banner dei salvati, senza che i due modelli si conoscano (D-04).
+        let visitedModel = VisitedModel(api: client) { [weak savesModel] in savesModel?.toast = $0 }
+        _visited = State(initialValue: visitedModel)
         let followsModel = FollowsModel(api: client)
         followsModel.notify = { [weak savesModel] in savesModel?.show($0) }
         _follows = State(initialValue: followsModel)
         _push = State(initialValue: pushModel)
-        _session = State(initialValue: Session(api: client, saves: savesModel, push: pushModel))
+        _session = State(initialValue: Session(api: client, saves: savesModel, visited: visitedModel, push: pushModel))
         #if DEBUG
         // Test UI (LocalTestCase): "-fr.resetWelcome" riporta il tutorial al primo avvio. Per saltarlo basta
         // "-fr.welcomeSeen YES" (dominio degli argomenti, vince su quello salvato); "-fr.skipInterests YES" salta gli interessi.
@@ -139,6 +152,7 @@ struct FuorirottaApp: App {
                 .environment(session)
                 .environment(push)
                 .environment(saves)
+                .environment(visited)
                 .environment(follows)
                 .environment(location)
                 .environment(router)
@@ -155,13 +169,16 @@ struct FuorirottaApp: App {
                 .task { config = await api.config(version: version) }
                 .task {
                     await saves.start()
+                    await visited.start()
                     await session.restore()
                     await push.refreshIfAuthorised()
                 }
                 // Il ritorno di Google resta il primo; il resto sono i link di fuori-rotta.it.
                 .onOpenURL { url in
                     if GIDSignIn.sharedInstance.handle(url) { return }
-                    Task { await router.open(url, api: api) }
+                    Task {
+                        if await router.open(url, api: api) == .gone { saves.show(String(localized: "Evento non più disponibile")) }
+                    }
                 }
                 .sheet(item: Bindable(router).safari) { SafariView(url: $0.url).ignoresSafeArea() }
         }
@@ -183,8 +200,8 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: Bindable(router).tab) {
-            Tab("Home", systemImage: "house", value: AppTab.home) { HomeView() }
             Tab("Mappa", systemImage: "map", value: AppTab.map) { MapScreen() }
+            Tab("Eventi", systemImage: "rectangle.stack", value: AppTab.home) { HomeView() }
             Tab("Salvati", systemImage: "heart", value: AppTab.saved) { SavedView() }
             Tab(value: AppTab.profile) {
                 ProfileView()
@@ -198,7 +215,7 @@ struct RootView: View {
             }
             Tab(value: AppTab.search, role: .search) { SearchView() }
         }
-        // Home e Salvati (le liste che scorrono) fanno ridurre la barra; la mappa non e' uno ScrollView e non la muove.
+        // Eventi e Salvati (le liste che scorrono) fanno ridurre la barra; la Mappa, prima scheda, non e' uno ScrollView e non la muove.
         .tabBarMinimizeBehavior(.onScrollDown)
         .overlay(alignment: .bottom) {
             if let toast = saves.toast {

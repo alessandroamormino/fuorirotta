@@ -23,13 +23,6 @@ enum Appearance: String, CaseIterable, Identifiable {
         case .dark: .dark
         }
     }
-    /// Per i fogli: `preferredColorScheme(nil)` su un foglio gia' forzato non lo riporta al sistema (resta scuro),
-    /// quindi "Sistema" diventa il tema reale dello schermo, che le sovrascritture delle finestre non toccano.
-    var sheetScheme: ColorScheme {
-        if let scheme { return scheme }
-        let screen = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen
-        return screen?.traitCollection.userInterfaceStyle == .dark ? .dark : .light
-    }
 }
 
 /// Stile della mappa: una sola preferenza (@AppStorage), condivisa dal tasto della mappa e da Impostazioni > Mappa.
@@ -65,11 +58,10 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
     }
 }
 
-/// Le schermate che Impostazioni spinge nella sua pila.
+/// Le schermate che Impostazioni spinge nella pila del Profilo.
 enum SettingsRoute: Hashable { case sessions }
 
-/// Impostazioni (REF Omniphile): foglio a tutta altezza chiuso da una X tonda in alto a sinistra, gruppi in card.
-/// Le righe stavano nella pagina Profilo; il Profilo tiene l'intestazione utente e cosa segue, le statistiche hanno una schermata loro.
+/// I gruppi di Impostazioni, identici, dentro il Profilo (F6, 27.1-18): niente pila, niente foglio, li impagina il Profilo.
 struct SettingsView: View {
     @Environment(Session.self) private var session
     @Environment(SavesModel.self) private var saves
@@ -77,7 +69,6 @@ struct SettingsView: View {
     @Environment(LocationModel.self) private var location
     @Environment(Router.self) private var router
     @Environment(\.openURL) private var openURL
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.api) private var api
     @AppStorage(Appearance.key) private var appearance = Appearance.system
     @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
@@ -106,40 +97,21 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.lg) {
-                    if signedIn { accountGroup }
-                    if signedIn { methodsGroup }
-                    appearanceGroup
-                    placeGroup
-                    mapGroup
-                    if signedIn { notificationsGroup }
-                    infoGroup
-                    if signedIn { dangerZone }
-                }
-                .padding(Spacing.md)
-            }
-            .background(Color.background)
-            .navigationTitle("Impostazioni")
-            .navigationDestination(for: SettingsRoute.self) { route in
-                switch route {
-                case .sessions: SessionsView()
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) { dismiss() }
-                }
-            }
-            .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
-            .sheet(item: $exportFile, onDismiss: removeExport) { file in
-                ActivityView(items: [file.url]).presentationDetents([.medium, .large]).ignoresSafeArea()
-            }
-            .sensoryFeedback(.success, trigger: push.activatedCount)
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            if signedIn { accountGroup }
+            if signedIn { methodsGroup }
+            appearanceGroup
+            placeGroup
+            mapGroup
+            if signedIn { notificationsGroup }
+            infoGroup
+            if signedIn { dangerZone }
         }
-        // L'aspetto si applica anche a questo foglio: un foglio non sempre eredita quello della finestra.
-        .preferredColorScheme(appearance.sheetScheme)
+        .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
+        .sheet(item: $exportFile, onDismiss: removeExport) { file in
+            ActivityView(items: [file.url]).presentationDetents([.medium, .large]).ignoresSafeArea()
+        }
+        .sensoryFeedback(.success, trigger: push.activatedCount)
     }
 
     // MARK: gruppi
@@ -227,10 +199,7 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .confirmationDialog("Uscire da Fuorirotta?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Esci", role: .destructive) {
-                    Task {
-                        await session.signOut()
-                        dismiss()
-                    }
+                    Task { await session.signOut() }
                 }
                 Button("Annulla", role: .cancel) {}
             } message: {
@@ -503,8 +472,7 @@ struct SettingsView: View {
                 deleteFailed = false
                 Task {
                     if await session.deleteAccount() {
-                        // Il foglio si chiude: l'avviso sta sulla Home, sotto di lui.
-                        dismiss()
+                        // L'avviso sta sulla Home: si torna li'.
                         router.tab = .home
                         saves.show(String(localized: "Account eliminato."))
                     } else if case .signedIn = session.state {

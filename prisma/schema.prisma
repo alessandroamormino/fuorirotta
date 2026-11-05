@@ -86,6 +86,7 @@ model Event {
   canonicalEvent   Event?   @relation("EventCanonical", fields: [canonicalEventId], references: [id])
   duplicates       Event[]  @relation("EventCanonical")
   savedEvents      SavedEvent[]
+  visitedEvents    VisitedEvent[]
   mergeScore       Float?   @map("merge_score")
   mergeReason      String?  @map("merge_reason") @db.VarChar(255)
 
@@ -216,6 +217,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   savedEvents   SavedEvent[]
+  visitedEvents VisitedEvent[]
   calendarFeed  CalendarFeed?
   shareLink     ShareLink?
   follows       UserFollow[]
@@ -311,6 +313,36 @@ model SavedEvent {
   @@unique([userId, source, sourceId])
   @@index([eventId])
   @@map("saved_events")
+}
+
+// Eventi visitati dall'utente, "Ci sono stato" (Fase 27.1). Stessa istantanea di
+// saved_events (la riga in `events` sparisce 7 giorni dopo la fine, la visita
+// resta): le colonne copiano i tipi di `events`, event_id e' ON DELETE SET NULL
+// con il suo indice, la chiave unica e' (utente, sorgente, id di sorgente).
+// visit_day (D-05) si sceglie UNA volta al momento del segno e non si ricalcola
+// mai: oggi a Roma se l'evento e' in corso, altrimenti il suo primo giorno.
+// DATE e non timestamp, perche' e' un giorno di calendario di Roma.
+// user_id cancella a cascata come le altre figlie di auth_user.
+model VisitedEvent {
+  id        Int       @id @default(autoincrement())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   Int?      @map("event_id")
+  event     Event?    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  title     String    @db.VarChar(500)
+  dateStart DateTime  @map("date_start") @db.Timestamp(6)
+  dateEnd   DateTime? @map("date_end") @db.Timestamp(6)
+  place     String?   @db.VarChar(255)
+  category  String    @map("canonical_category") @db.VarChar(50)
+  source    String    @db.VarChar(50)
+  sourceId  String    @map("source_id") @db.VarChar(255)
+  sourceUrl String?   @map("source_url") @db.VarChar(1000)
+  visitDay  DateTime  @map("visit_day") @db.Date
+  visitedAt DateTime  @default(now()) @map("visited_at") @db.Timestamptz(6)
+
+  @@unique([userId, source, sourceId])
+  @@index([eventId])
+  @@map("visited_events")
 }
 
 // Link del calendario dell'utente (D-11, D-13): una riga per utente. Il

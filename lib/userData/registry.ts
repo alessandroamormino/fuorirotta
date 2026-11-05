@@ -65,6 +65,17 @@ export const USER_DATA_REGISTRY: readonly UserDataEntry[] = [
       })
   },
   {
+    table: 'visited_events',
+    exportKey: 'visitedEvents',
+    // Come saved_events: solo colonne dell'utente o descrittive dell'evento, niente id interni.
+    exportRows: async (userId) =>
+      prisma.visitedEvent.findMany({
+        where: { userId },
+        select: { title: true, dateStart: true, dateEnd: true, place: true, category: true, sourceUrl: true, visitDay: true, visitedAt: true },
+        orderBy: [{ visitedAt: 'asc' }, { id: 'asc' }]
+      })
+  },
+  {
     table: 'calendar_feeds',
     exportKey: 'calendarFeed',
     // Del link del calendario si esporta quando e' nato e quando e' stato rigenerato, MAI il link

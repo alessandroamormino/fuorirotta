@@ -121,30 +121,39 @@ public struct EventsPage: Codable, Sendable {
     public let total: Int
 }
 
-/// Differenza tra i pin gia' sulla mappa e quelli in arrivo: la mappa aggiunge e toglie solo questa, mai tutto.
-/// I pin senza coordinate non si possono mostrare e vengono ignorati.
-public func pinDelta(existing: Set<Int>, incoming: [MapPin]) -> (add: [MapPin], remove: [Int]) {
-    let shown = incoming.filter { $0.lat != nil && $0.lng != nil }
-    let ids = Set(shown.map(\.id))
-    return (shown.filter { !existing.contains($0.id) }, existing.filter { !ids.contains($0) }.sorted())
-}
-
 /// /api/events/clusters: tutti i pin (GeoJSON) con l'istante di calcolo, usato anche come chiave di cache.
+/// Un file non ancora calcolato risponde `geojson: null`: e' "nessun dato" (set vuoto, `computedAt` vuoto), non un errore.
 public struct ClusterSet: Sendable {
     public let computedAt: String
     public let pins: [MapPin]
 
+    public init(computedAt: String, pins: [MapPin]) {
+        self.computedAt = computedAt
+        self.pins = pins
+    }
+
     init(_ env: ClusterEnvelope) {
-        computedAt = env.computedAt
-        pins = env.geojson.features.compactMap { f -> MapPin? in
+        computedAt = env.computedAt ?? ""
+        // Il file scrive "" per i campi mancanti (lib/clusterCache.ts): per l'app sono assenti, la categoria e' "Altro".
+        func present(_ s: String?) -> String? { s.flatMap { $0.isEmpty ? nil : $0 } }
+        pins = (env.geojson?.features ?? []).compactMap { f -> MapPin? in
             guard f.geometry.coordinates.count >= 2 else { return nil }
             let p = f.properties
             return MapPin(
-                id: p.id, title: p.title, category: p.category, imageUrl: p.imageUrl, dateStart: p.dateStart,
-                locationName: p.locationName, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
+                id: p.id, title: p.title, category: present(p.category) ?? "Altro", imageUrl: present(p.imageUrl),
+                dateStart: p.dateStart, locationName: present(p.locationName),
+                lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
             )
         }
     }
+}
+
+/// Esito di GET /api/events/clusters.
+public enum ClusterFetch: Sendable {
+    case fresh(ClusterSet, etag: String?)
+    case notModified
+    /// Risposta valida ma senza dati (`geojson: null`): non e' un errore.
+    case empty
 }
 
 struct ClusterEnvelope: Decodable {
@@ -162,8 +171,8 @@ struct ClusterEnvelope: Decodable {
         let properties: Props
     }
     struct Collection: Decodable { let features: [Feature] }
-    let computedAt: String
-    let geojson: Collection
+    let computedAt: String?
+    let geojson: Collection?
 }
 
 /// Esito di GET /api/events/{id}: l'evento, oppure 404 (cancellato). Gli altri errori sono eccezioni.
@@ -306,8 +315,22 @@ public struct APIClient: Sendable {
     }
 
     /// Tutti i pin (circa 9.000, 2,6 MB senza compressione). Le feature senza due coordinate si saltano.
-    public func clusters() async throws -> ClusterSet {
-        ClusterSet(try await get(baseURL.appendingPathComponent("api/events/clusters"), as: ClusterEnvelope.self))
+    /// `ifNoneMatch` e' l'ETag della copia che l'app ha su disco: il server risponde 304 e il file non si scarica.
+    /// La cache di URLSession e' spenta: la copia buona e' quella su disco, non una che decide il sistema.
+    public func clusters(ifNoneMatch: String?) async throws -> ClusterFetch {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/events/clusters"))
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        if let ifNoneMatch { request.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match") }
+        let data: Data
+        let http: HTTPURLResponse
+        do {
+            (data, http) = try await perform(request)
+        } catch APIError.http(status: 304, _) {
+            return .notModified
+        }
+        guard let env = try? JSONDecoder().decode(ClusterEnvelope.self, from: data) else { throw APIError.decoding }
+        guard env.geojson != nil else { return .empty }
+        return .fresh(ClusterSet(env), etag: http.value(forHTTPHeaderField: "ETag"))
     }
 
     /// Un evento con tutti i campi. Un membro fuso risponde 307 verso l'id canonico: URLSession lo segue da solo.

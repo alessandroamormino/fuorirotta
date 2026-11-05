@@ -203,3 +203,41 @@ private func titles(_ days: [SavedDay<Item>]) -> [[String]] { days.map { $0.item
         #expect(formatTimelineDay("rotto") == "rotto")
     }
 }
+
+// Visitati (27.1-10): i blocchi sono i giorni in cui sei andato, non i giorni degli eventi.
+@Suite struct VisitedTimelineTests {
+    private func visited(_ rows: [(Item, String)]) -> [SavedDay<Item>] {
+        visitedTimeline(rows.map { (item: $0.0, visitDay: $0.1) }, locale: .italian)
+    }
+
+    @Test func groupsByVisitDayNewestFirstWithMonthHeaders() {
+        let days = visited([
+            (Item("Settembre", "2026-09-10T12:00:00.000Z"), "2026-09-12"),
+            (Item("B", "2026-10-29T12:00:00.000Z"), "2026-10-30"),
+            (Item("Recente", "2026-11-03T12:00:00.000Z"), "2026-11-03"),
+            (Item("A", "2026-10-28T12:00:00.000Z"), "2026-10-30"),
+        ])
+        #expect(ids(days) == ["day-2026-11-03", "day-2026-10-30", "day-2026-09-12"])
+        #expect(titles(days) == [["Recente"], ["A", "B"], ["Settembre"]])
+        #expect(days.map(\.month) == ["Novembre 2026", "Ottobre 2026", "Settembre 2026"])
+        #expect(days.allSatisfy { !$0.isOngoing && $0.day != nil })
+    }
+
+    @Test func sameMonthHasOneHeader() {
+        let days = visited([
+            (Item("A", "2026-10-01T12:00:00.000Z"), "2026-10-30"),
+            (Item("B", "2026-10-01T12:00:00.000Z"), "2026-10-02"),
+        ])
+        #expect(days.map(\.month) == ["Ottobre 2026", nil])
+    }
+
+    @Test func eventInProgressVisitedTodayIsUnderToday() {
+        let days = visited([(Item("In corso", "2026-10-30T12:00:00.000Z", "2026-11-01T12:00:00.000Z"), "2026-10-31")])
+        #expect(ids(days) == ["day-2026-10-31"])
+        #expect(days[0].isOngoing == false)
+    }
+
+    @Test func emptyInputGivesNoBlocks() {
+        #expect(visited([]).isEmpty)
+    }
+}

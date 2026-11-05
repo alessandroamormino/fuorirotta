@@ -68,6 +68,12 @@ export type DeviceRegistration = { token: string; environment: ApnsEnvironment; 
 export const SAVED_LIST_ITEM_KEYS = ['ref', 'eventId', 'savedAt', 'snap', 'live', 'imageUrl', 'siblings'] as const
 export const SAVED_RESOLVE_ITEM_KEYS = ['ref', 'eventId', 'live', 'imageUrl', 'siblings'] as const
 
+// Visitati (Fase 27.1). GET /api/v1/me/visited risponde {items: [...]}: `ref` e' l'id della riga (parametro di
+// DELETE gone/{ref}), `eventId` l'id canonico dell'evento vivo o null se e' stato purgato, `visitedAt` ISO, `visitDay`
+// "YYYY-MM-DD" (giorno di Roma scelto dal server al primo segno), `snap` l'istantanea e `imageUrl` la foto dell'evento
+// vivo. Niente `live` ne' `siblings`. Le chiavi sono queste: il gate (check:mobile-api, VL1) le confronta con la risposta vera.
+export const VISITED_LIST_ITEM_KEYS = ['ref', 'eventId', 'visitedAt', 'visitDay', 'snap', 'imageUrl'] as const
+
 // Dettaglio evento (Fase 27, UAT7 B1). GET /api/events/{id} porta anche `comune`: {istatCode, name, provinceCode,
 // provinceName} del comune agganciato, `null` se l'evento non ne ha (circa un terzo). E' cio' che serve all'app per
 // "Segui" comune (kind 'comune', key = istatCode) e provincia (kind 'province', key = provinceCode) con le chiavi del
