@@ -278,6 +278,9 @@ struct EventDetailView: View {
         // D-02: la pillola c'e' solo dal primo giorno dell'evento; puo' stare da sola.
         let canVisit = visited.visitDay(for: event) != nil
         if link != nil || spot != nil || canVisit {
+            // Tre pulsanti in una riga troncano le etichette (UAT 27.1-12): "Ci sono stato" va sotto, a tutta larghezza.
+            VStack(spacing: Spacing.sm) {
+            if link != nil || spot != nil {
             HStack(spacing: Spacing.sm) {
                 if let link {
                     Button {
@@ -293,6 +296,8 @@ struct EventDetailView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+            }
+            }
                 if canVisit { visitedPill }
             }
             .buttonBorderShape(.capsule)
@@ -301,7 +306,7 @@ struct EventDetailView: View {
         }
     }
 
-    /// D-01: "Ci sono stato" accanto agli altri due; piena quando e' segnato. Solo qui: niente su card, file o pin.
+    /// D-01: "Ci sono stato" sotto gli altri due; piena quando e' segnato. Solo qui: niente su card, file o pin.
     @ViewBuilder private var visitedPill: some View {
         let marked = visited.isVisited(event)
         let button = Button {
