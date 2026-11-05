@@ -8,10 +8,9 @@ import { availableEventsWhere, windowStartToday } from "@/lib/dateWindow";
 
 export const revalidate = 300; // Rivalidate ogni 5 minuti
 
-// Il titolo di default del layout e' solo "Fuorirotta": per la home serve
-// quello che la gente cerca. Canonical esplicito, come le pagine regione.
+// Titolo: vale il default del layout, solo "Fuorirotta" (scelta del titolare).
+// Canonical esplicito, come le pagine regione.
 export const metadata: Metadata = {
-	title: { absolute: "Fuorirotta — Eventi, sagre e feste vicino a te" },
 	alternates: { canonical: "/" },
 };
 
