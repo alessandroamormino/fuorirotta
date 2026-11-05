@@ -161,7 +161,7 @@ struct CategoryFilter: View {
 
 struct AllEventsSection: View {
     let model: AllEventsModel
-    /// Home ignora la safe area in alto: l'intestazione fissata deve stare sotto la status bar (A4, da provare sul telefono).
+    /// Home ignora la safe area in alto: da agganciata l'intestazione sta sotto la status bar. Home passa 0 quando la sezione e' lontana dal bordo (A4, G-27.1-X2).
     let topInset: CGFloat
     @Environment(\.api) private var api
 

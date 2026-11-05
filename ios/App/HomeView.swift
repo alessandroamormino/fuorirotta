@@ -108,6 +108,8 @@ struct HomeView: View {
     @State private var scrollBusy = false
     @State private var scrollTouches = 0
     @State private var topInset: CGFloat = 0
+    /// Spazio sopra "Tutti gli eventi": 0 lontano dal bordo, cresce fino a topInset mentre si aggancia sotto la status bar (UAT 27.1, G-27.1-X2).
+    @State private var allEventsHeaderPad: CGFloat = 0
     @State private var showPlaceSheet = false
 
     var body: some View {
@@ -134,11 +136,13 @@ struct HomeView: View {
                         rails
                     }
                     .padding(.top, Spacing.xl)
-                    .padding(.bottom, Spacing.xl)
+                    .padding(.bottom, Spacing.lg)
                     // Ultima: una lista senza fine non puo' avere niente sotto. L'intestazione fissata e' il titolo della sezione col filtro per categoria.
                     if model.phase == .loaded {
+                        // Il segnaposto non dipende dall'intestazione, quindi leggerlo non crea un ciclo. Si salva il valore gia' stretto: fuori dalla fascia di aggancio non cambia e Home non si ridisegna a ogni frame.
                         Color.clear.frame(height: 0).id(Self.allEventsTop)
-                        AllEventsSection(model: allEvents, topInset: topInset)
+                            .onGeometryChange(for: CGFloat.self) { min(topInset, max(0, topInset - $0.frame(in: .scrollView).minY)) } action: { allEventsHeaderPad = $0 }
+                        AllEventsSection(model: allEvents, topInset: allEventsHeaderPad)
                     }
                 }
             }
