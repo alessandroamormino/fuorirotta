@@ -64,6 +64,11 @@ struct EventMapView: UIViewRepresentable {
         // Sempre piana (giro telefono F2): niente tasto 3D e niente inclinazione con due dita.
         map.isPitchEnabled = false
         map.delegate = context.coordinator
+        context.coordinator.scheme = context.environment.colorScheme
+        // Il tema arriva alla mappa come tratto UIKit anche quando SwiftUI non richiama updateUIView: si ascolta qui.
+        map.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak coordinator = context.coordinator] (map: MKMapView, _) in
+            coordinator?.repaint(map, scheme: map.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
+        }
         map.showsUserLocation = showsUser
         map.pointOfInterestFilter = .excludingAll
         map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "pin")
@@ -77,6 +82,8 @@ struct EventMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         let c = context.coordinator
         c.parent = self
+        // Tema cambiato (Profilo > Aspetto): i pin gia' sulla mappa non si ricolorano da soli (giro telefono F6).
+        c.repaint(map, scheme: map.traitCollection.userInterfaceStyle == .dark ? .dark : .light)
         if map.showsUserLocation != showsUser { map.showsUserLocation = showsUser }
         if map.mapType != mapType { map.mapType = mapType }
         // Scheda chiusa: il pin torna normale. Selezionarlo lo fa la mappa stessa, col tocco.
@@ -102,6 +109,8 @@ struct EventMapView: UIViewRepresentable {
 
         var parent: EventMapView
         var focus: MapFocus
+        /// Il tema con cui si risolvono i colori dei pin: UIColor(Color) li fisserebbe a quello del momento.
+        var scheme: ColorScheme = .light
         private var shown: [String: (annotation: any MKAnnotation, ids: [Int])] = [:]
         private var appliedRevision = -1
         private var debounce: Task<Void, Never>?
@@ -164,12 +173,35 @@ struct EventMapView: UIViewRepresentable {
             }
         }
 
+        /// Tema cambiato: ricolora i pin e i gruppi gia' sulla mappa.
+        func repaint(_ map: MKMapView, scheme: ColorScheme) {
+            guard scheme != self.scheme else { return }
+            self.scheme = scheme
+            // Un marker gia' a schermo non si ridisegna cambiando solo il colore (lo fa solo al tocco): si tolgono e si
+            // rimettono gli stessi oggetti, e viewFor li ridipinge. Qualche centinaio al massimo, una volta per cambio tema.
+            let marks = map.annotations.filter { !($0 is MKUserLocation) }
+            map.removeAnnotations(marks)
+            map.addAnnotations(marks)
+        }
+
+        /// I colori di un pin o di un gruppo, risolti nel tema corrente.
+        func paint(_ v: MKMarkerAnnotationView, for annotation: any MKAnnotation) {
+            var env = EnvironmentValues()
+            env.colorScheme = scheme
+            func ui(_ color: Color) -> UIColor { UIColor(Color(color.resolve(in: env))) }
+            if annotation is GroupAnnotation {
+                // Mai accent sulla mappa: bolla "foreground" con testo invertito.
+                v.markerTintColor = ui(Color.foreground)
+                v.glyphTintColor = ui(Color.background)
+            } else if let pin = annotation as? PinAnnotation {
+                v.markerTintColor = ui(categoryVisual(pin.category).color)
+            }
+        }
+
         func mapView(_ map: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
             if let group = annotation as? GroupAnnotation {
                 let v = map.dequeueReusableAnnotationView(withIdentifier: "cluster", for: group) as! MKMarkerAnnotationView
-                // Mai accent sulla mappa: bolla "foreground" con testo invertito.
-                v.markerTintColor = UIColor(Color.foreground)
-                v.glyphTintColor = UIColor(Color.background)
+                paint(v, for: group)
                 v.glyphText = String(group.group.pins.count)
                 v.displayPriority = .required
                 v.canShowCallout = false
@@ -179,7 +211,7 @@ struct EventMapView: UIViewRepresentable {
             guard let pin = annotation as? PinAnnotation else { return nil } // posizione utente: pallino di sistema
             let v = map.dequeueReusableAnnotationView(withIdentifier: "pin", for: pin) as! MKMarkerAnnotationView
             let visual = categoryVisual(pin.category)
-            v.markerTintColor = UIColor(visual.color)
+            paint(v, for: pin)
             v.glyphImage = UIImage(systemName: visual.symbol)
             // ponytail: .required = nessun evento nascosto dalle collisioni (stesso insieme del sito); due pin a pochi metri
             // ai due lati del bordo di una cella possono sovrapporsi finche' non si zooma.
