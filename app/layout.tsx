@@ -45,13 +45,13 @@ export const metadata: Metadata = {
 		locale: "it_IT",
 		url: SITE_URL,
 		siteName: "Fuorirotta",
-		title: "Fuorirotta — Eventi, Sagre e Feste vicino a te",
+		title: "Fuorirotta",
 		description:
 			"Scopri eventi, sagre, feste e manifestazioni vicino a te in tutta Italia, con mappa interattiva.",
 	},
 	twitter: {
 		card: "summary_large_image",
-		title: "Fuorirotta — Eventi, Sagre e Feste vicino a te",
+		title: "Fuorirotta",
 		description:
 			"Scopri eventi, sagre, feste e manifestazioni vicino a te in tutta Italia, con mappa interattiva.",
 	},
