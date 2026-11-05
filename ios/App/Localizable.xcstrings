@@ -1785,6 +1785,16 @@
         }
       }
     },
+    "Nessun evento visitato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No visited events"
+          }
+        }
+      }
+    },
     "Nessun luogo trovato per «%@»." : {
       "localizations" : {
         "en" : {
@@ -2469,6 +2479,16 @@
         }
       }
     },
+    "Rimosso dai visitati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removed from visited"
+          }
+        }
+      }
+    },
     "Rimuovi" : {
       "localizations" : {
         "en" : {
@@ -2971,6 +2991,16 @@
         }
       }
     },
+    "Tocca \"Ci sono stato\" su un evento iniziato per ritrovarlo qui." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap \"I was there\" on an event that has started to find it here."
+          }
+        }
+      }
+    },
     "Tocca il cuore su un evento e lo ritrovi in Salvati, giorno per giorno. Con l'account li hai su ogni dispositivo." : {
       "localizations" : {
         "en" : {
@@ -3107,6 +3137,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Near you"
+          }
+        }
+      }
+    },
+    "Visitati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visited"
           }
         }
       }

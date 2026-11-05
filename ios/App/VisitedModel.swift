@@ -124,6 +124,64 @@ final class VisitedModel {
 
     // MARK: Salvati (27.1-10)
 
+    /// Le righe del chip "Visitati": stesso tipo di Salvati, prefisso "v". Una riga di evento sparito non si apre (eventID nil).
+    var rows: [SavedRow] {
+        switch mode {
+        case .guest:
+            guestEntries.compactMap { e in e.snap.map { SavedRow(entryID: e.id, eventID: e.id, snap: $0, gone: false, prefix: "v") } }
+        case .account:
+            items.map { i in
+                var snap = i.snap
+                snap.imageUrl = i.imageUrl ?? snap.imageUrl
+                return SavedRow(entryID: i.ref, eventID: i.eventId, snap: snap, gone: i.eventId == nil, prefix: "v")
+            }
+        }
+    }
+
+    /// Il giorno di visita di ogni riga (id della riga -> "YYYY-MM-DD"), quello fissato al tocco.
+    var visitDays: [String: String] {
+        switch mode {
+        case .guest: Dictionary(guestEntries.compactMap { e in e.visitDay.map { ("v\(e.id)", $0) } }, uniquingKeysWith: { a, _ in a })
+        case .account: Dictionary(items.map { ("v\($0.ref)", $0.visitDay) }, uniquingKeysWith: { a, _ in a })
+        }
+    }
+
+    /// Via senza dialogo (reversibile): la riga se ne va subito, "Annulla" per 4 secondi rimette la stessa voce o rifa' il segno.
+    func remove(_ row: SavedRow) async {
+        let message = String(localized: "Rimosso dai visitati")
+        switch mode {
+        case .guest:
+            let entry = guestEntries.first { $0.id == row.entryID }
+            await store.remove(row.entryID)
+            await loadGuest()
+            if let entry {
+                undoToast(message) { [store] in await store.restore(entry); await self.loadGuest() }
+            } else {
+                say(message)
+            }
+        case .account:
+            let before = items
+            apply(items.filter { $0.ref != row.entryID })
+            do {
+                if let id = row.eventID { try await api.unmarkVisited(id: id) } else { try await api.unmarkVisitedGone(ref: row.entryID) }
+                writeCache()
+                // Una riga sparita non si puo' rimarcare (l'evento non c'e' piu'): niente "Annulla".
+                if let id = row.eventID {
+                    undoToast(message) { [api] in _ = try? await api.markVisited(id: id); await self.reloadAccount() }
+                } else {
+                    say(message)
+                }
+            } catch {
+                apply(before)
+                fail(error)
+            }
+        }
+    }
+
+    private func undoToast(_ message: String, undo: @escaping @MainActor () async -> Void) {
+        show(Toast(message: message, actionTitle: String(localized: "Annulla"), action: { Task { await undo() } }))
+    }
+
     /// La riga di Salvati e' segnata? Ospite: l'id della riga e' quello dell'evento; in ogni caso vale la chiave naturale.
     func isVisited(row: SavedRow) -> Bool {
         (mode == .guest && ids.contains(row.entryID)) || (row.sourceKey.map(keys.contains) ?? false)
@@ -203,6 +261,14 @@ final class VisitedModel {
         items = []
         mode = .guest
         try? FileManager.default.removeItem(at: Self.cacheURL)
+    }
+
+    /// Tirare per aggiornare in Visitati: la lista dell'account, o i segni del telefono.
+    func reload() async {
+        switch mode {
+        case .guest: await loadGuest()
+        case .account: await reloadAccount()
+        }
     }
 
     private func reloadAccount() async {

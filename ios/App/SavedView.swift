@@ -7,9 +7,15 @@ struct SavedView: View {
     @Environment(VisitedModel.self) private var visited
 
     private enum Filter: CaseIterable {
-        case upcoming, past
+        case upcoming, past, visited
 
-        var title: LocalizedStringKey { self == .upcoming ? "Prossimi" : "Passati" }
+        var title: LocalizedStringKey {
+            switch self {
+            case .upcoming: "Prossimi"
+            case .past: "Passati"
+            case .visited: "Visitati"
+            }
+        }
     }
 
     @State private var filter = Filter.upcoming
@@ -47,21 +53,25 @@ struct SavedView: View {
 
     var body: some View {
         let today = romeToday()
-        let days = savedTimeline(saves.rows, past: filter == .past, today: today, locale: .app)
+        let days: [SavedDay<SavedRow>] = filter == .visited
+            ? visitedTimeline(visited.rows.compactMap { r in visited.visitDays[r.id].map { (item: r, visitDay: $0) } }, locale: .app)
+            : savedTimeline(saves.rows, past: filter == .past, today: today, locale: .app)
+        // Salvati ha scheletri, avviso offline e invito per l'ospite; Visitati no (viene dal telefono o da una lista gia' caricata).
+        let showSkeleton = filter != .visited && saves.loading && saves.rows.isEmpty
         EventStack {
             List {
                 // UAT 6: riepilogo e chip sono contenuto, scorrono via con la lista (niente fascia fissa con fondo).
                 header(summary(days, today: today))
-                if saves.offline {
+                if filter != .visited, saves.offline {
                     Label("Sei offline. Mostriamo gli ultimi dati salvati.", systemImage: "wifi.slash")
                         .font(.label)
                         .foregroundStyle(Color.foregroundSecondary)
                         .banner()
                 }
-                if saves.guestCount != nil, !saves.rows.isEmpty {
+                if filter != .visited, saves.guestCount != nil, !saves.rows.isEmpty {
                     guestBanner
                 }
-                if saves.loading && saves.rows.isEmpty {
+                if showSkeleton {
                     ForEach(0..<4, id: \.self) { _ in skeletonRow }
                 } else {
                     ForEach(items(days)) { item in
@@ -94,7 +104,7 @@ struct SavedView: View {
             .listStyle(.plain)
             .listRowSpacing(0)
             .environment(\.defaultMinListRowHeight, 0)
-            .overlay { if !(saves.loading && saves.rows.isEmpty) && days.isEmpty { emptyState } }
+            .overlay { if !showSkeleton && days.isEmpty { emptyState } }
             .navigationTitle("Salvati")
             .navigationBarTitleDisplayMode(.large)
             // Sotto la barra di sistema il contenuto sfuma nel bordo morbido di iOS 26.
@@ -120,7 +130,10 @@ struct SavedView: View {
                 }
             }
             .task { await saves.reload() }
-            .refreshable { await saves.reload() }
+            .refreshable {
+                await saves.reload()
+                await visited.reload()
+            }
             .sensoryFeedback(.selection, trigger: filter)
         }
     }
@@ -128,7 +141,11 @@ struct SavedView: View {
     // MARK: pezzi
 
     private func remove(_ row: SavedRow) {
-        Task { await saves.remove(row, message: String(localized: "Rimosso dai salvati")) }
+        if filter == .visited {
+            Task { await visited.remove(row) }
+        } else {
+            Task { await saves.remove(row, message: String(localized: "Rimosso dai salvati")) }
+        }
     }
 
     private func toggleVisited(_ row: SavedRow) {
@@ -223,7 +240,13 @@ struct SavedView: View {
     }
 
     @ViewBuilder private var emptyState: some View {
-        if saves.loadFailed {
+        if filter == .visited {
+            ContentUnavailableView {
+                Label("Nessun evento visitato", systemImage: "checkmark.circle")
+            } description: {
+                Text("Tocca \"Ci sono stato\" su un evento iniziato per ritrovarlo qui.")
+            }
+        } else if saves.loadFailed {
             ContentUnavailableView {
                 Label("Salvati non disponibili", systemImage: "wifi.slash")
             } description: {
