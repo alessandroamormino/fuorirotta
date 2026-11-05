@@ -2,8 +2,8 @@ import Charts
 import FuorirottaCore
 import SwiftUI
 
-// Statistiche personali (MOB-07, D-13/D-14): descrivono i salvati di chi guarda e si calcolano sul telefono.
-// Niente rete in questo file e niente altro che i numeri dei propri salvati.
+// Statistiche personali (MOB-07, D-13/D-14): descrivono i visitati e i salvati di chi guarda e si calcolano sul telefono.
+// Niente rete in questo file e niente altro che i numeri delle proprie liste.
 
 private let monthCalendar: Calendar = {
     var c = Calendar(identifier: .gregorian)
@@ -15,12 +15,12 @@ private let monthNames = monthCalendar.standaloneMonthSymbols
 
 /// Titolo di una scheda di statistica.
 private struct StatCard<Content: View>: View {
-    let title: LocalizedStringKey
+    let title: String
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            Text(title).font(.heading).accessibilityAddTraits(.isHeader)
+            Text(verbatim: title).font(.heading).accessibilityAddTraits(.isHeader)
             content
         }
         .card()
@@ -28,6 +28,9 @@ private struct StatCard<Content: View>: View {
 }
 
 enum Period: Hashable { case always, year }
+
+/// Quale lista descrivono griglia e grafici (D-10).
+enum StatsKind: Hashable { case visited, saved }
 
 /// Le tre tessere in cima (D-09): Giorni fuori a tutta larghezza, Visitati e Salvati sotto. "Sempre | <anno>" (D-11).
 struct StatsTilesView: View {
@@ -73,39 +76,51 @@ struct StatsTilesView: View {
 struct StatsSection: View {
     let visited: [VisitedStatItem]
     let saved: [StatItem]
+    @State private var kind = StatsKind.visited
     @State private var picked: Int?
     @State private var period = Period.always
 
     var body: some View {
-        let year = resolvedYear
+        let stats = { (year: Int) in kind == .visited ? computeVisitedStats(visited, year: year) : computeStats(saved, year: year) }
+        let years = stats(0).years
+        let year = resolvedYear(years)
         StatsTilesView(
             tiles: statsTiles(visited: visited, saved: saved, year: period == .year ? year : nil),
             period: $period, year: year)
+        Picker("Statistiche di", selection: $kind) {
+            Text("Visitati").tag(StatsKind.visited)
+            Text("Salvati").tag(StatsKind.saved)
+        }
+        .pickerStyle(.segmented)
+        .sensoryFeedback(.selection, trigger: kind)
         if let year {
-            let stats = computeStats(saved, year: year)
-            if stats.years.count > 1 {
+            let current = stats(year)
+            if years.count > 1 {
                 Picker("Anno", selection: Binding(get: { year }, set: { picked = $0 })) {
-                    ForEach(stats.years, id: \.self) { Text(verbatim: String($0)).tag($0) }
+                    ForEach(years, id: \.self) { Text(verbatim: String($0)).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .sensoryFeedback(.selection, trigger: year)
             }
-            HeatmapCard(stats: stats, year: year)
-            MonthChartCard(perMonth: stats.perMonth)
-            CategoryBarsCard(rows: stats.perCategory)
+            HeatmapCard(stats: current, year: year, kind: kind)
+            MonthChartCard(perMonth: current.perMonth, kind: kind)
+            CategoryBarsCard(rows: current.perCategory, kind: kind)
         } else {
             ContentUnavailableView(
                 "Ancora niente da mostrare",
                 systemImage: "chart.bar",
-                description: Text("Salva qualche evento: qui vedrai quando e cosa ti piace."))
+                description: kind == .visited
+                    ? Text("Segna \"Ci sono stato\" su un evento: qui vedrai dove sei stato.")
+                    : Text("Salva qualche evento: qui vedrai quando e cosa ti piace."))
                 .card()
         }
     }
 
-    private var resolvedYear: Int? {
-        let years = computeStats(saved, year: 0).years
+    /// Anno scelto se la lista ce l'ha; altrimenti l'anno corrente (Roma) se presente, altrimenti l'ultimo.
+    private func resolvedYear(_ years: [Int]) -> Int? {
         if let picked, years.contains(picked) { return picked }
-        return defaultStatsYear(saved, now: .now)
+        let current = Rome.calendar.component(.year, from: .now)
+        return years.contains(current) ? current : years.last
     }
 }
 
@@ -152,11 +167,12 @@ private struct HeatWeeks {
 struct HeatmapCard: View {
     let stats: Stats
     let year: Int
+    let kind: StatsKind
     private let cell: CGFloat = 16
 
     var body: some View {
         let heat = HeatWeeks(year: year, today: romeToday())
-        StatCard(title: "Attività dell'anno") {
+        StatCard(title: String(localized: "Attività dell'anno")) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Spacing.xs) {
@@ -204,10 +220,13 @@ struct HeatmapCard: View {
 
     private func label(_ day: String, _ n: Int) -> String {
         let when = formatDayRange(from: day, to: day, locale: .app)
-        switch n {
-        case 0: return String(localized: "\(when), nessun evento salvato")
-        case 1: return String(localized: "\(when), 1 evento salvato")
-        default: return String(localized: "\(when), \(n) eventi salvati")
+        switch (n, kind) {
+        case (0, .visited): return String(localized: "\(when), nessun evento visitato")
+        case (0, .saved): return String(localized: "\(when), nessun evento salvato")
+        case (1, .visited): return String(localized: "\(when), 1 evento visitato")
+        case (1, .saved): return String(localized: "\(when), 1 evento salvato")
+        case (_, .visited): return String(localized: "\(when), \(n) eventi visitati")
+        case (_, .saved): return String(localized: "\(when), \(n) eventi salvati")
         }
     }
 
@@ -232,12 +251,13 @@ private struct BarsDescriptor: AXChartDescriptorRepresentable {
     let names: [String]
     let values: [Int]
     let summary: String
+    let valueTitle: String
 
     func makeChartDescriptor() -> AXChartDescriptor {
         let x = AXCategoricalDataAxisDescriptor(title: xTitle, categoryOrder: names)
         let top = Double(max(values.max() ?? 1, 1))
         let y = AXNumericDataAxisDescriptor(
-            title: String(localized: "Eventi salvati"), range: 0...top, gridlinePositions: [],
+            title: valueTitle, range: 0...top, gridlinePositions: [],
             valueDescriptionProvider: { "\(Int($0))" })
         let series = AXDataSeriesDescriptor(
             name: title, isContinuous: false,
@@ -250,16 +270,22 @@ private struct BarsDescriptor: AXChartDescriptorRepresentable {
 
 struct MonthChartCard: View {
     let perMonth: [Int]
+    let kind: StatsKind
 
     var body: some View {
         let top = perMonth.max() ?? 0
         let peak = perMonth.firstIndex(of: top)
+        let visited = kind == .visited
         let summary = top == 0
-            ? String(localized: "Nessun evento salvato in questo anno.")
-            : String(localized: "Il mese con più eventi salvati è \(monthNames[peak!]): \(top).")
-        StatCard(title: "Salvati per mese") {
+            ? (visited ? String(localized: "Nessun evento visitato in questo anno.") : String(localized: "Nessun evento salvato in questo anno."))
+            : (visited
+                ? String(localized: "Il mese con più eventi visitati è \(monthNames[peak!]): \(top).")
+                : String(localized: "Il mese con più eventi salvati è \(monthNames[peak!]): \(top)."))
+        let title = visited ? String(localized: "Visitati per mese") : String(localized: "Salvati per mese")
+        let valueTitle = visited ? String(localized: "Eventi visitati") : String(localized: "Eventi salvati")
+        StatCard(title: title) {
             Chart(perMonth.indices, id: \.self) { m in
-                BarMark(x: .value("Mese", monthNames[m]), y: .value("Eventi salvati", perMonth[m]))
+                BarMark(x: .value("Mese", monthNames[m]), y: .value(valueTitle, perMonth[m]))
                     .foregroundStyle(Color.accentToken)
                     .cornerRadius(Radius.cell)
                     .annotation(position: .top) {
@@ -280,7 +306,7 @@ struct MonthChartCard: View {
             .chartYAxis(.hidden)
             .frame(height: 160)
             .accessibilityChartDescriptor(
-                BarsDescriptor(title: String(localized: "Salvati per mese"), xTitle: String(localized: "Mese"), names: monthNames, values: perMonth, summary: summary))
+                BarsDescriptor(title: title, xTitle: String(localized: "Mese"), names: monthNames, values: perMonth, summary: summary, valueTitle: valueTitle))
             Text(summary).font(.label).foregroundStyle(Color.mutedForeground)
         }
     }
@@ -288,11 +314,19 @@ struct MonthChartCard: View {
 
 struct CategoryBarsCard: View {
     let rows: [(name: String, count: Int)]
+    let kind: StatsKind
 
     var body: some View {
         let top = Double(max(rows.map(\.count).max() ?? 1, 1))
-        let summary = rows.first.map { String(localized: "La categoria con più eventi salvati è \(categoryLabel($0.name)): \($0.count).") } ?? ""
-        StatCard(title: "Salvati per categoria") {
+        let visited = kind == .visited
+        let summary = rows.first.map {
+            visited
+                ? String(localized: "La categoria con più eventi visitati è \(categoryLabel($0.name)): \($0.count).")
+                : String(localized: "La categoria con più eventi salvati è \(categoryLabel($0.name)): \($0.count).")
+        } ?? ""
+        let title = visited ? String(localized: "Visitati per categoria") : String(localized: "Salvati per categoria")
+        let valueTitle = visited ? String(localized: "Eventi visitati") : String(localized: "Eventi salvati")
+        StatCard(title: title) {
             VStack(spacing: Spacing.md) {
                 ForEach(rows, id: \.name) { row in
                     let visual = categoryVisual(row.name)
@@ -314,8 +348,8 @@ struct CategoryBarsCard: View {
             }
             .accessibilityChartDescriptor(
                 BarsDescriptor(
-                    title: String(localized: "Salvati per categoria"), xTitle: String(localized: "Categoria"),
-                    names: rows.map { categoryLabel($0.name) }, values: rows.map(\.count), summary: summary))
+                    title: title, xTitle: String(localized: "Categoria"),
+                    names: rows.map { categoryLabel($0.name) }, values: rows.map(\.count), summary: summary, valueTitle: valueTitle))
         }
     }
 }

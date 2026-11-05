@@ -22,6 +22,16 @@
         }
       }
     },
+    "%@, %lld eventi visitati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, %lld events visited"
+          }
+        }
+      }
+    },
     "%@, 1 evento salvato" : {
       "localizations" : {
         "en" : {
@@ -32,12 +42,32 @@
         }
       }
     },
+    "%@, 1 evento visitato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, 1 event visited"
+          }
+        }
+      }
+    },
     "%@, nessun evento salvato" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@, no saved events"
+          }
+        }
+      }
+    },
+    "%@, nessun evento visitato" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, no events visited"
           }
         }
       }
@@ -1099,6 +1129,16 @@
         }
       }
     },
+    "Eventi visitati" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Events visited"
+          }
+        }
+      }
+    },
     "Evento %lld di %lld" : {
       "localizations" : {
         "en" : {
@@ -1423,6 +1463,16 @@
         }
       }
     },
+    "Il mese con più eventi visitati è %@: %lld." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The month with the most events visited is %@: %lld."
+          }
+        }
+      }
+    },
     "Impostazioni" : {
       "localizations" : {
         "en" : {
@@ -1500,6 +1550,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The category with the most saved events is %@: %lld."
+          }
+        }
+      }
+    },
+    "La categoria con più eventi visitati è %@: %lld." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The category with the most events visited is %@: %lld."
           }
         }
       }
@@ -1801,6 +1861,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No visited events"
+          }
+        }
+      }
+    },
+    "Nessun evento visitato in questo anno." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events visited this year."
           }
         }
       }
@@ -2800,6 +2870,16 @@
         }
       }
     },
+    "Segna \"Ci sono stato\" su un evento: qui vedrai dove sei stato." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark \"I was there\" on an event: here you will see where you have been."
+          }
+        }
+      }
+    },
     "Segui" : {
       "localizations" : {
         "en" : {
@@ -2967,6 +3047,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Statistics"
+          }
+        }
+      }
+    },
+    "Statistiche di" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Statistics of"
           }
         }
       }
@@ -3177,6 +3267,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Visited"
+          }
+        }
+      }
+    },
+    "Visitati per categoria" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visited by category"
+          }
+        }
+      }
+    },
+    "Visitati per mese" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visited by month"
           }
         }
       }
