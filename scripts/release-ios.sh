@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pubblica l'app su TestFlight (solo tester interni): `npm run release:ios 1.0.0`.
+# Pubblica l'app su TestFlight (gruppo interno subito; gli esterni, es. Friends, si aggiungono da App Store Connect con Beta App Review): `npm run release:ios 1.0.0`.
 # Prova senza caricare ne' taggare: `npm run release:ios -- --check 1.0.0`.
 #
 # Si lancia dal Mac, come `npm run release`; la chiave di App Store Connect vive fuori dal
