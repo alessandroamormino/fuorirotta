@@ -696,6 +696,17 @@
         }
       }
     },
+    "Ci sono stato" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I was there"
+          }
+        }
+      }
+    },
     "Collega" : {
       "localizations" : {
         "en" : {
@@ -1224,6 +1235,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Check out the events I saved on Fuorirotta."
+          }
+        }
+      }
+    },
+    "Hai raggiunto il limite di 100 eventi visitati senza account. Accedi per segnarne fino a 500." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have reached the limit of 100 visited events without an account. Sign in to mark up to 500."
           }
         }
       }

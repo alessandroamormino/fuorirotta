@@ -95,6 +95,7 @@ struct EventDetailView: View {
     @Environment(\.api) private var api
     @Environment(\.openURL) private var openURL
     @Environment(Router.self) private var router
+    @Environment(VisitedModel.self) private var visited
     @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
 
     @State private var event: Event
@@ -274,7 +275,9 @@ struct EventDetailView: View {
     @ViewBuilder private var actions: some View {
         let link = sourceLink
         let spot = coordinate
-        if link != nil || spot != nil {
+        // D-02: la pillola c'e' solo dal primo giorno dell'evento; puo' stare da sola.
+        let canVisit = visited.visitDay(for: event) != nil
+        if link != nil || spot != nil || canVisit {
             HStack(spacing: Spacing.sm) {
                 if let link {
                     Button {
@@ -290,11 +293,29 @@ struct EventDetailView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                if canVisit { visitedPill }
             }
             .buttonBorderShape(.capsule)
             .controlSize(.large)
             .padding(.horizontal, Spacing.md)
         }
+    }
+
+    /// D-01: "Ci sono stato" accanto agli altri due; piena quando e' segnato. Solo qui: niente su card, file o pin.
+    @ViewBuilder private var visitedPill: some View {
+        let marked = visited.isVisited(event)
+        let button = Button {
+            Task { await visited.toggle(event) }
+        } label: {
+            Label("Ci sono stato", systemImage: "checkmark").lineLimit(1).frame(maxWidth: .infinity)
+        }
+        Group {
+            if marked { button.buttonStyle(.borderedProminent) } else { button.buttonStyle(.bordered) }
+        }
+        .sensoryFeedback(.success, trigger: visited.successCount)
+        .sensoryFeedback(.warning, trigger: visited.warningCount)
+        .accessibilityLabel(Text("Ci sono stato"))
+        .accessibilityAddTraits(marked ? .isSelected : [])
     }
 
     // MARK: scheda "Dettagli"

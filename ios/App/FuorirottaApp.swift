@@ -85,6 +85,7 @@ struct FuorirottaApp: App {
     @State private var session: Session
     @State private var push: PushRegistration
     @State private var saves: SavesModel
+    @State private var visited: VisitedModel
     @State private var follows: FollowsModel
     @State private var location = LocationModel()
     @State private var router = Router()
@@ -104,6 +105,8 @@ struct FuorirottaApp: App {
         let pushModel = PushRegistration(api: client)
         AppDelegate.push = pushModel
         _saves = State(initialValue: savesModel)
+        // Un solo avviso per l'app: i segni passano dal banner dei salvati, senza che i due modelli si conoscano (D-04).
+        _visited = State(initialValue: VisitedModel(api: client) { [weak savesModel] in savesModel?.show($0) })
         let followsModel = FollowsModel(api: client)
         followsModel.notify = { [weak savesModel] in savesModel?.show($0) }
         _follows = State(initialValue: followsModel)
@@ -146,6 +149,7 @@ struct FuorirottaApp: App {
                 .environment(session)
                 .environment(push)
                 .environment(saves)
+                .environment(visited)
                 .environment(follows)
                 .environment(location)
                 .environment(router)
@@ -162,6 +166,7 @@ struct FuorirottaApp: App {
                 .task { config = await api.config(version: version) }
                 .task {
                     await saves.start()
+                    await visited.start()
                     await session.restore()
                     await push.refreshIfAuthorised()
                 }

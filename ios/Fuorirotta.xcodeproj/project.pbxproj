@@ -38,6 +38,7 @@
 		BBE468D771B4B1AC14E340DC /* UAT7BUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ADED2F7579BCA98280BBA51 /* UAT7BUITests.swift */; };
 		BF974CD1C09D61EB4E6C78DD /* StatsCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */; };
 		DA5A9A54EE87CEF48C914118 /* PushRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8E1A2BFAAA83D5CB47381C /* PushRegistration.swift */; };
+		DE356E4FC594BA309F0D0E10 /* VisitedModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4549BF41322B8BDBE69DFDB /* VisitedModel.swift */; };
 		E0C6F06E4A73B6450F59BB0C /* EventCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB95769BD3D9DD0097F97FE /* EventCards.swift */; };
 		E4ADD2DF47695AE99E691C28 /* SavesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0958FA7AA361C947B83B04 /* SavesModel.swift */; };
 		E72210D1CE6D9691DDCA04EE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 57D794E08B519C64F99B0EDB /* PrivacyInfo.xcprivacy */; };
@@ -89,6 +90,7 @@
 		BA4676EE0AF931C39E743D49 /* FuorirottaCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FuorirottaCore; path = Packages/FuorirottaCore; sourceTree = SOURCE_ROOT; };
 		BCB922A66158CC37247D8879 /* FuorirottaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuorirottaApp.swift; sourceTree = "<group>"; };
 		C30E1CFACE53CA40F0614F34 /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
+		C4549BF41322B8BDBE69DFDB /* VisitedModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitedModel.swift; sourceTree = "<group>"; };
 		C7BFDEB129782AA46C74DEFE /* Welcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Welcome.swift; sourceTree = "<group>"; };
 		C8F9D162C9C8A7A08EB24DB5 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		CA1EFD13439D79FEAA07CC85 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
@@ -176,6 +178,7 @@
 				4467811081BDB08735B3CFEB /* SignInSheet.swift */,
 				5A3B06979F73DCB85A4C67D6 /* StatsCards.swift */,
 				26EDFA955C33EC7E2B2D45D7 /* Tokens.swift */,
+				C4549BF41322B8BDBE69DFDB /* VisitedModel.swift */,
 				C7BFDEB129782AA46C74DEFE /* Welcome.swift */,
 			);
 			path = App;
@@ -349,6 +352,7 @@
 				399D5E2B4C97E1D979BDFF58 /* SignInSheet.swift in Sources */,
 				BF974CD1C09D61EB4E6C78DD /* StatsCards.swift in Sources */,
 				01200BF062C240AE8D16AB09 /* Tokens.swift in Sources */,
+				DE356E4FC594BA309F0D0E10 /* VisitedModel.swift in Sources */,
 				7E5B02C6D3F0F6BB3F92B089 /* Welcome.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

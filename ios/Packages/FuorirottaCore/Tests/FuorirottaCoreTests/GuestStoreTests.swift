@@ -6,6 +6,10 @@ private func tempFile() -> URL {
     FileManager.default.temporaryDirectory.appendingPathComponent("gs-\(UUID().uuidString)/fuorirotta/saves.json")
 }
 
+private func visitedFile() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent("gs-\(UUID().uuidString)/fuorirotta/visited.json")
+}
+
 private func snap(_ n: Int) -> Snap {
     Snap(title: "Evento \(n)", dateStart: "2026-11-08T00:00:00.000Z", dateEnd: nil, place: nil, category: "Altro", source: "s", sourceId: "\(n)", sourceUrl: nil)
 }
@@ -89,6 +93,41 @@ private func at(_ n: Int) -> Date { Date(timeIntervalSince1970: 1_790_000_000 + 
         #expect(names.contains { $0.hasPrefix("saves.corrupt-") && $0.hasSuffix(".json") })
         _ = await store.toggle(id: 1, snap: nil, now: at(1))
         #expect(try Data(contentsOf: file).count > 2)
+    }
+
+    @Test func savesEntryHasNoVisitDayKeyAndVisitedEntryKeepsIt() async throws {
+        let saves = GuestStore(fileURL: tempFile())
+        _ = await saves.toggle(id: 1, snap: snap(1), now: at(1))
+        let savesJson = try JSONSerialization.jsonObject(with: JSONEncoder().encode(await saves.all())) as! [[String: Any]]
+        #expect(savesJson[0]["visitDay"] == nil)
+
+        let file = visitedFile()
+        let a = GuestStore(fileURL: file)
+        _ = await a.toggle(id: 2, snap: snap(2), now: at(2), visitDay: "2026-11-01")
+        #expect(await GuestStore(fileURL: file).all().first?.visitDay == "2026-11-01")
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(await a.mergePayload())) as! [[String: Any]]
+        #expect(Set(json[0].keys) == ["id", "savedAt", "visitDay", "snap"])
+    }
+
+    @Test func corruptVisitedFileIsSetAsideUnderItsOwnNameAndSavesAreUntouched() async throws {
+        let saves = tempFile()
+        let a = GuestStore(fileURL: saves)
+        _ = await a.toggle(id: 1, snap: nil, now: at(1))
+        let before = try Data(contentsOf: saves)
+        // Stessa cartella dei salvati, come sul telefono.
+        let visited = saves.deletingLastPathComponent().appendingPathComponent("visited.json")
+        try Data("{non json".utf8).write(to: visited)
+        #expect(await GuestStore(fileURL: visited).all().isEmpty)
+        let names = try FileManager.default.contentsOfDirectory(atPath: saves.deletingLastPathComponent().path)
+        #expect(names.contains { $0.hasPrefix("visited.corrupt-") && $0.hasSuffix(".json") })
+        #expect(!names.contains { $0.hasPrefix("saves.corrupt-") })
+        #expect(try Data(contentsOf: saves) == before)
+    }
+
+    @Test func visitedCapIsStillHundred() async {
+        let store = GuestStore(fileURL: visitedFile())
+        for i in 1...100 { #expect(await store.toggle(id: i, snap: nil, now: at(i), visitDay: "2026-11-01") == .added) }
+        #expect(await store.toggle(id: 101, snap: nil, now: at(101), visitDay: "2026-11-01") == .cap)
     }
 }
 

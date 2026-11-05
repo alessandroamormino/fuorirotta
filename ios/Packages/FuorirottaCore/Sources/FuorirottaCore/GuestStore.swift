@@ -26,7 +26,12 @@ public struct DeviceEntry: Codable, Hashable, Sendable {
     public var id: Int
     public var savedAt: String
     public var snap: Snap?
-    public init(id: Int, savedAt: String, snap: Snap?) { self.id = id; self.savedAt = savedAt; self.snap = snap }
+    /// Solo nel file dei visitati (D-05): il giorno di visita scelto al tocco, mai ricalcolato. Assente (nil) nei salvati:
+    /// la codifica sintetizzata non scrive la chiave, quindi i byte di saves.json non cambiano.
+    public var visitDay: String?
+    public init(id: Int, savedAt: String, snap: Snap?, visitDay: String? = nil) {
+        self.id = id; self.savedAt = savedAt; self.snap = snap; self.visitDay = visitDay
+    }
 }
 
 public enum ToggleResult: Sendable { case added, removed, cap }
@@ -38,11 +43,13 @@ public actor GuestStore {
     public init(fileURL: URL = GuestStore.defaultFileURL) { self.fileURL = fileURL }
 
     public static let defaultFileURL: URL = URL.applicationSupportDirectory.appending(path: "fuorirotta/saves.json")
+    /// "Ci sono stato" senza account (D-07): stesso attore, altro file.
+    public static let visitedFileURL: URL = URL.applicationSupportDirectory.appending(path: "fuorirotta/visited.json")
 
     public func all() -> [DeviceEntry] { loaded() }
     public func contains(_ id: Int) -> Bool { loaded().contains { $0.id == id } }
 
-    public func toggle(id: Int, snap: Snap?, now: Date) -> ToggleResult {
+    public func toggle(id: Int, snap: Snap?, now: Date, visitDay: String? = nil) -> ToggleResult {
         var list = loaded()
         if let i = list.firstIndex(where: { $0.id == id }) {
             list.remove(at: i)
@@ -50,7 +57,7 @@ public actor GuestStore {
             return .removed
         }
         guard list.count < ApiContract.guestCap else { return .cap }
-        list.insert(DeviceEntry(id: id, savedAt: Self.iso(now), snap: snap), at: 0)
+        list.insert(DeviceEntry(id: id, savedAt: Self.iso(now), snap: snap, visitDay: visitDay), at: 0)
         commit(list)
         return .added
     }
@@ -99,7 +106,9 @@ public actor GuestStore {
                 list = decoded.sorted { $0.savedAt > $1.savedAt }
             } else {
                 // Mai sovrascritto in silenzio (T-27-13): il file illeggibile resta accanto, la lista riparte vuota.
-                let aside = fileURL.deletingLastPathComponent().appending(path: "saves.corrupt-\(Int(Date().timeIntervalSince1970)).json")
+                // Il nome nasce da quello del file stesso: un visited.json rovinato non finisce mai accanto ai salvati.
+                let name = fileURL.deletingPathExtension().lastPathComponent
+                let aside = fileURL.deletingLastPathComponent().appending(path: "\(name).corrupt-\(Int(Date().timeIntervalSince1970)).json")
                 try? FileManager.default.moveItem(at: fileURL, to: aside)
             }
         }
