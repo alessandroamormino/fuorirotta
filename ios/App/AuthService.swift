@@ -205,7 +205,7 @@ final class Session {
         case APIError.http(429, _):
             errorMessage = String(localized: "Troppi tentativi. Riprova tra un minuto.")
         case APIError.http(401, let code?) where code.localizedCaseInsensitiveContains("LINK"):
-            errorMessage = String(localized: "Questa e-mail è già registrata con un altro metodo. Entra con quello e collega questo da Impostazioni > Metodi di accesso.")
+            errorMessage = String(localized: "Questa e-mail è già registrata con un altro metodo. Entra con quello e collega questo da Profilo > Metodi di accesso.")
         default:
             errorMessage = String(localized: "Non è andata a buon fine. Riprova tra un momento.")
         }

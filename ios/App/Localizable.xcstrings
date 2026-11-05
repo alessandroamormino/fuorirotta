@@ -2448,12 +2448,12 @@
         }
       }
     },
-    "Questa e-mail è già registrata con un altro metodo. Entra con quello e collega questo da Impostazioni > Metodi di accesso." : {
+    "Questa e-mail è già registrata con un altro metodo. Entra con quello e collega questo da Profilo > Metodi di accesso." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This email is already registered with another method. Sign in with that one and link this one from Settings > Sign-in methods."
+            "value" : "This email is already registered with another method. Sign in with that one and link this one from Profile > Sign-in methods."
           }
         }
       }

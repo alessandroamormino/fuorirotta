@@ -109,7 +109,6 @@ struct HomeView: View {
     @State private var scrollTouches = 0
     @State private var topInset: CGFloat = 0
     @State private var showPlaceSheet = false
-    @State private var showSettings = false
 
     var body: some View {
         EventStack(path: Bindable(router).homePath) {
@@ -153,7 +152,6 @@ struct HomeView: View {
             }
         }
         .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
-        .sheet(isPresented: $showSettings) { SettingsView() }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
         .sensoryFeedback(.selection, trigger: followCount)
@@ -257,14 +255,12 @@ struct HomeView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                // Capsula di vetro in alto a destra (REF Omniphile): zona | impostazioni, due azioni in un solo gruppo.
+                // Capsula di vetro in alto a destra (REF Omniphile): la zona, nel suo gruppo di vetro.
                 GlassEffectContainer {
                     HStack(spacing: 0) {
                         Button { showPlaceSheet = true } label: { capsuleIcon("location") }
                             .accessibilityLabel("Cambia posizione")
                             .accessibilityHint("Apre la scelta della zona")
-                        Button { showSettings = true } label: { capsuleIcon("gearshape") }
-                            .accessibilityLabel("Impostazioni")
                     }
                     .glassEffect(.regular.interactive(), in: .capsule)
                 }
@@ -306,7 +302,7 @@ struct HomeView: View {
     /// L'avanzamento automatico gira solo se l'eroe si vede e nessuno lo sta usando.
     private var autoplay: Bool {
         motionOK && heroVisible && scenePhase == .active && router.tab == .home && router.homePath.isEmpty
-            && !showSettings && !showPlaceSheet && !scrollBusy
+            && !showPlaceSheet && !scrollBusy
     }
 
     private struct AutoKey: Hashable {
