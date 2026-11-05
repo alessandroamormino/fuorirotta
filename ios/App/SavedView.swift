@@ -4,6 +4,7 @@ import SwiftUI
 struct SavedView: View {
     @Environment(SavesModel.self) private var saves
     @Environment(Session.self) private var session
+    @Environment(VisitedModel.self) private var visited
 
     private enum Filter: CaseIterable {
         case upcoming, past
@@ -71,12 +72,21 @@ struct SavedView: View {
                             dayRow(day)
                         case .event(let row, let last):
                             timelineRow(last: last) {
-                                SavedRowView(row: row)
+                                HStack(spacing: Spacing.xs) {
+                                    SavedRowView(row: row)
+                                    // D-03: solo nei Passati, un tocco segna "Ci sono stato".
+                                    if filter == .past { visitedButton(row) }
+                                }
                             }
                             .swipeActions(edge: .trailing) {
                                 Button("Rimuovi", role: .destructive) { remove(row) }
                             }
                             .accessibilityAction(named: "Rimuovi") { remove(row) }
+                            .accessibilityActions {
+                                if filter == .past {
+                                    Button("Ci sono stato") { toggleVisited(row) }
+                                }
+                            }
                         }
                     }
                 }
@@ -119,6 +129,28 @@ struct SavedView: View {
 
     private func remove(_ row: SavedRow) {
         Task { await saves.remove(row, message: String(localized: "Rimosso dai salvati")) }
+    }
+
+    private func toggleVisited(_ row: SavedRow) {
+        Task { await visited.toggleFromSaved(row) }
+    }
+
+    /// Il segno a destra di una riga dei Passati: 44 pt, pieno e in accento quando l'evento e' segnato.
+    private func visitedButton(_ row: SavedRow) -> some View {
+        let marked = visited.isVisited(row: row)
+        return Button { toggleVisited(row) } label: {
+            Image(systemName: marked ? "checkmark.circle.fill" : "checkmark.circle")
+                .font(.title2)
+                .foregroundStyle(marked ? Color.accentToken : Color.mutedForeground)
+                .frame(width: 44, height: 44)
+        }
+        // In una riga di List un Button di stile default si attiva con tutta la riga: borderless lo isola.
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Ci sono stato")
+        .accessibilityAddTraits(marked ? .isSelected : [])
+        .sensoryFeedback(.success, trigger: visited.successCount)
+        .sensoryFeedback(.warning, trigger: visited.warningCount)
+        .sensoryFeedback(.error, trigger: visited.errorCount)
     }
 
     /// Prima riga della lista, sotto il titolo grande: il riepilogo in grigio e le chip.

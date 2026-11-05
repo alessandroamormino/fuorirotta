@@ -106,7 +106,7 @@ struct FuorirottaApp: App {
         AppDelegate.push = pushModel
         _saves = State(initialValue: savesModel)
         // Un solo avviso per l'app: i segni passano dal banner dei salvati, senza che i due modelli si conoscano (D-04).
-        let visitedModel = VisitedModel(api: client) { [weak savesModel] in savesModel?.show($0) }
+        let visitedModel = VisitedModel(api: client) { [weak savesModel] in savesModel?.toast = $0 }
         _visited = State(initialValue: visitedModel)
         let followsModel = FollowsModel(api: client)
         followsModel.notify = { [weak savesModel] in savesModel?.show($0) }

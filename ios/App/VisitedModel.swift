@@ -20,6 +20,7 @@ final class VisitedModel {
     private(set) var keys: Set<String> = []
     /// La lista dell'account (vuota da ospite); le statistiche la leggono da qui.
     private(set) var items: [VisitedItem] = []
+    private var guestEntries: [DeviceEntry] = []
     /// Contatori per .sensoryFeedback: cambiano a ogni esito, anche uguale al precedente.
     private(set) var successCount = 0
     private(set) var warningCount = 0
@@ -29,9 +30,9 @@ final class VisitedModel {
     private var guestStats: [VisitedStatItem] = []
     private let api: APIClient
     private let store: GuestStore
-    private let show: @MainActor (String) -> Void
+    private let show: @MainActor (Toast) -> Void
 
-    init(api: APIClient, store: GuestStore = GuestStore(fileURL: GuestStore.visitedFileURL), show: @escaping @MainActor (String) -> Void) {
+    init(api: APIClient, store: GuestStore = GuestStore(fileURL: GuestStore.visitedFileURL), show: @escaping @MainActor (Toast) -> Void) {
         self.api = api
         self.store = store
         self.show = show
@@ -52,12 +53,15 @@ final class VisitedModel {
 
     private func loadGuest() async {
         let entries = await store.all()
+        guestEntries = entries
         ids = Set(entries.map(\.id))
         keys = Set(entries.compactMap { $0.snap.map { Self.key($0.source, $0.sourceId) } })
         guestStats = entries.compactMap { e in
             e.visitDay.map { VisitedStatItem(visitDay: $0, category: e.snap?.category) }
         }
     }
+
+    private func say(_ message: String) { show(Toast(message: message)) }
 
     private static func key(_ source: String, _ sourceId: String) -> String { "\(source)\u{0}\(sourceId)" }
 
@@ -88,7 +92,7 @@ final class VisitedModel {
                 ids.remove(event.id)
                 if let k { keys.remove(k) }
                 warningCount += 1
-                show(Copy.guestCap)
+                say(Copy.guestCap)
             } else if !was {
                 successCount += 1
             }
@@ -100,16 +104,71 @@ final class VisitedModel {
                 await reloadAccount()
             } catch {
                 if was { ids.insert(event.id); if let k { keys.insert(k) } } else { ids.remove(event.id); if let k { keys.remove(k) } }
-                switch error {
-                case APIError.http(401, _):
-                    break  // la sessione e' finita: ci pensa Session.handleUnauthorized
-                case APIError.http(let status, let code) where status == 409 && code == "cap":
-                    warningCount += 1
-                    show(Copy.accountCap)
-                default:
-                    errorCount += 1
-                    show(Copy.failed)
+                fail(error)
+            }
+        }
+    }
+
+    private func fail(_ error: Error) {
+        switch error {
+        case APIError.http(401, _):
+            break  // la sessione e' finita: ci pensa Session.handleUnauthorized
+        case APIError.http(let status, let code) where status == 409 && code == "cap":
+            warningCount += 1
+            say(Copy.accountCap)
+        default:
+            errorCount += 1
+            say(Copy.failed)
+        }
+    }
+
+    // MARK: Salvati (27.1-10)
+
+    /// La riga di Salvati e' segnata? Ospite: l'id della riga e' quello dell'evento; in ogni caso vale la chiave naturale.
+    func isVisited(row: SavedRow) -> Bool {
+        (mode == .guest && ids.contains(row.entryID)) || (row.sourceKey.map(keys.contains) ?? false)
+    }
+
+    /// D-03: un tocco sulla riga dei Passati segna, il secondo toglie. Il salvato non si tocca mai (D-04).
+    func toggleFromSaved(_ row: SavedRow) async {
+        let was = isVisited(row: row)
+        let k = row.sourceKey
+        switch mode {
+        case .guest:
+            // Senza istantanea sul telefono non c'e' nulla da conservare (RESEARCH, domanda 6).
+            guard let snap = row.snap else { errorCount += 1; say(Copy.failed); return }
+            var day: String?
+            if !was {
+                day = visitDayFor(dateStart: snap.dateStart, dateEnd: snap.dateEnd, today: romeToday())
+                guard day != nil else { errorCount += 1; say(Copy.failed); return }
+            }
+            ids.formSymmetricDifference([row.entryID])
+            if await store.toggle(id: row.entryID, snap: snap, now: .now, visitDay: day) == .cap {
+                warningCount += 1
+                say(Copy.guestCap)
+            } else if !was {
+                successCount += 1
+            }
+            await loadGuest()
+        case .account:
+            // La voce visitata di questo evento, se c'e': serve a toglierla (viva per id, sparita per ref).
+            let item = k.flatMap { k in items.first { Self.key($0.snap.source, $0.snap.sourceId) == k } }
+            if was { if let k { keys.remove(k) } } else if let k { keys.insert(k) }
+            do {
+                if !was {
+                    try await api.markVisitedFromSaved(ref: row.entryID)
+                } else if let id = item?.eventId ?? row.eventID {
+                    try await api.unmarkVisited(id: id)
+                } else if let item {
+                    try await api.unmarkVisitedGone(ref: item.ref)
+                } else {
+                    throw APIError.decoding
                 }
+                if !was { successCount += 1 }
+                await reloadAccount()
+            } catch {
+                if was { if let k { keys.insert(k) } } else if let k { keys.remove(k) }
+                fail(error)
             }
         }
     }
@@ -123,12 +182,12 @@ final class VisitedModel {
         case .merged(let added):
             if let message = mergeVisitedMessage(added: added) {
                 successCount += 1
-                show(message)
+                say(message)
             }
         case .failed:
             // I segni restano sul telefono: la riprova e' il prossimo didSignIn.
             errorCount += 1
-            show(Copy.failed)
+            say(Copy.failed)
         }
         mode = .account
         guestStats = []
