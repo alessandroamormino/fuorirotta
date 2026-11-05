@@ -106,12 +106,13 @@ struct FuorirottaApp: App {
         AppDelegate.push = pushModel
         _saves = State(initialValue: savesModel)
         // Un solo avviso per l'app: i segni passano dal banner dei salvati, senza che i due modelli si conoscano (D-04).
-        _visited = State(initialValue: VisitedModel(api: client) { [weak savesModel] in savesModel?.show($0) })
+        let visitedModel = VisitedModel(api: client) { [weak savesModel] in savesModel?.show($0) }
+        _visited = State(initialValue: visitedModel)
         let followsModel = FollowsModel(api: client)
         followsModel.notify = { [weak savesModel] in savesModel?.show($0) }
         _follows = State(initialValue: followsModel)
         _push = State(initialValue: pushModel)
-        _session = State(initialValue: Session(api: client, saves: savesModel, push: pushModel))
+        _session = State(initialValue: Session(api: client, saves: savesModel, visited: visitedModel, push: pushModel))
         #if DEBUG
         // Test UI (LocalTestCase): "-fr.resetWelcome" riporta il tutorial al primo avvio. Per saltarlo basta
         // "-fr.welcomeSeen YES" (dominio degli argomenti, vince su quello salvato); "-fr.skipInterests YES" salta gli interessi.

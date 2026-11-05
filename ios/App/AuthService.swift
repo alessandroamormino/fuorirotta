@@ -60,13 +60,15 @@ final class Session {
 
     private let api: APIClient
     private let saves: SavesModel
+    private let visited: VisitedModel
     private let push: PushRegistration
     // Un solo accesso alla volta: due tocchi rapidi non devono lanciare due flussi.
     private var busy = false
 
-    init(api: APIClient, saves: SavesModel, push: PushRegistration) {
+    init(api: APIClient, saves: SavesModel, visited: VisitedModel, push: PushRegistration) {
         self.api = api
         self.saves = saves
+        self.visited = visited
         self.push = push
         api.onUnauthorized = { [weak self] in Task { @MainActor in self?.handleUnauthorized() } }
     }
@@ -83,6 +85,7 @@ final class Session {
             if let user = try await api.meState().user {
                 state = .signedIn(user)
                 await saves.didSignIn()  // un'unione rimasta a meta' (app chiusa tra il 2xx e lo svuotamento) si ripete qui
+                await visited.didSignIn()
             } else {
                 handleUnauthorized()
             }
@@ -139,6 +142,7 @@ final class Session {
         await forgetGoogle(revoke: false)
         state = .signedOut
         await saves.didSignOut()
+        await visited.didSignOut()
     }
 
     /// Google ricorda l'utente nel Portachiavi dell'SDK. "Esci" lo dimentica sul telefono (`signOut`, la concessione
@@ -167,6 +171,7 @@ final class Session {
         push.forget()
         await forgetGoogle(revoke: true)
         await saves.didSignOut()
+        await visited.didSignOut()
         URLCache.shared.removeAllCachedResponses()
         try? FileManager.default.removeItem(at: URL.cachesDirectory.appending(path: "fuorirotta"))
         UserDefaults.standard.removeObject(forKey: "fr.recentQueries")
@@ -181,7 +186,10 @@ final class Session {
         if state != .signedOut {
             expiredNotice = true
             // La sessione e' finita: dell'account non resta nulla sul telefono.
-            Task { await saves.didSignOut() }
+            Task {
+                await saves.didSignOut()
+                await visited.didSignOut()
+            }
         }
         state = .signedOut
     }
@@ -296,6 +304,7 @@ final class Session {
         presentSignIn = false
         successCount += 1
         await saves.didSignIn()
+        await visited.didSignIn()
         await push.refreshIfAuthorised()
     }
 }

@@ -93,6 +93,17 @@
         }
       }
     },
+    "%lld eventi aggiunti ai visitati" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld events added to visited"
+          }
+        }
+      }
+    },
     "%lld questa settimana" : {
       "localizations" : {
         "en" : {
@@ -120,6 +131,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 event added to saved"
+          }
+        }
+      }
+    },
+    "1 evento aggiunto ai visitati" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 event added to visited"
           }
         }
       }
@@ -1266,6 +1288,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "You've reached the limit of 50 followed places"
+          }
+        }
+      }
+    },
+    "Hai raggiunto il limite di 500 eventi visitati. Rimuovine qualcuno per aggiungerne altri." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have reached the limit of 500 visited events. Remove some to add more."
           }
         }
       }
