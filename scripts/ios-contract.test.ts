@@ -214,7 +214,8 @@ const tv = tagViolations(releaseIos)
 check('S5', tv.length === 0, `release-ios.sh: ${tv.join('; ')}`)
 check('S5', (releaseIos.match(/git (?:tag|push)[^\n]*ios-\$\{version\}/g) ?? []).length >= 2, 'tag e push di ios-${version} mancanti')
 const exportOpts = read('ios/ExportOptions.plist')
-check('S5', /<key>testFlightInternalTestingOnly<\/key>\s*<true\/>/.test(exportOpts), 'testFlightInternalTestingOnly non e\' true')
+// Dal 2026-11-05 le build vanno anche ai tester esterni (gruppo Friends, con Beta App Review): niente vincolo "solo interni".
+check('S5', /<key>testFlightInternalTestingOnly<\/key>\s*<false\/>/.test(exportOpts), 'testFlightInternalTestingOnly non e\' false: la build non arriverebbe ai tester esterni')
 check('S5', /<key>destination<\/key>\s*<string>upload<\/string>/.test(exportOpts), 'destination non e\' upload')
 const gi = read('.gitignore').split('\n').map((l) => l.trim())
 check('S5', gi.includes('*.p8') && gi.includes('*.mobileprovision'), '.gitignore senza *.p8 / *.mobileprovision')
@@ -222,7 +223,7 @@ const tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' 
   .split('\n').filter((f) => /\.(p8|mobileprovision)$/.test(f))
 check('S5', tracked.length === 0, `tracciati: ${tracked.join(', ')}`)
 check('S5', /<key>NSPrivacyTracking<\/key>\s*<false\/>/.test(read('ios/App/PrivacyInfo.xcprivacy')), 'NSPrivacyTracking non e\' false')
-ok('S5', 'rilascio app: solo tag ios-, solo tester interni, nessuna chiave tracciata (il matcher fallisce su un tag v piantato)')
+ok('S5', 'rilascio app: solo tag ios-, build anche per tester esterni, nessuna chiave tracciata (il matcher fallisce su un tag v piantato)')
 
 // S8 test UI solo in locale (UAT7 A1): salvano e tolgono eventi, su produzione sporcherebbero un account vero.
 // Lo schema di produzione non ha target di test UI; ogni classe di test UI passa da LocalTestCase (il guardiano).
