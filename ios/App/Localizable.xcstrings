@@ -1815,6 +1815,16 @@
         }
       }
     },
+    "Nessun evento in queste date vicino a te" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events on these dates near you"
+          }
+        }
+      }
+    },
     "Nessun evento passato" : {
       "localizations" : {
         "en" : {
@@ -3177,6 +3187,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Remove"
+          }
+        }
+      }
+    },
+    "Torna a questo weekend" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to this weekend"
           }
         }
       }

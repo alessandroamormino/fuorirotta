@@ -39,10 +39,10 @@ final class HomeModel {
             forYouFailed = signedIn && f == nil
             offline = false
             phase = .loaded
-            Self.write(Snapshot(hero: hero, nearby: nearby, nearbyTotal: nearbyTotal), for: place)
+            Self.write(Snapshot(key: when.cacheKey, hero: hero, nearby: nearby, nearbyTotal: nearbyTotal), for: place)
         } catch {
             guard !Task.isCancelled else { return }
-            if let cached = Self.read(for: place) {
+            if let cached = Self.read(for: place, key: when.cacheKey) {
                 hero = cached.hero
                 nearby = cached.nearby
                 nearbyTotal = cached.nearbyTotal
@@ -56,8 +56,11 @@ final class HomeModel {
         }
     }
 
-    // Solo dati pubblici (eroe e fila dei dintorni), uno per luogo: niente dell'account va su disco.
+    // Solo dati pubblici (eroe e fila dei dintorni), uno per luogo: niente dell'account va su disco. La `key` e' la finestra
+    // di date risolta (`When.cacheKey`): offline si mostra solo la copia fatta per le stesse date. Una copia senza chiave
+    // (versione precedente) vale "nessuna copia".
     private struct Snapshot: Codable {
+        let key: String?
         let hero: [Event]
         let nearby: [Event]
         let nearbyTotal: Int?
@@ -75,9 +78,11 @@ final class HomeModel {
         if let data = try? JSONEncoder().encode(snapshot) { try? data.write(to: target, options: .atomic) }
     }
 
-    private static func read(for place: Place) -> Snapshot? {
-        guard let data = try? Data(contentsOf: url(for: place)) else { return nil }
-        return try? JSONDecoder().decode(Snapshot.self, from: data)
+    private static func read(for place: Place, key: String) -> Snapshot? {
+        guard let data = try? Data(contentsOf: url(for: place)),
+            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data), snapshot.key == key
+        else { return nil }
+        return snapshot
     }
 
     /// Dopo un cambio in cio' che si segue (qui, nel dettaglio o in "Cosa segui"): solo "Per te", il resto non cambia.
@@ -213,8 +218,8 @@ struct HomeView: View {
             EmptyView()
         case .loaded:
             if model.hero.isEmpty {
-                // Eroe vuoto: si nasconde, resta l'intestazione e la riga "Nessun evento questo weekend".
-                emptyWeekend
+                // Eroe vuoto: si nasconde, resta l'intestazione e il vuoto del weekend o, per altre date, il pulsante per tornare al weekend (D-03).
+                if dateFilter.when == .weekend { emptyWeekend } else { emptyDates }
             } else {
                 hero(model.hero)
             }
@@ -302,6 +307,19 @@ struct HomeView: View {
             Text("Nessun evento questo weekend").font(.heading).foregroundStyle(Color.foreground)
             Text("Prova ad allargare la zona: cambia posizione dal pulsante in alto.")
                 .font(.body).foregroundStyle(Color.foregroundSecondary)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+        .padding(.horizontal, Spacing.md)
+    }
+
+    /// D-03: altre date e niente vicino a te. Eroe e "Vicino a te" vengono dalla stessa richiesta, quindi anche la fila e' vuota.
+    private var emptyDates: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Nessun evento in queste date vicino a te").font(.heading).foregroundStyle(Color.foreground)
+            Button("Torna a questo weekend") { withAnimation(Motion.snappy) { dateFilter.when = .weekend } }
+                .buttonStyle(.bordered)
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -416,7 +434,7 @@ struct HomeView: View {
             if signedIn { forYouSection }
             railSection(
                 String(localized: "Vicino a te"), events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
-                count: model.nearbyTotal, list: .nearby(location.place))
+                count: model.nearbyTotal, list: .nearby(location.place, dateFilter.when))
             if !signedIn { inviteCard }
         }
     }
