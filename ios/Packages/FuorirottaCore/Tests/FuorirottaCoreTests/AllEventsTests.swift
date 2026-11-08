@@ -62,6 +62,23 @@ private final class AllEventsStub: URLProtocol, @unchecked Sendable {
         #expect(Set(items.map(\.name)) == ["limit", "offset", "category", "mapEvents"])
     }
 
+    @Test func datesTravelAndCoordinatesNever() async throws {
+        AllEventsStub.reset()
+        _ = try await client().allEvents(categories: [], limit: 30, offset: 0, dateFrom: "2026-11-06", dateTo: "2026-11-08")
+        let items = URLComponents(url: try #require(AllEventsStub.lastURL), resolvingAgainstBaseURL: false)!.queryItems!
+        #expect(Set(items.map(\.name)) == ["limit", "offset", "dateFrom", "dateTo", "mapEvents"])
+        #expect(items.first { $0.name == "dateFrom" }?.value == "2026-11-06")
+        #expect(items.first { $0.name == "dateTo" }?.value == "2026-11-08")
+    }
+
+    @Test func categoryAndDatesTravelTogether() async throws {
+        AllEventsStub.reset()
+        _ = try await client().allEvents(categories: ["Food & Wine"], limit: 30, offset: 0, dateFrom: "2026-11-06", dateTo: "2026-11-08")
+        let items = URLComponents(url: try #require(AllEventsStub.lastURL), resolvingAgainstBaseURL: false)!.queryItems!
+        #expect(Set(items.map(\.name)) == ["limit", "offset", "category", "dateFrom", "dateTo", "mapEvents"])
+        #expect(items.first { $0.name == "category" }?.value == "Food & Wine")
+    }
+
     @Test func ongoingEventSitsUnderToday() {
         let days = allEventsTimeline(
             [ev(1, "2026-10-30T10:00:00.000Z", "2026-11-05T10:00:00.000Z"), ev(2, "2026-11-04T10:00:00.000Z")],
