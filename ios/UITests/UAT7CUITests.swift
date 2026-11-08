@@ -101,6 +101,25 @@ final class UAT7CUITests: LocalTestCase {
         shot(app, "data-oggi")
     }
 
+    /// 27.2: la pillola della mappa mostra la data e apre "Quando e dove"; la data scelta li' e' anche quella di Eventi (D-08).
+    func testMapPillChangesTheDate() {
+        let app = launch()
+        let pill = app.buttons["date-pill"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 20), "la mappa non ha la pillola della data")
+        XCTAssertEqual(pill.label, "Questo weekend")
+        pill.tap()
+        let bar = app.navigationBars["Quando e dove"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        app.collectionViews.buttons["Oggi"].tap()
+        app.buttons["when-where-done"].tap()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(pill.label, "Oggi")
+        app.tabBars.buttons["Eventi"].tap()
+        let header = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Oggi' AND label CONTAINS '· '")).firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 20), "l'intestazione di Eventi non segue la data scelta sulla mappa")
+        shot(app, "mappa-pillola")
+    }
+
     /// C3: un comune qualsiasi (fuori dai capoluoghi lombardi) diventa la zona della Home e il "Dove" dei filtri di Cerca.
     func testAnyComuneBecomesTheZone() {
         let app = launch()

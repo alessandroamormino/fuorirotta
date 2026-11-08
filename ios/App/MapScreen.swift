@@ -505,12 +505,15 @@ struct MapScreen: View {
     private enum MapSheet: Identifiable {
         case pin(FuorirottaCore.MapPin)
         case group(Group)
-        var id: String { "map-sheet" }
+        case whenWhere
+        /// "Quando e dove" ha un'identita' sua: SwiftUI scambia il foglio del pin con questo invece di riusarne la presentazione.
+        var id: String { if case .whenWhere = self { "when-where" } else { "map-sheet" } }
     }
 
     @Environment(\.api) private var api
     @Environment(LocationModel.self) private var location
     @Environment(Router.self) private var router
+    @Environment(DateFilter.self) private var dateFilter
 
     /// Un evento aperto dalla mappa piccola del dettaglio (C2): la mappa si centra li',
     /// finche' non cambia il luogo della Home. I pin sono sempre quelli di tutta Italia.
@@ -518,7 +521,7 @@ struct MapScreen: View {
     private var origin: Place { eventSpot ?? location.place }
 
     @State private var pins: [FuorirottaCore.MapPin] = []
-    /// `pins` dopo il filtro, calcolato solo quando cambiano i pin o il filtro (non a ogni disegno della vista).
+    /// `pins` dopo il filtro di categoria e di data, calcolato solo quando cambiano i pin, la categoria o la data (non a ogni disegno della vista).
     @State private var shownPins: [FuorirottaCore.MapPin] = []
     @State private var pinsRevision = 0
     /// ETag della copia che abbiamo: serve a chiedere al server "e' cambiato qualcosa?" senza riscaricare 2,6 MB.
@@ -536,7 +539,12 @@ struct MapScreen: View {
     }
 
     private func refreshShown() {
-        shownPins = filter.isEmpty ? pins : pins.filter { filter.contains($0.category ?? "Altro") }
+        // Un solo passaggio: il giorno di inizio e fine di ogni pin e' gia' calcolato (due confronti di stringa).
+        let range = dateFilter.when.range
+        shownPins = pins.filter { pin in
+            (filter.isEmpty || filter.contains(pin.category ?? "Altro"))
+                && (range.map { pin.overlaps(from: $0.from, to: $0.to) } ?? true)
+        }
         pinsRevision += 1
     }
 
@@ -574,6 +582,8 @@ struct MapScreen: View {
                     .id(pin.id)
             case .group(let group):
                 ClusterListSheet(events: group.events)
+            case .whenWhere:
+                LocationPickerSheet(showsWhen: true)
             }
         }
         .task { await load() }
@@ -588,6 +598,11 @@ struct MapScreen: View {
             sheet = nil
             refreshShown()
         }
+        // Un pin aperto potrebbe sparire con la nuova data; il foglio in cui si sceglie la data resta.
+        .onChange(of: dateFilter.when) {
+            if case .whenWhere = sheet {} else { sheet = nil }
+            refreshShown()
+        }
     }
 
     // MARK: vetro: filtro, ricentra, avvisi
@@ -595,6 +610,7 @@ struct MapScreen: View {
     private var chrome: some View {
         GlassEffectContainer(spacing: Spacing.sm) {
             VStack(spacing: Spacing.sm) {
+                datePill
                 if phase == .loading {
                     ProgressView()
                         .padding(Spacing.md)
@@ -619,6 +635,23 @@ struct MapScreen: View {
             // Sopra la barra delle schede.
             .padding(.bottom, Spacing.xxxl)
         }
+    }
+
+    /// D-06: la data che si sta guardando, sempre visibile; il tocco apre "Quando e dove" come in Eventi.
+    private var datePill: some View {
+        Button {
+            sheet = .whenWhere
+        } label: {
+            Label { Text(verbatim: dateFilter.when.title(locale: .app)) } icon: { Image(systemName: "calendar") }
+                .font(.label.weight(.semibold))
+                .foregroundStyle(Color.foreground)
+                .padding(.horizontal, Spacing.md)
+                .frame(minHeight: 44)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("date-pill")
+        .accessibilityHint("Apre la scelta di date e zona")
     }
 
     /// Colonna di vetro a destra, come Mappe: filtro categorie, stile della mappa, posizione.
