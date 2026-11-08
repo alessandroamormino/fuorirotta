@@ -40,10 +40,22 @@ struct LocationExplanationView: View {
     }
 }
 
-/// "Cambia posizione" (Home e "Dove" della Ricerca): il telefono, un comune qualsiasi cercato in alto (/api/comuni/search,
-/// come il campo "Dove" del sito, UAT7 C3), poi Milano e gli altri capoluoghi lombardi.
+/// La scelta della zona: il telefono, un comune qualsiasi cercato in alto (/api/comuni/search, come il campo "Dove" del sito,
+/// UAT7 C3), poi Milano e gli altri capoluoghi lombardi. Tre usi: "Dove" della Ricerca e "Zona" di Impostazioni ("Scegli la
+/// zona": un tocco sceglie e chiude) e, con `showsWhen`, "Quando e dove" di Eventi e (dalla 27.2-03) della Mappa: sopra la data,
+/// sotto la zona, il foglio resta aperto dopo un tocco (D-02) e si chiude coi suoi pulsanti.
 struct LocationPickerSheet: View {
+    let showsWhen: Bool
+    /// Dopo ogni scelta di zona (la Mappa ricentra qui).
+    let onPick: (() -> Void)?
+
+    init(showsWhen: Bool = false, onPick: (() -> Void)? = nil) {
+        self.showsWhen = showsWhen
+        self.onPick = onPick
+    }
+
     @Environment(LocationModel.self) private var location
+    @Environment(DateFilter.self) private var dateFilter
     @Environment(\.api) private var api
     @Environment(\.dismiss) private var dismiss
     @State private var search = PlaceSearch<ComuneOption> { try await $0.searchComuni(q: $1) }
@@ -54,15 +66,22 @@ struct LocationPickerSheet: View {
                 if search.active {
                     Section { comuneRows }
                 } else {
+                    if showsWhen { Section("Quando") { WhenPicker(when: Bindable(dateFilter).when) } }
                     places
                 }
             }
-            .navigationTitle("Scegli la zona")
+            .navigationTitle(showsWhen ? "Quando e dove" : "Scegli la zona")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if showsWhen {
+                    ToolbarItem(placement: .cancellationAction) { Button(role: .close) { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) { Button(role: .confirm) { dismiss() }.accessibilityIdentifier("when-where-done") }
+                }
+            }
             .searchable(text: Bindable(search).query, placement: .navigationBarDrawer(displayMode: .always), prompt: Text("Cerca un comune"))
             .task(id: search.query) { await search.run(api) }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents(showsWhen ? [.large] : [.medium, .large])
     }
 
     @ViewBuilder private var comuneRows: some View {
@@ -91,6 +110,8 @@ struct LocationPickerSheet: View {
             row(String(localized: "Usa la mia posizione"), symbol: "location.fill", selected: location.isUsingDevice) {
                 location.requestPermission()
             }
+        } header: {
+            if showsWhen { Text("Dove") }
         } footer: {
             if location.denied {
                 Text("La posizione è disattivata nelle Impostazioni di iOS: finché resta così mostriamo Milano.")
@@ -114,7 +135,8 @@ struct LocationPickerSheet: View {
     ) -> some View {
         Button {
             action()
-            withAnimation(Motion.spring) { dismiss() }
+            onPick?()
+            if !showsWhen { withAnimation(Motion.spring) { dismiss() } }
         } label: {
             HStack(spacing: Spacing.md) {
                 Image(systemName: symbol).foregroundStyle(Color.mutedForeground).frame(width: 28).accessibilityHidden(true)

@@ -357,6 +357,16 @@
         }
       }
     },
+    "Apre la scelta di date e zona" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the choice of dates and area"
+          }
+        }
+      }
+    },
     "Apre le Impostazioni di iOS" : {
       "localizations" : {
         "en" : {
@@ -2444,6 +2454,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "When"
+          }
+        }
+      }
+    },
+    "Quando e dove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When and where"
           }
         }
       }

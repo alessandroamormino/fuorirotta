@@ -64,6 +64,21 @@ final class Router {
     }
 }
 
+/// La data che si sta guardando: una sola per Eventi, Mappa e Cerca (D-08). Parte sempre da "Questo weekend" (D-09) e non
+/// si salva (D-10): volutamente non e' in UserDefaults ne' su disco, ogni avvio riparte dal weekend.
+@MainActor @Observable
+final class DateFilter {
+    var when = SearchFilters.When.weekend
+}
+
+extension SearchFilters.When {
+    /// Primo e ultimo giorno (Roma) della data scelta, calcolati a ogni chiamata: "Oggi" e il weekend non restano vecchi in memoria.
+    var range: (from: String, to: String)? { SearchFilters(when: self).dateRange() }
+
+    /// Chiave della finestra risolta (per la copia offline): "dal_al", oppure "any" senza data.
+    var cacheKey: String { range.map { "\($0.from)_\($0.to)" } ?? "any" }
+}
+
 /// Com'e' andata l'apertura di un link universale.
 enum LinkOutcome { case opened, gone, ignored }
 
@@ -90,6 +105,7 @@ struct FuorirottaApp: App {
     @State private var visited: VisitedModel
     @State private var follows: FollowsModel
     @State private var location = LocationModel()
+    @State private var dateFilter = DateFilter()
     @State private var router = Router()
     @State private var config: AppConfig?
     // Aspetto scelto in Impostazioni: "Sistema" = nil (D-07), la scelta resta salvata.
@@ -155,6 +171,7 @@ struct FuorirottaApp: App {
                 .environment(visited)
                 .environment(follows)
                 .environment(location)
+                .environment(dateFilter)
                 .environment(router)
                 .environment(\.appConfig, config)
                 // Un solo schermo intero alla volta: la versione non piu' supportata vince sulla spiegazione.

@@ -16,24 +16,25 @@ final class HomeModel {
     private(set) var forYouFailed = false
     /// Rete assente: si mostra l'ultimo Home riuscito per questo luogo, con l'avviso "Sei offline...".
     private(set) var offline = false
-    let window = weekendWindow()
 
-    func load(api: APIClient, place: Place, signedIn: Bool) async {
+    func load(api: APIClient, place: Place, signedIn: Bool, when: SearchFilters.When) async {
         // Un aggiornamento non svuota lo schermo: lo scheletro c'e' solo al primo caricamento.
         if phase == .failed { phase = .loading }
+        let range = when.range
         do {
             // Le coordinate partono solo come lat/lng di GET /api/events (T-27-25), mai altrove.
-            async let weekend = api.events(
+            // ponytail: una richiesta sola. Le due di prima (eroe e "Vicino a te") differivano solo per il limite: ora che
+            // portano la stessa data (D-01) bastano i 40 eventi, i primi 16 sono la fila.
+            async let dated = api.events(
                 lat: place.latitude, lng: place.longitude, radiusKm: 50,
-                dateFrom: window.from, dateTo: window.to, limit: 40)
-            async let near = api.events(lat: place.latitude, lng: place.longitude, radiusKm: 50, limit: 16)
+                dateFrom: range?.from, dateTo: range?.to, limit: 40)
             // Il feed e' un'altra rotta (bearer, nessuna posizione): se fallisce non toglie il resto di Home.
             async let feed: FeedPage? = signedIn ? try? await api.feed(limit: 16, offset: 0) : nil
-            let (w, n, f) = try await (weekend, near, feed)
+            let (d, f) = try await (dated, feed)
             if Task.isCancelled { return }
-            hero = heroPicks(w.events)
-            nearby = n.events
-            nearbyTotal = n.total
+            hero = heroPicks(d.events)
+            nearby = Array(d.events.prefix(16))
+            nearbyTotal = d.total
             forYou = f
             forYouFailed = signedIn && f == nil
             offline = false
@@ -111,6 +112,7 @@ struct HomeView: View {
     /// Spazio sopra "Tutti gli eventi": 0 lontano dal bordo, cresce fino a topInset mentre si aggancia sotto la status bar (UAT 27.1, G-27.1-X2).
     @State private var allEventsHeaderPad: CGFloat = 0
     @State private var showPlaceSheet = false
+    @Environment(DateFilter.self) private var dateFilter
 
     var body: some View {
         EventStack(path: Bindable(router).homePath) {
@@ -155,9 +157,9 @@ struct HomeView: View {
             .refreshable { await refresh() }
             }
         }
-        .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
+        .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet(showsWhen: true) }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
-        .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
+        .task(id: LoadKey(place: location.place, signedIn: signedIn, when: dateFilter.when)) { await load() }
         .sensoryFeedback(.selection, trigger: followCount)
         .onChange(of: follows.revision) {
             guard signedIn, let api else { return }
@@ -170,6 +172,7 @@ struct HomeView: View {
     private struct LoadKey: Equatable {
         let place: Place
         let signedIn: Bool
+        let when: SearchFilters.When
     }
 
     private var signedIn: Bool {
@@ -179,7 +182,7 @@ struct HomeView: View {
 
     private func load() async {
         guard let api else { return }
-        await model.load(api: api, place: location.place, signedIn: signedIn)
+        await model.load(api: api, place: location.place, signedIn: signedIn, when: dateFilter.when)
     }
 
     /// Il pull-to-refresh aggiorna anche la lista nazionale.
@@ -249,8 +252,8 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: Spacing.md) {
                 Button { showPlaceSheet = true } label: {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("Questo weekend").font(.display).foregroundStyle(Color.foreground)
-                        Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to, locale: .app) + " · " + location.place.name)
+                        Text(verbatim: dateFilter.when.title(locale: .app)).font(.display).foregroundStyle(Color.foreground)
+                        Text(verbatim: headerSubtitle)
                             .font(.label)
                             .foregroundStyle(Color.mutedForeground)
                     }
@@ -263,8 +266,8 @@ struct HomeView: View {
                 GlassEffectContainer {
                     HStack(spacing: 0) {
                         Button { showPlaceSheet = true } label: { capsuleIcon("location") }
-                            .accessibilityLabel("Cambia posizione")
-                            .accessibilityHint("Apre la scelta della zona")
+                            .accessibilityLabel("Quando e dove")
+                            .accessibilityHint("Apre la scelta di date e zona")
                     }
                     .glassEffect(.regular.interactive(), in: .capsule)
                 }
@@ -273,6 +276,17 @@ struct HomeView: View {
         }
         .padding(.horizontal, Spacing.md)
         .padding(.top, topInset + Spacing.sm)
+    }
+
+    /// Giorni e zona ("sab 8 – dom 9 nov · Firenze"); con "Qualsiasi data" e "Scegli le date" (il titolo e' gia' l'intervallo) solo la zona.
+    private var headerSubtitle: String {
+        switch dateFilter.when {
+        case .today, .weekend, .next7:
+            if let r = dateFilter.when.range { return formatDayRange(from: r.from, to: r.to, locale: .app) + " · " + location.place.name }
+            return location.place.name
+        case .any, .custom:
+            return location.place.name
+        }
     }
 
     private func capsuleIcon(_ symbol: String) -> some View {
