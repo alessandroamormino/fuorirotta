@@ -50,6 +50,28 @@ private func items(_ f: SearchFilters, category: String? = nil, now: Date) -> [S
         #expect(!SearchFilters(near: .init(lat: 45, lng: 9, radiusKm: 10)).isEmpty)
     }
 
+    @Test func weekendAndQualsiasiDataAreIdleTheRestIsNot() {
+        #expect(SearchFilters(when: .weekend).isIdle)
+        #expect(SearchFilters().isIdle)
+        #expect(!SearchFilters(when: .today).isIdle)
+        #expect(!SearchFilters(text: "jazz", when: .weekend).isIdle)
+        #expect(!SearchFilters(when: .weekend, categories: ["Food & Wine"]).isIdle)
+        #expect(!SearchFilters(when: .weekend, near: .init(lat: 45, lng: 9, radiusKm: 10)).isIdle)
+    }
+
+    @Test func onlyTheWeekendIsTheDefaultDate() {
+        #expect(!SearchFilters(when: .weekend).hasActiveFilters)
+        #expect(SearchFilters(when: .any).hasActiveFilters)
+        #expect(SearchFilters(when: .today).hasActiveFilters)
+        #expect(SearchFilters(when: .custom(from: "2026-12-01", to: "2026-12-05")).hasActiveFilters)
+        #expect(SearchFilters(when: .weekend, categories: ["Food & Wine"]).hasActiveFilters)
+        #expect(SearchFilters(when: .weekend, near: .init(lat: 45, lng: 9, radiusKm: 10)).hasActiveFilters)
+    }
+
+    @Test func theWeekendDefaultAddsOnlyTheTwoDates() {
+        #expect(items(SearchFilters(when: .weekend), now: wednesday) == ["dateFrom=2026-11-06", "dateTo=2026-11-08", "limit=30"])
+    }
+
     @Test func todayIsTheRomeDayNotTheUtcDay() {
         let range = SearchFilters(when: .today).dateRange(now: lateSunday)
         #expect(range?.from == "2026-11-02" && range?.to == "2026-11-02")
