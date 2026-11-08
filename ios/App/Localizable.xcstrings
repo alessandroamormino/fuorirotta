@@ -3051,6 +3051,16 @@
         }
       }
     },
+    "Sposta la mappa o cambia le date dalla pillola in alto." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the map or change the dates from the pill at the top."
+          }
+        }
+      }
+    },
     "Sposta la mappa o allarga la visuale." : {
       "localizations" : {
         "en" : {

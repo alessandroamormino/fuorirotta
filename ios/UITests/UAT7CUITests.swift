@@ -120,6 +120,23 @@ final class UAT7CUITests: LocalTestCase {
         shot(app, "mappa-pillola")
     }
 
+    /// 27.2: il tasto posizione della mappa apre "Quando e dove"; "Usa la mia posizione" ricentra senza chiudere il foglio.
+    func testMapLocationButtonOpensTheSheet() {
+        let app = launch()
+        let button = app.buttons["Quando e dove"]
+        XCTAssertTrue(button.waitForExistence(timeout: 20), "la mappa non ha il tasto posizione")
+        button.tap()
+        let bar = app.navigationBars["Quando e dove"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let here = app.collectionViews.buttons["Usa la mia posizione"]
+        XCTAssertTrue(here.waitForExistence(timeout: 5))
+        here.tap()
+        XCTAssertTrue(bar.exists, "il foglio si e' chiuso dopo il tocco su Usa la mia posizione")
+        app.buttons["when-where-done"].tap()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+        shot(app, "mappa-posizione")
+    }
+
     /// C3: un comune qualsiasi (fuori dai capoluoghi lombardi) diventa la zona della Home e il "Dove" dei filtri di Cerca.
     func testAnyComuneBecomesTheZone() {
         let app = launch()
