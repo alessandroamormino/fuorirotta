@@ -56,4 +56,31 @@ import Testing
         let o = try JSONDecoder().decode(MapPin.self, from: Data(old.utf8))
         #expect(o.dateEnd == nil && o.startDay == "2026-12-10")
     }
+
+    @Test func parseISOMatchesTheFormatter() {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let g = ISO8601DateFormatter()
+        for s in ["2026-11-08T00:00:00.000Z", "2026-11-08T00:00:00Z", "2026-11-08T01:00:00+01:00"] {
+            #expect(parseISO(s) == (f.date(from: s) ?? g.date(from: s)), "\(s)")
+        }
+        #expect(parseISO("non una data") == nil)
+    }
+
+    /// RESEARCH Pitfall 1: un formatter per chiamata costa ~250 us, 9.000 pin bloccavano la mappa per secondi.
+    @Test func ninethousandPinsDecodeFast() throws {
+        let features = (0..<9000).map { i in
+            let end = i % 2 == 0 ? "2026-12-15T23:59:59.999Z" : ""
+            return #"{"geometry":{"coordinates":[9.1,45.4]},"properties":{"id":\#(i),"title":"t","dateStart":"2026-12-09T23:00:00.000Z","dateEnd":"\#(end)"}}"#
+        }.joined(separator: ",")
+        let json = #"{"computedAt":"x","eventCount":9000,"geojson":{"features":["# + features + "]}}"
+        let clock = ContinuousClock()
+        var set: ClusterSet?
+        let t = try clock.measure {
+            set = ClusterSet(try JSONDecoder().decode(ClusterEnvelope.self, from: Data(json.utf8)))
+        }
+        print("9000-pin decode: \(t)")
+        #expect(set?.pins.count == 9000)
+        #expect(t < .seconds(1))
+    }
 }
