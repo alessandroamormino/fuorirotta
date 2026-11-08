@@ -58,6 +58,29 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
     }
 }
 
+/// La scheda con cui si apre l'app: Mappa o Eventi, la prima della barra (ne dipende anche l'ordine). Una preferenza del
+/// dispositivo (@AppStorage), vale anche per l'ospite e non va nell'account; predefinita Mappa. La prima scheda di `order`
+/// e' anche quella su cui l'app parte; i link universali scelgono la scheda per valore e non la guardano (D-13).
+enum StartTab: String, CaseIterable, Identifiable {
+    case map, events
+
+    static let key = "fr.startTab"
+
+    var id: Self { self }
+    var title: LocalizedStringKey {
+        switch self {
+        case .map: "Mappa"
+        case .events: "Eventi"
+        }
+    }
+    var order: [AppTab] {
+        switch self {
+        case .map: [.map, .home]
+        case .events: [.home, .map]
+        }
+    }
+}
+
 /// Le schermate che Impostazioni spinge nella pila del Profilo.
 enum SettingsRoute: Hashable { case sessions }
 

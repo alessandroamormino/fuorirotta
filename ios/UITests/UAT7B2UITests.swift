@@ -80,4 +80,18 @@ final class UAT7B2UITests: LocalTestCase {
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(waitHittable(stats), "Indietro non torna al Profilo")
     }
+
+    /// D-11: con la scheda iniziale Eventi la barra legge Eventi, Mappa, Salvati, Profilo e l'app si apre su Eventi.
+    /// L'argomento di avvio non si salva: niente da ripristinare.
+    func testStartTabFromLaunchArgument() {
+        let app = localApp()
+        app.launchArguments += ["-fr.startTab", "events"]
+        app.launch()
+        let events = app.tabBars.buttons["Eventi"]
+        XCTAssertTrue(waitHittable(events, timeout: 15), "nessuna scheda Eventi")
+        let labels = (0..<4).map { app.tabBars.buttons.element(boundBy: $0).label }
+        XCTAssertEqual(labels, ["Eventi", "Mappa", "Salvati", "Profilo"])
+        XCTAssertTrue(events.isSelected, "l'app non si apre su Eventi")
+        shot(app, "avvio-eventi")
+    }
 }
