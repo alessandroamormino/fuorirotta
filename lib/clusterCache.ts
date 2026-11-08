@@ -19,6 +19,8 @@ interface ClusterCacheData {
  * lista ma senza pin. Misurato sul Postgres locale: 18.769 pin contro 19.291
  * eventi disponibili con coordinate. Stessa finestra e stesso confine di
  * /api/events e di lib/coverage/liveRegions.ts: una regola sola.
+ *
+ * dateEnd ('' se manca) serve al filtro per data dell'app (overlap, 27.2) e al popup del sito.
  */
 export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
   // Mezzanotte di OGGI a Roma come istante UTC, non `setUTCHours(0,0,0,0)`:
@@ -51,6 +53,7 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
       id: true,
       title: true,
       dateStart: true,
+      dateEnd: true,
       locationName: true,
       category: true,
       canonicalCategory: true,
@@ -116,6 +119,7 @@ export async function computeClusterData(): Promise<GeoJSON.FeatureCollection> {
         id: event.id,
         title: event.title,
         dateStart: event.dateStart.toISOString(),
+        dateEnd: event.dateEnd ? event.dateEnd.toISOString() : '',
         locationName: event.locationName || '',
         category: event.canonicalCategory || '',
         imageUrl: event.imageUrl || '',

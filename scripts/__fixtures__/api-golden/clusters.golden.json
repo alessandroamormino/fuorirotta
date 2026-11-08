@@ -39,6 +39,9 @@
     "$.geojson.features[].properties.category": [
       "string"
     ],
+    "$.geojson.features[].properties.dateEnd": [
+      "string"
+    ],
     "$.geojson.features[].properties.dateStart": [
       "string"
     ],

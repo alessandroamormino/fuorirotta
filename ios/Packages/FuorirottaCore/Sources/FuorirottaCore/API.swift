@@ -70,21 +70,41 @@ public struct MapPin: Codable, Identifiable, Hashable, Sendable {
     public let category: String?
     public let imageUrl: String?
     public let dateStart: String
+    public let dateEnd: String?
     public let locationName: String?
     public let lat: Double?
     public let lng: Double?
+    /// Primo e ultimo giorno (Roma) del pin, calcolati una volta alla creazione: il filtro per data della mappa
+    /// resta due confronti di stringa per pin. Mai codificati: una copia su disco si ricalcola al decode.
+    public let startDay: String
+    public let endDay: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, category, imageUrl, dateStart, locationName
+        case id, title, category, imageUrl, dateStart, dateEnd, locationName
         case latitude, longitude, resolvedLatitude, resolvedLongitude
     }
 
     public init(
         id: Int, title: String, category: String?, imageUrl: String?, dateStart: String,
-        locationName: String?, lat: Double?, lng: Double?
+        locationName: String?, lat: Double?, lng: Double?, dateEnd: String? = nil
     ) {
         self.id = id; self.title = title; self.category = category; self.imageUrl = imageUrl
-        self.dateStart = dateStart; self.locationName = locationName; self.lat = lat; self.lng = lng
+        self.dateStart = dateStart; self.dateEnd = dateEnd; self.locationName = locationName; self.lat = lat; self.lng = lng
+        (startDay, endDay) = Self.days(dateStart: dateStart, dateEnd: dateEnd)
+    }
+
+    /// Senza `dateEnd` e partito prima di oggi: payload non ancora ricalcolato dal server. Meglio mostrarlo
+    /// (endDay lontanissimo) che nasconderlo; `romeToday()` si calcola solo in questo ramo.
+    private static func days(dateStart: String, dateEnd: String?) -> (String, String) {
+        guard let d = eventDays(dateStart: dateStart, dateEnd: dateEnd) else { return ("", "") }
+        if dateEnd == nil, d.startDay < romeToday() { return (d.startDay, "9999-12-31") }
+        return d
+    }
+
+    /// Regola di overlap di /api/events (dateFrom/dateTo, D-07): il pin e' nella finestra se inizia entro `to`
+    /// e finisce da `from` in poi. Un pin illeggibile ("") non combacia mai, perche' un giorno di finestra non e' vuoto.
+    public func overlaps(from: String, to: String) -> Bool {
+        !startDay.isEmpty && startDay <= to && endDay >= from
     }
 
     public init(from decoder: Decoder) throws {
@@ -94,6 +114,8 @@ public struct MapPin: Codable, Identifiable, Hashable, Sendable {
         category = try c.decodeIfPresent(String.self, forKey: .category)
         imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
         dateStart = try c.decode(String.self, forKey: .dateStart)
+        dateEnd = try c.decodeIfPresent(String.self, forKey: .dateEnd)
+        (startDay, endDay) = Self.days(dateStart: dateStart, dateEnd: dateEnd)
         locationName = try c.decodeIfPresent(String.self, forKey: .locationName)
         // Le coordinate risolte (comune) vincono su quelle della fonte.
         lat = try c.decodeIfPresent(Double.self, forKey: .resolvedLatitude)
@@ -109,6 +131,7 @@ public struct MapPin: Codable, Identifiable, Hashable, Sendable {
         try c.encodeIfPresent(category, forKey: .category)
         try c.encodeIfPresent(imageUrl, forKey: .imageUrl)
         try c.encode(dateStart, forKey: .dateStart)
+        try c.encodeIfPresent(dateEnd, forKey: .dateEnd)
         try c.encodeIfPresent(locationName, forKey: .locationName)
         try c.encodeIfPresent(lat, forKey: .resolvedLatitude)
         try c.encodeIfPresent(lng, forKey: .resolvedLongitude)
@@ -142,7 +165,7 @@ public struct ClusterSet: Sendable {
             return MapPin(
                 id: p.id, title: p.title, category: present(p.category) ?? "Altro", imageUrl: present(p.imageUrl),
                 dateStart: p.dateStart, locationName: present(p.locationName),
-                lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
+                lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], dateEnd: present(p.dateEnd)
             )
         }
     }
@@ -165,6 +188,7 @@ struct ClusterEnvelope: Decodable {
             let category: String?
             let imageUrl: String?
             let dateStart: String
+            let dateEnd: String?
             let locationName: String?
         }
         let geometry: Geometry
