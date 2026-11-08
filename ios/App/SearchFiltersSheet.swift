@@ -18,10 +18,10 @@ struct SearchFiltersSheet: View {
                     whenGroup
                     whereGroup
                     categoriesGroup
-                    if filters.hasFilters {
+                    if filters.hasActiveFilters {
                         Button("Azzera i filtri", role: .destructive) {
                             withAnimation(Motion.snappy) {
-                                filters.when = .any
+                                filters.when = .weekend
                                 filters.near = nil
                                 filters.categories = []
                             }

@@ -42,6 +42,14 @@ public struct SearchFilters: Equatable, Sendable {
     /// Niente testo e niente filtri: non c'e' nulla da cercare.
     public var isEmpty: Bool { term.isEmpty && !hasFilters }
 
+    /// Questo weekend e' la data predefinita dell'app (D-09): per la schermata d'attesa di Cerca (recenti, nessuna richiesta)
+    /// conta come "nessuna data scelta", come Qualsiasi data.
+    public var isIdle: Bool {
+        term.isEmpty && near == nil && categories.isEmpty && (when == .any || when == .weekend)
+    }
+    /// Qualcosa di diverso dal predefinito: un'altra data (anche Qualsiasi data), una zona o una categoria. Accende l'icona dei filtri.
+    public var hasActiveFilters: Bool { when != .weekend || near != nil || !categories.isEmpty }
+
     /// Primo e ultimo giorno (Roma) richiesti, o nil senza filtro di data.
     public func dateRange(now: Date = .now) -> (from: String, to: String)? {
         switch when {

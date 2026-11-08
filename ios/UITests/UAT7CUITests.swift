@@ -101,6 +101,27 @@ final class UAT7CUITests: LocalTestCase {
         shot(app, "data-oggi")
     }
 
+    /// 27.2: Cerca parte da Questo weekend (schermata d'attesa piu' chip) e legge e scrive la data dell'app (D-08, D-09).
+    func testSearchSharesTheDate() {
+        let app = launch()
+        app.tabBars.buttons.element(boundBy: app.tabBars.buttons.count - 1).tap()
+        let weekend = app.buttons["Questo weekend, tocca per togliere"]
+        XCTAssertTrue(weekend.waitForExistence(timeout: 10), "Cerca non mostra la chip Questo weekend")
+        app.buttons["Filtri"].tap()
+        let today = app.buttons["Oggi"]
+        XCTAssertTrue(today.waitForExistence(timeout: 5), "nessuna riga Oggi nei filtri")
+        today.tap()
+        app.swipeDown(velocity: .fast)
+        XCTAssertTrue(app.navigationBars["Filtri"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Oggi, tocca per togliere"].waitForExistence(timeout: 5), "la chip non segue la data scelta")
+        // Dalla scheda Cerca di iOS 26 la barra e' ridotta al solo bottone della scheda di provenienza: tornare li' la riapre.
+        if !app.tabBars.buttons["Eventi"].exists { app.tabBars.buttons.firstMatch.tap() }
+        app.tabBars.buttons["Eventi"].tap()
+        let header = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Oggi' AND label CONTAINS '· '")).firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 20), "l'intestazione di Eventi non segue la data scelta in Cerca")
+        shot(app, "cerca-data")
+    }
+
     /// 27.2: la pillola della mappa mostra la data e apre "Quando e dove"; la data scelta li' e' anche quella di Eventi (D-08).
     func testMapPillChangesTheDate() {
         let app = launch()
