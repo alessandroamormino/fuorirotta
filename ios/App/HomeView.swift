@@ -155,6 +155,8 @@ struct HomeView: View {
             }
             // Un altro filtro: si riparte dall'inizio della lista, col titolo fissato in alto (giro telefono F5).
             .onChange(of: allEvents.categories) { proxy.scrollTo(Self.allEventsTop, anchor: .top) }
+            // Anche una Home aperta dopo che la data e' cambiata (sulla mappa o in Cerca): `initial` la porta alla data giusta.
+            .onChange(of: dateFilter.when, initial: true) { allEvents.show(dateFilter.when, api: api) }
             // L'eroe sale fino al bordo alto, sotto la status bar (REF Omniphile): niente barra di navigazione.
             .ignoresSafeArea(edges: .top)
             .toolbar(.hidden, for: .navigationBar)

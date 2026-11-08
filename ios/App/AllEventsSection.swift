@@ -1,7 +1,7 @@
 import FuorirottaCore
 import SwiftUI
 
-/// "Tutti gli eventi" di Home (D-13, D-15): tutta l'Italia da oggi in poi, nell'ordine del sito, 30 alla volta.
+/// "Tutti gli eventi" di Home (D-13, D-15, D-01): tutta l'Italia nelle date scelte, nell'ordine del sito, 30 alla volta.
 /// Nessuna posizione parte con queste richieste (T-27-25): la lista e' la stessa per tutti.
 @MainActor @Observable
 final class AllEventsModel {
@@ -20,6 +20,8 @@ final class AllEventsModel {
     private(set) var didLoad = false
     /// Vuoto = Tutte.
     private(set) var categories: Set<String> = []
+    /// La data dell'app (D-01): la lista mostra solo gli eventi che la toccano. Parte dal weekend, come `DateFilter`.
+    private(set) var when = SearchFilters.When.weekend
     /// Cambia a ogni ripartenza: una risposta di una generazione vecchia si butta (cambio categoria, pull-to-refresh).
     private var epoch = 0
 
@@ -57,6 +59,22 @@ final class AllEventsModel {
         Task { await loadPage(api: api) }
     }
 
+    /// Un'altra data: stessa forma di `select`, la lista riparte vuota dalla prima pagina e le risposte della data
+    /// precedente si buttano (epoch).
+    func show(_ when: SearchFilters.When, api: APIClient?) {
+        guard when != self.when else { return }
+        self.when = when
+        epoch += 1
+        events = []
+        timeline = []
+        total = 0
+        offline = false
+        failed = false
+        didLoad = false
+        guard let api else { return }
+        Task { await loadPage(api: api) }
+    }
+
     /// "Carica altri" / "Riprova": la pagina che manca, a mano.
     func loadMore(api: APIClient?) async {
         guard let api, !loading else { return }
@@ -73,12 +91,15 @@ final class AllEventsModel {
         loading = true
         failed = false
         let offset = replacing ? 0 : events.count
+        let range = when.range
+        let key = when.cacheKey
         do {
-            let page = try await api.allEvents(categories: categories.sorted(), limit: Self.pageSize, offset: offset)
+            let page = try await api.allEvents(
+                categories: categories.sorted(), limit: Self.pageSize, offset: offset, dateFrom: range?.from, dateTo: range?.to)
             guard mine == epoch else { return }
             commit(replacing ? page.events : appendingNew(page.events, to: events), total: page.total)
             offline = false
-            if offset == 0, categories.isEmpty { Self.write(Cached(events: page.events, total: page.total)) }
+            if offset == 0, categories.isEmpty { Self.write(Cached(key: key, events: page.events, total: page.total)) }
         } catch {
             guard mine == epoch else { return }
             if Task.isCancelled {
@@ -88,7 +109,7 @@ final class AllEventsModel {
                 return
             } else if replacing, !events.isEmpty {
                 // Un aggiornamento che fallisce lascia la lista com'e'.
-            } else if offset == 0, categories.isEmpty, let cached = Self.read() {
+            } else if offset == 0, categories.isEmpty, let cached = Self.read(key: key) {
                 commit(cached.events, total: cached.total)
                 offline = true
             } else {
@@ -99,8 +120,10 @@ final class AllEventsModel {
         loading = false
     }
 
-    // Solo la prima pagina senza filtro, pubblica: niente dell'account va su disco (stesso schema di HomeModel).
+    // Solo la prima pagina senza categorie, pubblica: niente dell'account va su disco (stesso schema di HomeModel).
+    // `key` sono le date risolte: offline si rivede solo la pagina delle stesse date (un file senza chiave, del 1.0.1, non vale).
     private struct Cached: Codable {
+        let key: String?
         let events: [Event]
         let total: Int
     }
@@ -113,16 +136,18 @@ final class AllEventsModel {
         if let data = try? JSONEncoder().encode(cached) { try? data.write(to: cacheURL, options: .atomic) }
     }
 
-    private static func read() -> Cached? {
-        guard let data = try? Data(contentsOf: cacheURL) else { return nil }
-        return try? JSONDecoder().decode(Cached.self, from: data)
+    private static func read(key: String) -> Cached? {
+        guard let data = try? Data(contentsOf: cacheURL), let cached = try? JSONDecoder().decode(Cached.self, from: data),
+              cached.key == key else { return nil }
+        return cached
     }
 
     private func commit(_ list: [Event], total: Int) {
         events = list
         self.total = total
         // ponytail: si ricalcola tutta la timeline a ogni pagina (O(n)); spezzare per pagina se i 9.000 eventi pesano.
-        timeline = allEventsTimeline(list, today: romeToday(), locale: .app)
+        // Con una finestra che parte dopo oggi, un evento in corso sta sotto il primo giorno della finestra (non sotto oggi).
+        timeline = allEventsTimeline(list, today: max(romeToday(), when.range?.from ?? ""), locale: .app)
     }
 }
 
@@ -247,7 +272,7 @@ struct AllEventsSection: View {
                 }
                 .padding(.horizontal, Spacing.md)
             } else if model.didLoad {
-                Text("Nessun evento in questa categoria")
+                (model.categories.isEmpty ? Text("Nessun evento in queste date") : Text("Nessun evento in questa categoria"))
                     .font(.label)
                     .foregroundStyle(Color.mutedForeground)
                     .frame(maxWidth: .infinity)

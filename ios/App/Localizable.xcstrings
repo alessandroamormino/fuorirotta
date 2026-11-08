@@ -1815,6 +1815,16 @@
         }
       }
     },
+    "Nessun evento in queste date" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events on these dates"
+          }
+        }
+      }
+    },
     "Nessun evento in queste date vicino a te" : {
       "localizations" : {
         "en" : {
