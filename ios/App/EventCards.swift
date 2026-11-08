@@ -399,12 +399,15 @@ struct EventListView: View {
         .refreshable { await load() }
     }
 
-    /// Stessa fonte della fila, fino a 100.
+    /// Stessa fonte e stesse date della fila, fino a 100.
     private func fetch() async throws -> [Event] {
         guard let api else { throw APIError.network }
         switch route.source {
-        case .nearby(let place):
-            return try await api.events(lat: place.latitude, lng: place.longitude, radiusKm: 50, limit: 100).events
+        case .nearby(let place, let when):
+            let range = when.range
+            return try await api.events(
+                lat: place.latitude, lng: place.longitude, radiusKm: 50, dateFrom: range?.from, dateTo: range?.to, limit: 100
+            ).events
         case .forYou:
             return try await api.feed(limit: 100, offset: 0).items
         }

@@ -160,13 +160,15 @@ public func eventTime(_ dateStart: String) -> String? {
     return String(format: "%02d:%02d", rome.hour!, rome.minute!)
 }
 
+// Format style condivisi: costruire un ISO8601DateFormatter a ogni chiamata costa ~250 us (9.000 pin = secondi).
+private let isoFractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+private let isoPlain = Date.ISO8601FormatStyle()
+
 /// ISO 8601 con o senza frazioni di secondo (l'API manda ".000Z").
 func parseISO(_ s: String) -> Date? {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let d = f.date(from: s) { return d }
-    f.formatOptions = [.withInternetDateTime]
-    return f.date(from: s)
+    if let d = try? isoFractional.parse(s) { return d }
+    if let d = try? isoPlain.parse(s) { return d }
+    return nil
 }
 
 /// Primo e ultimo giorno (Roma) di un evento: l'inizio e' il giorno di Roma; una fine alle 23:59 UTC

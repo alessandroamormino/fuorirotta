@@ -491,7 +491,7 @@ struct ClusterListSheet: View {
 
 private func asEvent(_ pin: FuorirottaCore.MapPin) -> Event {
     Event(
-        id: pin.id, title: pin.title, dateStart: pin.dateStart, imageUrl: pin.imageUrl,
+        id: pin.id, title: pin.title, dateStart: pin.dateStart, dateEnd: pin.dateEnd, imageUrl: pin.imageUrl,
         locationName: pin.locationName, category: pin.category, latitude: pin.lat, longitude: pin.lng)
 }
 
@@ -505,12 +505,15 @@ struct MapScreen: View {
     private enum MapSheet: Identifiable {
         case pin(FuorirottaCore.MapPin)
         case group(Group)
-        var id: String { "map-sheet" }
+        case whenWhere
+        /// "Quando e dove" ha un'identita' sua: SwiftUI scambia il foglio del pin con questo invece di riusarne la presentazione.
+        var id: String { if case .whenWhere = self { "when-where" } else { "map-sheet" } }
     }
 
     @Environment(\.api) private var api
     @Environment(LocationModel.self) private var location
     @Environment(Router.self) private var router
+    @Environment(DateFilter.self) private var dateFilter
 
     /// Un evento aperto dalla mappa piccola del dettaglio (C2): la mappa si centra li',
     /// finche' non cambia il luogo della Home. I pin sono sempre quelli di tutta Italia.
@@ -518,7 +521,7 @@ struct MapScreen: View {
     private var origin: Place { eventSpot ?? location.place }
 
     @State private var pins: [FuorirottaCore.MapPin] = []
-    /// `pins` dopo il filtro, calcolato solo quando cambiano i pin o il filtro (non a ogni disegno della vista).
+    /// `pins` dopo il filtro di categoria e di data, calcolato solo quando cambiano i pin, la categoria o la data (non a ogni disegno della vista).
     @State private var shownPins: [FuorirottaCore.MapPin] = []
     @State private var pinsRevision = 0
     /// ETag della copia che abbiamo: serve a chiedere al server "e' cambiato qualcosa?" senza riscaricare 2,6 MB.
@@ -536,7 +539,12 @@ struct MapScreen: View {
     }
 
     private func refreshShown() {
-        shownPins = filter.isEmpty ? pins : pins.filter { filter.contains($0.category ?? "Altro") }
+        // Un solo passaggio: il giorno di inizio e fine di ogni pin e' gia' calcolato (due confronti di stringa).
+        let range = dateFilter.when.range
+        shownPins = pins.filter { pin in
+            (filter.isEmpty || filter.contains(pin.category ?? "Altro"))
+                && (range.map { pin.overlaps(from: $0.from, to: $0.to) } ?? true)
+        }
         pinsRevision += 1
     }
 
@@ -574,6 +582,8 @@ struct MapScreen: View {
                     .id(pin.id)
             case .group(let group):
                 ClusterListSheet(events: group.events)
+            case .whenWhere:
+                LocationPickerSheet(showsWhen: true, onPick: recentre)
             }
         }
         .task { await load() }
@@ -588,6 +598,11 @@ struct MapScreen: View {
             sheet = nil
             refreshShown()
         }
+        // Un pin aperto potrebbe sparire con la nuova data; il foglio in cui si sceglie la data resta.
+        .onChange(of: dateFilter.when) {
+            if case .whenWhere = sheet {} else { sheet = nil }
+            refreshShown()
+        }
     }
 
     // MARK: vetro: filtro, ricentra, avvisi
@@ -595,6 +610,7 @@ struct MapScreen: View {
     private var chrome: some View {
         GlassEffectContainer(spacing: Spacing.sm) {
             VStack(spacing: Spacing.sm) {
+                datePill
                 if phase == .loading {
                     ProgressView()
                         .padding(Spacing.md)
@@ -621,6 +637,23 @@ struct MapScreen: View {
         }
     }
 
+    /// D-06: la data che si sta guardando, sempre visibile; il tocco apre "Quando e dove" come in Eventi.
+    private var datePill: some View {
+        Button {
+            sheet = .whenWhere
+        } label: {
+            Label { Text(verbatim: dateFilter.when.title(locale: .app)) } icon: { Image(systemName: "calendar") }
+                .font(.label.weight(.semibold))
+                .foregroundStyle(Color.foreground)
+                .padding(.horizontal, Spacing.md)
+                .frame(minHeight: 44)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("date-pill")
+        .accessibilityHint("Apre la scelta di date e zona")
+    }
+
     /// Colonna di vetro a destra, come Mappe: filtro categorie, stile della mappa, posizione.
     private var mapControls: some View {
         VStack(spacing: 0) {
@@ -634,13 +667,21 @@ struct MapScreen: View {
             }
             .accessibilityLabel("Stile della mappa")
             Button {
-                focus = MapFocus(id: focus.id + 1, userFirst: true)
+                sheet = .whenWhere
             } label: {
                 controlIcon("location")
             }
-            .accessibilityLabel("Centra sulla mia posizione")
+            .accessibilityLabel("Quando e dove")
+            .accessibilityHint("Apre la scelta di date e zona")
         }
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+    }
+
+    /// Dal foglio "Quando e dove": scegliere la zona gia' in uso (o "Usa la mia posizione" gia' attiva) non cambia
+    /// `location.place`, quindi il suo onChange non muoverebbe la mappa.
+    private func recentre() {
+        eventSpot = nil
+        focus = MapFocus(id: focus.id + 1, userFirst: location.isUsingDevice)
     }
 
     private func controlIcon(_ symbol: String) -> some View {
@@ -668,7 +709,11 @@ struct MapScreen: View {
             ContentUnavailableView {
                 Label("Nessun evento in questa zona", systemImage: "map")
             } description: {
-                Text("Sposta la mappa o allarga la visuale.")
+                if dateFilter.when.range == nil {
+                    Text("Sposta la mappa o allarga la visuale.")
+                } else {
+                    Text("Sposta la mappa o cambia le date dalla pillola in alto.")
+                }
             }
             .padding(Spacing.md)
             .background(Color.surface, in: RoundedRectangle(cornerRadius: Radius.card))
@@ -677,7 +722,8 @@ struct MapScreen: View {
         }
     }
 
-    /// C2: centra la mappa sull'evento chiesto dal dettaglio e ne apre la scheda del pin.
+    /// C2: centra la mappa sull'evento chiesto dal dettaglio e ne apre la scheda del pin (D-15: mai su un pin nascosto
+    /// dal filtro di categoria o di data).
     private func showRequestedEvent() {
         guard let event = router.mapEvent else { return }
         router.mapEvent = nil
@@ -686,10 +732,19 @@ struct MapScreen: View {
         focus = MapFocus(id: focus.id + 1, meters: 4_000)
         let pin = FuorirottaCore.MapPin(
             id: event.id, title: event.title, category: event.canonicalCategory ?? event.category, imageUrl: event.imageUrl,
-            dateStart: event.dateStart, locationName: event.locationName, lat: lat, lng: lng)
-        // Un filtro di categoria che lo nasconderebbe si toglie; la scheda dopo, o il cambio di filtro la chiuderebbe.
+            dateStart: event.dateStart, locationName: event.locationName, lat: lat, lng: lng, dateEnd: event.dateEnd)
+        // Un filtro (categoria o data) che lo nasconderebbe si toglie: la data passa a "Qualsiasi data", visibile nella
+        // pillola. La scheda si apre dopo, o il cambio di filtro la chiuderebbe.
+        var cleared = false
         if !filter.isEmpty, !filter.contains(pin.category ?? "Altro") {
             filter = []
+            cleared = true
+        }
+        if let range = dateFilter.when.range, !pin.overlaps(from: range.from, to: range.to) {
+            dateFilter.when = .any
+            cleared = true
+        }
+        if cleared {
             Task { sheet = .pin(pin) }
         } else {
             sheet = .pin(pin)
@@ -738,12 +793,14 @@ struct MapScreen: View {
         let pins: [FuorirottaCore.MapPin]
     }
 
-    nonisolated private static let diskURL = URL.cachesDirectory.appending(path: "fuorirotta/map-italia.json")
+    nonisolated private static let diskURL = URL.cachesDirectory.appending(path: "fuorirotta/map-italia-2.json")
 
     nonisolated private static func writeDisk(_ copy: DiskCopy) {
         // ponytail: scrittura fallita = niente cache offline, nient'altro.
         try? FileManager.default.createDirectory(at: diskURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(copy) { try? data.write(to: diskURL, options: .atomic) }
+        // ponytail: la copia della 1.0.1 non ha dateEnd e, con lo stesso ETag, resterebbe 304: 2,5 MB di cache morta altrimenti.
+        try? FileManager.default.removeItem(at: URL.cachesDirectory.appending(path: "fuorirotta/map-italia.json"))
     }
 
     nonisolated private static func readDisk() -> DiskCopy? {

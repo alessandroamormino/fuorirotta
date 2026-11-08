@@ -22,7 +22,7 @@ struct EventRoute: Hashable {
 /// (toccare un evento mostrava ancora l'elenco, e a ogni Indietro riapparivano i dettagli gia' visti).
 struct EventListRoute: Hashable {
     enum Source: Hashable {
-        case nearby(Place)
+        case nearby(Place, SearchFilters.When)
         case forYou
     }
 

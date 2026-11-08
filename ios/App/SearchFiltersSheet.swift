@@ -18,10 +18,10 @@ struct SearchFiltersSheet: View {
                     whenGroup
                     whereGroup
                     categoriesGroup
-                    if filters.hasFilters {
+                    if filters.hasActiveFilters {
                         Button("Azzera i filtri", role: .destructive) {
                             withAnimation(Motion.snappy) {
-                                filters.when = .any
+                                filters.when = .weekend
                                 filters.near = nil
                                 filters.categories = []
                             }
@@ -56,43 +56,8 @@ struct SearchFiltersSheet: View {
 
     // MARK: Quando
 
-    private var isCustom: Bool {
-        if case .custom = filters.when { return true }
-        return false
-    }
-
     private var whenGroup: some View {
-        group("Quando") {
-            ForEach([SearchFilters.When.any, .today, .weekend, .next7], id: \.self) { option in
-                optionRow(option.title(locale: .app), selected: filters.when == option) { filters.when = option }
-            }
-            optionRow(String(localized: "Scegli le date"), selected: isCustom) {
-                if !isCustom { filters.when = .custom(from: romeToday(), to: romeToday()) }
-            }
-            if case .custom(let from, let to) = filters.when {
-                DatePicker("Dal", selection: dateBinding(from, isFrom: true), displayedComponents: .date)
-                DatePicker("Al", selection: dateBinding(to, isFrom: false), in: date(from)..., displayedComponents: .date)
-            }
-        }
-        // I giorni sono quelli di Roma, come ovunque nell'app.
-        .environment(\.calendar, Rome.calendar)
-        .environment(\.timeZone, Rome.calendar.timeZone)
-    }
-
-    private func date(_ day: String) -> Date {
-        let p = day.split(separator: "-").compactMap { Int($0) }
-        guard p.count == 3, let d = Rome.calendar.date(from: DateComponents(year: p[0], month: p[1], day: p[2], hour: 12)) else { return .now }
-        return d
-    }
-
-    private func dateBinding(_ day: String, isFrom: Bool) -> Binding<Date> {
-        Binding(
-            get: { date(day) },
-            set: { new in
-                guard case .custom(let from, let to) = filters.when else { return }
-                let picked = romeToday(now: new)
-                filters.when = isFrom ? .custom(from: picked, to: max(picked, to)) : .custom(from: from, to: picked)
-            })
+        group("Quando") { WhenPicker(when: $filters.when) }
     }
 
     // MARK: Dove
@@ -155,6 +120,51 @@ struct SearchFiltersSheet: View {
             }
             .sensoryFeedback(.selection, trigger: filters.categories)
         }
+    }
+}
+
+/// Le scelte di data (Qualsiasi data, Oggi, Questo weekend, Prossimi 7 giorni, Scegli le date con Dal/Al): sono nei filtri di
+/// Cerca e in "Quando e dove" (Eventi e Mappa). Le righe sono un `Group`: in una List ognuna e' una riga, in una VStack restano in colonna.
+struct WhenPicker: View {
+    @Binding var when: SearchFilters.When
+
+    private var isCustom: Bool {
+        if case .custom = when { return true }
+        return false
+    }
+
+    var body: some View {
+        Group {
+            ForEach([SearchFilters.When.any, .today, .weekend, .next7], id: \.self) { option in
+                optionRow(option.title(locale: .app), selected: when == option) { when = option }
+            }
+            optionRow(String(localized: "Scegli le date"), selected: isCustom) {
+                if !isCustom { when = .custom(from: romeToday(), to: romeToday()) }
+            }
+            if case .custom(let from, let to) = when {
+                DatePicker("Dal", selection: dateBinding(from, isFrom: true), displayedComponents: .date)
+                DatePicker("Al", selection: dateBinding(to, isFrom: false), in: date(from)..., displayedComponents: .date)
+            }
+        }
+        // I giorni sono quelli di Roma, come ovunque nell'app.
+        .environment(\.calendar, Rome.calendar)
+        .environment(\.timeZone, Rome.calendar.timeZone)
+    }
+
+    private func date(_ day: String) -> Date {
+        let p = day.split(separator: "-").compactMap { Int($0) }
+        guard p.count == 3, let d = Rome.calendar.date(from: DateComponents(year: p[0], month: p[1], day: p[2], hour: 12)) else { return .now }
+        return d
+    }
+
+    private func dateBinding(_ day: String, isFrom: Bool) -> Binding<Date> {
+        Binding(
+            get: { date(day) },
+            set: { new in
+                guard case .custom(let from, let to) = when else { return }
+                let picked = romeToday(now: new)
+                when = isFrom ? .custom(from: picked, to: max(picked, to)) : .custom(from: from, to: picked)
+            })
     }
 
     private func optionRow(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {

@@ -3,7 +3,8 @@ import SwiftUI
 
 /// Scheda Cerca: `.searchable` dentro la scheda con ruolo search fa disegnare a iOS 26 la pillola di vetro in basso
 /// che si espande a ricerca a tutto schermo (27-SPIKE.md: "Search pill: system"). Digitando si cerca su tutto il
-/// catalogo, senza posizione. Con il campo vuoto: le ricerche recenti come chip.
+/// catalogo, senza posizione. Con il campo vuoto: le ricerche recenti come chip. La data e' quella dell'app (`DateFilter`,
+/// D-08): parte da Questo weekend (D-09) ed e' la stessa di Eventi e Mappa; qui restano testo, zona e categorie.
 struct SearchView: View {
     private enum Phase {
         case idle, loading, failed
@@ -14,7 +15,9 @@ struct SearchView: View {
 
     @Environment(\.api) private var api
     @Environment(LocationModel.self) private var location
+    @Environment(DateFilter.self) private var dateFilter
 
+    // La sua `when` non si legge: vale quella di `dateFilter` (vedi `effective`).
     @State private var filters = SearchFilters()
     @State private var showFilters = false
     @State private var phase = Phase.idle
@@ -22,6 +25,12 @@ struct SearchView: View {
     @State private var path = NavigationPath()
 
     private var term: String { filters.term }
+    /// I filtri con la data dell'app: e' quello che si mostra, si chiede e si passa al foglio.
+    private var effective: SearchFilters {
+        var f = filters
+        f.when = dateFilter.when
+        return f
+    }
 
     var body: some View {
         EventStack(path: $path) {
@@ -32,10 +41,10 @@ struct SearchView: View {
                         // Vetro di sistema; in accento con almeno un filtro attivo.
                         Button { showFilters = true } label: {
                             Image(systemName: "line.3.horizontal.decrease")
-                                .foregroundStyle(filters.hasFilters ? Color.accentToken : Color.primary)
+                                .foregroundStyle(effective.hasActiveFilters ? Color.accentToken : Color.primary)
                         }
                         .accessibilityLabel("Filtri")
-                        .accessibilityValue(filters.hasFilters ? "attivi" : "")
+                        .accessibilityValue(effective.hasActiveFilters ? "attivi" : "")
                     }
                 }
         }
@@ -47,26 +56,34 @@ struct SearchView: View {
         .onChange(of: location.place) { _, place in
             if filters.near != nil { filters.near?.lat = place.latitude; filters.near?.lng = place.longitude }
         }
-        .sheet(isPresented: $showFilters) { SearchFiltersSheet(filters: $filters) }
-        .task(id: filters) { await run() }
+        .sheet(isPresented: $showFilters) {
+            // Due vie: la data scelta qui e' quella di tutta l'app (D-08), il resto resta di Cerca.
+            SearchFiltersSheet(filters: Binding(
+                get: { effective },
+                set: { new in
+                    filters = new
+                    dateFilter.when = new.when
+                }))
+        }
+        .task(id: effective) { await run() }
     }
 
     private var content: some View {
         // UAT 6: con una lista di risultati i filtri attivi sono la prima riga e scorrono via con lei (niente fascia fissa);
         // negli altri stati (caricamento, vuoto, errore) non c'e' nulla che scorra e stanno in cima.
         VStack(spacing: 0) {
-            if filters.hasFilters, !showsList { activeFilters }
+            if effective.hasFilters, !showsList { activeFilters }
             results
         }
     }
 
     private var showsList: Bool {
-        if !filters.isEmpty, case .results(let events, _) = phase { return !events.isEmpty }
+        if !effective.isIdle, case .results(let events, _) = phase { return !events.isEmpty }
         return false
     }
 
     @ViewBuilder private var results: some View {
-        if filters.isEmpty {
+        if effective.isIdle {
             idle
         } else {
             switch phase {
@@ -89,13 +106,13 @@ struct SearchView: View {
                             Image(systemName: "magnifyingglass")
                         }
                     } description: {
-                        Text(filters.hasFilters
+                        Text(effective.hasFilters
                             ? "Prova a togliere o allargare qualche filtro."
                             : "Controlla la parola o prova con un luogo o una categoria.")
                     }
                 } else {
                     List {
-                        if filters.hasFilters {
+                        if effective.hasFilters {
                             activeFilters
                                 .listRowInsets(EdgeInsets())
                                 .listRowSeparator(.hidden)
@@ -114,8 +131,8 @@ struct SearchView: View {
     private var activeFilters: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Spacing.sm) {
-                if filters.when != .any {
-                    removable(filters.when.title(locale: .app)) { filters.when = .any }
+                if effective.when != .any {
+                    removable(effective.when.title(locale: .app)) { dateFilter.when = .any }
                 }
                 if let near = filters.near {
                     removable(String(localized: "Entro \(near.radiusKm) km da \(location.place.name)")) { filters.near = nil }
@@ -207,8 +224,8 @@ struct SearchView: View {
     /// 300 ms dopo l'ultimo tasto (la nuova digitazione annulla questa attesa), poi la richiesta.
     private func run() async {
         let asked = term
-        let current = filters
-        guard !current.isEmpty else {
+        let current = effective
+        guard !current.isIdle else {
             phase = .idle
             return
         }

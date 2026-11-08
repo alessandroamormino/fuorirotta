@@ -27,12 +27,15 @@ struct SafariTarget: Identifiable {
 /// Dove sta l'app: la scheda attiva, la pila di Home (i link universali spingono qui) e il foglio Safari.
 @MainActor @Observable
 final class Router {
-    /// F7: l'app si apre sulla Mappa.
-    var tab = AppTab.map
+    /// F7: la scheda attiva. All'avvio e' la prima scelta in Impostazioni (Mappa se non si e' scelto: `StartTab`); dopo,
+    /// il Router non segue piu' la preferenza, cosi' cambiarla dal Profilo non sposta l'utente.
+    var tab: AppTab
     var homePath = NavigationPath()
     var safari: SafariTarget?
     /// L'evento da mostrare nella scheda Mappa (la mappa piccola del dettaglio, UAT7 C2): la mappa lo consuma.
     var mapEvent: Event?
+
+    init(tab: AppTab = .map) { self.tab = tab }
 
     func showOnMap(_ event: Event) {
         mapEvent = event
@@ -64,6 +67,21 @@ final class Router {
     }
 }
 
+/// La data che si sta guardando: una sola per Eventi, Mappa e Cerca (D-08). Parte sempre da "Questo weekend" (D-09) e non
+/// si salva (D-10): volutamente non e' in UserDefaults ne' su disco, ogni avvio riparte dal weekend.
+@MainActor @Observable
+final class DateFilter {
+    var when = SearchFilters.When.weekend
+}
+
+extension SearchFilters.When {
+    /// Primo e ultimo giorno (Roma) della data scelta, calcolati a ogni chiamata: "Oggi" e il weekend non restano vecchi in memoria.
+    var range: (from: String, to: String)? { SearchFilters(when: self).dateRange() }
+
+    /// Chiave della finestra risolta (per la copia offline): "dal_al", oppure "any" senza data.
+    var cacheKey: String { range.map { "\($0.from)_\($0.to)" } ?? "any" }
+}
+
 /// Com'e' andata l'apertura di un link universale.
 enum LinkOutcome { case opened, gone, ignored }
 
@@ -90,7 +108,8 @@ struct FuorirottaApp: App {
     @State private var visited: VisitedModel
     @State private var follows: FollowsModel
     @State private var location = LocationModel()
-    @State private var router = Router()
+    @State private var dateFilter = DateFilter()
+    @State private var router: Router
     @State private var config: AppConfig?
     // Aspetto scelto in Impostazioni: "Sistema" = nil (D-07), la scelta resta salvata.
     @AppStorage(Appearance.key) private var appearance = Appearance.system
@@ -114,6 +133,9 @@ struct FuorirottaApp: App {
         followsModel.notify = { [weak savesModel] in savesModel?.show($0) }
         _follows = State(initialValue: followsModel)
         _push = State(initialValue: pushModel)
+        // Stesso archivio di @AppStorage; un valore ignoto o assente vale Mappa (T-27.2-11).
+        let start = StartTab(rawValue: UserDefaults.standard.string(forKey: StartTab.key) ?? "") ?? .map
+        _router = State(initialValue: Router(tab: start.order[0]))
         _session = State(initialValue: Session(api: client, saves: savesModel, visited: visitedModel, push: pushModel))
         #if DEBUG
         // Test UI (LocalTestCase): "-fr.resetWelcome" riporta il tutorial al primo avvio. Per saltarlo basta
@@ -155,6 +177,7 @@ struct FuorirottaApp: App {
                 .environment(visited)
                 .environment(follows)
                 .environment(location)
+                .environment(dateFilter)
                 .environment(router)
                 .environment(\.appConfig, config)
                 // Un solo schermo intero alla volta: la versione non piu' supportata vince sulla spiegazione.
@@ -192,6 +215,8 @@ struct RootView: View {
     @Environment(Session.self) private var session
     /// La foto dell'account come icona della scheda Profilo (REF Omniphile), gia' tonda e a colori originali.
     @State private var profileIcon: UIImage?
+    /// L'ordine di Mappa ed Eventi nella barra (Impostazioni > Aspetto > Apri l'app su).
+    @AppStorage(StartTab.key) private var startTab = StartTab.map
 
     private var photoURL: String? {
         if case .signedIn(let user) = session.state { return user.image }
@@ -200,8 +225,14 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: Bindable(router).tab) {
-            Tab("Mappa", systemImage: "map", value: AppTab.map) { MapScreen() }
-            Tab("Eventi", systemImage: "rectangle.stack", value: AppTab.home) { HomeView() }
+            // Le due schede stanno nell'ordine scelto; l'identita' e' il valore, quindi le schermate tengono il loro stato.
+            ForEach(startTab.order, id: \.self) { tab in
+                if tab == .home {
+                    Tab("Eventi", systemImage: "rectangle.stack", value: AppTab.home) { HomeView() }
+                } else {
+                    Tab("Mappa", systemImage: "map", value: AppTab.map) { MapScreen() }
+                }
+            }
             Tab("Salvati", systemImage: "heart", value: AppTab.saved) { SavedView() }
             Tab(value: AppTab.profile) {
                 ProfileView()
@@ -215,7 +246,7 @@ struct RootView: View {
             }
             Tab(value: AppTab.search, role: .search) { SearchView() }
         }
-        // Eventi e Salvati (le liste che scorrono) fanno ridurre la barra; la Mappa, prima scheda, non e' uno ScrollView e non la muove.
+        // Eventi e Salvati (le liste che scorrono) fanno ridurre la barra; la Mappa non e' uno ScrollView e non la muove, anche se e' la prima.
         .tabBarMinimizeBehavior(.onScrollDown)
         .overlay(alignment: .bottom) {
             if let toast = saves.toast {

@@ -16,32 +16,33 @@ final class HomeModel {
     private(set) var forYouFailed = false
     /// Rete assente: si mostra l'ultimo Home riuscito per questo luogo, con l'avviso "Sei offline...".
     private(set) var offline = false
-    let window = weekendWindow()
 
-    func load(api: APIClient, place: Place, signedIn: Bool) async {
+    func load(api: APIClient, place: Place, signedIn: Bool, when: SearchFilters.When) async {
         // Un aggiornamento non svuota lo schermo: lo scheletro c'e' solo al primo caricamento.
         if phase == .failed { phase = .loading }
+        let range = when.range
         do {
             // Le coordinate partono solo come lat/lng di GET /api/events (T-27-25), mai altrove.
-            async let weekend = api.events(
+            // ponytail: una richiesta sola. Le due di prima (eroe e "Vicino a te") differivano solo per il limite: ora che
+            // portano la stessa data (D-01) bastano i 40 eventi, i primi 16 sono la fila.
+            async let dated = api.events(
                 lat: place.latitude, lng: place.longitude, radiusKm: 50,
-                dateFrom: window.from, dateTo: window.to, limit: 40)
-            async let near = api.events(lat: place.latitude, lng: place.longitude, radiusKm: 50, limit: 16)
+                dateFrom: range?.from, dateTo: range?.to, limit: 40)
             // Il feed e' un'altra rotta (bearer, nessuna posizione): se fallisce non toglie il resto di Home.
             async let feed: FeedPage? = signedIn ? try? await api.feed(limit: 16, offset: 0) : nil
-            let (w, n, f) = try await (weekend, near, feed)
+            let (d, f) = try await (dated, feed)
             if Task.isCancelled { return }
-            hero = heroPicks(w.events)
-            nearby = n.events
-            nearbyTotal = n.total
+            hero = heroPicks(d.events)
+            nearby = Array(d.events.prefix(16))
+            nearbyTotal = d.total
             forYou = f
             forYouFailed = signedIn && f == nil
             offline = false
             phase = .loaded
-            Self.write(Snapshot(hero: hero, nearby: nearby, nearbyTotal: nearbyTotal), for: place)
+            Self.write(Snapshot(key: when.cacheKey, hero: hero, nearby: nearby, nearbyTotal: nearbyTotal), for: place)
         } catch {
             guard !Task.isCancelled else { return }
-            if let cached = Self.read(for: place) {
+            if let cached = Self.read(for: place, key: when.cacheKey) {
                 hero = cached.hero
                 nearby = cached.nearby
                 nearbyTotal = cached.nearbyTotal
@@ -55,8 +56,11 @@ final class HomeModel {
         }
     }
 
-    // Solo dati pubblici (eroe e fila dei dintorni), uno per luogo: niente dell'account va su disco.
+    // Solo dati pubblici (eroe e fila dei dintorni), uno per luogo: niente dell'account va su disco. La `key` e' la finestra
+    // di date risolta (`When.cacheKey`): offline si mostra solo la copia fatta per le stesse date. Una copia senza chiave
+    // (versione precedente) vale "nessuna copia".
     private struct Snapshot: Codable {
+        let key: String?
         let hero: [Event]
         let nearby: [Event]
         let nearbyTotal: Int?
@@ -74,9 +78,11 @@ final class HomeModel {
         if let data = try? JSONEncoder().encode(snapshot) { try? data.write(to: target, options: .atomic) }
     }
 
-    private static func read(for place: Place) -> Snapshot? {
-        guard let data = try? Data(contentsOf: url(for: place)) else { return nil }
-        return try? JSONDecoder().decode(Snapshot.self, from: data)
+    private static func read(for place: Place, key: String) -> Snapshot? {
+        guard let data = try? Data(contentsOf: url(for: place)),
+            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data), snapshot.key == key
+        else { return nil }
+        return snapshot
     }
 
     /// Dopo un cambio in cio' che si segue (qui, nel dettaglio o in "Cosa segui"): solo "Per te", il resto non cambia.
@@ -111,6 +117,7 @@ struct HomeView: View {
     /// Spazio sopra "Tutti gli eventi": 0 lontano dal bordo, cresce fino a topInset mentre si aggancia sotto la status bar (UAT 27.1, G-27.1-X2).
     @State private var allEventsHeaderPad: CGFloat = 0
     @State private var showPlaceSheet = false
+    @Environment(DateFilter.self) private var dateFilter
 
     var body: some View {
         EventStack(path: Bindable(router).homePath) {
@@ -148,6 +155,8 @@ struct HomeView: View {
             }
             // Un altro filtro: si riparte dall'inizio della lista, col titolo fissato in alto (giro telefono F5).
             .onChange(of: allEvents.categories) { proxy.scrollTo(Self.allEventsTop, anchor: .top) }
+            // Anche una Home aperta dopo che la data e' cambiata (sulla mappa o in Cerca): `initial` la porta alla data giusta.
+            .onChange(of: dateFilter.when, initial: true) { allEvents.show(dateFilter.when, api: api) }
             // L'eroe sale fino al bordo alto, sotto la status bar (REF Omniphile): niente barra di navigazione.
             .ignoresSafeArea(edges: .top)
             .toolbar(.hidden, for: .navigationBar)
@@ -155,9 +164,9 @@ struct HomeView: View {
             .refreshable { await refresh() }
             }
         }
-        .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet() }
+        .sheet(isPresented: $showPlaceSheet) { LocationPickerSheet(showsWhen: true) }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
-        .task(id: LoadKey(place: location.place, signedIn: signedIn)) { await load() }
+        .task(id: LoadKey(place: location.place, signedIn: signedIn, when: dateFilter.when)) { await load() }
         .sensoryFeedback(.selection, trigger: followCount)
         .onChange(of: follows.revision) {
             guard signedIn, let api else { return }
@@ -170,6 +179,7 @@ struct HomeView: View {
     private struct LoadKey: Equatable {
         let place: Place
         let signedIn: Bool
+        let when: SearchFilters.When
     }
 
     private var signedIn: Bool {
@@ -179,7 +189,7 @@ struct HomeView: View {
 
     private func load() async {
         guard let api else { return }
-        await model.load(api: api, place: location.place, signedIn: signedIn)
+        await model.load(api: api, place: location.place, signedIn: signedIn, when: dateFilter.when)
     }
 
     /// Il pull-to-refresh aggiorna anche la lista nazionale.
@@ -210,8 +220,8 @@ struct HomeView: View {
             EmptyView()
         case .loaded:
             if model.hero.isEmpty {
-                // Eroe vuoto: si nasconde, resta l'intestazione e la riga "Nessun evento questo weekend".
-                emptyWeekend
+                // Eroe vuoto: si nasconde, resta l'intestazione e il vuoto del weekend o, per altre date, il pulsante per tornare al weekend (D-03).
+                if dateFilter.when == .weekend { emptyWeekend } else { emptyDates }
             } else {
                 hero(model.hero)
             }
@@ -249,8 +259,8 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: Spacing.md) {
                 Button { showPlaceSheet = true } label: {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("Questo weekend").font(.display).foregroundStyle(Color.foreground)
-                        Text(verbatim: formatDayRange(from: model.window.from, to: model.window.to, locale: .app) + " · " + location.place.name)
+                        Text(verbatim: dateFilter.when.title(locale: .app)).font(.display).foregroundStyle(Color.foreground)
+                        Text(verbatim: headerSubtitle)
                             .font(.label)
                             .foregroundStyle(Color.mutedForeground)
                     }
@@ -263,8 +273,8 @@ struct HomeView: View {
                 GlassEffectContainer {
                     HStack(spacing: 0) {
                         Button { showPlaceSheet = true } label: { capsuleIcon("location") }
-                            .accessibilityLabel("Cambia posizione")
-                            .accessibilityHint("Apre la scelta della zona")
+                            .accessibilityLabel("Quando e dove")
+                            .accessibilityHint("Apre la scelta di date e zona")
                     }
                     .glassEffect(.regular.interactive(), in: .capsule)
                 }
@@ -273,6 +283,17 @@ struct HomeView: View {
         }
         .padding(.horizontal, Spacing.md)
         .padding(.top, topInset + Spacing.sm)
+    }
+
+    /// Giorni e zona ("sab 8 – dom 9 nov · Firenze"); con "Qualsiasi data" e "Scegli le date" (il titolo e' gia' l'intervallo) solo la zona.
+    private var headerSubtitle: String {
+        switch dateFilter.when {
+        case .today, .weekend, .next7:
+            if let r = dateFilter.when.range { return formatDayRange(from: r.from, to: r.to, locale: .app) + " · " + location.place.name }
+            return location.place.name
+        case .any, .custom:
+            return location.place.name
+        }
     }
 
     private func capsuleIcon(_ symbol: String) -> some View {
@@ -288,6 +309,19 @@ struct HomeView: View {
             Text("Nessun evento questo weekend").font(.heading).foregroundStyle(Color.foreground)
             Text("Prova ad allargare la zona: cambia posizione dal pulsante in alto.")
                 .font(.body).foregroundStyle(Color.foregroundSecondary)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+        .padding(.horizontal, Spacing.md)
+    }
+
+    /// D-03: altre date e niente vicino a te. Eroe e "Vicino a te" vengono dalla stessa richiesta, quindi anche la fila e' vuota.
+    private var emptyDates: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Nessun evento in queste date vicino a te").font(.heading).foregroundStyle(Color.foreground)
+            Button("Torna a questo weekend") { withAnimation(Motion.snappy) { dateFilter.when = .weekend } }
+                .buttonStyle(.bordered)
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -402,7 +436,7 @@ struct HomeView: View {
             if signedIn { forYouSection }
             railSection(
                 String(localized: "Vicino a te"), events: model.nearby, style: .poster, icon: "location.fill", iconColor: .success,
-                count: model.nearbyTotal, list: .nearby(location.place))
+                count: model.nearbyTotal, list: .nearby(location.place, dateFilter.when))
             if !signedIn { inviteCard }
         }
     }

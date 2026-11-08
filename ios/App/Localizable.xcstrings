@@ -357,6 +357,16 @@
         }
       }
     },
+    "Apre la scelta di date e zona" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the choice of dates and area"
+          }
+        }
+      }
+    },
     "Apre le Impostazioni di iOS" : {
       "localizations" : {
         "en" : {
@@ -383,6 +393,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Open the event website"
+          }
+        }
+      }
+    },
+    "Apri l'app su" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the app on"
           }
         }
       }
@@ -1805,6 +1825,26 @@
         }
       }
     },
+    "Nessun evento in queste date" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events on these dates"
+          }
+        }
+      }
+    },
+    "Nessun evento in queste date vicino a te" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No events on these dates near you"
+          }
+        }
+      }
+    },
     "Nessun evento passato" : {
       "localizations" : {
         "en" : {
@@ -2448,6 +2488,16 @@
         }
       }
     },
+    "Quando e dove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When and where"
+          }
+        }
+      }
+    },
     "Questa e-mail è già registrata con un altro metodo. Entra con quello e collega questo da Profilo > Metodi di accesso." : {
       "localizations" : {
         "en" : {
@@ -3021,6 +3071,16 @@
         }
       }
     },
+    "Sposta la mappa o cambia le date dalla pillola in alto." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the map or change the dates from the pill at the top."
+          }
+        }
+      }
+    },
     "Sposta la mappa o allarga la visuale." : {
       "localizations" : {
         "en" : {
@@ -3157,6 +3217,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Remove"
+          }
+        }
+      }
+    },
+    "Torna a questo weekend" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to this weekend"
           }
         }
       }

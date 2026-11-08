@@ -58,6 +58,29 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
     }
 }
 
+/// La scheda con cui si apre l'app: Mappa o Eventi, la prima della barra (ne dipende anche l'ordine). Una preferenza del
+/// dispositivo (@AppStorage), vale anche per l'ospite e non va nell'account; predefinita Mappa. La prima scheda di `order`
+/// e' anche quella su cui l'app parte; i link universali scelgono la scheda per valore e non la guardano (D-13).
+enum StartTab: String, CaseIterable, Identifiable {
+    case map, events
+
+    static let key = "fr.startTab"
+
+    var id: Self { self }
+    var title: LocalizedStringKey {
+        switch self {
+        case .map: "Mappa"
+        case .events: "Eventi"
+        }
+    }
+    var order: [AppTab] {
+        switch self {
+        case .map: [.map, .home]
+        case .events: [.home, .map]
+        }
+    }
+}
+
 /// Le schermate che Impostazioni spinge nella pila del Profilo.
 enum SettingsRoute: Hashable { case sessions }
 
@@ -72,6 +95,7 @@ struct SettingsView: View {
     @Environment(\.api) private var api
     @AppStorage(Appearance.key) private var appearance = Appearance.system
     @AppStorage(MapStyleChoice.key) private var mapStyle = MapStyleChoice.hybrid
+    @AppStorage(StartTab.key) private var startTab = StartTab.map
 
     @State private var confirmSignOut = false
     @State private var confirmDelete = false
@@ -350,6 +374,13 @@ struct SettingsView: View {
             // Il cambio e' immediato e animato; la scelta resta salvata (@AppStorage) e la legge l'app intera.
             Picker("Aspetto", selection: Binding(get: { appearance }, set: { new in withAnimation(Motion.spring) { appearance = new } })) {
                 ForEach(Appearance.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            // Un picker segmentato non mostra l'etichetta: la didascalia dice cosa si sceglie. RootView legge la stessa
+            // chiave, quindi la barra si riordina subito e l'utente resta sul Profilo.
+            Text("Apri l'app su").font(.label).foregroundStyle(Color.mutedForeground)
+            Picker("Apri l'app su", selection: Binding(get: { startTab }, set: { new in withAnimation(Motion.spring) { startTab = new } })) {
+                ForEach(StartTab.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             // La lingua si sceglie in iOS (Impostazioni > Fuorirotta > Lingua): e' il modo di Apple, niente selettore interno.

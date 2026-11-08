@@ -80,4 +80,54 @@ final class UAT7B2UITests: LocalTestCase {
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(waitHittable(stats), "Indietro non torna al Profilo")
     }
+
+    /// D-11: con la scheda iniziale Eventi la barra legge Eventi, Mappa, Salvati, Profilo e l'app si apre su Eventi.
+    /// L'argomento di avvio non si salva: niente da ripristinare.
+    func testStartTabFromLaunchArgument() {
+        let app = localApp()
+        app.launchArguments += ["-fr.startTab", "events"]
+        app.launch()
+        let events = app.tabBars.buttons["Eventi"]
+        XCTAssertTrue(waitHittable(events, timeout: 15), "nessuna scheda Eventi")
+        let labels = (0..<4).map { app.tabBars.buttons.element(boundBy: $0).label }
+        XCTAssertEqual(labels, ["Eventi", "Mappa", "Salvati", "Profilo"])
+        XCTAssertTrue(events.isSelected, "l'app non si apre su Eventi")
+        shot(app, "avvio-eventi")
+    }
+
+    /// D-12 e D-11: "Apri l'app su" riordina la barra subito (l'utente resta sul Profilo) e il valore resta al riavvio.
+    /// In fondo si rimette Mappa, senza uscite anticipate: i test del benvenuto si aspettano la Mappa.
+    func testStartTabSettingReordersAtOnce() {
+        let app = localApp()
+        app.launch()
+        let tabs = app.tabBars.buttons
+        XCTAssertTrue(waitHittable(tabs["Mappa"], timeout: 15))
+        XCTAssertEqual(tabs.element(boundBy: 0).label, "Mappa")
+        tabs["Profilo"].tap()
+        pick("Eventi", in: app)
+        XCTAssertEqual(tabs.element(boundBy: 0).label, "Eventi", "la barra non si e' riordinata")
+        XCTAssertTrue(tabs["Profilo"].isSelected, "il cambio ha spostato l'utente dal Profilo")
+        shot(app, "impostazioni-avvio")
+        app.terminate()
+
+        let again = localApp()
+        again.launch()
+        let againEvents = again.tabBars.buttons["Eventi"]
+        XCTAssertTrue(waitHittable(againEvents, timeout: 15))
+        XCTAssertEqual(again.tabBars.buttons.element(boundBy: 0).label, "Eventi", "la scelta non e' stata salvata")
+        XCTAssertTrue(againEvents.isSelected, "al riavvio l'app non si apre su Eventi")
+
+        again.tabBars.buttons["Profilo"].tap()
+        pick("Mappa", in: again)
+        XCTAssertEqual(again.tabBars.buttons.element(boundBy: 0).label, "Mappa", "ripristino: la barra non e' tornata a Mappa")
+    }
+
+    /// Il segmento `title` del selettore "Apri l'app su" (si scorre il Profilo fino a trovarlo), poi lo tocca.
+    private func pick(_ title: String, in app: XCUIApplication) {
+        let segment = app.segmentedControls.buttons[title]
+        var swipes = 0
+        while !segment.isHittable, swipes < 4 { app.swipeUp(); swipes += 1 }
+        XCTAssertTrue(segment.isHittable, "manca il segmento \(title)")
+        segment.tap()
+    }
 }
