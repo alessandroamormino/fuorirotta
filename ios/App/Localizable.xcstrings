@@ -397,6 +397,16 @@
         }
       }
     },
+    "Apri l'app su" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the app on"
+          }
+        }
+      }
+    },
     "Apri link" : {
       "localizations" : {
         "en" : {
