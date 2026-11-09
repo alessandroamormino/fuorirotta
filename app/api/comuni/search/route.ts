@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { allComuni } from "@/lib/comuniCache";
 import { normalizeComuneName } from "@/lib/territorial/normalize";
 
 // Autocomplete comuni per il campo Dove della Navbar (UI-02, D-03, D-04).
@@ -28,19 +28,8 @@ export async function GET(request: NextRequest) {
 			return NextResponse.json({ results: [] });
 		}
 
-		const rows = await prisma.comune.findMany({
-			select: {
-				id: true,
-				istatCode: true,
-				name: true,
-				aliases: true,
-				provinceName: true,
-				regionName: true,
-				// UAT7 C3: l'app usa il comune scelto come centro (lat/lng/radius, mai il filtro per comune).
-				latitude: true,
-				longitude: true,
-			},
-		});
+		// UAT7 C3: l'app usa il comune scelto come centro (lat/lng/radius, mai il filtro per comune).
+		const rows = await allComuni();
 
 		const matches = rows
 			.map((r) => {

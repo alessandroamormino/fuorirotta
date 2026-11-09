@@ -7,7 +7,25 @@ export const dynamic = 'force-dynamic';
 // Cache the sitemap for 1 hour
 export const revalidate = 3600;
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+// Fase 27.2.1 (egress): con force-dynamic il revalidate sopra non vale e ogni
+// passaggio di un crawler rileggeva ~4.000 eventi (query n. 1 per chiamate in
+// pg_stat_statements). Una copia per processo, rifatta al massimo ogni ora.
+// ponytail: cache in memoria del processo; con piu' repliche ognuna ha la sua.
+const SITEMAP_TTL_MS = 60 * 60 * 1000;
+let cached: { at: number; data: Promise<MetadataRoute.Sitemap> } | undefined;
+
+export default function sitemap(): Promise<MetadataRoute.Sitemap> {
+	if (!cached || Date.now() - cached.at > SITEMAP_TTL_MS) {
+		const data = buildSitemap();
+		cached = { at: Date.now(), data };
+		data.catch(() => {
+			if (cached?.data === data) cached = undefined;
+		});
+	}
+	return cached.data;
+}
+
+async function buildSitemap(): Promise<MetadataRoute.Sitemap> {
 	const baseUrl = getBaseUrl();
 
 	// Limita la sitemap a un numero ragionevole per evitare risposte troppo grandi.
