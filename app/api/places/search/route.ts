@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { allComuni } from "@/lib/comuniCache";
 import { getProvinceDirectory } from "@/lib/coverage/liveRegions";
 import { comuneChip, provinceChip, regionChip, type PlaceKind } from "@/lib/follows/keys";
 import { VALID_REGION_SLUGS } from "@/lib/scrapers/regionSlug";
@@ -47,9 +47,7 @@ export async function GET(request: NextRequest) {
 			);
 		}
 
-		const rows = await prisma.comune.findMany({
-			select: { istatCode: true, name: true, aliases: true, provinceCode: true, provinceName: true },
-		});
+		const rows = await allComuni();
 		for (const c of rows) {
 			const n = normalizeComuneName(c.name);
 			add(

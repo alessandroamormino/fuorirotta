@@ -41,7 +41,7 @@ import { compareByWindowRelevance } from "@/lib/eventOrdering";
 // Forma leggera di un evento per la mappa, identica nei due rami (con e senza
 // raggio). resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
 // davvero (D-09/D-14, Fase 6).
-function toMapEvent(e: PrismaEvent) {
+function toMapEvent(e: LightEvent) {
 	return {
 		id: e.id,
 		latitude: e.latitude ? parseFloat(e.latitude.toString()) : null,
@@ -59,12 +59,40 @@ function toMapEvent(e: PrismaEvent) {
 	};
 }
 
+// Fase 27.2.1 (egress): filtrare, ordinare e disegnare la mappa richiede solo
+// questi campi. Le righe intere (description, address, ...) di TUTTI gli eventi
+// filtrati, lette a ogni richiesta, erano la voce piu' grossa dell'egress di
+// Supabase (pg_stat_statements, 2026-11-09): le righe intere si leggono ora
+// solo per la pagina. Tutti i COMPOSABLE_FIELDS che toMapEvent mostra sono qui.
+const LIGHT = {
+	id: true,
+	source: true,
+	sourceId: true,
+	canonicalEventId: true,
+	title: true,
+	imageUrl: true,
+	locationName: true,
+	category: true,
+	canonicalCategory: true,
+	coordinateSource: true,
+	dateStart: true,
+	latitude: true,
+	longitude: true,
+	resolvedLatitude: true,
+	resolvedLongitude: true,
+} satisfies Prisma.EventSelect;
+type LightEvent = Prisma.EventGetPayload<{ select: typeof LIGHT }>;
+
 type EventWithComune = Prisma.EventGetPayload<{
 	include: { comune: { select: { name: true; provinceCode: true } } };
 }>;
 
-async function withComposedFields<T extends PrismaEvent>(
-	events: T[]
+// `select` = LIGHT per la mappa: anche i membri si leggono leggeri. composeEvent
+// salta i campi assenti (isEmpty(undefined)), quindi i campi mostrati dalla
+// mappa escono identici a quelli della composizione su righe intere.
+async function withComposedFields<T extends LightEvent>(
+	events: T[],
+	select?: typeof LIGHT
 ): Promise<T[]> {
 	if (events.length === 0) return events;
 
@@ -72,12 +100,25 @@ async function withComposedFields<T extends PrismaEvent>(
 	const members = await prisma.event.findMany({
 		where: { canonicalEventId: { in: canonicalIds } },
 		orderBy: { id: "asc" },
+		...(select ? { select } : {}),
 	});
-	const membersByCanonical = groupMembersByCanonical(members);
+	const membersByCanonical = groupMembersByCanonical(members as PrismaEvent[]);
 
 	return events.map(
-		(e) => composeEvent(e, membersByCanonical.get(e.id) ?? []) as T
+		(e) =>
+			composeEvent(e as unknown as PrismaEvent, membersByCanonical.get(e.id) ?? []) as unknown as T
 	);
+}
+
+// Righe intere (con il comune, T-12-04: solo name/provinceCode) per i soli id
+// della pagina, nell'ordine di `ids` (`in` non lo garantisce).
+async function fetchPage(ids: number[]): Promise<EventWithComune[]> {
+	const rows = await prisma.event.findMany({
+		where: { id: { in: ids } },
+		include: { comune: { select: { name: true, provinceCode: true } } },
+	});
+	const byId = new Map(rows.map((e) => [e.id, e]));
+	return ids.map((id) => byId.get(id)).filter((e): e is EventWithComune => e !== undefined);
 }
 
 /**
@@ -417,9 +458,28 @@ export async function GET(request: NextRequest) {
 			// (coordinate del centroide, codici regione, timestamp non servono al client).
 			// Nessun orderBy qui: l'ordine finale e' quello clampato-alla-finestra
 			// applicato sotto a filteredEvents, non il dateStart grezzo del DB.
+			// 27.2.1 (egress): riquadro attorno al cerchio gia' nella query, cosi'
+			// il DB restituisce la zona e non tutta Italia. Il filtro esatto sotto
+			// resta l'unica regola: il riquadro contiene sempre il cerchio.
+			const inBox = (
+				[userLat, userLng, radiusKm].every(Number.isFinite)
+					? (() => {
+							const dLat = radiusKm / 111;
+							const dLng = radiusKm / (111 * Math.max(Math.cos((userLat * Math.PI) / 180), 0.01));
+							const la = { gte: userLat - dLat, lte: userLat + dLat };
+							const ln = { gte: userLng - dLng, lte: userLng + dLng };
+							return {
+								OR: [
+									{ resolvedLatitude: la, resolvedLongitude: ln },
+									{ resolvedLatitude: null, latitude: la, longitude: ln },
+								],
+							};
+						})()
+					: null
+			) satisfies Prisma.EventWhereInput | null;
 			const allEvents = await prisma.event.findMany({
-				where,
-				include: { comune: { select: { name: true, provinceCode: true } } },
+				where: inBox ? { AND: [where, inBox] } : where,
+				select: LIGHT,
 			});
 
 			// Filtra per raggio sul punto RISOLTO, lo stesso che legge la mappa
@@ -450,22 +510,13 @@ export async function GET(request: NextRequest) {
 			// ordinare prima dello slice basta — nessuna query aggiuntiva.
 			filteredEvents.sort(compareByWindowRelevance(windowStart));
 
-			// DEDUP-04: compone una volta sola l'intero set filtrato (non solo la
-			// pagina) perche' la stessa lista alimenta sia la pagina corrente sia i
-			// dati della mappa: una sola query aggiuntiva serve entrambi gli usi,
-			// invece delle due chiamate separate del ramo senza raggio (dove pagina
-			// e mappa arrivano gia' da due query DB distinte).
-			const composedFilteredEvents = await withComposedFields(filteredEvents);
-
-			// Applica paginazione sui risultati filtrati e composti
-			events = composedFilteredEvents.slice(offset, offset + limit);
+			// DEDUP-04: pagina composta su righe intere, mappa composta sull'intero
+			// set filtrato ma su righe leggere (27.2.1).
 			total = filteredEvents.length;
-
-			// For map: use all filtered events (composed) with lightweight fields.
-			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
-			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
-			// al solo centroide del comune non avrebbero nessun punto da leggere.
-			mapEvents = composedFilteredEvents.map(toMapEvent);
+			events = await withComposedFields(
+				await fetchPage(filteredEvents.slice(offset, offset + limit).map((e) => e.id))
+			);
+			mapEvents = (await withComposedFields(filteredEvents, LIGHT)).map(toMapEvent);
 		} else {
 			// Senza filtro raggio: Prisma non sa esprimere GREATEST(dateStart,
 			// windowStart) in orderBy (lib/eventOrdering.ts), quindi l'ordine
@@ -478,7 +529,7 @@ export async function GET(request: NextRequest) {
 			// resolvedLatitude/resolvedLongitude sono il punto che la mappa usa
 			// davvero (D-09/D-14, Fase 6): senza questi campi gli eventi agganciati
 			// al solo centroide del comune non avrebbero nessun punto da leggere.
-			const allMatchingEvents = await prisma.event.findMany({ where });
+			const allMatchingEvents = await prisma.event.findMany({ where, select: LIGHT });
 			allMatchingEvents.sort(compareByWindowRelevance(windowStart));
 			total = allMatchingEvents.length;
 
@@ -486,35 +537,19 @@ export async function GET(request: NextRequest) {
 				.slice(offset, offset + limit)
 				.map((e) => e.id);
 
-			// Solo la pagina corrente porta l'include comune (T-12-04): solo
-			// name/provinceCode, mai la riga intera. Un secondo findMany per id,
-			// non uno slice del fetch sopra, perche' quello non ha l'include.
-			const pageEventsRaw = await prisma.event.findMany({
-				where: { id: { in: pageIds } },
-				include: { comune: { select: { name: true, provinceCode: true } } },
-			});
-			const pageEventsById = new Map(pageEventsRaw.map((e) => [e.id, e]));
-			// `in` non garantisce l'ordine: si ricostruisce da pageIds, gia'
-			// ordinato per rilevanza.
-			const pageEvents = pageIds
-				.map((id) => pageEventsById.get(id))
-				.filter((e): e is (typeof pageEventsRaw)[number] => e !== undefined);
-
 			// DEDUP-04: compone solo la pagina corrente, una query aggiuntiva sui
 			// soli membri dei gruppi di questa pagina (niente N+1).
-			events = await withComposedFields(pageEvents);
+			events = await withComposedFields(await fetchPage(pageIds));
 
 			// DEDUP-04: servono i campi componibili (title/imageUrl/locationName/
 			// category) per non mostrare nel popup un valore diverso dalla scheda
 			// dello stesso evento fuso — description non serve alla mappa e resta
-			// fuori. Riusare le righe intere e la stessa funzione factorizzata e'
-			// piu' semplice di una select parziale ad-hoc, e il costo in byte e'
-			// accettabile al volume attuale (~2.700 eventi).
+			// fuori: righe e membri leggeri (LIGHT, 27.2.1).
 			// Con mapEvents=0 la lista dell'app pagina 30 alla volta e ha un suo file
 			// per la mappa (RESEARCH Pitfall 5): niente composizione dell'intero set.
 			mapEvents = lean
 				? []
-				: (await withComposedFields(allMatchingEvents)).map(toMapEvent);
+				: (await withComposedFields(allMatchingEvents, LIGHT)).map(toMapEvent);
 		}
 
 		// ========== INDICATORE DI COPERTURA (D-06/D-07) ==========

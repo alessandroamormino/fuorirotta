@@ -17,6 +17,7 @@
  * viva; con COVERAGE_THRESHOLD + 1 lo e'.
  */
 import { prisma } from '../prisma'
+import { allComuni } from '../comuniCache'
 import { istatRegionToSlug } from '../scrapers/regionSlug'
 import { availableEventsWhere, endWindow, windowStartToday } from '../dateWindow'
 
@@ -124,11 +125,11 @@ export interface ProvinceRef {
 }
 
 export async function getProvinceDirectory(): Promise<ProvinceRef[]> {
-  const rows = await prisma.comune.findMany({
-    distinct: ['provinceCode'],
-    select: { provinceCode: true, provinceName: true, regionName: true },
-    orderBy: { provinceCode: 'asc' }
-  })
+  // 27.2.1 (egress): `distinct` di Prisma scaricava tutti i 7.894 comuni a ogni
+  // chiamata e filtrava in JS; ora la stessa riduzione gira sulla copia in memoria.
+  const byCode = new Map<string, { provinceCode: string; provinceName: string; regionName: string }>()
+  for (const c of await allComuni()) if (!byCode.has(c.provinceCode)) byCode.set(c.provinceCode, c)
+  const rows = [...byCode.values()].sort((a, b) => (a.provinceCode < b.provinceCode ? -1 : a.provinceCode > b.provinceCode ? 1 : 0))
 
   return rows
     .filter((row) => !ABOLISHED_PROVINCE_CODES.has(row.provinceCode))
